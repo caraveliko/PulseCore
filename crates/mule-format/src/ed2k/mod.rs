@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Laurent Geynet "Loulach"
+
+pub mod hash;
+pub mod link;
+pub mod source;
+
+pub use hash::{
+    ed2k_root_from_part_hashes, hash_reader, Ed2kHash, Ed2kHashResult, Ed2kHasher,
+    ED2K_PART_SIZE, MD4_EMPTY_DIGEST,
+};
+pub use link::{fix_mojibake, Ed2kFileLink};
+pub use source::LinkSource;

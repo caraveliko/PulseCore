@@ -1,0 +1,85 @@
+name: 🐛 Informe de error
+description: Notificar un comportamiento inesperado en Pulse Core (eMuleRust)
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por tu colaboración. Para **vulnerabilidades de seguridad**,
+        utiliza [Security Advisories](../../security/advisories); no abras una
+        incidencia pública.
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: Versión del paquete (campo `version` de `version.json` o etiqueta Git)
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: flavor
+    attributes:
+      label: Variante de distribución
+      options:
+        - standard
+        - qa-loopback (lab)
+        - compilación desde fuentes
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Componente afectado
+      options:
+        - Interfaz web (WebUI)
+        - Icono de bandeja del sistema (Windows)
+        - Daemon / RPC (mule-daemon)
+        - Protocolo eD2K (mule-protocol)
+        - Kad / DHT
+        - MCP (mule-mcp)
+        - CLI (mule-cli)
+        - Instalación / empaquetado
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción del error
+      description: Comportamiento observado frente al comportamiento esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Pasos para reproducirlo
+      description: Preferiblemente en entorno sin conexión o loopback
+      placeholder: |
+        1. Iniciar mule-daemon
+        2. Abrir http://127.0.0.1:4660
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Registros relevantes (logs)
+      description: Salida del daemon (tracing), consola o capturas debidamente anonimizadas
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Comprobaciones previas
+      options:
+        - label: He comprobado que no existe ninguna incidencia abierta sobre este mismo error
+          required: true
+        - label: He reproducido el error en la última versión disponible
+          required: false

@@ -1,0 +1,38 @@
+# Rust
+/target
+/dist
+.gemini/
+amule-ref/
+**/*.rs.bk
+*.pdb
+
+# IDE y herramientas
+.vscode/
+**/.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sistema operativo y temporales
+.DS_Store
+Thumbs.db
+*.log
+scratch/
+
+# Configuración local de agentes de IA (rutas locales) — ver *.example.json
+.agents/mcp_config.json
+.agents/plugins/emulerust/mcp_config.json
+
+# Destino de despliegue local de compilaciones release
+.deploy-dir
+
+# Configuración Cargo local por máquina (trabajos del enlazador, perfil dev) — no versionada
+/.cargo/
+
+# Configuración local por máquina — el config.json compartido permanece versionado
+/.devin/config.local.json
+
+# Archivos binarios y herramientas locales empaquetadas
+/bin/
+*.tar.xz
+*.zip

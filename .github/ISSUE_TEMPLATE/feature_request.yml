@@ -1,0 +1,38 @@
+name: 💡 Solicitud de funcionalidad
+description: Proponer una mejora o una nueva funcionalidad para Pulse Core
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema o necesidad
+      description: ¿Qué problema resuelve esta funcionalidad?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solución propuesta
+      description: Describe el comportamiento deseado
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: Otros enfoques valorados
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Alcance
+      options:
+        - label: Esta solicitud afecta al protocolo en cable (eD2K/Kad) — se requiere referencia a eMule 0.72a
+          required: false
+        - label: Esta solicitud afecta a la seguridad (anti-SSRF, loopback, kill switch)
+          required: false

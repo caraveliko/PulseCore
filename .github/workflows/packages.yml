@@ -1,0 +1,91 @@
+name: Packages
+
+# Compilación de artefactos distribuibles en cada push a master y bajo demanda.
+# - windows-bundle: compila mule-daemon.exe y mule-cli.exe + SBOM + prueba de humo.
+# - linux-bundle: compila los binarios nativos Linux x64 (servidor + CLI).
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-bundle:
+    name: Windows x64 server bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cadena de herramientas Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Caché de Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilar paquete servidor estándar (sin firma)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass `
+            -File scripts\build_windows_server.ps1
+
+      - name: Verificar paquete generado (prueba de humo, sin métodos lab.*)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass `
+            -File scripts\test_packaged_bundle.ps1
+
+      - name: Subir artefacto Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseCore-windows-x64
+          path: |
+            dist/PulseCore-Server-Windows-x64.zip
+            dist/PulseCore-Server-Windows-x64.zip.sha256
+          retention-days: 14
+
+  linux-bundle:
+    name: Linux x64 daemon + CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cadena de herramientas Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Caché de Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilar daemon y CLI en Rust (release)
+        run: cargo build --release -p mule-daemon -p mule-cli
+
+      - name: Empaquetar distribución Linux
+        run: |
+          mkdir -p dist/PulseCore-Server-Linux
+          cp target/release/mule-daemon target/release/mule-cli dist/PulseCore-Server-Linux/
+          tar -czf dist/PulseCore-Server-Linux-x64.tar.gz -C dist PulseCore-Server-Linux
+          (cd dist && sha256sum PulseCore-Server-Linux-x64.tar.gz > PulseCore-Server-Linux-x64.tar.gz.sha256)
+
+      - name: Subir artefacto Linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseCore-linux-x64
+          path: |
+            dist/PulseCore-Server-Linux-x64.tar.gz
+            dist/PulseCore-Server-Linux-x64.tar.gz.sha256
+          retention-days: 14

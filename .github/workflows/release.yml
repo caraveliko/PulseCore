@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Build & publish Windows bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cadena de herramientas Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Caché de Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Firma Authenticode opcional — requiere los secretos:
+      #   WINDOWS_CERT_BASE64    (certificado .pfx codificado en base64)
+      #   WINDOWS_CERT_PASSWORD  (contraseña del archivo .pfx)
+      - name: Importar certificado de firma (opcional)
+        shell: pwsh
+        env:
+          CERT_B64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CERT_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ($env:CERT_B64) {
+            $bytes = [Convert]::FromBase64String($env:CERT_B64)
+            $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+            [IO.File]::WriteAllBytes($pfx, $bytes)
+            $cert = Import-PfxCertificate -FilePath $pfx `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -Password (ConvertTo-SecureString $env:CERT_PASS -AsPlainText -Force)
+            "THUMB=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Certificado importado: $($cert.Thumbprint)"
+          } else {
+            Write-Host "Sin certificado de firma configurado — compilación sin firma"
+          }
+
+      - name: Compilar paquete servidor estándar (release)
+        shell: pwsh
+        run: |
+          $buildArgs = @()
+          if ($env:THUMB) {
+            $buildArgs = @('-CertificateThumbprint', $env:THUMB)
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass `
+            -File scripts\build_windows_server.ps1 @buildArgs
+
+      - name: Verificar paquete generado (sin exposición lab.*)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass `
+            -File scripts\test_packaged_bundle.ps1
+
+      - name: Publicar lanzamiento en GitHub
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = Get-ChildItem dist\PulseCore-Server-Windows-x64.zip | Select-Object -First 1
+          if (!$zip) { throw "No se encontró el archivo ZIP de distribución en dist/" }
+          $assets = @($zip.FullName, "$($zip.FullName).sha256")
+          $sbom = Get-ChildItem dist\PulseCore-Server-Windows\sbom\*.json -ErrorAction SilentlyContinue
+          foreach ($s in $sbom) { $assets += $s.FullName }
+          $notesFile = "docs/releases/RELEASE_NOTES_$($tag.TrimStart('v')).md"
+          if (Test-Path $notesFile) {
+            gh release create $tag $assets `
+              --title "Pulse Core $tag" `
+              --notes-file $notesFile `
+              --verify-tag
+          } else {
+            gh release create $tag $assets `
+              --title "Pulse Core $tag" `
+              --generate-notes `
+              --verify-tag
+          }
+
+  linux:
+    name: Build & publish Linux bundle
+    runs-on: ubuntu-latest
+    needs: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cadena de herramientas Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Caché de Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilar daemon y CLI en Rust (release)
+        run: cargo build --release -p mule-daemon -p mule-cli
+
+      - name: Empaquetar distribución Linux
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          bundle="PulseCore-${tag}-linux-x64"
+          mkdir -p "dist/$bundle"
+          cp target/release/mule-daemon target/release/mule-cli "dist/$bundle/"
+          tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
+          (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
+
+      - name: Subir artefacto Linux a la Release de GitHub
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release upload "$tag" \
+            "dist/PulseCore-${tag}-linux-x64.tar.gz" \
+            "dist/PulseCore-${tag}-linux-x64.tar.gz.sha256" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

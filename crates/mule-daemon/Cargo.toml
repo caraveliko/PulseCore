@@ -1,0 +1,97 @@
+[package]
+name = "mule-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Local daemon and JSON-RPC WebSocket API for emule-modern"
+
+[features]
+default = []
+debug-rpc = []
+lab-loopback = ["mule-protocol/lab-loopback"]
+ed2k-loopback = ["mule-protocol/ed2k-loopback"]
+lab-tools = ["lab-loopback", "ed2k-loopback", "debug-rpc"]
+ed2k-reference-loopback = ["ed2k-loopback", "mule-protocol/ed2k-reference-loopback"]
+
+
+[dependencies]
+mule-core = { path = "../mule-core" }
+mule-format = { path = "../mule-format" }
+mule-protocol = { path = "../mule-protocol" }
+mule-network-policy = { path = "../mule-network-policy" }
+mule-filter = { path = "../mule-filter" }
+mule-crypto = { path = "../mule-crypto" }
+mule-torrent = { path = "../mule-torrent" }
+tokio.workspace = true
+axum.workspace = true
+tower = "0.5"
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+futures-util.workspace = true
+hex.workspace = true
+rand.workspace = true
+fs4 = "1.1.0"
+bytes.workspace = true
+md4.workspace = true
+data-encoding.workspace = true
+rsa = "0.9"
+igd-next.workspace = true
+reqwest.workspace = true
+flate2.workspace = true
+time.workspace = true
+url.workspace = true
+rust-embed.workspace = true
+mime_guess.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# IcmpSendEcho (iphlpapi) — ICMP echo/traceroute without raw sockets or
+# admin rights, for the USS last-common-host discovery (eMule LCRF).
+# Win32_UI_Shell + Win32_UI_WindowsAndMessaging — bandeja del sistema (system tray).
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(all(target_os = "linux", not(target_env = "musl")))'.dependencies]
+tikv-jemallocator = "0.7"
+
+[dev-dependencies]
+mule-test-support = { path = "../mule-test-support" }
+tokio-tungstenite.workspace = true
+tempfile.workspace = true
+md-5.workspace = true
+
+[[test]]
+name = "inter_daemon_transfer"
+required-features = ["lab-loopback"]
+
+[[test]]
+name = "daemon_adversarial"
+required-features = ["lab-loopback"]
+
+[[test]]
+name = "ed2k_source_discovery"
+required-features = ["ed2k-loopback"]
+
+[[test]]
+name = "ed2k_transfer_tests"
+required-features = ["ed2k-loopback"]
+
+[[test]]
+name = "lab_rpc_tests"
+required-features = ["lab-tools"]
+
+

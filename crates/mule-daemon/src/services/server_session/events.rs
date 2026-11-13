@@ -1,0 +1,197 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Laurent Geynet "Loulach"
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use tokio::sync::broadcast;
+
+use super::types::ServerSessionSnapshot;
+use crate::services::DaemonEvent;
+use mule_protocol::ed2k::{FoundSources, FoundSourcesObfu, SearchResult};
+use serde_json::json;
+
+pub fn emit_event(
+    event_tx: &broadcast::Sender<String>,
+    sequence: &Arc<AtomicU64>,
+    snapshot: &ServerSessionSnapshot,
+) {
+    let seq = sequence.fetch_add(1, Ordering::SeqCst);
+    DaemonEvent::ServerSessionUpdated {
+        sequence: seq,
+        session: snapshot.clone(),
+    }
+    .send(event_tx);
+}
+
+pub fn emit_search_results(
+    event_tx: &broadcast::Sender<String>,
+    sequence: &Arc<AtomicU64>,
+    sr: &SearchResult,
+    cancelled: &std::collections::HashSet<String>,
+) {
+    let seq = sequence.fetch_add(1, Ordering::SeqCst);
+    let files: Vec<serde_json::Value> = sr
+        .files
+        .iter()
+        .map(|f| {
+            let hash = hex::encode(f.file_hash);
+            json!({
+                "fileHash": hash,
+                "fileName": f.name().unwrap_or_else(|| "Unknown".to_string()),
+                "fileSize": f.size().unwrap_or(0),
+                "sourceCount": f.source_count().unwrap_or(1),
+                // eMule marque les fichiers annulés dans les résultats de
+                // recherche (IsCancelledFileByID → m_MyListCtrlItem).
+                "cancelled": cancelled.contains(&hash),
+            })
+        })
+        .collect();
+
+    DaemonEvent::Custom {
+        method: "server.searchResult".to_string(),
+        payload: json!({
+            "sequence": seq,
+            "files": files,
+        }),
+    }
+    .send(event_tx);
+}
+
+/// eMule `IsCancelledFileByID` sur chaque résultat — l'ensemble des
+/// hashes annulés à marquer dans `server.searchResult`.
+pub async fn search_result_cancelled_flags(
+    downloads: &Option<Arc<tokio::sync::Mutex<crate::services::downloads::DownloadService>>>,
+    sr: &SearchResult,
+) -> std::collections::HashSet<String> {
+    let Some(dl) = downloads else {
+        return Default::default();
+    };
+    let dl = dl.lock().await;
+    sr.files
+        .iter()
+        .map(|f| hex::encode(f.file_hash))
+        .filter(|h| dl.is_cancelled_file(h).unwrap_or(false))
+        .collect()
+}
+
+pub fn emit_found_sources(
+    event_tx: &broadcast::Sender<String>,
+    sequence: &Arc<AtomicU64>,
+    fs: &FoundSources,
+) {
+    let seq = sequence.fetch_add(1, Ordering::SeqCst);
+    emit_found_sources_payload(
+        event_tx,
+        seq,
+        &fs.file_hash,
+        fs.sources.iter().map(source_to_json).collect(),
+    );
+}
+
+pub fn emit_found_sources_obfu(
+    event_tx: &broadcast::Sender<String>,
+    sequence: &Arc<AtomicU64>,
+    fs: &FoundSourcesObfu,
+) {
+    let seq = sequence.fetch_add(1, Ordering::SeqCst);
+    emit_found_sources_payload(
+        event_tx,
+        seq,
+        &fs.file_hash,
+        fs.sources.iter().map(source_to_json).collect(),
+    );
+}
+
+fn source_to_json<S: FoundSourceLike>(s: &S) -> serde_json::Value {
+    json!({
+        "address": s.to_address_string(),
+        "ip": s.ip_u32(),
+        "port": s.port_u16(),
+    })
+}
+
+/// Common surface of `FoundSourcePeer` / `FoundSourcePeerObfu` for the
+/// `server.foundSources` payload.
+trait FoundSourceLike {
+    fn to_address_string(&self) -> String;
+    fn ip_u32(&self) -> u32;
+    fn port_u16(&self) -> u16;
+}
+
+impl FoundSourceLike for mule_protocol::ed2k::FoundSourcePeer {
+    fn to_address_string(&self) -> String {
+        self.to_address_string()
+    }
+    fn ip_u32(&self) -> u32 {
+        self.ip
+    }
+    fn port_u16(&self) -> u16 {
+        self.port
+    }
+}
+
+impl FoundSourceLike for mule_protocol::ed2k::FoundSourcePeerObfu {
+    fn to_address_string(&self) -> String {
+        self.to_address_string()
+    }
+    fn ip_u32(&self) -> u32 {
+        self.ip
+    }
+    fn port_u16(&self) -> u16 {
+        self.port
+    }
+}
+
+fn emit_found_sources_payload(
+    event_tx: &broadcast::Sender<String>,
+    seq: u64,
+    file_hash: &[u8; 16],
+    sources: Vec<serde_json::Value>,
+) {
+    DaemonEvent::Custom {
+        method: "server.foundSources".to_string(),
+        payload: json!({
+            "sequence": seq,
+            "fileHash": hex::encode(file_hash),
+            "sources": sources,
+        }),
+    }
+    .send(event_tx);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mule_protocol::ed2k::SearchResultFile;
+
+    #[tokio::test]
+    async fn search_result_marks_cancelled_hashes() {
+        let (tx, mut rx) = broadcast::channel(4);
+        let seq = Arc::new(AtomicU64::new(0));
+        let sr = SearchResult {
+            files: vec![
+                SearchResultFile {
+                    file_hash: [0xAB; 16],
+                    client_id: 0,
+                    client_port: 0,
+                    tags: Vec::new(),
+                },
+                SearchResultFile {
+                    file_hash: [0xCD; 16],
+                    client_id: 0,
+                    client_port: 0,
+                    tags: Vec::new(),
+                },
+            ],
+        };
+        let mut cancelled = std::collections::HashSet::new();
+        cancelled.insert(hex::encode([0xABu8; 16]));
+
+        emit_search_results(&tx, &seq, &sr, &cancelled);
+        let msg = rx.recv().await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["method"], "server.searchResult");
+        assert_eq!(v["params"]["files"][0]["cancelled"], true);
+        assert_eq!(v["params"]["files"][1]["cancelled"], false);
+    }
+}
