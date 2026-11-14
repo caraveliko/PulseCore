@@ -68,6 +68,10 @@ pub async fn handle_request(
         "settings.pickFolder" => handle_settings_pick_folder(req.params).await,
         "settings.setRetentionDays" => handle_settings_set_retention_days(state, req.params).await,
         "settings.resetDownloadDir" => handle_settings_reset_download_dir(state).await,
+        "settings.exportBackup" => crate::rpc::backup::handle_settings_export_backup(state).await,
+        "settings.restoreBackup" => {
+            crate::rpc::backup::handle_settings_restore_backup(state, req.params).await
+        }
         "stats.resetLifetimeTotals" => handle_stats_reset_lifetime_totals(state).await,
         "categories.list" => handle_categories_list(state).await,
         "categories.create" => handle_categories_create(state, req.params).await,

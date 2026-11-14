@@ -21,6 +21,10 @@ use crate::services::DaemonEvent;
 /// (eMule lit la liste en direct à chaque promotion ; ici un snapshot à
 /// ~15 s suffit, les partages changent rarement).
 const SHARED_HASH_REFRESH_TICKS: u64 = 15;
+/// Clave de ajuste persistido para el hash de la contraseña opcional de la WebUI.
+pub const SETTING_WEBUI_PASSWORD_HASH: &str = "webui_password_hash";
+/// Prefijo de sal estático para derivar el hash de la contraseña de la WebUI.
+const WEBUI_PASSWORD_SALT_PREFIX: &str = "pulse-core-webui-v1:";
 
 /// Contrôle à chaud du `EnvFilter` global (clé `logLevel` de
 /// `settings.set`). Le binaire installe le `reload::Handle` au démarrage ;
@@ -170,6 +174,8 @@ pub struct AppState {
     pub active_nas_transfer_id: Arc<tokio::sync::Mutex<Option<Uuid>>>,
     /// Metadata client for unified media manager (Radarr/Sonarr/TMDB replacement).
     pub media_metadata: Arc<crate::services::MediaMetadataService>,
+    /// Hash en memoria de la contraseña opcional de la WebUI para peticiones en red local.
+    pub webui_password_hash: Arc<std::sync::RwLock<Option<String>>>,
 }
 
 impl AppState {
@@ -364,6 +370,12 @@ impl AppState {
             Arc::new(AtomicU64::new(u64_setting("lifetime_downloaded_bytes")));
         let lifetime_uploaded_bytes =
             Arc::new(AtomicU64::new(u64_setting("lifetime_uploaded_bytes")));
+        let initial_webui_pass_hash = downloads
+            .get_setting(SETTING_WEBUI_PASSWORD_HASH)
+            .ok()
+            .flatten()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         downloads.set_event_channel(event_tx.clone(), Arc::clone(&sequence));
         let dl_arc = Arc::new(Mutex::new(downloads));
         server_session.set_downloads(Arc::clone(&dl_arc));
@@ -678,6 +690,7 @@ impl AppState {
             nas_transfer_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             active_nas_transfer_id: Arc::new(Mutex::new(None)),
             media_metadata: Arc::new(crate::services::MediaMetadataService::new()),
+            webui_password_hash: Arc::new(std::sync::RwLock::new(initial_webui_pass_hash)),
         }
     }
 
@@ -747,6 +760,42 @@ impl AppState {
 
     pub fn set_udp_enabled(&self, enabled: bool) {
         self.udp_enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Calcula el hash determinista con sal de la contraseña de la WebUI.
+    pub fn hash_webui_password(password: &str) -> String {
+        use md4::{Digest, Md4};
+        let first = Md4::digest(format!("{WEBUI_PASSWORD_SALT_PREFIX}{password}").as_bytes());
+        let mut second = Md4::new();
+        second.update(WEBUI_PASSWORD_SALT_PREFIX.as_bytes());
+        second.update(first);
+        hex::encode(second.finalize())
+    }
+
+    /// Indica si el usuario ha configurado una contraseña de acceso para la WebUI.
+    pub fn has_webui_password(&self) -> bool {
+        self.webui_password_hash
+            .read()
+            .map(|g| g.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Verifica si `candidate` coincide con la contraseña configurada (o devuelve `true` si no hay contraseña).
+    pub fn verify_webui_password(&self, candidate: &str) -> bool {
+        let Ok(guard) = self.webui_password_hash.read() else {
+            return false;
+        };
+        match guard.as_deref() {
+            Some(expected) => Self::hash_webui_password(candidate.trim()) == expected,
+            None => true,
+        }
+    }
+
+    /// Actualiza en caliente el hash de la contraseña de la WebUI en memoria.
+    pub fn set_webui_password_hash(&self, hash: Option<String>) {
+        if let Ok(mut guard) = self.webui_password_hash.write() {
+            *guard = hash.filter(|s| !s.trim().is_empty());
+        }
     }
 
     /// Effective nickname announced in eD2K hellos / server login
@@ -998,7 +1047,7 @@ impl AppState {
     /// d'identité : listener entrant (hellos + challenges SUI), identité
     /// firewall Kad, table de routage Kad (KadID dérivé du user_hash).
     /// Les sessions déjà établies conservent leur identité d'origine.
-    async fn propagate_identity(&self, new_id: crate::services::IdentityService, reason: &str) {
+    pub(crate) async fn propagate_identity(&self, new_id: crate::services::IdentityService, reason: &str) {
         let user_hash = new_id.user_hash();
         let pubkey = new_id.has_key().then(|| new_id.public_key_bytes().to_vec());
         {

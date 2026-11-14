@@ -118,6 +118,19 @@ impl Database {
         Ok(rows > 0)
     }
 
+    /// Lista todos los ajustes clave-valor almacenados en SQLite.
+    pub fn list_settings(&self) -> Result<Vec<(String, String)>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key, value FROM settings ORDER BY key ASC")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
     // ── Downloads ───────────────────────────────────────────────────────────
 
     /// Saves a new download record.

@@ -8,6 +8,9 @@ use crate::error::JsonRpcError;
 use crate::rpc::methods::DAEMON_VERSION;
 use crate::state::AppState;
 
+/// Longitud máxima permitida para la contraseña opcional de la WebUI.
+const MAX_WEBUI_PASSWORD_LEN: usize = 128;
+
 /// Clés camelCase reconnues par `settings.set` — toute autre clé est
 /// ignorée (un warning est émis pour faciliter le diagnostic des typos).
 const KNOWN_SETTINGS_KEYS: &[&str] = &[
@@ -67,6 +70,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "mcpEnabled",
     "mcpToolProfile",
     "logLevel",
+    "webuiPassword",
 ];
 
 fn query_disk_space(path: &std::path::Path) -> (Option<u64>, Option<u64>) {
@@ -755,6 +759,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         "portableDownloadDir": portable_default.to_string_lossy(),
         "isCustom": custom_dir.is_some(),
         "authToken": state.config.auth_token.clone(),
+        "webuiPasswordEnabled": state.has_webui_password(),
         "historyRetentionDays": retention_days,
         "maxGlobalDownloadPeers": max_global,
         "maxPeersPerDownload": max_per_file,
@@ -1395,6 +1400,32 @@ pub async fn handle_settings_set(
             .map_err(|e| JsonRpcError::invalid_params(&e))?;
         tracing::info!("[LOG] Niveau de log changé à chaud: {spec}");
         keys.push("logLevel");
+    }
+    if let Some(val) = params.get("webuiPassword") {
+        let pass = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'webuiPassword'"))?
+            .trim();
+        if pass.len() > MAX_WEBUI_PASSWORD_LEN {
+            return Err(JsonRpcError::invalid_params("'webuiPassword' is too long"));
+        }
+        if pass.is_empty() {
+            state
+                .downloads
+                .lock()
+                .await
+                .remove_setting(crate::state::SETTING_WEBUI_PASSWORD_HASH)?;
+            state.set_webui_password_hash(None);
+        } else {
+            let hash = AppState::hash_webui_password(pass);
+            state
+                .downloads
+                .lock()
+                .await
+                .set_setting(crate::state::SETTING_WEBUI_PASSWORD_HASH, &hash)?;
+            state.set_webui_password_hash(Some(hash));
+        }
+        keys.push("webuiPassword");
     }
     if ports_changed {
         apply_port_change(state).await?;

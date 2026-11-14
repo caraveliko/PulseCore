@@ -31,7 +31,7 @@ fn shared_http_client() -> &'static Client {
     SHARED_HTTP_CLIENT.get_or_init(|| {
         Client::builder()
             .timeout(std::time::Duration::from_secs(INDEXER_HTTP_TIMEOUT_SECS))
-            .user_agent("eMule-Rust/0.2.0-RC3 MediaManager")
+            .user_agent(concat!("eMule-Rust/", env!("CARGO_PKG_VERSION"), " MediaManager"))
             .build()
             .unwrap_or_default()
     })

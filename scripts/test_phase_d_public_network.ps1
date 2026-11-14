@@ -21,6 +21,7 @@
 #>
 
 $ErrorActionPreference = "Stop"
+$env:MULE_NO_TRAY = "1"  # Sin icono de bandeja en pruebas automatizadas
 $Root = Split-Path -Parent $PSScriptRoot
 
 # URLs canoniques eMule (upd.emule-security.org, maintenues par la
@@ -135,17 +136,17 @@ Write-Host "  Phase D - Reseau reel supervise (eD2K + Kad)   " -ForegroundColor 
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  ATTENTION: trafic reseau reel vers serveurs eD2K/Kad publics" -ForegroundColor Yellow
 
-$zip = Get-ChildItem (Join-Path $Root "dist") -Filter "eMuleRust-*-standard-windows-x64.zip" |
+$zip = Get-ChildItem (Join-Path $Root "dist") -Filter "PulseCore-Server-Windows-x64.zip" |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (!$zip) { throw "Standard bundle ZIP not found in dist/ - run build_windows_release.ps1 first" }
+if (!$zip) { throw "Standard bundle ZIP not found in dist/ - run build_windows_server.ps1 first" }
 
 $WorkRoot = Join-Path $env:TEMP ("eMuleRust-PhaseD-" + (New-Guid).ToString("N").Substring(0,8))
 $BundleDir = Join-Path $WorkRoot "bundle"
 $WorkDir = Join-Path $WorkRoot "workdir"
 New-Item -ItemType Directory -Force -Path $BundleDir, $WorkDir | Out-Null
 Expand-Archive -Path $zip.FullName -DestinationPath $BundleDir -Force
-$DaemonBin = Join-Path $BundleDir "bin\mule-daemon.exe"
-if (!(Test-Path $DaemonBin)) { throw "bin\mule-daemon.exe not found in extracted bundle" }
+$DaemonBin = Join-Path $BundleDir "mule-daemon.exe"
+if (!(Test-Path $DaemonBin)) { throw "mule-daemon.exe not found in extracted bundle" }
 Write-Host " -> Bundle: $($zip.Name)" -ForegroundColor Gray
 Write-Host " -> Sandbox: $WorkRoot" -ForegroundColor Gray
 

@@ -872,6 +872,12 @@ impl DownloadService {
             .map_err(db_err("removing setting"))
     }
 
+    pub fn list_settings(&self) -> Result<Vec<(String, String)>, DaemonError> {
+        self.db
+            .list_settings()
+            .map_err(db_err("listing settings"))
+    }
+
     pub fn query_history(
         &self,
         filter: &mule_core::HistoryFilter,

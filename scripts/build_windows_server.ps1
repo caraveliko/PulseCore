@@ -8,12 +8,19 @@
     SHA256SUMS.txt y el archivo comprimido dist\PulseCore-Server-Windows-x64.zip.
     No crea portable.flag por defecto para conservar tus configuraciones y base de datos
     existentes en %LOCALAPPDATA%\eMuleRust.
+    La variante -Flavor qa-loopback compila con la feature lab-tools y sirve EXCLUSIVAMENTE
+    para las pruebas locales en loopback (test_qa_loopback_e2e.ps1, test_phase_b_functional_bench.ps1).
+    Nunca debe publicarse.
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1 -Flavor qa-loopback
 #>
 
 param(
-    [string]$OutputDir = "dist\PulseCore-Server-Windows",
+    [ValidateSet("standard", "qa-loopback")]
+    [string]$Flavor = "standard",
+    [string]$OutputDir = "",
     [switch]$Portable = $false,
     [string]$CertificateThumbprint = ""
 )
@@ -21,6 +28,23 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+
+$IsQa = $Flavor -eq "qa-loopback"
+$BundleName = if ($IsQa) { "PulseCore-Qa-Loopback-Windows" } else { "PulseCore-Server-Windows" }
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $OutputDir = "dist\$BundleName"
+}
+if ($IsQa) {
+    # La variante de laboratorio siempre es portable (datos junto al ejecutable).
+    $Portable = $true
+}
+
+# Versión única tomada de [workspace.package] en Cargo.toml
+$AppVersion = "0.0.0"
+$CargoToml = Get-Content (Join-Path $Root "Cargo.toml") -Raw
+if ($CargoToml -match '(?ms)\[workspace\.package\].*?^version\s*=\s*"([^"]+)"') {
+    $AppVersion = $Matches[1]
+}
 
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  Pulse Core — Compilación Servidor Windows x64   " -ForegroundColor Cyan
@@ -35,8 +59,12 @@ if (!$Cargo -or !(Test-Path $Cargo)) {
 $RustcVersion = try { (& rustc --version).Trim() } catch { "rustc unknown" }
 
 # 2. Compilar mule-daemon y mule-cli en Release
-Write-Host "`n[1/5] Compilando mule-daemon.exe y mule-cli.exe (release)..." -ForegroundColor Yellow
-& $Cargo build --release --bin mule-daemon --bin mule-cli
+Write-Host "`n[1/5] Compilando mule-daemon.exe y mule-cli.exe (release, variante $Flavor, v$AppVersion)..." -ForegroundColor Yellow
+if ($IsQa) {
+    & $Cargo build --release --bin mule-daemon --bin mule-cli --features mule-daemon/lab-tools
+} else {
+    & $Cargo build --release --bin mule-daemon --bin mule-cli
+}
 if ($LASTEXITCODE -ne 0) {
     throw "Error al compilar Rust (código $LASTEXITCODE)"
 }
@@ -124,10 +152,10 @@ foreach ($rel in $CoreFiles) {
 $VersionObj = [ordered]@{
     schemaVersion = 1
     product = "PulseCore"
-    version = "0.2.0"
+    version = $AppVersion
     protocolVersion = 1
-    distributionFlavor = "standard"
-    labToolsEnabled = $false
+    distributionFlavor = $Flavor
+    labToolsEnabled = $IsQa
     builtAtUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     gitCommit = $GitCommit
     toolchains = [ordered]@{
@@ -157,11 +185,12 @@ foreach ($f in $AllBundleFiles) {
 $SumsPath = Join-Path $DestPath "SHA256SUMS.txt"
 [System.IO.File]::WriteAllLines($SumsPath, $SumsLines, [System.Text.Encoding]::ASCII)
 
-$ZipPath = Join-Path $Root "dist\PulseCore-Server-Windows-x64.zip"
+$ZipName = "$BundleName-x64.zip"
+$ZipPath = Join-Path $Root "dist\$ZipName"
 if (Test-Path $ZipPath) { Remove-Item -Path $ZipPath -Force }
 Compress-Archive -Path "$DestPath\*" -DestinationPath $ZipPath -Force
 $ZipHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-"$ZipHash  PulseCore-Server-Windows-x64.zip" | Out-File -FilePath "$ZipPath.sha256" -Encoding ascii
+"$ZipHash  $ZipName" | Out-File -FilePath "$ZipPath.sha256" -Encoding ascii
 
 Write-Host "`n==================================================" -ForegroundColor Green
 Write-Host "  ¡Servidor Windows compilado correctamente!" -ForegroundColor Green

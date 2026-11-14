@@ -30,7 +30,11 @@ if (!(Test-Path $OutputDir)) {
 }
 
 $NowIso = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$AppVersion = "0.2.0"
+$AppVersion = "0.0.0"
+$CargoTomlRaw = Get-Content (Join-Path $Root "Cargo.toml") -Raw
+if ($CargoTomlRaw -match '(?ms)\[workspace\.package\].*?^version\s*=\s*"([^"]+)"') {
+    $AppVersion = $Matches[1]
+}
 $VersionJsonPath = Join-Path (Join-Path $Root $BundleDir) "version.json"
 if (Test-Path $VersionJsonPath) {
     try {

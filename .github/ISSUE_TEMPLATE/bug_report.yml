@@ -15,7 +15,7 @@ body:
     attributes:
       label: Versión
       description: Versión del paquete (campo `version` de `version.json` o etiqueta Git)
-      placeholder: "0.2.0"
+      placeholder: "0.3.0-beta.1"
     validations:
       required: true
 

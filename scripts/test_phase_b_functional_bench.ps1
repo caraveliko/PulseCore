@@ -16,6 +16,7 @@
 #>
 
 $ErrorActionPreference = "Stop"
+$env:MULE_NO_TRAY = "1"  # Sin icono de bandeja en pruebas automatizadas
 $Root = Split-Path -Parent $PSScriptRoot
 
 # -----------------------------------------------------------------------
@@ -237,16 +238,16 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "  Phase B - Banc fonctionnel RPC (loopback)       " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
-$zip = Get-ChildItem (Join-Path $Root "dist") -Filter "eMuleRust-*-qa-loopback-windows-x64.zip" |
+$zip = Get-ChildItem (Join-Path $Root "dist") -Filter "PulseCore-Qa-Loopback-Windows-x64.zip" |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (!$zip) { throw "QA loopback bundle ZIP not found in dist/ - run build_windows_release.ps1 -Flavor qa-loopback first" }
+if (!$zip) { throw "QA loopback bundle ZIP not found in dist/ - run build_windows_server.ps1 -Flavor qa-loopback first" }
 
 $WorkRoot = Join-Path $env:TEMP ("eMuleRust-PhaseB-" + (New-Guid).ToString("N").Substring(0,8))
 $BundleDir = Join-Path $WorkRoot "bundle"
 $WorkDir = Join-Path $WorkRoot "workdir"
 New-Item -ItemType Directory -Force -Path $BundleDir, $WorkDir | Out-Null
 Expand-Archive -Path $zip.FullName -DestinationPath $BundleDir -Force
-# Le daemon RPC est bin\mule-daemon.exe (eMuleRust.exe = UI Flutter).
+# El daemon RPC es mule-daemon.exe (raíz del paquete servidor).
 $DaemonBin = Get-ChildItem $BundleDir -Recurse -Filter "mule-daemon.exe" | Select-Object -First 1 -ExpandProperty FullName
 if (!$DaemonBin) { throw "mule-daemon.exe not found in extracted bundle" }
 Write-Host " -> Bundle: $($zip.Name)" -ForegroundColor Gray

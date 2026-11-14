@@ -7,7 +7,7 @@
 .DESCRIPTION
     Phase 7.3 - Industrialisation Locale et Validation E2E QA:
     Executes in a sterile, temporary directory outside the Git repository:
-    1. Extracts eMuleRust-v0.1.2-lab-qa-loopback-windows-x64.zip into a temporary sandbox.
+    1. Extracts PulseCore-Qa-Loopback-Windows-x64.zip into a temporary sandbox.
     2. Validates portable.flag and boots the packaged mule-daemon binary in portable mode.
     3. Verifies loopback network confinement (127.0.0.1) and JSON-RPC handshake (lab-tools announced).
     4. Nominal Transfer (sample_1mb):
@@ -43,12 +43,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:MULE_NO_TRAY = "1"  # Sin icono de bandeja en pruebas automatizadas
 
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 if ([string]::IsNullOrWhiteSpace($BundleDir)) {
-    $BundleDir = Join-Path $Root "dist\eMuleRust-Qa-Loopback-Windows"
+    $BundleDir = Join-Path $Root "dist\PulseCore-Qa-Loopback-Windows"
 }
 
 if ([string]::IsNullOrWhiteSpace($ZipPath)) {
@@ -60,7 +61,7 @@ if ([string]::IsNullOrWhiteSpace($ZipPath)) {
             if ($parsed.version) { $bundleVer = $parsed.version }
         } catch {}
     }
-    $ZipPath = Join-Path $Root "dist\eMuleRust-v${bundleVer}-qa-loopback-windows-x64.zip"
+    $ZipPath = Join-Path $Root "dist\PulseCore-Qa-Loopback-Windows-x64.zip"
 }
 
 Write-Host "==================================================" -ForegroundColor Cyan
@@ -94,7 +95,7 @@ try {
         Write-Host " -> Copying assembled bundle from: $BundleDir" -ForegroundColor Gray
         Copy-Item -Path "$BundleDir\*" -Destination $BundleCopyDir -Recurse -Force
     } else {
-        throw "Neither ZIP archive ($ZipPath) nor bundle directory ($BundleDir) exists! Run build_windows_release.ps1 -Flavor qa-loopback first."
+        throw "Neither ZIP archive ($ZipPath) nor bundle directory ($BundleDir) exists! Run build_windows_server.ps1 -Flavor qa-loopback first."
     }
 
     # Verify portable.flag

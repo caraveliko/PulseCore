@@ -3316,6 +3316,38 @@
               <input type="number" class="form-control" id="pref-retention-days" min="1" max="365" placeholder="30">
             </div>
           </div>
+
+          <!-- Control de Acceso WebUI (Red Local) -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <h4 style="margin-top: 0; margin-bottom: 14px; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+              <span style="display: flex; align-items: center; gap: 8px;"><span>🔑</span> <span>Control de Acceso a la WebUI (Red Local)</span></span>
+              <span id="webui-pass-status-badge" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; background: rgba(148, 163, 184, 0.14); color: var(--text-muted); border: 1px solid var(--border);">Sin contraseña</span>
+            </h4>
+            <div class="form-group">
+              <label for="pref-webui-password">Contraseña de acceso desde red local (LAN)</label>
+              <input type="password" class="form-control" id="pref-webui-password" autocomplete="new-password" placeholder="Nueva contraseña (vacío para no cambiar)">
+              <span class="help-text">El acceso local en el mismo equipo (<code>localhost</code> / <code>127.0.0.1</code>) entra directo. Desde otros dispositivos de tu red local se solicitará esta contraseña.</span>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+              <button type="button" class="btn btn-sm btn-danger" id="btn-clear-webui-password" style="display: none;" onclick="clearWebuiPassword()">🔓 Quitar Contraseña WebUI</button>
+            </div>
+          </div>
+
+          <!-- Copia de Seguridad y Migración (1 Clic) -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <h4 style="margin-top: 0; margin-bottom: 14px; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+              <span>📦</span> <span>Copia de Seguridad y Migración (1 Clic)</span>
+            </h4>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0; margin-bottom: 14px; line-height: 1.45;">
+              Exporta o restaura en un archivo <code>.zip</code> tu identidad RSA (<code>cryptkey.dat</code>, <code>userhash.dat</code>), créditos de pares, amigos, categorías, <code>nodes.dat</code>, servidores, biblioteca y ajustes. Al migrar entre Raspberry Pi y Windows se omiten automáticamente las rutas locales incompatibles.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-export-backup" onclick="exportFullBackup()">⬇️ Exportar Copia (.zip)</button>
+              <button type="button" class="btn btn-sm" id="btn-restore-backup" onclick="document.getElementById('backup-restore-file-input').click()">⬆️ Restaurar Copia (.zip)</button>
+              <input type="file" id="backup-restore-file-input" accept=".zip" style="display: none;" onchange="restoreFullBackupFromFile(this)">
+            </div>
+            <div id="backup-status-msg" class="help-text" style="margin-top: 10px;"></div>
+          </div>
         </div>
       </div>
 
@@ -3391,7 +3423,7 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;">
               <div class="form-group">
                 <label>Versión del Daemon</label>
-                <input type="text" class="form-control" id="cfg-version" value="0.2.0-RC3" readonly>
+                <input type="text" class="form-control" id="cfg-version" value="" readonly>
               </div>
               <div class="form-group">
                 <label>Directorio de Trabajo</label>
@@ -4212,6 +4244,27 @@
   <!-- TOOLTIP FLOTANTE INTELIGENTE (HOVER CARD) -->
   <div id="smart-tooltip-card" class="smart-tooltip-card"></div>
 
+  <!-- MODAL: INICIO DE SESIÓN WEBUI (RED LOCAL PROTEGIDA) -->
+  <div class="modal-overlay" id="webui-login-modal" style="z-index: 10050;">
+    <div class="modal" style="max-width: 400px; width: 92%; padding: 24px;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+        <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(94, 106, 210, 0.16); border: 1px solid rgba(94, 106, 210, 0.35); display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0;">🔒</div>
+        <div>
+          <h3 style="margin: 0; font-size: 1.08rem;">Acceso Protegido — Pulse Core</h3>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">Introduce la contraseña configurada para la red local</div>
+        </div>
+      </div>
+      <form onsubmit="event.preventDefault(); submitWebuiLogin();" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group">
+          <label for="webui-login-password">Contraseña WebUI</label>
+          <input type="password" class="form-control" id="webui-login-password" autocomplete="current-password" placeholder="Contraseña..." required autofocus>
+        </div>
+        <div id="webui-login-error" style="display: none; font-size: 0.8rem; color: #fb7185; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.25); border-radius: 6px; padding: 8px 10px;"></div>
+        <button type="submit" class="btn btn-primary" id="webui-login-submit-btn" style="justify-content: center;">🔓 Desbloquear Interfaz</button>
+      </form>
+    </div>
+  </div>
+
   <script>
     class MuleClient {
       constructor() {
@@ -4219,12 +4272,17 @@
         this.msgId = 1;
         this.pendingRequests = new Map();
         this.eventListeners = new Map();
-        this.token = localStorage.getItem('mule_token') || '';
+        this.requiresPassword = Boolean(window.MULE_SESSION && window.MULE_SESSION.requiresPassword);
+        this.awaitingPassword = false;
+        this.token = this.requiresPassword
+          ? (sessionStorage.getItem('mule_webui_token') || '')
+          : (localStorage.getItem('mule_token') || '');
       }
 
       connect() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         let endpoint = `${protocol}//${location.host}/rpc`;
+        this.requiresPassword = Boolean(window.MULE_SESSION && window.MULE_SESSION.requiresPassword);
         if (window.MULE_SESSION && window.MULE_SESSION.endpoint) {
           let ep = window.MULE_SESSION.endpoint;
           if (ep.startsWith('/')) {
@@ -4234,8 +4292,21 @@
           } else {
             endpoint = ep;
           }
-          if (window.MULE_SESSION.token) this.token = window.MULE_SESSION.token;
+          if (!this.requiresPassword && window.MULE_SESSION.token) {
+            this.token = window.MULE_SESSION.token;
+          }
         }
+
+        if (this.requiresPassword && !this.token) {
+          this.awaitingPassword = true;
+          document.getElementById('ws-indicator').className = 'indicator';
+          document.getElementById('ws-label').textContent = '🔒 Requiere contraseña';
+          if (typeof openWebuiLoginModal === 'function') {
+            openWebuiLoginModal();
+          }
+          return;
+        }
+        this.awaitingPassword = false;
 
         document.getElementById('ws-label').textContent = 'Conectando...';
         try {
@@ -4252,16 +4323,19 @@
             const helloRes = await this.call('system.hello', { protocolVersion: 1, token: this.token });
             if (helloRes) {
               if (helloRes.workdirPath) document.getElementById('cfg-workdir').value = helloRes.workdirPath;
+              if (helloRes.daemonVersion) document.getElementById('cfg-version').value = helloRes.daemonVersion;
             }
             this.trigger('connected');
           } catch (e) {
             console.error('Handshake error:', e);
-            if (e.message && e.message.includes('Auth')) {
-              const pass = prompt('Introduce el token del daemon:');
-              if (pass !== null) {
-                this.token = pass;
-                localStorage.setItem('mule_token', pass);
-                this.connect();
+            if (e.message && /Auth|Unauthorized|Token/i.test(e.message)) {
+              sessionStorage.removeItem('mule_webui_token');
+              localStorage.removeItem('mule_token');
+              this.token = '';
+              this.awaitingPassword = true;
+              try { this.ws.close(); } catch (_) {}
+              if (typeof openWebuiLoginModal === 'function') {
+                openWebuiLoginModal();
               }
             }
           }
@@ -4285,8 +4359,10 @@
 
         this.ws.onclose = () => {
           document.getElementById('ws-indicator').className = 'indicator';
-          document.getElementById('ws-label').textContent = 'Desconectado';
-          setTimeout(() => this.connect(), 2500);
+          document.getElementById('ws-label').textContent = this.awaitingPassword ? '🔒 Requiere contraseña' : 'Desconectado';
+          if (!this.awaitingPassword) {
+            setTimeout(() => this.connect(), 2500);
+          }
         };
       }
 
@@ -6770,6 +6846,21 @@
         setChk('pref-remember-downloaded', s.rememberDownloaded !== false);
         setVal('pref-retention-days', s.historyRetentionDays || 30);
 
+        const webuiPassEl = document.getElementById('pref-webui-password');
+        if (webuiPassEl) webuiPassEl.value = '';
+        const webuiBadge = document.getElementById('webui-pass-status-badge');
+        const clearWebuiBtn = document.getElementById('btn-clear-webui-password');
+        const hasWebuiPass = Boolean(s.webuiPasswordEnabled);
+        if (webuiBadge) {
+          webuiBadge.textContent = hasWebuiPass ? '🔒 Protegida en LAN' : 'Sin contraseña';
+          webuiBadge.style.color = hasWebuiPass ? '#4ade80' : 'var(--text-muted)';
+          webuiBadge.style.background = hasWebuiPass ? 'rgba(34, 197, 94, 0.14)' : 'rgba(148, 163, 184, 0.14)';
+          webuiBadge.style.borderColor = hasWebuiPass ? 'rgba(34, 197, 94, 0.35)' : 'var(--border)';
+        }
+        if (clearWebuiBtn) {
+          clearWebuiBtn.style.display = hasWebuiPass ? 'inline-flex' : 'none';
+        }
+
         // Integración & API
         setVal('pref-jellyfin-url', s.jellyfinUrl || '');
         setVal('pref-nickname', s.nickname || 'eMuleRust');
@@ -6891,6 +6982,12 @@
         const retDays = getInt('pref-retention-days');
         if (retDays !== null) payload.historyRetentionDays = retDays;
 
+        const webuiPassEl = document.getElementById('pref-webui-password');
+        const webuiPassVal = webuiPassEl ? webuiPassEl.value : '';
+        if (webuiPassVal && webuiPassVal.length > 0) {
+          payload.webuiPassword = webuiPassVal;
+        }
+
         // Integración & API
         const jelly = getStr('pref-jellyfin-url');
         if (jelly !== null) payload.jellyfinUrl = jelly;
@@ -6904,6 +7001,11 @@
         if (mcpProf) payload.mcpToolProfile = mcpProf;
 
         await client.call('settings.set', payload);
+        if (payload.webuiPassword) {
+          const webuiPassInput = document.getElementById('pref-webui-password');
+          if (webuiPassInput) webuiPassInput.value = '';
+          await loadPreferences();
+        }
         if (badge) {
           badge.style.display = 'inline-block';
           setTimeout(() => { badge.style.display = 'none'; }, 3500);
@@ -9345,11 +9447,197 @@
       folderBrowserTargetInputId = null;
     }
 
+    function openWebuiLoginModal() {
+      const errEl = document.getElementById('webui-login-error');
+      const passEl = document.getElementById('webui-login-password');
+      if (errEl) {
+        errEl.style.display = 'none';
+        errEl.textContent = '';
+      }
+      if (passEl) {
+        passEl.value = '';
+      }
+      openModal('webui-login-modal');
+      setTimeout(() => {
+        if (passEl) passEl.focus();
+      }, 60);
+    }
+
+    async function submitWebuiLogin() {
+      const passEl = document.getElementById('webui-login-password');
+      const errEl = document.getElementById('webui-login-error');
+      const submitBtn = document.getElementById('webui-login-submit-btn');
+      const password = passEl ? passEl.value : '';
+
+      if (errEl) {
+        errEl.style.display = 'none';
+        errEl.textContent = '';
+      }
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || !data.token) {
+          if (errEl) {
+            errEl.textContent = data.error || 'Contraseña incorrecta. Inténtalo de nuevo.';
+            errEl.style.display = 'block';
+          }
+          if (passEl) {
+            passEl.select();
+            passEl.focus();
+          }
+          return;
+        }
+        sessionStorage.setItem('mule_webui_token', data.token);
+        client.token = data.token;
+        client.awaitingPassword = false;
+        closeModal('webui-login-modal');
+        client.connect();
+      } catch (e) {
+        if (errEl) {
+          errEl.textContent = 'Error de conexión con el servidor: ' + (e.message || e);
+          errEl.style.display = 'block';
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+
+    async function clearWebuiPassword() {
+      if (!confirm('¿Deseas quitar la contraseña de la WebUI para que la red local acceda sin login?')) {
+        return;
+      }
+      try {
+        await client.call('settings.set', { webuiPassword: '' });
+        sessionStorage.removeItem('mule_webui_token');
+        const passEl = document.getElementById('pref-webui-password');
+        if (passEl) passEl.value = '';
+        await loadPreferences();
+        if (typeof showToast === 'function') {
+          showToast('Contraseña WebUI eliminada', 'info', '🔓');
+        }
+      } catch (e) {
+        if (typeof showToast === 'function') {
+          showToast('Error al quitar la contraseña: ' + (e.message || e), 'error', '❌');
+        }
+      }
+    }
+
+    async function exportFullBackup() {
+      const btn = document.getElementById('btn-export-backup');
+      const statusEl = document.getElementById('backup-status-msg');
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Generando copia de seguridad portátil...';
+
+      try {
+        const res = await client.call('settings.exportBackup');
+        if (!res || !res.zipBase64) {
+          throw new Error('El servidor no devolvió el archivo ZIP');
+        }
+        const binStr = atob(res.zipBase64);
+        const bytes = new Uint8Array(binStr.length);
+        for (let i = 0; i < binStr.length; i++) {
+          bytes[i] = binStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || 'pulse-core-backup.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        const sum = res.summary || {};
+        const sizeKb = Math.max(1, Math.round((res.sizeBytes || bytes.length) / 1024));
+        const detail = `Copia generada (${sizeKb} KiB): ${sum.creditsCount || 0} créditos, ${sum.serversCount || 0} servidores, ${sum.kadContactsCount || 0} nodos Kad, ${sum.mediaCount || 0} títulos.`;
+        if (statusEl) statusEl.textContent = '✅ ' + detail;
+        if (typeof showToast === 'function') {
+          showToast(detail, 'success', '📦');
+        }
+      } catch (e) {
+        const msg = e.message || String(e);
+        if (statusEl) statusEl.textContent = '❌ Error exportando copia: ' + msg;
+        if (typeof showToast === 'function') {
+          showToast('Error exportando copia: ' + msg, 'error', '❌');
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function restoreFullBackupFromFile(inputEl) {
+      const file = inputEl && inputEl.files && inputEl.files[0];
+      if (!file) return;
+
+      const btn = document.getElementById('btn-restore-backup');
+      const statusEl = document.getElementById('backup-status-msg');
+      const maxZipBytes = 64 * 1024 * 1024;
+      if (file.size > maxZipBytes) {
+        if (statusEl) statusEl.textContent = '❌ El archivo supera el límite máximo de 64 MiB.';
+        inputEl.value = '';
+        return;
+      }
+      if (!confirm(`¿Restaurar la copia "${file.name}"? Se importará la identidad RSA, créditos de pares, amigos, categorías, servidores, nodos Kad y ajustes compatibles.`)) {
+        inputEl.value = '';
+        return;
+      }
+
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Subiendo y restaurando copia de seguridad...';
+
+      try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const chunkSize = 8192;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        const zipBase64 = btoa(binary);
+
+        const res = await client.call('settings.restoreBackup', { zipBase64 });
+        const skippedMsg = res.settingsSkippedIncompatiblePaths > 0
+          ? ` (${res.settingsSkippedIncompatiblePaths} rutas de otro SO omitidas)`
+          : '';
+        const summaryMsg = `Restauración completada${skippedMsg}: ${res.creditsRestored || 0} créditos, ${res.serversRestored || 0} servidores, ${res.kadContactsRestored || 0} nodos Kad${res.identityRestored ? ', identidad RSA actualizada' : ''}.`;
+        if (statusEl) statusEl.textContent = '✅ ' + summaryMsg;
+        if (typeof showToast === 'function') {
+          showToast(summaryMsg, 'success', '✅');
+        }
+
+        if (typeof loadPreferences === 'function') await loadPreferences();
+        if (typeof refreshServers === 'function') refreshServers();
+        if (typeof refreshKad === 'function') refreshKad();
+        if (typeof loadMediaLibrary === 'function') loadMediaLibrary();
+      } catch (e) {
+        const msg = e.message || String(e);
+        if (statusEl) statusEl.textContent = '❌ Error restaurando copia: ' + msg;
+        if (typeof showToast === 'function') {
+          showToast('Error restaurando copia: ' + msg, 'error', '❌');
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+        inputEl.value = '';
+      }
+    }
+
     window.openFolderBrowser = openFolderBrowser;
     window.loadFolderBrowserPath = loadFolderBrowserPath;
     window.loadFolderBrowserParent = loadFolderBrowserParent;
     window.confirmFolderBrowserSelection = confirmFolderBrowserSelection;
     window.closeFolderBrowser = closeFolderBrowser;
+    window.openWebuiLoginModal = openWebuiLoginModal;
+    window.submitWebuiLogin = submitWebuiLogin;
+    window.clearWebuiPassword = clearWebuiPassword;
+    window.exportFullBackup = exportFullBackup;
+    window.restoreFullBackupFromFile = restoreFullBackupFromFile;
 
   </script>
 </body>

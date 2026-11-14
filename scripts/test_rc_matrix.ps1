@@ -21,22 +21,23 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:MULE_NO_TRAY = "1"  # Sin icono de bandeja en pruebas automatizadas
 
 $Root = Split-Path -Parent $PSScriptRoot
 
 if ([string]::IsNullOrWhiteSpace($BundleDir)) {
-    if (Test-Path (Join-Path $Root "dist\eMuleRust-Standard-Windows")) {
-        $BundleDir = "dist\eMuleRust-Standard-Windows"
-    } elseif (Test-Path (Join-Path $Root "dist\eMuleRust-Qa-Loopback-Windows")) {
-        $BundleDir = "dist\eMuleRust-Qa-Loopback-Windows"
+    if (Test-Path (Join-Path $Root "dist\PulseCore-Server-Windows")) {
+        $BundleDir = "dist\PulseCore-Server-Windows"
+    } elseif (Test-Path (Join-Path $Root "dist\PulseCore-Qa-Loopback-Windows")) {
+        $BundleDir = "dist\PulseCore-Qa-Loopback-Windows"
     } else {
-        $BundleDir = "dist\eMuleRust-Windows"
+        $BundleDir = "dist\PulseCore-Server-Windows"
     }
 }
 
 $SourceBundle = Join-Path $Root $BundleDir
 if (!(Test-Path $SourceBundle)) {
-    throw "Distribution bundle not found at '$SourceBundle'. Run scripts\build_windows_release.ps1 first."
+    throw "Distribution bundle not found at '$SourceBundle'. Run scripts\build_windows_server.ps1 first."
 }
 
 Write-Host "==================================================" -ForegroundColor Cyan
@@ -95,7 +96,7 @@ try {
     $UnicodeWorkdir = Join-Path $UnicodeDir "data"
     New-Item -ItemType Directory -Path $UnicodeWorkdir -Force | Out-Null
 
-    $DaemonBin = Join-Path $UnicodeBundle "bin\mule-daemon.exe"
+    $DaemonBin = Join-Path $UnicodeBundle "mule-daemon.exe"
     $pinfo = [System.Diagnostics.ProcessStartInfo]::new($DaemonBin, "--workdir `"$UnicodeWorkdir`"")
     $pinfo.UseShellExecute = $false
     $pinfo.RedirectStandardOutput = $true
@@ -304,10 +305,8 @@ try {
     $RelocDir = Join-Path $TestRoot "RelocatedeMuleRust"
     Copy-Item -Path $SourceBundle -Destination $RelocDir -Recurse -Force
 
-    $RelocExe = Join-Path $RelocDir "eMuleRust.exe"
-    $RelocDaemon = Join-Path $RelocDir "bin\mule-daemon.exe"
-    if (!(Test-Path $RelocExe)) { throw "eMuleRust.exe missing in relocated bundle" }
-    if (!(Test-Path $RelocDaemon)) { throw "bin\mule-daemon.exe missing in relocated bundle" }
+    $RelocDaemon = Join-Path $RelocDir "mule-daemon.exe"
+    if (!(Test-Path $RelocDaemon)) { throw "mule-daemon.exe missing in relocated bundle" }
 
     $RelocWorkdir = Join-Path $TestRoot "reloc-workdir"
     $pinfoReloc = [System.Diagnostics.ProcessStartInfo]::new($RelocDaemon, "--workdir `"$RelocWorkdir`"")
@@ -369,7 +368,7 @@ try {
         New-Item -ItemType File -Path $FlagPath -Force | Out-Null
     }
 
-    $PortDaemonBin = Join-Path $PortModeDir "bin\mule-daemon.exe"
+    $PortDaemonBin = Join-Path $PortModeDir "mule-daemon.exe"
     # Launch daemon WITHOUT --workdir argument and with clean env vars
     $pinfoPort = [System.Diagnostics.ProcessStartInfo]::new($PortDaemonBin)
     $pinfoPort.UseShellExecute = $false

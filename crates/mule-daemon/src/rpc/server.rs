@@ -25,12 +25,17 @@ use crate::state::AppState;
 #[folder = "../../web"]
 pub struct EmbeddedWebAssets;
 
+/// Dirección IP del cliente propagada por el guardia de seguridad de plano de control.
+#[derive(Clone, Copy)]
+struct ClientIp(IpAddr);
+
 pub fn create_router(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/health", get(health_check))
         .route("/rpc", get(ws_handler))
         .route("/api/rpc", post(handle_http_rpc))
         .route("/api", post(handle_http_rpc))
+        .route("/api/auth/login", post(handle_webui_login))
         .route("/session-config.js", get(session_config_js))
         .route(
             "/transmission/rpc",
@@ -75,6 +80,18 @@ pub fn create_router(state: AppState) -> Router {
     router
         .layer(middleware::from_fn(control_plane_security_guard))
         .with_state(state)
+}
+
+/// Comprueba si una dirección IP corresponde a la interfaz local (loopback),
+/// normalizando direcciones IPv6 mapeadas a IPv4 (`::ffff:127.0.0.1`).
+pub fn is_loopback_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback(),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.is_loopback(),
+            None => v6.is_loopback(),
+        },
+    }
 }
 
 /// Vérifie qu'une adresse IP appartient au loopback ou au réseau privé local (RFC1918 / Link-Local / ULA).
@@ -140,13 +157,15 @@ pub fn is_allowed_origin_header(origin_header: &str) -> bool {
     is_allowed_host_header(host_part)
 }
 
-async fn control_plane_security_guard(req: Request, next: Next) -> impl IntoResponse {
+async fn control_plane_security_guard(mut req: Request, next: Next) -> impl IntoResponse {
     // 1. Isolation IP : refuser toute connexion provenant d'Internet hors LAN/Loopback
     let client_ip = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ci| ci.0.ip())
         .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+
+    req.extensions_mut().insert(ClientIp(client_ip));
 
     if !is_trusted_lan_or_loopback_ip(client_ip) {
         tracing::warn!(
@@ -274,15 +293,46 @@ async fn health_check() -> impl IntoResponse {
     }))
 }
 
+async fn handle_webui_login(
+    State(state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let password = payload
+        .get("password")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !state.has_webui_password() || state.verify_webui_password(password) {
+        (
+            StatusCode::OK,
+            Json(json!({
+                "ok": true,
+                "token": state.config.auth_token,
+            })),
+        )
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "ok": false,
+                "error": "Contraseña incorrecta",
+            })),
+        )
+    }
+}
+
 async fn handle_http_rpc(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ext_ip: Option<axum::Extension<ClientIp>>,
     Json(req): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
+    let client_ip = ext_ip
+        .map(|e| e.0 .0)
+        .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
     // Vérification du jeton Bearer si fourni, ou accès LAN/Loopback déjà validé par `control_plane_security_guard`.
     let expected = state.config.auth_token.as_str();
     let mut is_authenticated = if expected.is_empty() {
-        true
+        !(state.has_webui_password() && !is_loopback_ip(client_ip))
     } else if let Some(auth_hdr) = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -292,18 +342,34 @@ async fn handle_http_rpc(
             .map(|t| t.trim() == expected)
             .unwrap_or(false)
     } else {
-        // Autorisé sans mot de passe uniquement depuis le réseau local (filtré en amont par control_plane_security_guard)
-        true
+        // Sin contraseña de WebUI o desde loopback local se permite directamente;
+        // si hay contraseña y la petición viene de la red local se exige token Bearer.
+        !(state.has_webui_password() && !is_loopback_ip(client_ip))
     };
     let resp = handle_request(&state, req, &mut is_authenticated).await;
     Json(resp)
 }
 
-/// Emits `window.MULE_SESSION = {endpoint, token}` consumed by the bundled
-/// web UI to auto-connect. The token is only exposed when the socket is
-/// loopback-bound — on a LAN-facing bind a remote page must provide `auth_token`.
-async fn session_config_js(State(state): State<AppState>) -> impl IntoResponse {
-    let token = state.config.auth_token.clone();
+/// Emite `window.MULE_SESSION = {endpoint, token, instanceId, requiresPassword}` para la WebUI.
+/// Si hay contraseña configurada para la WebUI y la petición no procede de loopback, oculta el
+/// token y activa `requiresPassword: true` hasta autenticarse en `/api/auth/login`.
+async fn session_config_js(State(state): State<AppState>, req: Request) -> impl IntoResponse {
+    let client_ip = req
+        .extensions()
+        .get::<ClientIp>()
+        .map(|c| c.0)
+        .or_else(|| {
+            req.extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| ci.0.ip())
+        })
+        .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+    let requires_password = state.has_webui_password() && !is_loopback_ip(client_ip);
+    let token = if requires_password {
+        String::new()
+    } else {
+        state.config.auth_token.clone()
+    };
     let endpoint = if state.config.bind_addr.ip().is_unspecified() {
         "/rpc".to_string()
     } else {
@@ -313,6 +379,7 @@ async fn session_config_js(State(state): State<AppState>) -> impl IntoResponse {
         "endpoint": endpoint,
         "token": token,
         "instanceId": state.instance_id.to_string(),
+        "requiresPassword": requires_password,
     });
     (
         [(
@@ -532,6 +599,32 @@ mod tests {
         assert!(is_allowed_origin_header("null"));
         assert!(!is_allowed_origin_header("https://malicious-site.com"));
         assert!(!is_allowed_origin_header("http://8.8.8.8:4660"));
+    }
+
+    #[tokio::test]
+    async fn test_loopback_ip_and_webui_password_hash() {
+        assert!(is_loopback_ip("127.0.0.1".parse().unwrap()));
+        assert!(is_loopback_ip("::1".parse().unwrap()));
+        assert!(is_loopback_ip("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(!is_loopback_ip("192.168.1.50".parse().unwrap()));
+        assert!(!is_loopback_ip("::ffff:192.168.1.50".parse().unwrap()));
+
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::config::DaemonConfig::new(tmp.path().to_path_buf(), "tok".to_string());
+        let dls = crate::services::downloads::DownloadService::in_memory(tmp.path().join("temp"))
+            .unwrap();
+        let state = AppState::new(cfg, dls);
+        assert!(!state.has_webui_password());
+        assert!(state.verify_webui_password("cualquier-cosa"));
+
+        let h = AppState::hash_webui_password("secreto-123");
+        state.set_webui_password_hash(Some(h));
+        assert!(state.has_webui_password());
+        assert!(state.verify_webui_password("secreto-123"));
+        assert!(!state.verify_webui_password("incorrecto"));
+
+        state.set_webui_password_hash(None);
+        assert!(!state.has_webui_password());
     }
 }
 
