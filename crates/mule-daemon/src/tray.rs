@@ -7,6 +7,7 @@
 //! notificación con las acciones principales del servidor:
 //! - Abrir la interfaz web (`WebUI`) en el navegador predeterminado
 //! - Abrir la carpeta de descargas o la carpeta de datos
+//! - Activar o desactivar las notificaciones discretas (fin de descarga / caída de servidor)
 //! - Activar o desactivar el inicio automático al arrancar Windows
 //! - Detener el servidor de forma ordenada
 //!
@@ -14,10 +15,10 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::sync::{broadcast, Notify};
 
 /// Configuración para el icono de la bandeja del sistema.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TrayConfig {
     /// URL completa de la interfaz web (ej. `http://127.0.0.1:4660/`).
     pub web_url: String,
@@ -27,6 +28,8 @@ pub struct TrayConfig {
     pub data_dir: PathBuf,
     /// Señal de apagado ordenado del servidor.
     pub shutdown_notify: Arc<Notify>,
+    /// Receptor opcional de tramas JSON-RPC de eventos para avisos discretos.
+    pub event_rx: Option<broadcast::Receiver<String>>,
 }
 
 /// Controlador del hilo de la bandeja del sistema.
@@ -60,19 +63,97 @@ pub fn spawn(config: TrayConfig) -> TrayHandle {
     }
 }
 
+#[cfg(any(windows, test))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BalloonNotice {
+    pub title: String,
+    pub body: String,
+    pub is_warning: bool,
+}
+
+#[cfg(any(windows, test))]
+fn evaluate_event_frame(
+    raw: &str,
+    was_connected: &mut bool,
+    last_server_label: &mut String,
+) -> Option<BalloonNotice> {
+    if !raw.contains("\"event.downloadCompleted\"") && !raw.contains("\"server.sessionUpdated\"") {
+        return None;
+    }
+
+    let frame: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let method = frame.get("method")?.as_str()?;
+    let params = frame.get("params")?;
+
+    match method {
+        "event.downloadCompleted" => {
+            let file_name = params
+                .get("download")
+                .and_then(|d| d.get("fileName"))
+                .and_then(|v| v.as_str())?
+                .trim();
+            if file_name.is_empty() {
+                return None;
+            }
+            Some(BalloonNotice {
+                title: "Descarga completada".to_string(),
+                body: file_name.to_string(),
+                is_warning: false,
+            })
+        }
+        "server.sessionUpdated" => {
+            let session = params.get("session")?;
+            let status = session.get("status")?.as_str()?;
+            match status {
+                "connected" => {
+                    *was_connected = true;
+                    let name = session
+                        .get("serverName")
+                        .and_then(|v| v.as_str())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty());
+                    let addr = session
+                        .get("serverAddress")
+                        .and_then(|v| v.as_str())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty());
+                    *last_server_label = name
+                        .or(addr)
+                        .unwrap_or("el servidor eD2K")
+                        .to_string();
+                    None
+                }
+                "disconnected" if *was_connected => {
+                    *was_connected = false;
+                    Some(BalloonNotice {
+                        title: "Conexión eD2K perdida".to_string(),
+                        body: format!("Se ha desconectado de {last_server_label}."),
+                        is_warning: true,
+                    })
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 #[cfg(windows)]
 mod platform {
-    use super::{TrayConfig, TrayHandle};
+    use super::{evaluate_event_frame, BalloonNotice, TrayConfig, TrayHandle};
+    use std::collections::VecDeque;
     use std::ffi::c_void;
     use std::path::Path;
-    use std::sync::atomic::{AtomicIsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::broadcast;
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Shell::{
-        ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
-        NIN_KEYSELECT, NIN_SELECT, NOTIFYICONDATAW,
+        ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO,
+        NIIF_NOSOUND, NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIN_SELECT, NOTIFYICONDATAW,
+        NOTIFYICONDATAW_0,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreateIconFromResourceEx, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
@@ -88,6 +169,10 @@ mod platform {
     const APP_ICON_BYTES: &[u8] = include_bytes!("../assets/app_icon.ico");
     const TRAY_ICON_ID: u32 = 1;
     const WM_TRAY_CALLBACK: u32 = WM_APP + 1;
+    const WM_TRAY_NOTIFY_BALLOON: u32 = WM_APP + 2;
+    const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
+    const BALLOON_TIMEOUT_MS: u32 = 5_000;
+    const MAX_PENDING_BALLOONS: usize = 32;
 
     const IDM_STATUS: usize = 1000;
     const IDM_OPEN_WEBUI: usize = 1001;
@@ -95,6 +180,7 @@ mod platform {
     const IDM_OPEN_DATA: usize = 1003;
     const IDM_EXIT: usize = 1004;
     const IDM_AUTOSTART: usize = 1005;
+    const IDM_NOTIFICATIONS: usize = 1006;
 
     const RUN_REG_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
     const RUN_REG_VALUE: &str = "PulseCore";
@@ -103,6 +189,9 @@ mod platform {
     struct TrayState {
         config: TrayConfig,
         hicon: HICON,
+        hwnd_slot: Arc<AtomicIsize>,
+        notifications_enabled: Arc<AtomicBool>,
+        pending_balloons: Arc<Mutex<VecDeque<BalloonNotice>>>,
     }
 
     pub(super) fn spawn_tray(config: TrayConfig) -> TrayHandle {
@@ -132,7 +221,7 @@ mod platform {
         if raw != 0 {
             let hwnd = HWND(raw as *mut c_void);
             unsafe {
-                let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+                let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
             }
         }
         if let Some(handle) = thread {
@@ -141,9 +230,14 @@ mod platform {
     }
 
     fn run_tray_loop(
-        config: TrayConfig,
+        mut config: TrayConfig,
         hwnd_slot: Arc<AtomicIsize>,
     ) -> Result<(), String> {
+        let event_rx = config.event_rx.take();
+        let notifications_enabled = Arc::new(AtomicBool::new(true));
+        let pending_balloons = Arc::new(Mutex::new(VecDeque::new()));
+        let web_url = config.web_url.clone();
+
         unsafe {
             let hmodule = GetModuleHandleW(None).map_err(|e| format!("GetModuleHandleW: {e}"))?;
             let hinstance: HINSTANCE = hmodule.into();
@@ -158,8 +252,11 @@ mod platform {
             RegisterClassW(&wc);
 
             let state = Box::new(TrayState {
-                config: config.clone(),
+                config,
                 hicon: load_tray_icon(),
+                hwnd_slot: hwnd_slot.clone(),
+                notifications_enabled: notifications_enabled.clone(),
+                pending_balloons: pending_balloons.clone(),
             });
             let state_ptr = Box::into_raw(state);
 
@@ -172,9 +269,9 @@ mod platform {
                 0,
                 0,
                 0,
-                Some(HWND_MESSAGE),
+                HWND_MESSAGE,
                 None,
-                Some(hinstance),
+                hinstance,
                 None,
             )
             .map_err(|e| {
@@ -195,21 +292,109 @@ mod platform {
                 hIcon: (*state_ptr).hicon,
                 ..Default::default()
             };
-            fill_tooltip(&mut nid.szTip, &format!("Pulse Core — {}", config.web_url));
+            fill_utf16_buf(&mut nid.szTip, &format!("Pulse Core — {web_url}"));
 
             if !Shell_NotifyIconW(NIM_ADD, &nid).as_bool() {
                 let _ = DestroyWindow(hwnd);
                 return Err("Shell_NotifyIconW(NIM_ADD) devolvió false".to_string());
             }
 
+            if let Some(rx) = event_rx {
+                spawn_event_listener(rx, hwnd_slot.clone(), notifications_enabled, pending_balloons);
+            }
+
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
 
             hwnd_slot.store(0, Ordering::Release);
             Ok(())
+        }
+    }
+
+    fn spawn_event_listener(
+        mut rx: broadcast::Receiver<String>,
+        hwnd_slot: Arc<AtomicIsize>,
+        notifications_enabled: Arc<AtomicBool>,
+        pending_balloons: Arc<Mutex<VecDeque<BalloonNotice>>>,
+    ) {
+        let _ = std::thread::Builder::new()
+            .name("pulse-tray-events".to_string())
+            .spawn(move || {
+                let mut was_connected = false;
+                let mut last_server_label = String::from("el servidor eD2K");
+
+                loop {
+                    let raw = match rx.blocking_recv() {
+                        Ok(msg) => msg,
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    };
+
+                    let raw_hwnd = hwnd_slot.load(Ordering::Acquire);
+                    if raw_hwnd == 0 {
+                        break;
+                    }
+
+                    if let Some(notice) =
+                        evaluate_event_frame(&raw, &mut was_connected, &mut last_server_label)
+                    {
+                        if !notifications_enabled.load(Ordering::Relaxed) {
+                            continue;
+                        }
+                        if let Ok(mut queue) = pending_balloons.lock() {
+                            while queue.len() >= MAX_PENDING_BALLOONS {
+                                queue.pop_front();
+                            }
+                            queue.push_back(notice);
+                        }
+                        let hwnd = HWND(raw_hwnd as *mut c_void);
+                        unsafe {
+                            let _ =
+                                PostMessageW(hwnd, WM_TRAY_NOTIFY_BALLOON, WPARAM(0), LPARAM(0));
+                        }
+                    }
+                }
+            });
+    }
+
+    unsafe fn flush_pending_balloons(hwnd: HWND, state: &TrayState) {
+        let enabled = state.notifications_enabled.load(Ordering::Relaxed);
+        loop {
+            let notice = match state.pending_balloons.lock() {
+                Ok(mut queue) => {
+                    if !enabled {
+                        queue.clear();
+                        return;
+                    }
+                    queue.pop_front()
+                }
+                Err(_) => return,
+            };
+            let Some(notice) = notice else {
+                break;
+            };
+            let flags = if notice.is_warning {
+                NIIF_WARNING | NIIF_NOSOUND
+            } else {
+                NIIF_INFO | NIIF_NOSOUND
+            };
+            let mut nid = NOTIFYICONDATAW {
+                cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+                hWnd: hwnd,
+                uID: TRAY_ICON_ID,
+                uFlags: NIF_INFO,
+                dwInfoFlags: flags,
+                Anonymous: NOTIFYICONDATAW_0 {
+                    uTimeout: BALLOON_TIMEOUT_MS,
+                },
+                ..Default::default()
+            };
+            fill_utf16_buf(&mut nid.szInfoTitle, &notice.title);
+            fill_utf16_buf(&mut nid.szInfo, &notice.body);
+            let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
         }
     }
 
@@ -232,8 +417,14 @@ mod platform {
                     {
                         open_target(hwnd, &state.config.web_url);
                     } else if event == WM_RBUTTONUP || event == WM_CONTEXTMENU {
-                        show_context_menu(hwnd, &state.config);
+                        show_context_menu(hwnd, state);
                     }
+                }
+                LRESULT(0)
+            }
+            WM_TRAY_NOTIFY_BALLOON => {
+                if let Some(state) = state_ptr.as_ref() {
+                    flush_pending_balloons(hwnd, state);
                 }
                 LRESULT(0)
             }
@@ -247,6 +438,10 @@ mod platform {
                         }
                         IDM_OPEN_DATA => {
                             open_path(hwnd, &state.config.data_dir);
+                        }
+                        IDM_NOTIFICATIONS => {
+                            let prev = state.notifications_enabled.load(Ordering::Relaxed);
+                            state.notifications_enabled.store(!prev, Ordering::Relaxed);
                         }
                         IDM_AUTOSTART => {
                             let next = !is_autostart_enabled();
@@ -275,6 +470,7 @@ mod platform {
                 if !state_ptr.is_null() {
                     SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
                     let state = Box::from_raw(state_ptr);
+                    state.hwnd_slot.store(0, Ordering::Release);
                     let _ = DestroyIcon(state.hicon);
                 }
                 PostQuitMessage(0);
@@ -284,12 +480,12 @@ mod platform {
         }
     }
 
-    unsafe fn show_context_menu(hwnd: HWND, config: &TrayConfig) {
+    unsafe fn show_context_menu(hwnd: HWND, state: &TrayState) {
         let Ok(hmenu) = CreatePopupMenu() else {
             return;
         };
 
-        let status_label = to_wide(&format!("Pulse Core ({})", config.web_url));
+        let status_label = to_wide(&format!("Pulse Core ({})", state.config.web_url));
         let _ = AppendMenuW(
             hmenu,
             MF_STRING | MF_GRAYED,
@@ -311,6 +507,17 @@ mod platform {
             w!("Abrir carpeta de datos"),
         );
         let _ = AppendMenuW(hmenu, MF_SEPARATOR, 0, PCWSTR::null());
+        let notif_flag = if state.notifications_enabled.load(Ordering::Relaxed) {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        let _ = AppendMenuW(
+            hmenu,
+            MF_STRING | notif_flag,
+            IDM_NOTIFICATIONS,
+            w!("Notificaciones discretas"),
+        );
         let autostart_flag = if is_autostart_enabled() {
             MF_CHECKED
         } else {
@@ -333,7 +540,7 @@ mod platform {
                 TPM_BOTTOMALIGN | TPM_LEFTALIGN | TPM_RIGHTBUTTON,
                 pt.x,
                 pt.y,
-                None,
+                0,
                 hwnd,
                 None,
             );
@@ -349,7 +556,7 @@ mod platform {
     unsafe fn open_target(hwnd: HWND, target: &str) {
         let wide = to_wide(target);
         let _ = ShellExecuteW(
-            Some(hwnd),
+            hwnd,
             w!("open"),
             PCWSTR(wide.as_ptr()),
             PCWSTR::null(),
@@ -446,7 +653,7 @@ mod platform {
                 return icon;
             }
         }
-        LoadIconW(None, IDI_APPLICATION).unwrap_or_default()
+        LoadIconW(HINSTANCE::default(), IDI_APPLICATION).unwrap_or_default()
     }
 
     /// Selecciona la mejor entrada de un archivo `.ico` para el tamaño objetivo.
@@ -484,7 +691,10 @@ mod platform {
         best.map(|(_, slice)| slice)
     }
 
-    fn fill_tooltip(buf: &mut [u16; 128], text: &str) {
+    fn fill_utf16_buf(buf: &mut [u16], text: &str) {
+        if buf.is_empty() {
+            return;
+        }
         let mut idx = 0usize;
         for unit in text.encode_utf16() {
             if idx + 1 >= buf.len() {
@@ -498,5 +708,111 @@ mod platform {
 
     fn to_wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::downloads::types::DownloadSnapshot;
+    use crate::services::server_session::types::{ServerConnectionStatus, ServerSessionSnapshot};
+    use crate::services::DaemonEvent;
+    use uuid::Uuid;
+
+    #[test]
+    fn evaluate_event_frame_detects_download_completion_and_server_drop() {
+        let mut was_connected = false;
+        let mut last_server = String::from("el servidor eD2K");
+
+        // Una desconexión previa sin haber estado conectado no genera aviso.
+        let initial_drop = DaemonEvent::ServerSessionUpdated {
+            sequence: 1,
+            session: ServerSessionSnapshot {
+                status: ServerConnectionStatus::Disconnected,
+                ..Default::default()
+            },
+        }
+        .to_wire_json()
+        .unwrap();
+        assert_eq!(
+            evaluate_event_frame(&initial_drop, &mut was_connected, &mut last_server),
+            None
+        );
+
+        // Conectar memoriza el nombre del servidor.
+        let connected = DaemonEvent::ServerSessionUpdated {
+            sequence: 2,
+            session: ServerSessionSnapshot {
+                status: ServerConnectionStatus::Connected,
+                server_name: Some("eMule Security No1".to_string()),
+                server_address: Some("1.2.3.4:4661".to_string()),
+                ..Default::default()
+            },
+        }
+        .to_wire_json()
+        .unwrap();
+        assert_eq!(
+            evaluate_event_frame(&connected, &mut was_connected, &mut last_server),
+            None
+        );
+        assert!(was_connected);
+
+        // Caída posterior genera aviso único con el servidor afectado.
+        let dropped = DaemonEvent::ServerSessionUpdated {
+            sequence: 3,
+            session: ServerSessionSnapshot {
+                status: ServerConnectionStatus::Disconnected,
+                ..Default::default()
+            },
+        }
+        .to_wire_json()
+        .unwrap();
+        assert_eq!(
+            evaluate_event_frame(&dropped, &mut was_connected, &mut last_server),
+            Some(BalloonNotice {
+                title: "Conexión eD2K perdida".to_string(),
+                body: "Se ha desconectado de eMule Security No1.".to_string(),
+                is_warning: true,
+            })
+        );
+        assert!(!was_connected);
+
+        // Descarga completada genera aviso informativo con el nombre de archivo.
+        let done = DaemonEvent::DownloadCompleted {
+            sequence: 4,
+            download: DownloadSnapshot {
+                id: Uuid::nil(),
+                file_name: "PulseCore-Ubuntu-ARM64.iso".to_string(),
+                total_bytes: 1024,
+                received_bytes: 1024,
+                verified_bytes: 1024,
+                progress: 1.0,
+                status: "completed".to_string(),
+                priority: "normal".to_string(),
+                source_count: 1,
+                download_rate_bps: 0,
+                uploaded_bytes: 0,
+                created_at_unix_ms: 0,
+                updated_at_unix_ms: 0,
+                category_id: None,
+                eta_seconds: None,
+                ed2k_hash: "0123456789ABCDEF0123456789ABCDEF".to_string(),
+                parts: Vec::new(),
+                pending_ranges: Vec::new(),
+                max_sources: None,
+                nas_copy_active: None,
+                protocol: Some("ed2k".to_string()),
+            },
+        }
+        .to_wire_json()
+        .unwrap();
+        assert_eq!(
+            evaluate_event_frame(&done, &mut was_connected, &mut last_server),
+            Some(BalloonNotice {
+                title: "Descarga completada".to_string(),
+                body: "PulseCore-Ubuntu-ARM64.iso".to_string(),
+                is_warning: false,
+            })
+        );
     }
 }

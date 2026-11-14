@@ -481,6 +481,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener_cleanup = state.inbound_listener.clone();
     let downloads_cleanup = state.downloads.clone();
     let tray_downloads_dir = state.config.default_download_dir.clone();
+    let tray_event_rx = if !no_tray_arg {
+        Some(state.event_tx.subscribe())
+    } else {
+        None
+    };
     let app = create_router(state);
 
     if let Some(parent_pid) = parent_pid_arg {
@@ -500,6 +505,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             downloads_dir: tray_downloads_dir,
             data_dir: data_dir.clone(),
             shutdown_notify: shutdown_notify.clone(),
+            event_rx: tray_event_rx,
         }))
     } else {
         None

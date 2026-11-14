@@ -2,7 +2,8 @@ name: Packages
 
 # Compilación de artefactos distribuibles en cada push a master y bajo demanda.
 # - windows-bundle: compila mule-daemon.exe y mule-cli.exe + SBOM + prueba de humo.
-# - linux-bundle: compila los binarios nativos Linux x64 (servidor + CLI).
+# - linux-bundle: compila los binarios nativos Linux x64 (servidor + CLI + plantilla systemd).
+# - linux-arm64-bundle: compila los binarios Raspberry Pi / ARM64 (servidor + CLI + plantilla systemd).
 
 on:
   push:
@@ -77,7 +78,7 @@ jobs:
       - name: Empaquetar distribución Linux
         run: |
           mkdir -p dist/PulseCore-Server-Linux
-          cp target/release/mule-daemon target/release/mule-cli dist/PulseCore-Server-Linux/
+          cp target/release/mule-daemon target/release/mule-cli scripts/mule-daemon.service dist/PulseCore-Server-Linux/
           tar -czf dist/PulseCore-Server-Linux-x64.tar.gz -C dist PulseCore-Server-Linux
           (cd dist && sha256sum PulseCore-Server-Linux-x64.tar.gz > PulseCore-Server-Linux-x64.tar.gz.sha256)
 
@@ -88,4 +89,52 @@ jobs:
           path: |
             dist/PulseCore-Server-Linux-x64.tar.gz
             dist/PulseCore-Server-Linux-x64.tar.gz.sha256
+          retention-days: 14
+
+  linux-arm64-bundle:
+    name: Linux ARM64 (Raspberry Pi) daemon + CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar compilador cruzado aarch64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Instalar cadena de herramientas Rust (aarch64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Caché de Cargo (aarch64)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-arm64-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilar daemon y CLI en Rust (aarch64 release)
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli
+
+      - name: Empaquetar distribución Raspberry Pi (ARM64)
+        run: |
+          mkdir -p dist/PulseCore-Server-Linux-arm64
+          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli scripts/mule-daemon.service dist/PulseCore-Server-Linux-arm64/
+          tar -czf dist/PulseCore-Server-Linux-arm64.tar.gz -C dist PulseCore-Server-Linux-arm64
+          (cd dist && sha256sum PulseCore-Server-Linux-arm64.tar.gz > PulseCore-Server-Linux-arm64.tar.gz.sha256)
+
+      - name: Subir artefacto Raspberry Pi (ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseCore-linux-arm64
+          path: |
+            dist/PulseCore-Server-Linux-arm64.tar.gz
+            dist/PulseCore-Server-Linux-arm64.tar.gz.sha256
           retention-days: 14

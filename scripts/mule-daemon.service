@@ -1,0 +1,40 @@
+# Plantilla de servicio systemd de usuario (--user) para Raspberry Pi / Linux.
+#
+# Instalación rápida en el equipo destino:
+#   mkdir -p ~/.local/bin ~/.config/systemd/user ~/.mule ~/Downloads
+#   install -m 755 mule-daemon mule-cli ~/.local/bin/
+#   cp mule-daemon.service ~/.config/systemd/user/mule-daemon.service
+#   loginctl enable-linger "$USER"
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now mule-daemon.service
+
+[Unit]
+Description=Pulse Core Daemon (eD2K + Kademlia + BitTorrent)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/mule-daemon --workdir %h/.mule --downloads-dir %h/Downloads --bind 0.0.0.0:4660 --ed2k-port 4662 --kad-port 4672
+Restart=always
+RestartSec=5
+
+# === Límites de recursos (protección en Raspberry Pi y servidores) ===
+LimitNOFILE=65535
+TasksMax=1024
+MemoryHigh=1536M
+MemoryMax=2048M
+
+# === Endurecimiento de seguridad (systemd user sandboxing) ===
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+LockPersonality=yes
+RestrictSUIDSGID=yes
+UMask=0022
+InaccessiblePaths=-%h/.ssh -%h/.gnupg -%h/.bash_history
+ReadWritePaths=%h/.mule %h/Downloads
+
+[Install]
+WantedBy=default.target

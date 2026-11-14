@@ -242,26 +242,25 @@ fn get_host_metrics() -> Value {
         }
     }
 
-    let mut mem_total: u64 = 0;
-    let mut mem_avail: u64 = 0;
     #[cfg(windows)]
-    {
-        let (t, a) = query_windows_memory();
-        mem_total = t;
-        mem_avail = a;
-    }
+    let (mem_total, mem_avail) = query_windows_memory();
     #[cfg(not(windows))]
-    if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
-        for line in meminfo.lines() {
-            if let Some(rest) = line.strip_prefix("MemTotal:") {
-                let kb: u64 = rest.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
-                mem_total = kb * 1024;
-            } else if let Some(rest) = line.strip_prefix("MemAvailable:") {
-                let kb: u64 = rest.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
-                mem_avail = kb * 1024;
+    let (mem_total, mem_avail) = {
+        let mut total: u64 = 0;
+        let mut avail: u64 = 0;
+        if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
+            for line in meminfo.lines() {
+                if let Some(rest) = line.strip_prefix("MemTotal:") {
+                    let kb: u64 = rest.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    total = kb * 1024;
+                } else if let Some(rest) = line.strip_prefix("MemAvailable:") {
+                    let kb: u64 = rest.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    avail = kb * 1024;
+                }
             }
         }
-    }
+        (total, avail)
+    };
     let mem_used = mem_total.saturating_sub(mem_avail);
     let hostname = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))

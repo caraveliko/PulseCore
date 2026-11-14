@@ -115,7 +115,7 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           bundle="PulseCore-${tag}-linux-x64"
           mkdir -p "dist/$bundle"
-          cp target/release/mule-daemon target/release/mule-cli "dist/$bundle/"
+          cp target/release/mule-daemon target/release/mule-cli scripts/mule-daemon.service "dist/$bundle/"
           tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
@@ -125,6 +125,58 @@ jobs:
           gh release upload "$tag" \
             "dist/PulseCore-${tag}-linux-x64.tar.gz" \
             "dist/PulseCore-${tag}-linux-x64.tar.gz.sha256" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  linux-arm64:
+    name: Build & publish Raspberry Pi (ARM64) bundle
+    runs-on: ubuntu-latest
+    needs: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar compilador cruzado aarch64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Instalar cadena de herramientas Rust (aarch64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Caché de Cargo (aarch64)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilar daemon y CLI en Rust (aarch64 release)
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli
+
+      - name: Empaquetar distribución Raspberry Pi (ARM64)
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          bundle="PulseCore-${tag}-linux-arm64"
+          mkdir -p "dist/$bundle"
+          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli scripts/mule-daemon.service "dist/$bundle/"
+          tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
+          (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
+
+      - name: Subir artefacto Raspberry Pi (ARM64) a la Release de GitHub
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release upload "$tag" \
+            "dist/PulseCore-${tag}-linux-arm64.tar.gz" \
+            "dist/PulseCore-${tag}-linux-arm64.tar.gz.sha256" \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
