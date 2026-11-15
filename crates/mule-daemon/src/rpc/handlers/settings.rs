@@ -69,6 +69,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "cleanerEnabled",
     "mcpEnabled",
     "mcpToolProfile",
+    "ramProfile",
     "logLevel",
     "webuiPassword",
 ];
@@ -740,6 +741,11 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                 .ok()
                 .flatten()
                 .unwrap_or_else(|| "safe".to_string()),
+            "ramProfile": dls
+                .get_setting("ram_profile")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "balanced".to_string()),
             "sonarrUrl": dls.get_setting("sonarr_url").ok().flatten().unwrap_or_default(),
             "radarrUrl": dls.get_setting("radarr_url").ok().flatten().unwrap_or_default(),
             "jellyfinUrl": dls.get_setting("jellyfin_url").ok().flatten().unwrap_or_default(),
@@ -1364,6 +1370,44 @@ pub async fn handle_settings_set(
             .await
             .set_setting("mcp_tool_profile", &profile)?;
         keys.push("mcpToolProfile");
+    }
+    if let Some(val) = params.get("ramProfile") {
+        let profile = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'ramProfile'"))?
+            .trim()
+            .to_lowercase();
+        if !["low", "balanced", "high"].contains(&profile.as_str()) {
+            return Err(JsonRpcError::invalid_params(
+                "'ramProfile' must be 'low', 'balanced' or 'high'",
+            ));
+        }
+
+        // Aplicar presupuestos de red e I/O en caliente según el perfil seleccionado
+        let mut b = state.network_policy.budgets();
+        match profile.as_str() {
+            "low" => {
+                b.max_total_buffer_bytes = 8 * 1024 * 1024; // 8 MiB buffer global
+                b.max_active_peer_connections = 120;
+            }
+            "high" => {
+                b.max_total_buffer_bytes = 64 * 1024 * 1024; // 64 MiB buffer global
+                b.max_active_peer_connections = 1000;
+            }
+            _ => {
+                b.max_total_buffer_bytes = 32 * 1024 * 1024; // 32 MiB equilibrado
+                b.max_active_peer_connections = 500;
+            }
+        }
+        let _ = state.network_policy.set_budgets(b);
+
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("ram_profile", &profile)?;
+        tracing::info!("[CACHE] Perfil de memoria RAM configurado: {profile}");
+        keys.push("ramProfile");
     }
     for (camel, snake) in [
         ("sonarrUrl", "sonarr_url"),

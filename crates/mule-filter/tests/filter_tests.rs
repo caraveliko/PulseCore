@@ -43,7 +43,7 @@ fn test_filter_binary_search_lookup() {
     let hit = filter.check_ip("10.0.0.50".parse().unwrap());
     assert!(hit.is_some());
     let r = hit.unwrap();
-    assert_eq!(r.description, "Blocked Range A");
+    assert_eq!(r.description.as_ref(), "Blocked Range A");
     assert_eq!(r.level, 90);
 
     // Check hit boundary Range B

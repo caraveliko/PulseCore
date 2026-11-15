@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach" & Antigravity
 
+//! Motor BitTorrent integrado acotado y optimizado para bajo consumo de memoria.
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
 use serde::{Deserialize, Serialize};
+
+/// Límite estricto de pares concurrentes por torrent para evitar sobrecarga de descriptores y memoria de búfer.
+pub const TORRENT_PEER_LIMIT: usize = 32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TorrentSnapshot {
@@ -95,6 +100,7 @@ impl TorrentEngine {
         let opts = AddTorrentOptions {
             output_folder: Some(out_dir.to_string_lossy().to_string()),
             overwrite: true,
+            peer_limit: Some(TORRENT_PEER_LIMIT),
             ..Default::default()
         };
 

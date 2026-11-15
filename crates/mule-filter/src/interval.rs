@@ -1,21 +1,58 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
+//! Representación y fusión de intervalos IPv4 para el filtro IP en memoria.
+
 use serde::{Deserialize, Serialize};
 use std::net::Ipv4Addr;
+use std::sync::Arc;
+
+/// Rango IPv4 compacto optimizado para consumo mínimo de RAM.
+/// Ocupa únicamente 8 bytes por intervalo en memoria contigua (`start` + `end`),
+/// permitiendo albergar cientos de miles de rangos con un consumo < 3 MiB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompactRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl CompactRange {
+    #[inline]
+    pub const fn new(start: u32, end: u32) -> Self {
+        Self { start, end }
+    }
+
+    #[inline]
+    pub const fn contains(&self, ip: u32) -> bool {
+        ip >= self.start && ip <= self.end
+    }
+
+    #[inline]
+    pub fn start_ip(&self) -> Ipv4Addr {
+        Ipv4Addr::from(self.start)
+    }
+
+    #[inline]
+    pub fn end_ip(&self) -> Ipv4Addr {
+        Ipv4Addr::from(self.end)
+    }
+}
 
 /// An IPv4 address represented as an inclusive range `[start, end]`.
 /// IP values are stored as big-endian `u32` (network order).
+///
+/// La descripción utiliza `Arc<str>` para compartir cadenas idénticas entre
+/// miles de reglas y evitar alocaciones repetidas en el heap.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FilterRange {
     pub start: u32,
     pub end: u32,
     pub level: u32,
-    pub description: String,
+    pub description: Arc<str>,
 }
 
 impl FilterRange {
-    pub fn new(start: Ipv4Addr, end: Ipv4Addr, level: u32, description: impl Into<String>) -> Self {
+    pub fn new(start: Ipv4Addr, end: Ipv4Addr, level: u32, description: impl AsRef<str>) -> Self {
         let start_u32 = u32::from(start);
         let end_u32 = u32::from(end);
         let (s, e) = if start_u32 <= end_u32 {
@@ -27,33 +64,69 @@ impl FilterRange {
             start: s,
             end: e,
             level,
-            description: description.into(),
+            description: Arc::from(description.as_ref()),
         }
     }
 
+    #[inline]
     pub fn contains(&self, ip: u32) -> bool {
         ip >= self.start && ip <= self.end
     }
 
+    #[inline]
     pub fn start_ip(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.start)
     }
 
+    #[inline]
     pub fn end_ip(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.end)
     }
 }
 
 /// Merges sorted intervals where possible.
+/// If two ranges overlap or are adjacent, they are coalesced into a single compact range.
+pub fn coalesce_compact_ranges(mut ranges: Vec<CompactRange>) -> (Vec<CompactRange>, usize) {
+    if ranges.len() <= 1 {
+        return (ranges, 0);
+    }
+
+    ranges.sort_unstable_by(|a, b| a.start.cmp(&b.start).then_with(|| a.end.cmp(&b.end)));
+
+    let mut merged: Vec<CompactRange> = Vec::with_capacity(ranges.len());
+    let mut merged_count = 0usize;
+
+    for r in ranges {
+        if let Some(last) = merged.last_mut() {
+            let is_adjacent = last.end < u32::MAX && (last.end + 1 >= r.start);
+            let is_overlapping = r.start <= last.end;
+
+            if is_adjacent || is_overlapping {
+                if r.end > last.end {
+                    last.end = r.end;
+                }
+                merged_count += 1;
+            } else {
+                merged.push(r);
+            }
+        } else {
+            merged.push(r);
+        }
+    }
+
+    merged.shrink_to_fit();
+    (merged, merged_count)
+}
+
+/// Merges sorted intervals where possible.
 /// If two ranges overlap or are adjacent AND have the same level, they are merged.
-/// If they have different levels or descriptions, descriptions can be appended or kept.
 pub fn coalesce_ranges(mut ranges: Vec<FilterRange>) -> (Vec<FilterRange>, usize) {
     if ranges.len() <= 1 {
         return (ranges, 0);
     }
 
     // Sort by start ascending, then end ascending
-    ranges.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.end.cmp(&b.end)));
+    ranges.sort_unstable_by(|a, b| a.start.cmp(&b.start).then_with(|| a.end.cmp(&b.end)));
 
     let mut merged: Vec<FilterRange> = Vec::with_capacity(ranges.len());
     let mut merged_count = 0usize;
@@ -61,22 +134,23 @@ pub fn coalesce_ranges(mut ranges: Vec<FilterRange>) -> (Vec<FilterRange>, usize
     for r in ranges {
         if let Some(last) = merged.last_mut() {
             // Check if current range overlaps or is immediately adjacent (last.end + 1 == r.start)
-            // Be careful with u32 overflow: last.end < u32::MAX
             let is_adjacent = last.end < u32::MAX && (last.end + 1 >= r.start);
             let is_overlapping = r.start <= last.end;
 
             if (is_adjacent || is_overlapping) && last.level == r.level {
-                // Merge into last
                 if r.end > last.end {
                     last.end = r.end;
                 }
-                if !r.description.is_empty() && !last.description.contains(&r.description) {
+                if !r.description.is_empty() && !last.description.contains(r.description.as_ref()) {
+                    let mut combined = String::with_capacity(last.description.len() + r.description.len() + 3);
                     if last.description.is_empty() {
-                        last.description = r.description;
+                        combined.push_str(r.description.as_ref());
                     } else {
-                        last.description.push_str(" | ");
-                        last.description.push_str(&r.description);
+                        combined.push_str(last.description.as_ref());
+                        combined.push_str(" | ");
+                        combined.push_str(r.description.as_ref());
                     }
+                    last.description = Arc::from(combined);
                 }
                 merged_count += 1;
             } else {

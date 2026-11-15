@@ -1427,6 +1427,156 @@
       color: #818cf8;
     }
 
+    /* === DRAWER / PANEL ASISTENTE COPILOTO IA === */
+    .assistant-drawer {
+      position: fixed;
+      bottom: 42px;
+      right: 20px;
+      width: 380px;
+      height: 520px;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 80px);
+      background: #0f172a;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(168, 85, 247, 0.15);
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      overflow: hidden;
+      animation: slideUpAssistant 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUpAssistant {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .assistant-header {
+      padding: 10px 14px;
+      background: rgba(30, 41, 59, 0.7);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .assistant-quick-prompts {
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .ast-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .ast-chip:hover {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: rgba(168, 85, 247, 0.4);
+      color: #fff;
+    }
+    .assistant-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 0.82rem;
+    }
+    .ast-msg {
+      display: flex;
+      gap: 8px;
+      max-width: 90%;
+    }
+    .ast-msg.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+    .ast-msg.assistant {
+      align-self: flex-start;
+    }
+    .ast-msg-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .ast-msg.user .ast-msg-avatar {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+    .ast-msg-body {
+      padding: 8px 12px;
+      border-radius: 8px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .ast-msg.assistant .ast-msg-body {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+    .ast-msg.user .ast-msg-body {
+      background: #4f46e5;
+      color: #fff;
+    }
+    .ast-tool-call {
+      font-size: 0.75rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 2px solid #38bdf8;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin: 4px 0;
+      color: #94a3b8;
+      font-family: var(--font-mono);
+    }
+    .ast-confirm-card {
+      margin: 8px 12px;
+      padding: 8px 10px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 6px;
+    }
+    .assistant-input-bar {
+      padding: 8px 10px;
+      background: rgba(30, 41, 59, 0.7);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .assistant-input-bar textarea {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.8rem;
+      resize: none;
+      outline: none;
+      max-height: 80px;
+    }
+    .assistant-input-bar textarea:focus {
+      border-color: #a855f7;
+    }
+
     /* === BARRA DE ESTADO INFERIOR PROFESIONAL (BOTTOM STATUSBAR) === */
     .bottom-statusbar {
       height: 30px;
@@ -1438,18 +1588,6 @@
       justify-content: space-between;
       padding: 0 16px;
       font-size: 11.5px;
-      color: var(--text-muted);
-      user-select: none;
-      z-index: 35;
-      flex-shrink: 0;
-    }
-      background-color: #0b0f19;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 14px;
-      font-size: 11px;
       color: var(--text-muted);
       user-select: none;
       z-index: 35;
@@ -2382,6 +2520,12 @@
         <span style="font-size: 0.78rem;">Buscar</span>
         <kbd style="font-size: 0.65rem; background: #0f172a; padding: 1px 5px; border-radius: 3px; border: 1px solid #334155; color: #94a3b8; font-family: var(--font-mono);">Ctrl K</kbd>
       </button>
+
+      <!-- Botón Asistente IA Copilot -->
+      <button class="btn btn-sm" id="btn-toggle-assistant" onclick="toggleAssistantDrawer()" title="Abrir Copiloto IA de eMuleRust (Asistente inteligente)" style="padding: 4px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25)); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 6px; color: #e0e7ff; cursor: pointer; font-weight: 600;">
+        <span style="font-size: 0.95rem;">🤖</span>
+        <span style="font-size: 0.78rem;">Copiloto IA</span>
+      </button>
     </div>
   </header>
 
@@ -2389,6 +2533,26 @@
   <main>
     <!-- VISTA: DESCARGAS -->
     <section id="tab-downloads" class="view-panel active">
+      <!-- BANNER DE ADVERTENCIA LOWID / FIREWALLED -->
+      <div id="lowid-warning-banner" style="display: none; margin-bottom: 12px; background: linear-gradient(90deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05)); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 10px 14px; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.3rem;">⚠️</span>
+          <div>
+            <div style="font-weight: 600; color: #fbbf24; font-size: 0.85rem;" id="lowid-banner-title">Estado de Red Limitado: LowID / Firewalled detectado</div>
+            <div style="font-size: 0.76rem; color: var(--text-muted);" id="lowid-banner-desc">Tus puertos TCP/UDP están bloqueados por el router o cortafuegos. Esto reduce drásticamente las fuentes y la velocidad.</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+          <button class="btn btn-sm btn-primary" onclick="openPortTutorialModal()" style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; padding: 4px 10px;">
+            <span>📖 Abrir Puertos en el Router</span>
+          </button>
+          <button class="btn btn-sm" onclick="tryUpnpQuickFix(this)" style="padding: 4px 8px;" title="Intentar mapear puertos mediante UPnP">
+            <span>🔄 Probar UPnP</span>
+          </button>
+          <button class="btn btn-sm" onclick="dismissLowIdBanner()" style="padding: 4px 8px;" title="Descartar aviso temporalmente">✕</button>
+        </div>
+      </div>
+
       <!-- BARRA DE HERRAMIENTAS UNIFICADA Y COMPACTA -->
       <div class="action-bar" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
         <!-- Izquierda: Botón Añadir Principal + Acciones Compactas Contextuales -->
@@ -3108,6 +3272,20 @@
                 <label>Cuota Diaria Subida (GB)</label>
                 <input type="number" class="form-control" id="pref-daily-quota" min="0" placeholder="0 = Ilimitado">
               </div>
+            </div>
+
+            <!-- Selector de Perfil de Memoria RAM & Caché -->
+            <div class="form-group" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);">
+              <label style="display: flex; align-items: center; justify-content: space-between;">
+                <span>💾 Perfil de Memoria RAM & Búferes</span>
+                <span id="ram-profile-badge" class="badge" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; font-size: 0.7rem;">Equilibrado</span>
+              </label>
+              <select class="form-control" id="pref-ram-profile" onchange="updateRamProfileBadge()">
+                <option value="low">🌱 Bajo consumo (~25-40 MB RAM) - Ideal para NAS y Raspberry Pi</option>
+                <option value="balanced" selected>⚖️ Equilibrado (~60-80 MB RAM) - Uso estándar</option>
+                <option value="high">🚀 Alto rendimiento (~150-250 MB RAM) - Enjambres masivos en PC</option>
+              </select>
+              <span class="help-text">Ajusta los búferes de red en anillo y la memoria máxima asignada para transferencias de disco.</span>
             </div>
           </div>
         </div>
@@ -4232,6 +4410,214 @@
         <span>Usa <kbd class="spotlight-badge-kbd">↑</kbd> <kbd class="spotlight-badge-kbd">↓</kbd> para navegar</span>
         <span><kbd class="spotlight-badge-kbd">↵ Enter</kbd> para ejecutar</span>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: TUTORIAL APERTURA DE PUERTOS (HIGHID) -->
+  <div class="modal-overlay" id="modal-port-tutorial" onclick="if(event.target === this) closeModal('modal-port-tutorial')">
+    <div class="modal" style="max-width: 680px; width: 92%; max-height: 88vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🌐</div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem; color: #fff;">Guía para conseguir HighID (Abrir puertos)</h3>
+            <div style="font-size: 0.76rem; color: var(--text-muted);">Configuración de redirección de puertos (Port Forwarding) en tu router</div>
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="closeModal('modal-port-tutorial')" style="padding: 2px 8px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="overflow-y: auto; padding-right: 6px; font-size: 0.82rem; line-height: 1.5; color: var(--text); display: flex; flex-direction: column; gap: 14px;">
+        <!-- Explicación -->
+        <div style="background: rgba(30, 41, 59, 0.5); border-left: 3px solid #f59e0b; padding: 10px 12px; border-radius: 4px;">
+          <b>¿Por qué tengo LowID?</b> Un <b>LowID</b> o estado <b>Firewalled</b> significa que otros clientes P2P no pueden iniciar conexiones entrantes directas hacia tu nodo porque el cortafuegos o tu router bloquean los puertos. Con <b>HighID</b> tendrás el 100% de fuentes disponibles y la máxima velocidad de descarga.
+        </div>
+
+        <!-- Opción 1: UPnP Automático -->
+        <div style="border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: rgba(15, 23, 42, 0.4);">
+          <div style="font-weight: 600; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+            <span>Opción 1: Intento Automático UPnP</span>
+            <button class="btn btn-sm btn-primary" id="btn-tutorial-upnp" onclick="tryUpnpQuickFix(this)">⚡ Probar UPnP Ahora</button>
+          </div>
+          <div style="color: var(--text-muted); font-size: 0.78rem;">
+            Si tu router tiene activado Universal Plug and Play (UPnP), eMuleRust puede solicitar la apertura automática sin tocar la configuración del router.
+          </div>
+          <div id="tutorial-upnp-status" style="margin-top: 8px; font-size: 0.78rem; display: none;"></div>
+        </div>
+
+        <!-- Opción 2: Port Forwarding Manual -->
+        <div style="border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: rgba(15, 23, 42, 0.4);">
+          <div style="font-weight: 600; color: #fff; margin-bottom: 8px;">Opción 2: Apertura Manual en el Router (Port Forwarding)</div>
+          
+          <!-- Diagrama Gráfico SVG de Red NAT -->
+          <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center;">
+            <svg viewBox="0 0 560 110" style="width: 100%; max-width: 540px; height: auto;" xmlns="http://www.w3.org/2000/svg">
+              <!-- Internet Cloud -->
+              <g transform="translate(10, 20)">
+                <rect width="90" height="60" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+                <text x="45" y="32" fill="#38bdf8" font-size="11" font-weight="700" text-anchor="middle">Internet</text>
+                <text x="45" y="47" fill="#94a3b8" font-size="9" text-anchor="middle">Pares eD2k/Kad</text>
+              </g>
+
+              <!-- Flecha Internet -> Router -->
+              <path d="M 105 50 L 160 50" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4" marker-end="url(#arr-arrow)" />
+              <text x="132" y="42" fill="#f59e0b" font-size="8" font-weight="600" text-anchor="middle">TCP 4662</text>
+              <text x="132" y="62" fill="#f59e0b" font-size="8" font-weight="600" text-anchor="middle">UDP 4672</text>
+
+              <!-- Router NAT Box -->
+              <g transform="translate(165, 10)">
+                <rect width="160" height="80" rx="8" fill="#1e1e38" stroke="#a855f7" stroke-width="1.8" />
+                <text x="80" y="24" fill="#e0e7ff" font-size="11" font-weight="700" text-anchor="middle">Router / Puerta Enlace</text>
+                <text x="80" y="38" fill="#a855f7" font-size="9" text-anchor="middle">192.168.1.1 (NAT Firewall)</text>
+                
+                <!-- Reglas dentro del router -->
+                <rect x="10" y="46" width="140" height="26" rx="4" fill="#0f172a" stroke="rgba(255,255,255,0.1)" />
+                <text x="75" y="58" fill="#38bdf8" font-size="8" font-weight="600" text-anchor="middle">Port Forwarding: ON</text>
+                <text x="75" y="68" fill="#34d399" font-size="8" text-anchor="middle">Redirigir a IP Local ➔</text>
+              </g>
+
+              <!-- Flecha Router -> Tu PC/NAS -->
+              <path d="M 330 50 L 390 50" stroke="#34d399" stroke-width="2" marker-end="url(#arr-arrow)" />
+              <text x="360" y="42" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">Tráfico OK</text>
+
+              <!-- PC / eMule Host Box -->
+              <g transform="translate(395, 15)">
+                <rect width="150" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="1.8" />
+                <text x="75" y="26" fill="#ecfdf5" font-size="11" font-weight="700" text-anchor="middle">Tu Máquina / NAS</text>
+                <text x="75" y="40" fill="#34d399" font-size="9" font-family="monospace" text-anchor="middle" class="tut-val-ip">192.168.1.X</text>
+                <rect x="15" y="46" width="120" height="18" rx="3" fill="#022c22" />
+                <text x="75" y="58" fill="#34d399" font-size="8.5" font-weight="700" text-anchor="middle">🟢 HighID / Abierto</text>
+              </g>
+
+              <defs>
+                <marker id="arr-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+                </marker>
+              </defs>
+            </svg>
+            <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 4px; text-align: center;">
+              El router intercepta el tráfico exterior y lo reenvía directamente al puerto de tu app eMuleRust.
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 10px;">
+            <b>Paso 1: Puertos configurados en eMuleRust</b>
+            <table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.8rem; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden;">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.05); text-align: left; color: var(--text-muted);">
+                  <th style="padding: 6px 10px;">Protocolo</th>
+                  <th style="padding: 6px 10px;">Puerto</th>
+                  <th style="padding: 6px 10px;">Uso</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+                  <td style="padding: 6px 10px;"><b style="color: #60a5fa;">TCP</b></td>
+                  <td style="padding: 6px 10px;"><code style="color: #38bdf8;" id="tut-tcp-port">4662</code></td>
+                  <td style="padding: 6px 10px; color: var(--text-muted);">Conexión eD2k entre pares (Esencial para HighID)</td>
+                </tr>
+                <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+                  <td style="padding: 6px 10px;"><b style="color: #34d399;">UDP</b></td>
+                  <td style="padding: 6px 10px;"><code style="color: #34d399;" id="tut-kad-port">4672</code></td>
+                  <td style="padding: 6px 10px; color: var(--text-muted);">Red Kademlia DHT y consultas extendidas eD2k</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 10px;">
+            <b>Paso 2: Conocer tu IP local</b>
+            <div style="color: var(--text-muted); font-size: 0.78rem; margin-top: 2px;">
+              Tu máquina en la red local tiene asignada la IP: <code id="tut-local-ip" style="color: #10b981; font-weight: 600;">127.0.0.1</code>. Esta es la IP de destino a la que debes redirigir el tráfico.
+            </div>
+          </div>
+
+          <div>
+            <b>Paso 3: Acceder al panel de administración del router</b>
+            <div style="color: var(--text-muted); font-size: 0.78rem; margin-top: 2px;">
+              Abre el navegador e introduce la dirección de tu router (habitualmente <a href="http://192.168.1.1" target="_blank" rel="noopener noreferrer" style="color: #38bdf8;">http://192.168.1.1</a> o <a href="http://192.168.0.1" target="_blank" rel="noopener noreferrer" style="color: #38bdf8;">http://192.168.0.1</a>).<br>
+              Busca la sección <b>Port Forwarding</b>, <b>Reenvío de Puertos</b>, <b>NAT</b> o <b>Servidores Virtuales</b> y crea 2 reglas:
+              <ul style="margin: 6px 0 0 16px; padding: 0;">
+                <li>Nombre: <code>eMule-TCP</code> | Tipo: <code>TCP</code> | Puerto: <code class="tut-val-tcp">4662</code> | IP Destino: <span class="tut-val-ip">192.168.1.X</span></li>
+                <li>Nombre: <code>eMule-UDP</code> | Tipo: <code>UDP</code> | Puerto: <code class="tut-val-udp">4672</code> | IP Destino: <span class="tut-val-ip">192.168.1.X</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-muted); cursor: pointer;">
+          <input type="checkbox" id="chk-never-show-lowid"> No volver a mostrar este aviso
+        </label>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" onclick="closeModal('modal-port-tutorial')">Entendido</button>
+          <button class="btn btn-primary" onclick="recheckPortsAfterTutorial(this)">🔄 Comprobar de Nuevo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL / DRAWER ASISTENTE COPILOTO IA -->
+  <div id="assistant-drawer" class="assistant-drawer" style="display: none;">
+    <div class="assistant-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.25rem;">🤖</span>
+        <div>
+          <div style="font-weight: 600; font-size: 0.9rem; color: #fff;">Copiloto eMuleRust</div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
+            <span id="ast-status-dot" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #94a3b8;"></span>
+            <span id="ast-status-text">Desconectado</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-sm" onclick="clearAssistantChat()" title="Limpiar conversación" style="padding: 2px 7px; font-size: 0.8rem;">🧹</button>
+        <button class="btn btn-sm" onclick="toggleAssistantDrawer()" title="Cerrar panel" style="padding: 2px 7px; font-size: 0.9rem;">✕</button>
+      </div>
+    </div>
+
+    <!-- Sugerencias rápidas -->
+    <div class="assistant-quick-prompts" id="ast-quick-prompts">
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Cuál es el estado general del nodo y las transferencias?')">📊 Estado general</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Por qué tengo LowID o firewall y cómo solucionarlo?')">⚠️ Guía LowID / Router</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Cómo añado enlaces eD2k o torrents en la app?')">📥 Cómo descargar</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('Busca fuentes para descargas paradas o lentas')">🔍 Reanimar descargas</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('Verifica si hay descargas completadas listas para limpiar')">🧹 Limpieza</button>
+    </div>
+
+    <!-- Contenedor de mensajes -->
+    <div class="assistant-messages" id="ast-messages">
+      <div class="ast-msg assistant">
+        <div class="ast-msg-avatar">🤖</div>
+        <div class="ast-msg-body">
+          ¡Hola! Soy el asistente de <b>eMuleRust</b>. Funciono tanto con <b>IA conectada</b> como en <b>modo local interactivo autónomo</b> sin IA.<br><br>
+          Puedo explicarte cómo funciona cada sección del programa, cómo abrir los puertos en tu router o ejecutar diagnósticos sobre tus descargas y redes.
+          <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:router')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8;">🌐 Tutorial Abrir Puertos</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:links')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80;">🧲 Añadir Enlaces</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:kad')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc;">🚀 Kademlia DHT</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmación flotante si se requiere para una tool call -->
+    <div id="ast-confirm-box" style="display: none;" class="ast-confirm-card">
+      <div style="font-weight: 600; font-size: 0.78rem; color: #fbbf24; margin-bottom: 4px;">⚠️ Confirmación de acción requerida:</div>
+      <div id="ast-confirm-desc" style="font-size: 0.75rem; color: #cbd5e1; word-break: break-all; margin-bottom: 8px;"></div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="btn btn-sm" onclick="respondAssistantConfirm(false)" style="padding: 2px 8px;">Rechazar</button>
+        <button class="btn btn-sm btn-primary" onclick="respondAssistantConfirm(true)" style="padding: 2px 8px;">Aprobar</button>
+      </div>
+    </div>
+
+    <!-- Barra de entrada de texto -->
+    <div class="assistant-input-bar">
+      <textarea id="ast-input" rows="1" placeholder="Pregunta al asistente o pídele una acción..." onkeydown="handleAssistantKeyDown(event)"></textarea>
+      <button class="btn btn-primary btn-sm" id="ast-send-btn" onclick="sendAssistantMessage()" style="padding: 6px 12px; font-weight: 600;">
+        <span>Enviar</span>
+      </button>
     </div>
   </div>
 
@@ -5746,6 +6132,8 @@
       document.getElementById('insp-parts-summary').textContent = `${parts.length} partes totales | ${verifiedCount} verificadas | ${downloadingCount} descargando`;
     }
 
+    let lastRenderedPeersKey = '';
+
     function renderInspectorPeersTable(list) {
       document.getElementById('insp-peers-count').textContent = list.length;
       document.getElementById('insp-peers-summary').textContent = `${list.length} fuentes registradas en red`;
@@ -5753,9 +6141,17 @@
       const tbody = document.getElementById('insp-peers-list');
       if (!tbody) return;
       if (list.length === 0) {
+        lastRenderedPeersKey = '';
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Buscando fuentes activas en servidores eD2k y red Kad...</td></tr>';
         return;
       }
+
+      const peersKey = list.map(s => `${s.address || `${s.ip}:${s.port}`}-${s.status}-${s.failCount}-${s.cooldownUntilUnixMs}`).join('|');
+      if (lastRenderedPeersKey === peersKey && tbody.children.length === list.length) {
+        // Nada ha cambiado en la lista de pares, evitar repintado del DOM
+        return;
+      }
+      lastRenderedPeersKey = peersKey;
 
       let html = '';
       list.forEach(s => {
@@ -5862,6 +6258,9 @@
           headerEd2k.style.color = sStatus.isHighId ? '#34d399' : '#fbbf24';
           const p2pDot = document.getElementById('p2p-net-dot');
           if (p2pDot) p2pDot.textContent = sStatus.isHighId ? '🟢' : '🟡';
+
+          // Chequeo proactivo de LowID para ofrecer tutorial
+          evaluateLowIdState(sStatus.isHighId, null);
         } else if (statusStr === 'connecting') {
           connCard.style.display = 'none';
           headerEd2k.textContent = 'eD2k: Conectando...';
@@ -5942,6 +6341,9 @@
           natPill.style.color = fwColor;
 
           document.getElementById('kad-card-packets').textContent = `⬇ ${kStatus.packetsReceived || 0} pkts / ⬆ ${kStatus.packetsSent || 0} pkts`;
+
+          // Evaluar si Kad está en estado firewalled
+          evaluateLowIdState(null, fw);
         } else {
           kadHeader.textContent = '⚪ Kad: Desconectado';
           kadHeader.style.color = 'var(--text-muted)';
@@ -6619,6 +7021,721 @@
     };
     document.getElementById('btn-refresh-kad-contacts').onclick = refreshKadContacts;
 
+    // === GESTIÓN DE PRIMER INICIO & DETECCIÓN LOWID / PUERTOS ===
+    let lastKnownIsHighId = null;
+    let lastKnownKadFw = null;
+    let lowIdBannerDismissed = false;
+
+    async function checkFirstRunSetup() {
+      try {
+        const setupDone = localStorage.getItem('mule_first_run_completed');
+        if (setupDone === 'true') {
+          return;
+        }
+
+        addLog('info', '🚀 Primer inicio detectado: Iniciando aprovisionamiento automático de redes...');
+        showToast('🚀 Configuración inicial: Descargando lista de servidores y conectando...', 'info', '⚡');
+
+        // 1. Activar reconexión y autoconexión automática en el daemon
+        try {
+          await client.call('settings.set', {
+            serverReconnect: true,
+            serverAutoconnect: true,
+            upnpEnabled: true
+          });
+        } catch (e) {
+          console.warn('No se pudieron fijar ajustes iniciales:', e);
+        }
+
+        // 2. Descargar e importar server.met canónico
+        let serversCount = 0;
+        try {
+          const sRes = await client.call('servers.updateFromUrl', {
+            url: 'http://upd.emule-security.org/server.met'
+          });
+          serversCount = sRes.imported || sRes.totalCount || 0;
+          addLog('success', `Lista inicial de servidores eD2k importada (${serversCount} servidores).`);
+          await refreshServers();
+        } catch (e) {
+          console.warn('Error al descargar server.met inicial:', e);
+        }
+
+        // 3. Iniciar Kad DHT y bootstrap de nodes.dat
+        try {
+          await client.call('kad.startUdp', {});
+          const kRes = await client.call('kad.bootstrapFromUrl', {
+            url: 'http://upd.emule-security.org/nodes.dat'
+          });
+          addLog('success', `Bootstrap inicial Kademlia iniciado (${kRes.importedCount || 0} contactos).`);
+          await refreshKad();
+        } catch (e) {
+          console.warn('Error al iniciar bootstrap Kademlia:', e);
+        }
+
+        // 4. Conectar automáticamente al mejor servidor eD2k disponible
+        try {
+          if (cachedServers && cachedServers.length > 0) {
+            const allowed = cachedServers.filter(s => s.filter_status === 'allowed' || !s.filter_status);
+            const pool = allowed.length > 0 ? allowed : cachedServers;
+            const target = pool.slice().sort((a, b) => (a.ping || 9999) - (b.ping || 9999))[0];
+            if (target && target.address) {
+              await client.call('servers.connect', { address: target.address });
+              addLog('info', `Conectando automáticamente a servidor: ${target.name || target.address}`);
+            }
+          }
+        } catch (e) {
+          console.warn('Error al conectar al servidor inicial:', e);
+        }
+
+        // 5. Marcar como completado el primer inicio
+        localStorage.setItem('mule_first_run_completed', 'true');
+        showToast('✅ Redes eD2k y Kademlia inicializadas con éxito.', 'success', '🌐');
+      } catch (err) {
+        console.error('Error durante el aprovisionamiento de primer inicio:', err);
+      }
+    }
+
+    function evaluateLowIdState(isHighId, kadFirewall) {
+      if (isHighId !== null) lastKnownIsHighId = isHighId;
+      if (kadFirewall !== null) lastKnownKadFw = kadFirewall;
+
+      const neverShow = localStorage.getItem('mule_lowid_tutorial_suppressed') === 'true';
+      if (neverShow || lowIdBannerDismissed) {
+        return;
+      }
+
+      const banner = document.getElementById('lowid-warning-banner');
+      if (!banner) return;
+
+      const isLowId = lastKnownIsHighId === false;
+      const isKadFirewalled = lastKnownKadFw === 'firewalled';
+
+      if (isLowId || isKadFirewalled) {
+        banner.style.display = 'flex';
+        const titleEl = document.getElementById('lowid-banner-title');
+        const descEl = document.getElementById('lowid-banner-desc');
+        if (isLowId && isKadFirewalled) {
+          if (titleEl) titleEl.textContent = 'Estado Limitado: eD2k LowID y Kad Firewalled detectados';
+          if (descEl) descEl.textContent = 'Los puertos TCP y UDP están inaccesibles desde el exterior. El router o firewall impiden conexiones entrantes.';
+        } else if (isLowId) {
+          if (titleEl) titleEl.textContent = 'Estado Limitado: eD2k LowID detectado';
+          if (descEl) descEl.textContent = 'El puerto TCP está bloqueado por tu router o firewall. Esto reduce las fuentes disponibles y la velocidad.';
+        } else {
+          if (titleEl) titleEl.textContent = 'Estado Limitado: Kademlia tras NAT (Firewalled)';
+          if (descEl) descEl.textContent = 'El puerto UDP de Kademlia no recibe paquetes directos. Se recomienda abrir puertos para mayor eficacia DHT.';
+        }
+      } else if (lastKnownIsHighId === true && (!lastKnownKadFw || lastKnownKadFw === 'open' || lastKnownKadFw === 'unverified')) {
+        banner.style.display = 'none';
+      }
+    }
+
+    window.dismissLowIdBanner = function() {
+      lowIdBannerDismissed = true;
+      const banner = document.getElementById('lowid-warning-banner');
+      if (banner) banner.style.display = 'none';
+    };
+
+    window.openPortTutorialModal = async function() {
+      openModal('modal-port-tutorial');
+      // Obtener puertos configurados actualmente
+      try {
+        const s = await client.call('settings.get');
+        const tcpPort = s.ed2kPort || 4662;
+        const kadPort = s.kadPort || 4672;
+        const localIp = window.location.hostname || '192.168.1.X';
+
+        const elTcp = document.getElementById('tut-tcp-port');
+        const elKad = document.getElementById('tut-kad-port');
+        const elIp = document.getElementById('tut-local-ip');
+
+        if (elTcp) elTcp.textContent = tcpPort;
+        if (elKad) elKad.textContent = kadPort;
+        if (elIp) elIp.textContent = localIp;
+
+        document.querySelectorAll('.tut-val-tcp').forEach(el => el.textContent = tcpPort);
+        document.querySelectorAll('.tut-val-udp').forEach(el => el.textContent = kadPort);
+        document.querySelectorAll('.tut-val-ip').forEach(el => el.textContent = localIp);
+
+        const chk = document.getElementById('chk-never-show-lowid');
+        if (chk) {
+          chk.checked = localStorage.getItem('mule_lowid_tutorial_suppressed') === 'true';
+          chk.onchange = (e) => {
+            localStorage.setItem('mule_lowid_tutorial_suppressed', e.target.checked ? 'true' : 'false');
+          };
+        }
+      } catch (e) {
+        console.warn('Error leyendo opciones para tutorial de puertos:', e);
+      }
+    };
+
+    window.tryUpnpQuickFix = async function(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '🔄 Solicitando UPnP...';
+      }
+      const statusDiv = document.getElementById('tutorial-upnp-status');
+      if (statusDiv) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.color = '#38bdf8';
+        statusDiv.textContent = 'Enviando petición UPnP IGD a la puerta de enlace...';
+      }
+
+      try {
+        const s = await client.call('settings.get');
+        const tcpPort = s.ed2kPort || 4662;
+        const kadPort = s.kadPort || 4672;
+
+        const res = await client.call('upnp.mapPorts', { tcpPort, udpPort: kadPort });
+        const isMapped = res.tcpMapped && res.udpMapped;
+
+        if (isMapped) {
+          if (statusDiv) {
+            statusDiv.style.color = '#34d399';
+            statusDiv.textContent = `✅ ¡Puertos mapeados con éxito en el router! (IP Externa: ${res.externalIp || 'detectada'})`;
+          }
+          showToast('✅ Reglas UPnP aplicadas con éxito en el router', 'success', '🔌');
+          // Reintentar conexión para verificar si pasa a HighID
+          await refreshServers();
+          await refreshKad();
+        } else {
+          if (statusDiv) {
+            statusDiv.style.color = '#fbbf24';
+            statusDiv.textContent = '⚠️ El router no respondió a las peticiones UPnP. Sigue la Opción 2 para abrirlos manualmente.';
+          }
+          showToast('El router no admitió UPnP. Requiere apertura manual.', 'warning', '⚠️');
+        }
+      } catch (err) {
+        if (statusDiv) {
+          statusDiv.style.color = '#fb7185';
+          statusDiv.textContent = 'Error UPnP: ' + (err.message || err);
+        }
+        showToast('Error en petición UPnP: ' + (err.message || err), 'error', '❌');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '⚡ Probar UPnP Ahora';
+        }
+      }
+    };
+
+    window.recheckPortsAfterTutorial = async function(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Comprobando...';
+      }
+      try {
+        showToast('Verificando estado de red...', 'info', '🔍');
+        await refreshServers();
+        await refreshKad();
+        const sStatus = await client.call('servers.status');
+        if (sStatus && sStatus.isHighId) {
+          showToast('🎉 ¡Enhorabuena! Has conseguido HighID.', 'success', '🟢');
+          closeModal('modal-port-tutorial');
+          dismissLowIdBanner();
+        } else {
+          showToast('Aún se detecta LowID. Asegúrate de guardar los cambios y reiniciar el router si es necesario.', 'warning', '⚠️');
+        }
+      } catch (e) {
+        console.warn('Error al recomprobar puertos:', e);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🔄 Comprobar de Nuevo';
+        }
+      }
+    };
+
+    // === COPILOTO ASISTENTE IA (DRAWER & WEBSOCKET) ===
+    let assistantWs = null;
+    let assistantTurnActive = false;
+    let currentAssistantMsgEl = null;
+
+    window.toggleAssistantDrawer = function() {
+      const drawer = document.getElementById('assistant-drawer');
+      if (!drawer) return;
+      const isVisible = drawer.style.display !== 'none';
+      if (isVisible) {
+        drawer.style.display = 'none';
+      } else {
+        drawer.style.display = 'flex';
+        connectAssistantWs();
+        const input = document.getElementById('ast-input');
+        if (input) setTimeout(() => input.focus(), 100);
+      }
+    };
+
+    window.clearAssistantChat = function() {
+      const container = document.getElementById('ast-messages');
+      if (container) {
+        container.innerHTML = `
+          <div class="ast-msg assistant">
+            <div class="ast-msg-avatar">🤖</div>
+            <div class="ast-msg-body">
+              Conversación reiniciada. ¿En qué puedo ayudarte?
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    function connectAssistantWs() {
+      if (assistantWs && (assistantWs.readyState === WebSocket.OPEN || assistantWs.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      const host = window.location.hostname || '127.0.0.1';
+      const wsUrl = `ws://${host}:4680/assistant`;
+      const dot = document.getElementById('ast-status-dot');
+      const text = document.getElementById('ast-status-text');
+
+      if (text) text.textContent = 'Conectando a Ollama...';
+      if (dot) dot.style.background = '#fbbf24';
+
+      try {
+        assistantWs = new WebSocket(wsUrl);
+
+        assistantWs.onopen = () => {
+          const token = client.token || '';
+          assistantWs.send(JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'assistant.hello',
+            params: { token }
+          }));
+        };
+
+        assistantWs.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleAssistantWsMessage(data);
+          } catch (e) {
+            console.error('Error parseando mensaje WS asistente:', e);
+          }
+        };
+
+        assistantWs.onclose = () => {
+          if (dot) dot.style.background = '#94a3b8';
+          if (text) text.textContent = 'Sin conexión (:4680)';
+          assistantTurnActive = false;
+          setAssistantInputEnabled(true);
+        };
+
+        assistantWs.onerror = () => {
+          if (dot) dot.style.background = '#f87171';
+          if (text) text.textContent = 'Servicio inactivo';
+        };
+      } catch (err) {
+        console.warn('No se pudo abrir WS del asistente:', err);
+      }
+    }
+
+    function handleAssistantWsMessage(msg) {
+      const dot = document.getElementById('ast-status-dot');
+      const text = document.getElementById('ast-status-text');
+
+      if (msg.result && msg.result.server) {
+        if (dot) dot.style.background = '#34d399';
+        if (text) text.textContent = `Online (${msg.result.tools || 0} tools)`;
+        return;
+      }
+
+      if (msg.method === 'assistant.event' && msg.params) {
+        const ev = msg.params;
+        const type = ev.type;
+
+        if (type === 'token') {
+          appendAssistantToken(ev.content || '');
+        } else if (type === 'toolStart') {
+          appendAssistantToolCall(ev.name, ev.args);
+        } else if (type === 'toolResult') {
+          updateAssistantToolResult(ev.name, ev.isError, ev.content);
+        } else if (type === 'final') {
+          finalizeAssistantTurn(ev.content);
+        } else if (type === 'notice') {
+          appendAssistantNotice(ev.message);
+        } else if (type === 'error') {
+          appendAssistantError(ev.message);
+        }
+      } else if (msg.method === 'assistant.confirmRequired' && msg.params) {
+        showAssistantConfirmation(msg.params.name, msg.params.args);
+      } else if (msg.method === 'assistant.turnEnd') {
+        assistantTurnActive = false;
+        setAssistantInputEnabled(true);
+        if (msg.params && msg.params.error) {
+          appendAssistantError(msg.params.error);
+        }
+      }
+    }
+
+    function setAssistantInputEnabled(enabled) {
+      const input = document.getElementById('ast-input');
+      const btn = document.getElementById('ast-send-btn');
+      if (input) input.disabled = !enabled;
+      if (btn) {
+        btn.disabled = !enabled;
+        btn.textContent = enabled ? 'Enviar' : '...';
+      }
+    }
+
+    function appendUserMessage(text) {
+      const container = document.getElementById('ast-messages');
+      if (!container) return;
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'ast-msg user';
+      msgDiv.innerHTML = `
+        <div class="ast-msg-avatar">👤</div>
+        <div class="ast-msg-body">${escapeHtml(text)}</div>
+      `;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function ensureAssistantMessageBubble() {
+      if (currentAssistantMsgEl) return currentAssistantMsgEl;
+      const container = document.getElementById('ast-messages');
+      if (!container) return null;
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'ast-msg assistant';
+      msgDiv.innerHTML = `
+        <div class="ast-msg-avatar">🤖</div>
+        <div class="ast-msg-body"></div>
+      `;
+      container.appendChild(msgDiv);
+      currentAssistantMsgEl = msgDiv.querySelector('.ast-msg-body');
+      container.scrollTop = container.scrollHeight;
+      return currentAssistantMsgEl;
+    }
+
+    function appendAssistantToken(token) {
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        body.innerHTML += escapeHtml(token).replace(/\n/g, '<br>');
+        const container = document.getElementById('ast-messages');
+        if (container) container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    function appendAssistantToolCall(name, args) {
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        const toolDiv = document.createElement('div');
+        toolDiv.className = 'ast-tool-call';
+        toolDiv.dataset.toolName = name;
+        toolDiv.innerHTML = `⚡ <b>${escapeHtml(name)}</b>(${escapeHtml(JSON.stringify(args || {}))}) <span style="opacity:0.7">...</span>`;
+        body.appendChild(toolDiv);
+        const container = document.getElementById('ast-messages');
+        if (container) container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    function updateAssistantToolResult(name, isError, content) {
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        const lastTool = body.querySelector(`.ast-tool-call[data-tool-name="${name}"]:last-child`);
+        if (lastTool) {
+          lastTool.style.borderLeftColor = isError ? '#f87171' : '#34d399';
+          lastTool.innerHTML += `<div style="font-size: 0.7rem; color: ${isError ? '#fb7185' : '#a7f3d0'}; margin-top: 2px;">${isError ? '✕ Falló' : '✔ Éxito'}</div>`;
+        }
+      }
+    }
+
+    function finalizeAssistantTurn(content) {
+      const body = ensureAssistantMessageBubble();
+      if (body && content && body.textContent.trim().length === 0) {
+        body.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+      }
+      currentAssistantMsgEl = null;
+    }
+
+    function appendAssistantNotice(msg) {
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        body.innerHTML += `<div style="font-style: italic; color: #94a3b8; font-size: 0.75rem;">ℹ️ ${escapeHtml(msg)}</div>`;
+      }
+    }
+
+    function appendAssistantError(msg) {
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        body.innerHTML += `<div style="color: #fb7185; font-size: 0.75rem;">❌ ${escapeHtml(msg)}</div>`;
+      }
+    }
+
+    function showAssistantConfirmation(name, args) {
+      const box = document.getElementById('ast-confirm-box');
+      const desc = document.getElementById('ast-confirm-desc');
+      if (box && desc) {
+        desc.textContent = `${name}(${JSON.stringify(args)})`;
+        box.style.display = 'block';
+      }
+    }
+
+    window.respondAssistantConfirm = function(allow) {
+      const box = document.getElementById('ast-confirm-box');
+      if (box) box.style.display = 'none';
+      if (assistantWs && assistantWs.readyState === WebSocket.OPEN) {
+        assistantWs.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'assistant.confirm',
+          params: { allow }
+        }));
+      }
+    };
+
+    window.sendAssistantMessage = async function() {
+      const input = document.getElementById('ast-input');
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text || assistantTurnActive) return;
+
+      appendUserMessage(text);
+      input.value = '';
+      currentAssistantMsgEl = null;
+      assistantTurnActive = true;
+      setAssistantInputEnabled(false);
+
+      // Si el WebSocket con el LLM está activo, delegar en la IA
+      if (assistantWs && assistantWs.readyState === WebSocket.OPEN) {
+        assistantWs.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'assistant.chat',
+          params: { text }
+        }));
+        return;
+      }
+
+      // === MODO INTERACTIVO AUTÓNOMO (SIN IA EXTERNA) ===
+      // Funciona siempre localmente consultando el daemon RPC y guías integradas
+      await handleAutonomousAssistantTurn(text);
+      assistantTurnActive = false;
+      setAssistantInputEnabled(true);
+    };
+
+    async function handleAutonomousAssistantTurn(query) {
+      const q = query.toLowerCase();
+
+      // 1. Tutorial y Apertura de Puertos / LowID / NAT
+      if (q.includes('puerto') || q.includes('nat') || q.includes('router') || q.includes('lowid') || q.includes('highid') || q.includes('firewall') || q === 'tutorial:router') {
+        let tcpPort = 4662;
+        let kadPort = 4672;
+        try {
+          const s = await client.call('settings.get');
+          tcpPort = s.ed2kPort || 4662;
+          kadPort = s.kadPort || 4672;
+        } catch (_) {}
+
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <span>🌐</span> <span>Guía Interactiva: Abrir Puertos en el Router (HighID)</span>
+            </div>
+            <div>
+              Para conseguir <b>HighID</b> en eD2k y estado <b>Abierto</b> en Kademlia, otros usuarios deben poder conectarse a tus puertos sin que el router los rechace:
+            </div>
+            
+            <div style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px; margin: 8px 0; border: 1px solid rgba(255,255,255,0.08);">
+              <div style="font-weight:600; color:#38bdf8; margin-bottom:4px;">Puertos activos en este equipo:</div>
+              • <b>TCP:</b> <code style="color:#60a5fa;">${tcpPort}</code> (Transferencias eD2k)<br>
+              • <b>UDP:</b> <code style="color:#34d399;">${kadPort}</code> (Búsquedas Kademlia DHT)<br>
+              • <b>IP Local Destino:</b> <code style="color:#10b981;">${window.location.hostname || '192.168.1.X'}</code>
+            </div>
+
+            <div style="margin-top: 6px;">
+              <b>Pasos para configurar el router:</b>
+              <ol style="margin: 4px 0 8px 16px; padding: 0;">
+                <li>Entra al router abriendo <a href="http://192.168.1.1" target="_blank" style="color: #38bdf8;">192.168.1.1</a> o <a href="http://192.168.0.1" target="_blank" style="color: #38bdf8;">192.168.0.1</a>.</li>
+                <li>Ve a <i>Port Forwarding / Reenvío de Puertos / Servidores Virtuales</i>.</li>
+                <li>Crea una regla TCP para el puerto <code>${tcpPort}</code> y una UDP para <code>${kadPort}</code> hacia tu IP local.</li>
+              </ol>
+            </div>
+
+            <div style="margin-top: 8px; display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-primary" onclick="openPortTutorialModal()" style="font-size: 0.74rem;">📖 Abrir Guía Visual Completa</button>
+              <button class="btn btn-sm" onclick="tryUpnpQuickFix(this)" style="font-size: 0.74rem;">⚡ Probar UPnP Automático</button>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 2. Cómo añadir descargas y enlaces
+      if (q.includes('descargar') || q.includes('enlace') || q.includes('ed2k://') || q.includes('magnet') || q.includes('torrent') || q === 'tutorial:links') {
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #34d399; margin-bottom: 6px;">📥 Cómo Añadir Descargas en eMuleRust</div>
+            <div>
+              eMuleRust admite enlaces duales <b>eD2k</b> y <b>BitTorrent</b> en el mismo enjambre:
+            </div>
+            <ul style="margin: 6px 0 8px 16px; padding: 0;">
+              <li><b>Botón "+ Añadir":</b> Pulsa el botón superior en la vista de descargas y pega enlaces con formato <code>ed2k://|file|...</code> o <code>magnet:?xt=...</code>.</li>
+              <li><b>Búsqueda Directa:</b> Usa la pestaña <i>"Buscar"</i> o el atajo <kbd style="background:#1e293b; padding:1px 4px; border-radius:3px;">Ctrl + K</kbd> para localizar contenidos en los servidores eD2k y DHT.</li>
+              <li><b>Mediateca Automática:</b> Si usas la biblioteca de Cine/Series, el auto-grabber rastreará lanzamientos automáticamente.</li>
+            </ul>
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('add-modal').classList.add('active')" style="font-size: 0.74rem; margin-top: 4px;">＋ Abrir Diálogo de Añadir</button>
+          `;
+        }
+        return;
+      }
+
+      // 3. Kademlia DHT
+      if (q.includes('kad') || q.includes('kademlia') || q.includes('dht') || q.includes('nodes.dat') || q === 'tutorial:kad') {
+        let kadCount = 0;
+        let isUdp = false;
+        try {
+          const k = await client.call('kad.status');
+          kadCount = k.totalContacts || 0;
+          isUdp = !!k.isUdpActive;
+        } catch (_) {}
+
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #a855f7; margin-bottom: 6px;">🚀 Red Kademlia DHT (P2P Descentralizado)</div>
+            <div>
+              A diferencia de los servidores eD2k centrales, <b>Kademlia</b> no depende de ningún servidor fijo: cada usuario es un nodo de búsqueda.
+            </div>
+            <div style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px; margin: 8px 0;">
+              • <b>Estado UDP:</b> ${isUdp ? '🟢 Activo' : '🔴 Inactivo'}<br>
+              • <b>Contactos en memoria:</b> <code>${kadCount} nodos</code>
+            </div>
+            <div style="margin-top: 6px; display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-primary" onclick="document.getElementById('btn-bootstrap-kad').click()" style="font-size: 0.74rem;">🚀 Bootstrap nodes.dat</button>
+              <button class="btn btn-sm" onclick="document.querySelector('.nav-btn[data-tab=tab-kad]').click()" style="font-size: 0.74rem;">Ir a Pestaña Kad</button>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 4. Diagnóstico en vivo de Salud y Rendimiento (Estado general)
+      if (q.includes('estado') || q.includes('salud') || q.includes('general') || q.includes('resumen') || q.includes('velocidad')) {
+        let serversStatus = null;
+        let kadStatus = null;
+        let dls = [];
+        try {
+          serversStatus = await client.call('servers.status');
+          kadStatus = await client.call('kad.status');
+          const dlRes = await client.call('downloads.list');
+          dls = dlRes.downloads || [];
+        } catch (_) {}
+
+        const activeDls = dls.filter(d => (d.status || '').toLowerCase() === 'downloading');
+        const completedDls = dls.filter(d => (d.status || '').toLowerCase() === 'completed');
+        const isEd2kConnected = serversStatus && serversStatus.status === 'connected';
+        const isHighId = serversStatus && serversStatus.isHighId;
+
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px;">📊 Telemetría y Diagnóstico del Sistema</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin: 8px 0;">
+              <div style="padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 4px;">
+                <b>eD2k:</b> ${isEd2kConnected ? `🟢 Conectado (${isHighId ? 'HighID ✔' : 'LowID ⚠'})` : '⚪ Desconectado'}
+              </div>
+              <div style="padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 4px;">
+                <b>Kademlia:</b> ${kadStatus && kadStatus.isUdpActive ? `🟢 ${kadStatus.totalContacts || 0} nodos (${kadStatus.udpFirewallStatus || 'ok'})` : '⚪ Inactivo'}
+              </div>
+              <div style="padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 4px;">
+                <b>Descargas:</b> ${dls.length} en cola (${activeDls.length} activas, ${completedDls.length} completadas)
+              </div>
+            </div>
+            ${!isHighId && isEd2kConnected ? '<div style="color: #fbbf24; font-size: 0.75rem;">⚠️ Estás en LowID. Pulsa abajo para ver la guía de apertura de puertos.</div>' : ''}
+            <div style="margin-top: 8px; display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-primary" onclick="sendQuickPrompt('tutorial:router')" style="font-size: 0.74rem;">Ver Guía Puertos</button>
+              <button class="btn btn-sm" onclick="cleanCompletedDownloads()" style="font-size: 0.74rem;">Limpiar Completadas</button>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 5. Reanimar descargas lentas o paradas
+      if (q.includes('lenta') || q.includes('parada') || q.includes('reanimar') || q.includes('fuentes')) {
+        let restarted = 0;
+        try {
+          const res = await client.call('downloads.list');
+          const dls = res.downloads || [];
+          for (const d of dls) {
+            const st = (d.status || '').toLowerCase();
+            if (st === 'downloading' || st === 'waiting' || st === 'paused') {
+              try {
+                await client.call('downloads.retry', { id: d.id });
+                restarted++;
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #34d399; margin-bottom: 6px;">⚡ Acción Ejecutada: Reconsulta de Fuentes</div>
+            <div>
+              Se ha forzado la reconexión y petición de fuentes en servidores y red DHT para <b>${restarted}</b> descargas activas.
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">
+              Las fuentes eD2k y Kad responderán progresivamente durante los próximos minutos.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 6. Limpieza de completadas
+      if (q.includes('limpiar') || q.includes('limpieza') || q.includes('completada')) {
+        cleanCompletedDownloads();
+        const body = ensureAssistantMessageBubble();
+        if (body) {
+          body.innerHTML = `
+            <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px;">🧹 Limpieza de Cola de Descargas</div>
+            <div>
+              Se han retirado las descargas completadas de la lista para mantener la interfaz limpia.
+              Tus archivos permanecen intactos en la carpeta de destino o NAS.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // Respuesta genérica de ayuda offline
+      const body = ensureAssistantMessageBubble();
+      if (body) {
+        body.innerHTML = `
+          <div>
+            Entendido. En este momento el servicio LLM no está corriendo en segundo plano, pero puedo ayudarte con estas tareas interactivas:
+          </div>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 5px;">
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:router')" style="text-align: left; font-size: 0.75rem;">🌐 <b>Abrir puertos en el router:</b> Guía paso a paso y UPnP</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:links')" style="text-align: left; font-size: 0.75rem;">📥 <b>Cómo descargar:</b> Enlaces eD2k, magnets y torrents</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:kad')" style="text-align: left; font-size: 0.75rem;">🚀 <b>Kademlia DHT:</b> Cómo funciona la red sin servidores</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('estado general')" style="text-align: left; font-size: 0.75rem;">📊 <b>Diagnóstico:</b> Salud de transferencias y redes</button>
+          </div>
+          <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px;">
+            <i>Tip: Para habilitar conversación libre con IA avanzada, ejecuta en terminal: <code>mule-assistant serve</code></i>
+          </div>
+        `;
+      }
+    }
+
+    window.sendQuickPrompt = function(promptText) {
+      const input = document.getElementById('ast-input');
+      if (input) {
+        input.value = promptText;
+        sendAssistantMessage();
+      }
+    };
+
+    window.handleAssistantKeyDown = function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAssistantMessage();
+      }
+    };
+
     // Filtros de descargas (Pestañas de estado sobre la tabla)
     document.querySelectorAll('#filter-status-group .filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -6788,6 +7905,26 @@
       if (btn) btn.classList.add('active');
     }
 
+    function updateRamProfileBadge() {
+      const select = document.getElementById('pref-ram-profile');
+      const badge = document.getElementById('ram-profile-badge');
+      if (!select || !badge) return;
+      const val = select.value;
+      if (val === 'low') {
+        badge.textContent = 'Bajo consumo (~25MB)';
+        badge.style.background = 'rgba(34, 197, 94, 0.2)';
+        badge.style.color = '#4ade80';
+      } else if (val === 'high') {
+        badge.textContent = 'Alto rendimiento (~150MB+)';
+        badge.style.background = 'rgba(239, 68, 68, 0.2)';
+        badge.style.color = '#f87171';
+      } else {
+        badge.textContent = 'Equilibrado (~60MB)';
+        badge.style.background = 'rgba(99, 102, 241, 0.2)';
+        badge.style.color = '#818cf8';
+      }
+    }
+
     async function loadPreferences() {
       try {
         const s = await client.call('settings.get');
@@ -6815,6 +7952,10 @@
         setVal('pref-max-active-downloads', s.maxActiveDownloads || 30);
         setVal('pref-max-upload-queue', s.maxUploadQueue || 1000);
         setVal('pref-daily-quota', s.dailyUploadQuotaGb || '');
+        if (s.ramProfile) {
+          setVal('pref-ram-profile', s.ramProfile);
+          updateRamProfileBadge();
+        }
 
         // Redes P2P
         setVal('pref-ed2k-port', s.ed2kPort || 4662);
@@ -6927,6 +8068,8 @@
         if (maxQ !== null) payload.maxUploadQueue = maxQ;
         const dailyQ = getInt('pref-daily-quota');
         if (dailyQ !== null) payload.dailyUploadQuotaGb = dailyQ;
+        const ramProf = getStr('pref-ram-profile');
+        if (ramProf) payload.ramProfile = ramProf;
 
         // Redes P2P
         const ed2kP = getInt('pref-ed2k-port');
@@ -7039,6 +8182,11 @@
       try { refreshServers(); } catch (e) { console.error('Error refreshServers:', e); }
       try { refreshDownloads(); } catch (e) { console.error('Error refreshDownloads:', e); }
       try { refreshStorage(); } catch (e) { console.error('Error refreshStorage:', e); }
+
+      // Inicialización automática en el primer arranque (First Run Autoconnect)
+      setTimeout(() => {
+        checkFirstRunSetup();
+      }, 1200);
 
       // === PLANIFICADOR MAESTRO ADAPTATIVO (Smart Adaptive Scheduler) ===
       // Un único temporizador sincronizado a 1s que adapta la frecuencia de sondeo

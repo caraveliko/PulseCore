@@ -11,6 +11,7 @@
 
 pub mod mock;
 pub mod ollama;
+pub mod openai;
 
 use std::future::Future;
 use std::pin::Pin;

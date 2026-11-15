@@ -8,7 +8,7 @@ pub mod pseudonym;
 pub mod token_bucket;
 
 pub use filter::{FilterStats, IpFilter};
-pub use interval::{coalesce_ranges, FilterRange};
+pub use interval::{coalesce_compact_ranges, coalesce_ranges, CompactRange, FilterRange};
 pub use parser::{
     parse_ipfilter, ParseError, ParseReport, MAX_ENTRIES, MAX_FILE_SIZE, MAX_LINE_LEN,
 };

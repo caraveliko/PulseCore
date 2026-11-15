@@ -294,7 +294,7 @@ impl NetworkPolicyManager {
             return Err(PolicyError::IpFiltered(
                 addr.ip().to_string(),
                 range.level,
-                range.description,
+                range.description.to_string(),
             ));
         }
 

@@ -16,6 +16,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use mule_assistant::config::{AssistantConfig, DEFAULT_ENDPOINT, DEFAULT_MODEL, DEFAULT_WS_PORT};
 use mule_assistant::llm::ollama::OllamaBackend;
+use mule_assistant::llm::openai::OpenAiCompatibleBackend;
+use mule_assistant::llm::LlmBackend;
 use mule_assistant::repl::run_repl;
 use mule_assistant::session::Session;
 use mule_assistant::ws::serve_ws;
@@ -53,6 +55,14 @@ struct Cli {
     /// Model name on the backend (must support Ollama tool calling)
     #[arg(long, default_value = DEFAULT_MODEL)]
     model: String,
+
+    /// LLM provider type: 'ollama' (default) or 'openai' (for LM Studio, LocalAI, vLLM, OpenAI)
+    #[arg(long, default_value = "ollama")]
+    provider: String,
+
+    /// Optional API key for OpenAI-compatible providers
+    #[arg(long)]
+    api_key: Option<String>,
 
     /// Explicitly allow a non-loopback LLM endpoint
     #[arg(long)]
@@ -102,7 +112,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     config.validate()?;
 
-    let backend = Box::new(OllamaBackend::new(&config)?);
+    let backend: Box<dyn LlmBackend> = match cli.provider.to_lowercase().as_str() {
+        "openai" | "lmstudio" | "localai" => {
+            Box::new(OpenAiCompatibleBackend::new(&config, cli.api_key.clone())?)
+        }
+        _ => Box::new(OllamaBackend::new(&config)?),
+    };
     let session = Session::connect(
         backend,
         config.clone(),

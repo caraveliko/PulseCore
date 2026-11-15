@@ -34,14 +34,14 @@ pub mod sources;
 /// contention disque (AV, checkpoints WAL) une écriture ne doit pas
 /// échouer immédiatement.
 const SQLITE_BUSY_TIMEOUT_MS: i64 = 5_000;
-/// Taille du cache de pages SQLite (négatif = Kio) — 4 Mio (profil embarqué Raspberry Pi).
-const SQLITE_CACHE_SIZE_KIB: i64 = -4_096;
-/// Seuil d'auto-checkpoint du journal WAL en pages (~4 Mio à 4 Kio/page)
-/// — borne la relecture WAL au chargement et l'ampleur d'un checkpoint pour limiter l'usure Flash/SSD.
-const SQLITE_WAL_AUTOCHECKPOINT_PAGES: i64 = 1_000;
-/// Taille maximale de memory-mapped I/O pour SQLite (32 Mio) permettant
-/// des lectures directes zero-copy sans allocations d'espaces utilisateurs.
-const SQLITE_MMAP_SIZE_BYTES: i64 = 33_554_432;
+/// Taille du cache de pages SQLite (négatif = Kio) — 2 Mio (profil mémoire minimal pour embarqué/RPi).
+const SQLITE_CACHE_SIZE_KIB: i64 = -2_048;
+/// Seuil d'auto-checkpoint du journal WAL en pages (~2 Mio à 4 Kio/page)
+/// — borne la relecture WAL au chargement et l'ampleur d'un checkpoint pour limiter l'usure Flash/SSD et la RAM du journal.
+const SQLITE_WAL_AUTOCHECKPOINT_PAGES: i64 = 500;
+/// Taille maximale de memory-mapped I/O pour SQLite (4 Mio) — réduit l'espace d'adressage virtuel
+/// et l'empreinte résidente (RSS) sous Linux/aarch64 sans impacter la vitesse des requêtes locales.
+const SQLITE_MMAP_SIZE_BYTES: i64 = 4_194_304;
 
 /// Database persistence manager for mule-core.
 pub struct Database {

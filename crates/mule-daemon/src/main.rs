@@ -16,6 +16,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+// Configuración de purga agresiva de jemalloc para minimizar el RSS en Linux:
+// Libera páginas sucias y "muzzy" inmediatamente al kernel evitando la retención de memoria inactiva.
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[allow(non_upper_case_globals)]
+#[export_name = "malloc_conf"]
+pub static malloc_conf: &[u8] = b"dirty_decay_ms:0,muzzy_decay_ms:0,background_thread:true\0";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
