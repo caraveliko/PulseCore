@@ -27,7 +27,9 @@ scratch/
 .deploy-dir
 
 # Configuración Cargo local por máquina (trabajos del enlazador, perfil dev) — no versionada
-/.cargo/
+# Configuracion Cargo local por maquina salvo config.toml
+/.cargo/*
+!/.cargo/config.toml
 
 # Configuración local por máquina — el config.json compartido permanece versionado
 /.devin/config.local.json
