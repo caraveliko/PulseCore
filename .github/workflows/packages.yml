@@ -19,7 +19,7 @@ jobs:
     name: Windows x64 server bundle
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar cadena de herramientas Rust
         uses: dtolnay/rust-toolchain@stable
@@ -42,7 +42,7 @@ jobs:
             -File scripts\test_packaged_bundle.ps1
 
       - name: Subir artefacto Windows
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PulseCore-windows-x64
           path: |
@@ -54,7 +54,7 @@ jobs:
     name: Linux x64 daemon + CLI + assistant
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar cadena de herramientas Rust
         uses: dtolnay/rust-toolchain@stable
@@ -75,7 +75,7 @@ jobs:
           (cd dist && sha256sum PulseCore-Server-Linux-x64.tar.gz > PulseCore-Server-Linux-x64.tar.gz.sha256)
 
       - name: Subir artefacto Linux
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PulseCore-linux-x64
           path: |
@@ -87,7 +87,7 @@ jobs:
     name: Linux ARM64 (Raspberry Pi) daemon + CLI + assistant
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar compilador cruzado aarch64
         run: |
@@ -120,7 +120,7 @@ jobs:
           (cd dist && sha256sum PulseCore-Server-Linux-arm64.tar.gz > PulseCore-Server-Linux-arm64.tar.gz.sha256)
 
       - name: Subir artefacto Raspberry Pi (ARM64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PulseCore-linux-arm64
           path: |

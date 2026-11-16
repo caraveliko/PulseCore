@@ -1087,10 +1087,7 @@ impl UploadManager {
         // pas `AcceptNewClient` — conservé comme garde utilisateur
         // supplémentaire, inactif par défaut).
         let min_rate = self.min_upload_rate_bps.load(Ordering::Relaxed);
-        if min_rate > 0 && total_bps / (uploading.max(1) as u64) < min_rate {
-            return false;
-        }
-        true
+        !(min_rate > 0 && total_bps / (uploading.max(1) as u64) < min_rate)
     }
 
     /// eMule `ForceNewClient` pacing (`UploadQueue.cpp:417-421`) : `true`
