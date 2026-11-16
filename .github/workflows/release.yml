@@ -8,9 +8,34 @@ permissions:
   contents: write
 
 jobs:
+  init-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear borrador de Release en GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes_file="docs/releases/RELEASE_NOTES_${tag#v}.md"
+          if [ -f "$notes_file" ]; then
+            gh release create "$tag" \
+              --title "Pulse Core $tag" \
+              --notes-file "$notes_file" \
+              --verify-tag
+          else
+            gh release create "$tag" \
+              --title "Pulse Core $tag" \
+              --generate-notes \
+              --verify-tag
+          fi
+
   windows:
     name: Build & publish Windows bundle
     runs-on: windows-latest
+    needs: init-release
     steps:
       - uses: actions/checkout@v4
 
@@ -18,13 +43,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Caché de Cargo
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: windows-release
 
       # Firma Authenticode opcional — requiere los secretos:
       #   WINDOWS_CERT_BASE64    (certificado .pfx codificado en base64)
@@ -64,7 +85,7 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass `
             -File scripts\test_packaged_bundle.ps1
 
-      - name: Publicar lanzamiento en GitHub
+      - name: Subir artefacto Windows a Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,23 +96,12 @@ jobs:
           $assets = @($zip.FullName, "$($zip.FullName).sha256")
           $sbom = Get-ChildItem dist\PulseCore-Server-Windows\sbom\*.json -ErrorAction SilentlyContinue
           foreach ($s in $sbom) { $assets += $s.FullName }
-          $notesFile = "docs/releases/RELEASE_NOTES_$($tag.TrimStart('v')).md"
-          if (Test-Path $notesFile) {
-            gh release create $tag $assets `
-              --title "Pulse Core $tag" `
-              --notes-file $notesFile `
-              --verify-tag
-          } else {
-            gh release create $tag $assets `
-              --title "Pulse Core $tag" `
-              --generate-notes `
-              --verify-tag
-          }
+          gh release upload $tag $assets --clobber
 
   linux:
     name: Build & publish Linux bundle
     runs-on: ubuntu-latest
-    needs: windows
+    needs: init-release
     steps:
       - uses: actions/checkout@v4
 
@@ -99,23 +109,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Caché de Cargo
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-x64-release
 
-      - name: Compilar daemon y CLI en Rust (release)
-        run: cargo build --release -p mule-daemon -p mule-cli
+      - name: Compilar daemon, CLI y asistente en Rust (release)
+        run: cargo build --release -p mule-daemon -p mule-cli -p mule-assistant
 
       - name: Empaquetar distribución Linux
         run: |
           tag="${GITHUB_REF_NAME}"
           bundle="PulseCore-${tag}-linux-x64"
           mkdir -p "dist/$bundle"
-          cp target/release/mule-daemon target/release/mule-cli scripts/mule-daemon.service "dist/$bundle/"
+          cp target/release/mule-daemon target/release/mule-cli target/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
           tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
@@ -132,7 +138,7 @@ jobs:
   linux-arm64:
     name: Build & publish Raspberry Pi (ARM64) bundle
     runs-on: ubuntu-latest
-    needs: windows
+    needs: init-release
     steps:
       - uses: actions/checkout@v4
 
@@ -147,27 +153,23 @@ jobs:
           targets: aarch64-unknown-linux-gnu
 
       - name: Caché de Cargo (aarch64)
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-arm64-release
 
-      - name: Compilar daemon y CLI en Rust (aarch64 release)
+      - name: Compilar daemon, CLI y asistente en Rust (aarch64 release)
         env:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
           AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
-        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli -p mule-assistant
 
       - name: Empaquetar distribución Raspberry Pi (ARM64)
         run: |
           tag="${GITHUB_REF_NAME}"
           bundle="PulseCore-${tag}-linux-arm64"
           mkdir -p "dist/$bundle"
-          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli scripts/mule-daemon.service "dist/$bundle/"
+          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli target/aarch64-unknown-linux-gnu/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
           tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 

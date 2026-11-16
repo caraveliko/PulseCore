@@ -58,12 +58,12 @@ if (!$Cargo -or !(Test-Path $Cargo)) {
 }
 $RustcVersion = try { (& rustc --version).Trim() } catch { "rustc unknown" }
 
-# 2. Compilar mule-daemon y mule-cli en Release
-Write-Host "`n[1/5] Compilando mule-daemon.exe y mule-cli.exe (release, variante $Flavor, v$AppVersion)..." -ForegroundColor Yellow
+# 2. Compilar mule-daemon, mule-cli y mule-assistant en Release
+Write-Host "`n[1/5] Compilando mule-daemon.exe, mule-cli.exe y mule-assistant.exe (release, variante $Flavor, v$AppVersion)..." -ForegroundColor Yellow
 if ($IsQa) {
-    & $Cargo build --release --bin mule-daemon --bin mule-cli --features mule-daemon/lab-tools
+    & $Cargo build --release --bin mule-daemon --bin mule-cli --bin mule-assistant --features mule-daemon/lab-tools
 } else {
-    & $Cargo build --release --bin mule-daemon --bin mule-cli
+    & $Cargo build --release --bin mule-daemon --bin mule-cli --bin mule-assistant
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Error al compilar Rust (código $LASTEXITCODE)"
@@ -71,6 +71,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $DaemonExe = Join-Path $Root "target\release\mule-daemon.exe"
 $CliExe = Join-Path $Root "target\release\mule-cli.exe"
+$AssistantExe = Join-Path $Root "target\release\mule-assistant.exe"
 if (!(Test-Path $DaemonExe)) { throw "No se encontró $DaemonExe" }
 if (!(Test-Path $CliExe)) { throw "No se encontró $CliExe" }
 
@@ -88,11 +89,18 @@ $DestDaemon = Join-Path $DestPath "mule-daemon.exe"
 $DestCli = Join-Path $DestPath "mule-cli.exe"
 Copy-Item -Path $DaemonExe -Destination $DestDaemon -Force
 Copy-Item -Path $CliExe -Destination $DestCli -Force
+$ExesToSign = @($DestDaemon, $DestCli)
+
+if (Test-Path $AssistantExe) {
+    $DestAssistant = Join-Path $DestPath "mule-assistant.exe"
+    Copy-Item -Path $AssistantExe -Destination $DestAssistant -Force
+    $ExesToSign += $DestAssistant
+}
 
 if (![string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
     Write-Host " -> Firmando ejecutables con certificado $CertificateThumbprint..." -ForegroundColor Gray
     $cert = Get-Item "Cert:\CurrentUser\My\$CertificateThumbprint"
-    foreach ($exePath in @($DestDaemon, $DestCli)) {
+    foreach ($exePath in $ExesToSign) {
         $sig = Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert -HashAlgorithm SHA256 -TimestampServer "http://timestamp.digicert.com"
         if ($sig.Status -ne "Valid") {
             throw "Error al firmar ${exePath}: $($sig.StatusMessage)"
@@ -136,6 +144,7 @@ if ([string]::IsNullOrWhiteSpace($GitCommit) -or $GitCommit.Length -ne 40) {
 
 $ArtifactList = [System.Collections.Generic.List[object]]::new()
 $CoreFiles = @("mule-daemon.exe", "mule-cli.exe", "Iniciar Servidor.bat", "Detener Servidor.bat")
+if (Test-Path (Join-Path $DestPath "mule-assistant.exe")) { $CoreFiles += "mule-assistant.exe" }
 if ($Portable) { $CoreFiles += "portable.flag" }
 
 foreach ($rel in $CoreFiles) {

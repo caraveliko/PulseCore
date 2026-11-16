@@ -1,9 +1,9 @@
 name: Packages
 
 # Compilación de artefactos distribuibles en cada push a master y bajo demanda.
-# - windows-bundle: compila mule-daemon.exe y mule-cli.exe + SBOM + prueba de humo.
-# - linux-bundle: compila los binarios nativos Linux x64 (servidor + CLI + plantilla systemd).
-# - linux-arm64-bundle: compila los binarios Raspberry Pi / ARM64 (servidor + CLI + plantilla systemd).
+# - windows-bundle: compila mule-daemon.exe, mule-cli.exe y mule-assistant.exe + SBOM + prueba de humo.
+# - linux-bundle: compila los binarios nativos Linux x64 (servidor + CLI + asistente + plantilla systemd).
+# - linux-arm64-bundle: compila los binarios Raspberry Pi / ARM64 (servidor + CLI + asistente + plantilla systemd).
 
 on:
   push:
@@ -25,13 +25,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Caché de Cargo
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+          key: windows-pkg
 
       - name: Compilar paquete servidor estándar (sin firma)
         shell: pwsh
@@ -55,7 +51,7 @@ jobs:
           retention-days: 14
 
   linux-bundle:
-    name: Linux x64 daemon + CLI
+    name: Linux x64 daemon + CLI + assistant
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,21 +60,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Caché de Cargo
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-x64-pkg
 
-      - name: Compilar daemon y CLI en Rust (release)
-        run: cargo build --release -p mule-daemon -p mule-cli
+      - name: Compilar daemon, CLI y asistente en Rust (release)
+        run: cargo build --release -p mule-daemon -p mule-cli -p mule-assistant
 
       - name: Empaquetar distribución Linux
         run: |
           mkdir -p dist/PulseCore-Server-Linux
-          cp target/release/mule-daemon target/release/mule-cli scripts/mule-daemon.service dist/PulseCore-Server-Linux/
+          cp target/release/mule-daemon target/release/mule-cli target/release/mule-assistant scripts/mule-daemon.service dist/PulseCore-Server-Linux/
           tar -czf dist/PulseCore-Server-Linux-x64.tar.gz -C dist PulseCore-Server-Linux
           (cd dist && sha256sum PulseCore-Server-Linux-x64.tar.gz > PulseCore-Server-Linux-x64.tar.gz.sha256)
 
@@ -92,7 +84,7 @@ jobs:
           retention-days: 14
 
   linux-arm64-bundle:
-    name: Linux ARM64 (Raspberry Pi) daemon + CLI
+    name: Linux ARM64 (Raspberry Pi) daemon + CLI + assistant
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,25 +100,21 @@ jobs:
           targets: aarch64-unknown-linux-gnu
 
       - name: Caché de Cargo (aarch64)
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-arm64-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-arm64-pkg
 
-      - name: Compilar daemon y CLI en Rust (aarch64 release)
+      - name: Compilar daemon, CLI y asistente en Rust (aarch64 release)
         env:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
           AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
-        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p mule-daemon -p mule-cli -p mule-assistant
 
       - name: Empaquetar distribución Raspberry Pi (ARM64)
         run: |
           mkdir -p dist/PulseCore-Server-Linux-arm64
-          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli scripts/mule-daemon.service dist/PulseCore-Server-Linux-arm64/
+          cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli target/aarch64-unknown-linux-gnu/release/mule-assistant scripts/mule-daemon.service dist/PulseCore-Server-Linux-arm64/
           tar -czf dist/PulseCore-Server-Linux-arm64.tar.gz -C dist PulseCore-Server-Linux-arm64
           (cd dist && sha256sum PulseCore-Server-Linux-arm64.tar.gz > PulseCore-Server-Linux-arm64.tar.gz.sha256)
 
