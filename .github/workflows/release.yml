@@ -94,6 +94,8 @@ jobs:
           $zip = Get-ChildItem dist\PulseCore-Server-Windows-x64.zip | Select-Object -First 1
           if (!$zip) { throw "No se encontró el archivo ZIP de distribución en dist/" }
           $assets = @($zip.FullName, "$($zip.FullName).sha256")
+          $rawExe = "target\release\mule-daemon.exe"
+          if (Test-Path $rawExe) { $assets += $rawExe }
           $sbom = Get-ChildItem dist\PulseCore-Server-Windows\sbom\*.json -ErrorAction SilentlyContinue
           foreach ($s in $sbom) { $assets += $s.FullName }
           gh release upload $tag $assets --clobber
@@ -122,6 +124,7 @@ jobs:
           bundle="PulseCore-${tag}-linux-x64"
           mkdir -p "dist/$bundle"
           cp target/release/mule-daemon target/release/mule-cli target/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
+          cp target/release/mule-daemon "dist/mule-daemon-linux-x86_64"
           tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
@@ -131,6 +134,7 @@ jobs:
           gh release upload "$tag" \
             "dist/PulseCore-${tag}-linux-x64.tar.gz" \
             "dist/PulseCore-${tag}-linux-x64.tar.gz.sha256" \
+            "dist/mule-daemon-linux-x86_64" \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -171,6 +175,7 @@ jobs:
           bundle="PulseCore-${tag}-linux-arm64"
           mkdir -p "dist/$bundle"
           cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli target/aarch64-unknown-linux-gnu/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
+          cp target/aarch64-unknown-linux-gnu/release/mule-daemon "dist/mule-daemon-linux-aarch64"
           tar -czvf "dist/$bundle.tar.gz" -C dist "$bundle"
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
@@ -180,6 +185,53 @@ jobs:
           gh release upload "$tag" \
             "dist/PulseCore-${tag}-linux-arm64.tar.gz" \
             "dist/PulseCore-${tag}-linux-arm64.tar.gz.sha256" \
+            "dist/mule-daemon-linux-aarch64" \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  generate-update-manifest:
+    name: Generate & sign update manifest
+    runs-on: ubuntu-latest
+    needs: [windows, linux, linux-arm64]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias criptográficas
+        run: pip install cryptography
+
+      - name: Descargar binarios de la Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          mkdir -p assets
+          gh release download "$tag" -D assets -p "mule-daemon*"
+
+      - name: Generar y firmar manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING_KEY: ${{ secrets.RELEASE_ED25519_KEY }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "Aviso: El secreto RELEASE_ED25519_KEY no está configurado en GitHub Secrets."
+            echo "Se omitirá la firma automática del manifiesto."
+            exit 0
+          fi
+
+          python3 scripts/generate_update_manifest.py \
+            --version "$version" \
+            --private-key "$SIGNING_KEY" \
+            --assets-dir assets \
+            --base-url "https://github.com/caraveliko/PulseCore/releases/download/$tag/" \
+            --output manifest.json
+
+          gh release upload "$tag" manifest.json --clobber
