@@ -4010,6 +4010,53 @@
     </div>
   </div>
 
+  <!-- MODAL: AVISO LEGAL Y CONDICIONES DE USO (PRIMER INICIO) -->
+  <div class="modal-overlay" id="legal-disclaimer-modal" style="z-index: 10050; background: rgba(5, 7, 12, 0.94); backdrop-filter: blur(6px); display: none;">
+    <div class="modal" style="max-width: 680px; width: 92%; max-height: 90vh; display: flex; flex-direction: column; border-color: rgba(59, 130, 246, 0.4); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+        <span style="font-size: 1.6rem;">⚖️</span>
+        <div>
+          <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Aviso Legal y Condiciones de Uso</h3>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Pulse Core / eMule-Rust — Términos de utilización de software de red</span>
+        </div>
+      </div>
+
+      <div style="overflow-y: auto; flex: 1; padding: 12px; font-size: 0.84rem; line-height: 1.55; color: #cbd5e1; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0;">
+          <strong>Pulse Core</strong> es un proyecto de software libre de carácter técnico y educativo que implementa un cliente para protocolos estándar de comunicación entre pares (<em>peer-to-peer</em>: eD2K, Kademlia y BitTorrent), junto con herramientas locales de organización y gestión de archivos.
+        </p>
+
+        <div style="background: rgba(30, 41, 59, 0.5); border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 0 4px 4px 0;">
+          <strong style="color: #60a5fa; display: block; margin-bottom: 4px;">1. Ausencia total de contenidos</strong>
+          <span>Este software no aloja, almacena, indexa, rastrea, distribuye, promociona ni proporciona acceso a ningún archivo, película, serie de televisión, obra audiovisual o material protegido por derechos de propiedad intelectual. Los desarrolladores no poseen servidores ni repositorios de contenido.</span>
+        </div>
+
+        <div style="background: rgba(30, 41, 59, 0.5); border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 0 4px 4px 0;">
+          <strong style="color: #60a5fa; display: block; margin-bottom: 4px;">2. Neutralidad tecnológica de red</strong>
+          <span>Las funciones de búsqueda, descarga y organización operan de forma estrictamente neutral y automática sobre redes descentralizadas públicas y abiertas, o mediante indexadores e integraciones configurados de forma libre, autónoma y directa por el propio usuario.</span>
+        </div>
+
+        <div style="background: rgba(30, 41, 59, 0.5); border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 0 4px 4px 0;">
+          <strong style="color: #fbbf24; display: block; margin-bottom: 4px;">3. Responsabilidad exclusiva del usuario</strong>
+          <span>El uso que se haga de esta herramienta recae única y exclusivamente sobre el usuario final. Corresponde exclusivamente al usuario asegurarse en todo momento de que sus actividades cumplen íntegramente con la legislación vigente y con la normativa de propiedad intelectual aplicable en su jurisdicción de residencia.</span>
+        </div>
+
+        <p style="margin: 0; font-size: 0.8rem; color: #94a3b8;">
+          Al pulsar «Conforme», usted reconoce haber leído y comprendido este aviso, aceptando la plena responsabilidad de su uso. Si pulsa «Disconforme», el servicio se detendrá de inmediato y la aplicación se cerrará.
+        </p>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px;">
+        <button type="button" class="btn btn-danger" id="btn-legal-disagree" onclick="handleLegalDisclaimerResponse(false)" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 8px 18px; border-radius: 6px;">
+          <span>✕</span> Disconforme (Cerrar)
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-legal-agree" onclick="handleLegalDisclaimerResponse(true)" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 8px 22px; background: #16a34a; border-color: #22c55e; border-radius: 6px;">
+          <span>✓</span> Conforme (Continuar)
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: EXPLORADOR DE CARPETAS DEL SERVIDOR -->
   <div class="modal-overlay" id="folder-browser-modal">
     <div class="modal" style="max-width: 640px; width: 92%; max-height: 82vh; display: flex; flex-direction: column;">
@@ -7021,12 +7068,93 @@
     };
     document.getElementById('btn-refresh-kad-contacts').onclick = refreshKadContacts;
 
-    // === GESTIÓN DE PRIMER INICIO & DETECCIÓN LOWID / PUERTOS ===
+    // === GESTIÓN DE AVISO LEGAL & PRIMER INICIO & DETECCIÓN LOWID / PUERTOS ===
     let lastKnownIsHighId = null;
     let lastKnownKadFw = null;
     let lowIdBannerDismissed = false;
+    let legalDisclaimerAccepted = false;
+
+    async function checkLegalDisclaimer() {
+      // 1. Comprobar primero en localStorage para respuesta instantánea
+      if (localStorage.getItem('mule_disclaimer_accepted') === 'true') {
+        legalDisclaimerAccepted = true;
+        return true;
+      }
+
+      // 2. Comprobar en ajustes persistidos del daemon
+      try {
+        const s = await client.call('settings.get', {});
+        if (s && s.legalDisclaimerAccepted) {
+          localStorage.setItem('mule_disclaimer_accepted', 'true');
+          legalDisclaimerAccepted = true;
+          return true;
+        }
+      } catch (err) {
+        console.warn('No se pudo verificar el estado del aviso legal en el daemon:', err);
+      }
+
+      // 3. Si no ha sido aceptado, mostrar el modal bloqueante
+      const modal = document.getElementById('legal-disclaimer-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+      }
+      return false;
+    }
+
+    async function handleLegalDisclaimerResponse(agreed) {
+      const modal = document.getElementById('legal-disclaimer-modal');
+      if (agreed) {
+        // El usuario acepta las condiciones
+        legalDisclaimerAccepted = true;
+        localStorage.setItem('mule_disclaimer_accepted', 'true');
+        try {
+          await client.call('settings.set', { legalDisclaimerAccepted: true });
+        } catch (e) {
+          console.warn('Error al guardar aceptación del aviso legal:', e);
+        }
+        if (modal) {
+          modal.classList.remove('active');
+          modal.style.display = 'none';
+        }
+        showToast('Condiciones aceptadas. Iniciando servicios...', 'success', '⚖️');
+        // Proceder con la inicialización habitual de primer inicio
+        checkFirstRunSetup();
+      } else {
+        // El usuario rechaza las condiciones: detener el daemon y cerrar la sesión
+        if (modal) {
+          modal.innerHTML = `
+            <div class="modal" style="max-width: 520px; width: 90%; text-align: center; padding: 32px 24px;">
+              <span style="font-size: 3rem; display: block; margin-bottom: 16px;">🛑</span>
+              <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #ef4444;">Programa detenido</h3>
+              <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+                Ha indicado disconformidad con el aviso legal y condiciones de uso. El servidor Pulse Core se ha apagado ordenadamente.
+              </p>
+              <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: #fca5a5; margin-bottom: 20px;">
+                Ya puede cerrar con seguridad esta pestaña del navegador.
+              </div>
+              <button class="btn" onclick="window.close();" style="padding: 8px 20px;">Cerrar pestaña</button>
+            </div>
+          `;
+        }
+
+        try {
+          await client.call('system.stop', {});
+        } catch (e) {
+          console.warn('Error al solicitar detención del sistema:', e);
+        }
+
+        if (client && typeof client.disconnect === 'function') {
+          try { client.disconnect(); } catch (_) {}
+        }
+      }
+    }
 
     async function checkFirstRunSetup() {
+      // Si el disclaimer no está aceptado, no ejecutar aprovisionamiento inicial
+      if (!legalDisclaimerAccepted && localStorage.getItem('mule_disclaimer_accepted') !== 'true') {
+        return;
+      }
       try {
         const setupDone = localStorage.getItem('mule_first_run_completed');
         if (setupDone === 'true') {
@@ -8183,10 +8311,13 @@
       try { refreshDownloads(); } catch (e) { console.error('Error refreshDownloads:', e); }
       try { refreshStorage(); } catch (e) { console.error('Error refreshStorage:', e); }
 
-      // Inicialización automática en el primer arranque (First Run Autoconnect)
-      setTimeout(() => {
-        checkFirstRunSetup();
-      }, 1200);
+      // Comprobación de aviso legal y primer arranque
+      setTimeout(async () => {
+        const accepted = await checkLegalDisclaimer();
+        if (accepted) {
+          checkFirstRunSetup();
+        }
+      }, 500);
 
       // === PLANIFICADOR MAESTRO ADAPTATIVO (Smart Adaptive Scheduler) ===
       // Un único temporizador sincronizado a 1s que adapta la frecuencia de sondeo

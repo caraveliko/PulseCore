@@ -72,6 +72,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "ramProfile",
     "logLevel",
     "webuiPassword",
+    "legalDisclaimerAccepted",
 ];
 
 fn query_disk_space(path: &std::path::Path) -> (Option<u64>, Option<u64>) {
@@ -735,6 +736,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                 .flatten()
                 .unwrap_or_else(|| "spa".to_string()),
             "cleanerEnabled": read("cleaner_enabled", true),
+            "legalDisclaimerAccepted": read("legal_disclaimer_accepted", false),
             "mcpEnabled": read("mcp_enabled", true),
             "mcpToolProfile": dls
                 .get_setting("mcp_tool_profile")
@@ -1317,6 +1319,7 @@ pub async fn handle_settings_set(
         ("scorerAntiFake", "scorer_anti_fake"),
         ("subtitlesAutoDownload", "subtitles_auto_download"),
         ("cleanerEnabled", "cleaner_enabled"),
+        ("legalDisclaimerAccepted", "legal_disclaimer_accepted"),
     ] {
         if let Some(val) = params.get(camel) {
             let v = val
