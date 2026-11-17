@@ -2320,6 +2320,7 @@ dependencies = [
  "openssl",
  "rand 0.9.5",
  "reqwest 0.12.28",
+ "ring",
  "rsa",
  "rust-embed",
  "serde",

@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::error::JsonRpcError;
 use crate::rpc::handlers::{
     categories::*, downloads::*, friends::*, history::*, kad::*, lab::*, media::*, network::*,
-    servers::*, settings::*, shares::*, sources::*, upnp::*,
+    servers::*, settings::*, shares::*, sources::*, upnp::*, updater::*,
 };
 use crate::rpc::types::{JsonRpcRequest, JsonRpcResponse};
 use crate::state::AppState;
@@ -37,6 +37,9 @@ pub async fn handle_request(
 
     let result: Result<Value, JsonRpcError> = match req.method.as_str() {
         "system.status" => handle_status(state).await,
+        "system.checkUpdate" => handle_check_update(state, req.params).await,
+        "system.getUpdateStatus" => handle_get_update_status(state).await,
+        "system.applyUpdate" => handle_apply_update(state, req.params).await,
         "system.diskSpace" => handle_disk_space(state).await,
         "system.nasInfo" => handle_nas_info(state).await,
         "system.logs" => handle_logs(state, req.params).await,

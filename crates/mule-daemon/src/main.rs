@@ -25,6 +25,11 @@ pub static malloc_conf: &[u8] = b"dirty_decay_ms:0,muzzy_decay_ms:0,background_t
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Limpieza silenciosa de posibles archivos de respaldo (.old) de actualizaciones previas
+    if let Ok(exe_path) = std::env::current_exe() {
+        mule_daemon::services::updater::cleanup_old_backup_if_present(&exe_path);
+    }
+
     let args: Vec<String> = std::env::args().collect();
     let mut data_dir_arg: Option<PathBuf> = None;
     let mut downloads_dir_arg: Option<PathBuf> = None;
@@ -487,6 +492,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let upnp_cleanup = state.upnp.clone();
     let listener_cleanup = state.inbound_listener.clone();
     let downloads_cleanup = state.downloads.clone();
+    let updater_cleanup = state.updater.clone();
     let tray_downloads_dir = state.config.default_download_dir.clone();
     let tray_event_rx = if !no_tray_arg {
         Some(state.event_tx.subscribe())
@@ -559,6 +565,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     DaemonSession::remove(&data_dir);
     tracing::info!("==> mule-daemon exited cleanly.");
+
+    // Si se aplicó una actualización con reinicio solicitado, relanza el nuevo binario
+    if updater_cleanup.is_restart_pending() {
+        tracing::info!("==> Relanzando proceso eMuleRust con la nueva versión actualizada...");
+        if let Err(e) = mule_daemon::services::updater::respawn_current_process() {
+            tracing::error!("Error al relanzar el proceso actualizado: {e}");
+        }
+    }
+
     Ok(())
 }
 

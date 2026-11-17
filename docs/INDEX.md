@@ -680,6 +680,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `docs/architecture/rapport_architecture_et_avancement.md` | Informe detallado de arquitectura de software, Clean Architecture y estado de avance |
 | `docs/architecture/rpc_protocol.md` | Contrato JSON-RPC 2.0/WebSocket demonio↔clientes: transporte, auth, métodos, eventos, códigos de error, versionado |
 | `docs/architecture/plan_daemon_events.md` | Plan de eventos del demonio: subidas en tiempo real, `statsTick`, ciclo de vida de descargas, fin del polling (fases E1–E6) |
+| `docs/architecture/adr_auto_update.md` | ADR: Sistema de actualización automática integrado (In-App Staging + Atomic Self-Replace, Ed25519, graceful shutdown) |
 
 ### docs/walkthroughs/ — Guías de ejecución e interoperabilidad por fase
 | Archivo | Función |
@@ -760,6 +761,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 |---|---|
 | `build_windows_release.ps1` | Compilación de release Windows (desktop + web empaquetada bajo `web/`, lanzador `Interface Web.bat`, `-SkipWeb`/`-WebBaseHref`) |
 | `generate_sbom.ps1` | Generación del SBOM (Bill of Materials) |
+| `generate_update_manifest.py` | Firma criptográfica Ed25519 y generación de `manifest.json` para actualizaciones |
 | `test_packaged_bundle.ps1` | Prueba del paquete empaquetado |
 | `test_qa_loopback_e2e.ps1` | Prueba E2E loopback QA |
 | `test_rc_matrix.ps1` | Matriz de pruebas release candidate |

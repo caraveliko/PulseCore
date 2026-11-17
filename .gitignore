@@ -38,3 +38,7 @@ scratch/
 /bin/
 *.tar.xz
 *.zip
+
+# Claves privadas de firma de lanzamiento (Ed25519) — NUNCA versionar
+*.key
+release_ed25519.key

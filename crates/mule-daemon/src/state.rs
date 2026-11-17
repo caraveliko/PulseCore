@@ -177,6 +177,8 @@ pub struct AppState {
     pub media_metadata: Arc<crate::services::MediaMetadataService>,
     /// Hash en memoria de la contraseña opcional de la WebUI para peticiones en red local.
     pub webui_password_hash: Arc<std::sync::RwLock<Option<String>>>,
+    /// Servicio de comprobación, descarga y aplicación de actualizaciones en caliente.
+    pub updater: Arc<crate::services::updater::UpdaterService>,
 }
 
 impl AppState {
@@ -656,6 +658,10 @@ impl AppState {
             ed2k_port_eff,
             kad_port_eff,
         ));
+        let updater = Arc::new(crate::services::updater::UpdaterService::new(
+            config.update_manifest_url.clone(),
+            crate::rpc::methods::DAEMON_VERSION.to_string(),
+        ));
         Self {
             config,
             downloads: dl_arc,
@@ -692,6 +698,7 @@ impl AppState {
             active_nas_transfer_id: Arc::new(Mutex::new(None)),
             media_metadata: Arc::new(crate::services::MediaMetadataService::new()),
             webui_password_hash: Arc::new(std::sync::RwLock::new(initial_webui_pass_hash)),
+            updater,
         }
     }
 

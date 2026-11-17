@@ -52,7 +52,20 @@ pub struct DaemonConfig {
     pub nas_ssh_target: Option<String>,
     /// SSH port for NAS hardware telemetry (`EMULERUST_NAS_SSH_PORT`).
     pub nas_ssh_port: u16,
+    /// Comprobación periódica automática de actualizaciones habilitada (`EMULERUST_UPDATE_CHECK_ENABLED`).
+    pub update_check_enabled: bool,
+    /// URL del manifiesto de versiones remotas (`EMULERUST_UPDATE_MANIFEST_URL`).
+    pub update_manifest_url: String,
+    /// Canal de actualización seleccionado (`EMULERUST_UPDATE_CHANNEL`).
+    pub update_channel: String,
 }
+
+/// URL oficial predeterminada para el manifiesto de actualizaciones.
+pub const DEFAULT_UPDATE_MANIFEST_URL: &str =
+    "https://github.com/caraveliko/PulseCore/releases/latest/download/manifest.json";
+
+/// Canal de actualización predeterminado.
+pub const DEFAULT_UPDATE_CHANNEL: &str = "stable";
 
 impl DaemonConfig {
     pub fn new(data_dir: PathBuf, auth_token: impl Into<String>) -> Self {
@@ -112,6 +125,17 @@ impl DaemonConfig {
             .ok()
             .and_then(|s| s.parse::<u16>().ok())
             .unwrap_or(2222);
+        let update_check_enabled = std::env::var("EMULERUST_UPDATE_CHECK_ENABLED")
+            .map(|s| s != "0" && s.to_lowercase() != "false")
+            .unwrap_or(true);
+        let update_manifest_url = std::env::var("EMULERUST_UPDATE_MANIFEST_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_UPDATE_MANIFEST_URL.to_string());
+        let update_channel = std::env::var("EMULERUST_UPDATE_CHANNEL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_UPDATE_CHANNEL.to_string());
 
         Self {
             bind_addr: "127.0.0.1:4660".parse().unwrap(),
@@ -144,6 +168,9 @@ impl DaemonConfig {
             plex_url,
             nas_ssh_target,
             nas_ssh_port,
+            update_check_enabled,
+            update_manifest_url,
+            update_channel,
         }
     }
 

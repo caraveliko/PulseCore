@@ -110,7 +110,7 @@ Espacios de nombres estables (véase `methods.rs` para la lista exhaustiva mante
 
 | Espacio de nombres | Métodos representativos |
 |---|---|
-| `system.*` | `hello`, `status`, `stop`/`shutdown` |
+| `system.*` | `hello`, `status`, `stop`/`shutdown`, `checkUpdate`, `getUpdateStatus`, `applyUpdate` (véase `adr_auto_update.md`) |
 | `downloads.*` | `list`, `get`, `addEd2kLink`, `pause`, `resume`, `remove`, `setDestination`, `rename` (`{id, newName}` — disco + `shared_files` si ha finalizado), `setCategory`, `getSources`, `inspectPartMet`, `importPartMet`, `retryConnection` |
 | `servers.*` | `list`, `connect`, `disconnect`, `status`, `search`, `querySources`, `importMet`, `updateFromUrl`, `setEnabled`, `delete`, `clear` |
 | `sources.*` | `list`, `addManual`, `connect`, `disconnect`, `clear`, `status`/`swarmStatus` |

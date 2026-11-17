@@ -29,6 +29,7 @@ pub mod subtitles;
 pub mod swarm_coordinator;
 pub mod upload_queue;
 pub mod upnp;
+pub mod updater;
 pub mod uss;
 mod uss_icmp;
 
@@ -39,6 +40,7 @@ pub use kad::{KadContactEntryDto, KadService, KadStatusSnapshot, NodesDatInspect
 pub use kad_udp::{KadUdpService, KadUdpSnapshot, UdpFirewallStatus};
 pub use obfuscation_stream::ObfuscatedStream;
 pub use upnp::{UpnpService, UpnpStatusSnapshot};
+pub use updater::{UpdateStatusSnapshot, UpdaterService};
 
 pub use auto_grabber::AutoGrabber;
 pub use cleaner::MediaCleaner;
