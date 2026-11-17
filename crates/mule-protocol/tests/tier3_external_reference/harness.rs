@@ -557,9 +557,7 @@ impl Sha256 {
         let total_bits = self.count * 8;
         let buf_idx = (self.count % 64) as usize;
         self.buffer[buf_idx] = 0x80;
-        for i in buf_idx + 1..64 {
-            self.buffer[i] = 0;
-        }
+        self.buffer[buf_idx + 1..64].fill(0);
         if buf_idx >= 56 {
             self.process_block();
             self.buffer = [0u8; 64];

@@ -9,7 +9,6 @@ authors.workspace = true
 [dependencies]
 rsa = "0.9"
 sha1 = { workspace = true, features = ["oid"] }
-rand.workspace = true
 thiserror.workspace = true
 data-encoding.workspace = true
 
