@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use mule_network_policy::{NetworkPolicyManager, ResourceBudgets};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use crate::config::DaemonConfig;
 use crate::services::downloads::types::DownloadSnapshot;
@@ -720,6 +721,58 @@ impl AppState {
     /// Puerto TCP efectivo de eD2K (`ed2k_port` persistido o configuración de inicio).
     pub fn ed2k_port(&self) -> u16 {
         self.ed2k_port_eff.load(Ordering::Relaxed)
+    }
+
+    /// Directorio efectivo de descargas (ajuste persistido `default_download_directory` o valor de inicio).
+    pub async fn effective_download_dir(&self) -> PathBuf {
+        let dl = self.downloads.lock().await;
+        dl.get_setting("default_download_directory")
+            .ok()
+            .flatten()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.config.default_download_dir.clone())
+    }
+
+    /// Directorio efectivo de películas (ajuste persistido `movies_dir` o valor derivado/inicial).
+    pub async fn effective_movies_dir(&self) -> PathBuf {
+        let dl = self.downloads.lock().await;
+        if let Some(dir) = dl.get_setting("movies_dir").ok().flatten() {
+            if !dir.trim().is_empty() {
+                return PathBuf::from(dir.trim());
+            }
+        }
+        if let Some(nas_dir) = dl.get_setting("nas_root_dir").ok().flatten() {
+            if !nas_dir.trim().is_empty() {
+                return PathBuf::from(nas_dir.trim()).join("Movies");
+            }
+        }
+        if let Some(dl_dir) = dl.get_setting("default_download_directory").ok().flatten() {
+            if !dl_dir.trim().is_empty() {
+                return PathBuf::from(dl_dir.trim()).join("media").join("Movies");
+            }
+        }
+        self.config.movies_dir.clone()
+    }
+
+    /// Directorio efectivo de series (ajuste persistido `series_dir` o valor derivado/inicial).
+    pub async fn effective_series_dir(&self) -> PathBuf {
+        let dl = self.downloads.lock().await;
+        if let Some(dir) = dl.get_setting("series_dir").ok().flatten() {
+            if !dir.trim().is_empty() {
+                return PathBuf::from(dir.trim());
+            }
+        }
+        if let Some(nas_dir) = dl.get_setting("nas_root_dir").ok().flatten() {
+            if !nas_dir.trim().is_empty() {
+                return PathBuf::from(nas_dir.trim()).join("Series");
+            }
+        }
+        if let Some(dl_dir) = dl.get_setting("default_download_directory").ok().flatten() {
+            if !dl_dir.trim().is_empty() {
+                return PathBuf::from(dl_dir.trim()).join("media").join("Series");
+            }
+        }
+        self.config.series_dir.clone()
     }
 
     /// Puerto UDP efectivo de Kad (`kad_port` persistido o configuración de inicio).

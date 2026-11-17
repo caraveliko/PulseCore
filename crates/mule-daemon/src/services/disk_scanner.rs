@@ -309,8 +309,8 @@ impl DiskScanner {
     /// Escanea directorios de películas y series en disco (`spawn_blocking`) y sincroniza la base de datos en lote
     pub async fn scan_all(state: &AppState) -> Value {
         let now = now_ms();
-        let movies_root = state.config.movies_dir.clone();
-        let series_root = state.config.series_dir.clone();
+        let movies_root = state.effective_movies_dir().await;
+        let series_root = state.effective_series_dir().await;
         let movies_root_str = movies_root.to_string_lossy().to_string();
         let series_root_str = series_root.to_string_lossy().to_string();
 

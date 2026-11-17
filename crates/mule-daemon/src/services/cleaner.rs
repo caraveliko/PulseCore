@@ -343,12 +343,12 @@ impl MediaCleaner {
 
     /// Deduplica episodios de series de TV en series_dir
     async fn deduplicate_series(state: &AppState, dry_run: bool, report: &mut CleanReport) {
-        let series_dir = &state.config.series_dir;
+        let series_dir = state.effective_series_dir().await;
         if !series_dir.is_dir() {
             return;
         }
 
-        let Ok(series_entries) = std::fs::read_dir(series_dir) else {
+        let Ok(series_entries) = std::fs::read_dir(&series_dir) else {
             return;
         };
 
@@ -489,12 +489,12 @@ impl MediaCleaner {
 
     /// Deduplica películas en movies_dir
     async fn deduplicate_movies(state: &AppState, dry_run: bool, report: &mut CleanReport) {
-        let movies_dir = &state.config.movies_dir;
+        let movies_dir = state.effective_movies_dir().await;
         if !movies_dir.is_dir() {
             return;
         }
 
-        let Ok(movie_entries) = std::fs::read_dir(movies_dir) else {
+        let Ok(movie_entries) = std::fs::read_dir(&movies_dir) else {
             return;
         };
 
@@ -583,7 +583,8 @@ impl MediaCleaner {
 
     /// Limpia directorios entrantes (default_download_dir + extra_incoming_dirs + temp_dir)
     async fn clean_incoming(state: &AppState, dry_run: bool, report: &mut CleanReport) {
-        let mut incoming_dirs = vec![state.config.default_download_dir.clone()];
+        let effective_dl_dir = state.effective_download_dir().await;
+        let mut incoming_dirs = vec![effective_dl_dir, state.config.default_download_dir.clone()];
         for d in &state.config.extra_incoming_dirs {
             if !incoming_dirs.contains(d) {
                 incoming_dirs.push(d.clone());
@@ -605,6 +606,9 @@ impl MediaCleaner {
             temps
         };
 
+        let effective_movies = state.effective_movies_dir().await;
+        let effective_series = state.effective_series_dir().await;
+
         // 1. Limpiar basura y muestras de las carpetas entrantes (no carpetas de biblioteca)
         for inc_dir in &incoming_dirs {
             if !inc_dir.is_dir() {
@@ -612,7 +616,9 @@ impl MediaCleaner {
             }
             if inc_dir == &state.config.movies_dir
                 || inc_dir == &state.config.series_dir
-                || crate::services::organizer::is_already_in_organized_library(state, inc_dir)
+                || inc_dir == &effective_movies
+                || inc_dir == &effective_series
+                || crate::services::organizer::is_already_in_organized_library(state, inc_dir).await
             {
                 continue;
             }
@@ -728,9 +734,12 @@ impl MediaCleaner {
         // 2. Deduplicar películas
         Self::deduplicate_movies(state, dry_run, &mut report).await;
 
+        let effective_series = state.effective_series_dir().await;
+        let effective_movies = state.effective_movies_dir().await;
+
         // 3. Purgar basura, tráileres/muestras de carpetas de medios (preservando estrictamente portadas, metadatos nfo y subtítulos)
-        Self::clean_junk_and_orphan_subtitles(&state.config.series_dir, true, dry_run, &mut report);
-        Self::clean_junk_and_orphan_subtitles(&state.config.movies_dir, true, dry_run, &mut report);
+        Self::clean_junk_and_orphan_subtitles(&effective_series, true, dry_run, &mut report);
+        Self::clean_junk_and_orphan_subtitles(&effective_movies, true, dry_run, &mut report);
 
         // 4. Limpiar carpetas entrantes y archivos temporales huérfanos
         Self::clean_incoming(state, dry_run, &mut report).await;
@@ -753,7 +762,7 @@ impl MediaCleaner {
                 let clean_t = clean_movie_title(&m.title).to_lowercase();
                 let norm_t = crate::services::scorer::normalize_accents_and_symbols(&clean_t);
                 if m.media_type == "movie" {
-                    if let Ok(entries) = std::fs::read_dir(&state.config.movies_dir) {
+                    if let Ok(entries) = std::fs::read_dir(&effective_movies) {
                         for e in entries.flatten() {
                             let p = e.path();
                             if p.is_dir() {
@@ -766,7 +775,7 @@ impl MediaCleaner {
                         }
                     }
                 } else if m.media_type == "tv" {
-                    if let Ok(entries) = std::fs::read_dir(&state.config.series_dir) {
+                    if let Ok(entries) = std::fs::read_dir(&effective_series) {
                         for e in entries.flatten() {
                             let p = e.path();
                             if p.is_dir() {
@@ -783,8 +792,8 @@ impl MediaCleaner {
             list
         };
 
-        Self::purge_empty_dirs_recursive(&state.config.series_dir, &protected_dirs, dry_run, &mut report);
-        Self::purge_empty_dirs_recursive(&state.config.movies_dir, &protected_dirs, dry_run, &mut report);
+        Self::purge_empty_dirs_recursive(&effective_series, &protected_dirs, dry_run, &mut report);
+        Self::purge_empty_dirs_recursive(&effective_movies, &protected_dirs, dry_run, &mut report);
 
         info!(
             "[CLEANER] Finished media cleanup: {} duplicate eps, {} duplicate movies, {} junk files, {} orphan subs, {} bytes freed",

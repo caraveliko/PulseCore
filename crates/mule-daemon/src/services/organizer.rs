@@ -172,7 +172,19 @@ pub fn detect_quality_tag(filename: &str) -> &'static str {
     }
 }
 
-/// Realiza un enlace duro desde el origen al destino (o copia en caso de EXDEV) y elimina el origen de incoming
+/// Comprueba si el error devuelto por el sistema operativo indica un enlace entre dispositivos o sistemas de archivos diferentes.
+/// - En Unix / Linux: `EXDEV` (código de error 18).
+/// - En Windows: `ERROR_NOT_SAME_DEVICE` (código 17) o `ERROR_INVALID_FUNCTION` (código 1) en ciertos sistemas de archivos o unidades de red.
+fn is_cross_device_error(err: &std::io::Error) -> bool {
+    match err.raw_os_error() {
+        Some(18) => true,
+        #[cfg(target_os = "windows")]
+        Some(17) | Some(1) => true,
+        _ => false,
+    }
+}
+
+/// Realiza un enlace duro desde el origen al destino (o copia en caso de límite entre dispositivos) y elimina el origen de incoming
 /// para que no queden archivos duplicados ni residuos en incoming.
 pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<()> {
     let src = source.to_path_buf();
@@ -217,10 +229,10 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<(
                 );
                 Ok(())
             }
-            Err(e) if e.raw_os_error() == Some(18) => {
-                // EXDEV: Enlace entre dispositivos cruzados, incoming y la mediateca están en montajes/sistemas de archivos separados
+            Err(e) if is_cross_device_error(&e) => {
+                // Enlace entre dispositivos cruzados, incoming y la mediateca están en montajes/sistemas de archivos separados
                 info!(
-                    "[ORGANIZER] Cross-device boundary (EXDEV); falling back to optimized NAS/local transfer and removing source to leave zero residues on host: '{}' -> '{}'",
+                    "[ORGANIZER] Cross-device boundary detected; falling back to optimized NAS/local transfer and removing source to leave zero residues on host: '{}' -> '{}'",
                     src.display(),
                     tgt.display()
                 );
@@ -357,8 +369,10 @@ fn purge_superseded_movie_files(
 }
 
 /// Devuelve true si `path` ya está organizado dentro de un subdirectorio de `movies_dir` o `series_dir`.
-pub fn is_already_in_organized_library(state: &AppState, path: &Path) -> bool {
-    for lib_root in [&state.config.movies_dir, &state.config.series_dir] {
+pub async fn is_already_in_organized_library(state: &AppState, path: &Path) -> bool {
+    let movies_dir = state.effective_movies_dir().await;
+    let series_dir = state.effective_series_dir().await;
+    for lib_root in [&movies_dir, &series_dir, &state.config.movies_dir, &state.config.series_dir] {
         if path.starts_with(lib_root) && path.parent() != Some(lib_root.as_path()) {
             return true;
         }
@@ -440,7 +454,7 @@ impl MediaOrganizer {
         }
 
         // Omitir archivos que ya están organizados dentro de una subcarpeta de película o serie
-        if is_already_in_organized_library(state, completed_file_path) {
+        if is_already_in_organized_library(state, completed_file_path).await {
             return Ok(None);
         }
 
@@ -803,6 +817,7 @@ impl MediaOrganizer {
                         results.into_iter().next()
                     };
 
+                    let effective_movies_root = state.effective_movies_dir().await;
                     if let Some(meta) = best {
                         let id = Uuid::new_v4().to_string();
                         let item = MediaItem {
@@ -820,7 +835,7 @@ impl MediaOrganizer {
                             status: "completed".to_string(),
                             monitored: true,
                             quality_profile: "1080p-es".to_string(),
-                            root_folder: state.config.movies_dir.to_string_lossy().to_string(),
+                            root_folder: effective_movies_root.to_string_lossy().to_string(),
                             file_path: None,
                             download_id: Some(download_id.to_string()),
                             created_at: now,
@@ -833,6 +848,7 @@ impl MediaOrganizer {
                 }
             }
 
+            let effective_movies_root = state.effective_movies_dir().await;
             let final_movie = matched_movie.unwrap_or_else(|| {
                 MediaItem {
                     id: Uuid::new_v4().to_string(),
@@ -849,7 +865,7 @@ impl MediaOrganizer {
                     status: "completed".to_string(),
                     monitored: true,
                     quality_profile: "1080p-es".to_string(),
-                    root_folder: state.config.movies_dir.to_string_lossy().to_string(),
+                    root_folder: effective_movies_root.to_string_lossy().to_string(),
                     file_path: None,
                     download_id: Some(download_id.to_string()),
                     created_at: now,
@@ -931,8 +947,9 @@ impl MediaOrganizer {
                 .collect()
         };
 
+        let effective_dl_dir = state.effective_download_dir().await;
         for (dl_id, path) in completed_ed2k {
-            if path.is_file() && !is_already_in_organized_library(state, &path) {
+            if path.is_file() && !is_already_in_organized_library(state, &path).await {
                 if let Ok(Some(dest)) = Self::organize_download(state, &dl_id, &path).await {
                     organized_files.push(json!({
                         "protocol": "ed2k",
@@ -1004,8 +1021,8 @@ impl MediaOrganizer {
             }
         }
 
-        // 3. Escanear default_download_dir y los directorios adicionales configurados en busca de archivos de vídeo independientes
-        let mut incoming_dirs = vec![state.config.default_download_dir.clone()];
+        // 3. Escanear directorios de descarga y los directorios adicionales configurados en busca de archivos de vídeo independientes
+        let mut incoming_dirs = vec![effective_dl_dir, state.config.default_download_dir.clone()];
         for d in &state.config.extra_incoming_dirs {
             if !incoming_dirs.contains(d) {
                 incoming_dirs.push(d.clone());
@@ -1017,7 +1034,7 @@ impl MediaOrganizer {
                 if let Ok(entries) = std::fs::read_dir(inc_dir) {
                     for entry in entries.flatten() {
                         let p = entry.path();
-                        if p.is_file() && !is_already_in_organized_library(state, &p) {
+                        if p.is_file() && !is_already_in_organized_library(state, &p).await {
                             let size = p.metadata().map(|m| m.len()).unwrap_or(0);
                             if size < MIN_STANDALONE_VIDEO_BYTES {
                                 continue;

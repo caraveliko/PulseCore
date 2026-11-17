@@ -198,9 +198,9 @@ pub async fn handle_media_add(
         .to_string();
 
     let default_root = if media_type == "tv" {
-        state.config.series_dir.to_string_lossy().to_string()
+        state.effective_series_dir().await.to_string_lossy().to_string()
     } else {
-        state.config.movies_dir.to_string_lossy().to_string()
+        state.effective_movies_dir().await.to_string_lossy().to_string()
     };
     let root_folder = params["rootFolder"]
         .as_str()
