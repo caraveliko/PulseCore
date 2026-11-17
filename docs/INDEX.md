@@ -710,6 +710,8 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `docs/releases/RELEASE_NOTES_0.2.0-RC1.md` | Notas de la versión 0.2.0-RC1 |
 | `docs/releases/RELEASE_NOTES_0.2.0.md` | Notas de la versión 0.2.0 |
 | `docs/releases/RELEASE_NOTES_0.2.0-RC2.md` | Notas de la versión 0.2.0-RC2 |
+| `docs/releases/RELEASE_NOTES_0.3.0-beta.2.md` | Notas de la versión 0.3.0-beta.2 |
+| `docs/releases/RELEASE_NOTES_0.3.0-beta.3.md` | Notas de la versión 0.3.0-beta.3 |
 
 ### docs/qa/ — Garantía de calidad y conformidad
 | Archivo | Función |
