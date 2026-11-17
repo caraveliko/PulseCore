@@ -208,11 +208,7 @@ pub fn run_import_amule(
 
     // 6. Descargas incompletas (*.part.met & *.part)
     // aMule almacena los archivos temporales en ~/.aMule/Temp, en el TempDir personalizado de amule.conf o en ~/.aMule
-    let mut candidate_temp_dirs = vec![
-        amule_dir.join("Temp"),
-        amule_dir.join("temp"),
-        amule_dir.to_path_buf(),
-    ];
+    let mut raw_candidates = Vec::new();
 
     let conf_path = amule_dir.join("amule.conf");
     if conf_path.is_file() {
@@ -221,9 +217,24 @@ pub fn run_import_amule(
                 if let Some(rest) = line.strip_prefix("TempDir=") {
                     let p = std::path::PathBuf::from(rest.trim());
                     if p.is_dir() {
-                        candidate_temp_dirs.insert(0, p);
+                        raw_candidates.push(p);
                     }
                 }
+            }
+        }
+    }
+
+    raw_candidates.push(amule_dir.join("Temp"));
+    raw_candidates.push(amule_dir.join("temp"));
+    raw_candidates.push(amule_dir.to_path_buf());
+
+    // Deduplicar rutas resolviendo la ruta canónica para evitar duplicados en sistemas sin distinción de mayúsculas (como NTFS en Windows)
+    let mut candidate_temp_dirs = Vec::new();
+    for cand in raw_candidates {
+        if cand.is_dir() {
+            let canonical = cand.canonicalize().unwrap_or_else(|_| cand.clone());
+            if !candidate_temp_dirs.contains(&canonical) {
+                candidate_temp_dirs.push(canonical);
             }
         }
     }
@@ -250,8 +261,9 @@ pub fn run_import_amule(
         }
     }
 
-    part_met_files.sort();
-    part_met_files.dedup();
+    // Ordenar y deduplicar tanto por ruta completa como por nombre de archivo para evitar colisiones
+    part_met_files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    part_met_files.dedup_by(|a, b| a.file_name() == b.file_name());
     println!("Detectadas {} descargas en progreso", part_met_files.len());
 
     for met_file in &part_met_files {

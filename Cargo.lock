@@ -2288,7 +2288,6 @@ version = "0.3.0-beta.1"
 dependencies = [
  "data-encoding",
  "hex 0.4.3",
- "rand 0.9.5",
  "rsa",
  "sha1",
  "tempfile",
