@@ -24,8 +24,8 @@ use crate::services::DaemonEvent;
 const SHARED_HASH_REFRESH_TICKS: u64 = 15;
 /// Clave de ajuste persistido para el hash de la contraseña opcional de la WebUI.
 pub const SETTING_WEBUI_PASSWORD_HASH: &str = "webui_password_hash";
-/// Prefijo de sal estático para derivar el hash de la contraseña de la WebUI.
-const WEBUI_PASSWORD_SALT_PREFIX: &str = "pulse-core-webui-v1:";
+/// Prefijo de sal estático para derivar el hash robusto de la contraseña de la WebUI mediante SHA-256.
+const WEBUI_PASSWORD_SALT_PREFIX: &str = "pulse-core-webui-v2:";
 
 /// Control en caliente del `EnvFilter` global (clave `logLevel` de
 /// `settings.set`). El binario instala el `reload::Handle` en el arranque;
@@ -815,14 +815,13 @@ impl AppState {
         self.udp_enabled.store(enabled, Ordering::Relaxed);
     }
 
-    /// Calcula el hash determinista con sal de la contraseña de la WebUI.
+    /// Calcula el hash determinista con sal de la contraseña de la WebUI mediante SHA-256.
     pub fn hash_webui_password(password: &str) -> String {
-        use md4::{Digest, Md4};
-        let first = Md4::digest(format!("{WEBUI_PASSWORD_SALT_PREFIX}{password}").as_bytes());
-        let mut second = Md4::new();
-        second.update(WEBUI_PASSWORD_SALT_PREFIX.as_bytes());
-        second.update(first);
-        hex::encode(second.finalize())
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(WEBUI_PASSWORD_SALT_PREFIX.as_bytes());
+        hasher.update(password.as_bytes());
+        hex::encode(hasher.finalize())
     }
 
     /// Indica si el usuario ha configurado una contraseña de acceso para la WebUI.

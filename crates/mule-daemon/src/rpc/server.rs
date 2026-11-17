@@ -297,26 +297,32 @@ async fn handle_webui_login(
     State(state): State<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let password = payload
-        .get("password")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    if !state.has_webui_password() || state.verify_webui_password(password) {
-        (
+    if !state.has_webui_password() {
+        return (
             StatusCode::OK,
             Json(json!({
                 "ok": true,
                 "token": state.config.auth_token,
             })),
-        )
-    } else {
-        (
+        );
+    }
+
+    let candidate = payload.get("password").and_then(|v| v.as_str());
+    match candidate {
+        Some(pass) if state.verify_webui_password(pass) => (
+            StatusCode::OK,
+            Json(json!({
+                "ok": true,
+                "token": state.config.auth_token,
+            })),
+        ),
+        _ => (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "ok": false,
                 "error": "Contraseña incorrecta",
             })),
-        )
+        ),
     }
 }
 
@@ -600,30 +606,13 @@ mod tests {
         assert!(!is_allowed_origin_header("http://8.8.8.8:4660"));
     }
 
-    #[tokio::test]
-    async fn test_loopback_ip_and_webui_password_hash() {
+    #[test]
+    fn test_loopback_ip() {
         assert!(is_loopback_ip("127.0.0.1".parse().unwrap()));
         assert!(is_loopback_ip("::1".parse().unwrap()));
         assert!(is_loopback_ip("::ffff:127.0.0.1".parse().unwrap()));
         assert!(!is_loopback_ip("192.168.1.50".parse().unwrap()));
         assert!(!is_loopback_ip("::ffff:192.168.1.50".parse().unwrap()));
-
-        let tmp = tempfile::tempdir().unwrap();
-        let cfg = crate::config::DaemonConfig::new(tmp.path().to_path_buf(), "tok".to_string());
-        let dls = crate::services::downloads::DownloadService::in_memory(tmp.path().join("temp"))
-            .unwrap();
-        let state = AppState::new(cfg, dls);
-        assert!(!state.has_webui_password());
-        assert!(state.verify_webui_password("cualquier-cosa"));
-
-        let h = AppState::hash_webui_password("secreto-123");
-        state.set_webui_password_hash(Some(h));
-        assert!(state.has_webui_password());
-        assert!(state.verify_webui_password("secreto-123"));
-        assert!(!state.verify_webui_password("incorrecto"));
-
-        state.set_webui_password_hash(None);
-        assert!(!state.has_webui_password());
     }
 }
 

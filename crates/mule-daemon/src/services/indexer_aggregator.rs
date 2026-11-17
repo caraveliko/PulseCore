@@ -122,10 +122,14 @@ impl IndexerAggregator {
             async move {
                 let sep = if idx.base_url.contains('?') { "&" } else { "?" };
                 let url = format!(
-                    "{}{sep}t=search&q={eq}&cat={cat}&apikey={}",
-                    idx.base_url, idx.api_key
+                    "{}{sep}t=search&q={eq}&cat={cat}",
+                    idx.base_url
                 );
-                if let Ok(resp) = client.get(&url).send().await {
+                let mut req = client.get(&url);
+                if !idx.api_key.is_empty() {
+                    req = req.header("X-Api-Key", &idx.api_key);
+                }
+                if let Ok(resp) = req.send().await {
                     if let Ok(xml_text) = resp.text().await {
                         return parse_torznab_feed(&xml_text, &idx.name, is_movie, &prof);
                     }
