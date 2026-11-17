@@ -154,7 +154,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     use bytes::BytesMut;
     use mule_daemon::services::UdpFirewallStatus;
     use mule_format::kad::{KadContactEntry, NodesDatFile};
-    use mule_protocol::ed2k::obfuscation::Rc4Cipher;
+    use mule_protocol::ed2k::obfuscation::WireObfuscationCipher;
     use mule_protocol::ed2k::{
         Ed2kEncoder, Ed2kHelloAnswer, OP_FWCHECKUDPREQ, OP_HELLO, PR_ED2K, PR_EMULE,
     };
@@ -164,7 +164,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     use tokio::net::TcpListener;
 
     /// Reproduce `EncryptSendClient` de eMule (ruta reckey de Kad, sin relleno):
-    /// flujo RC4 con clave MD5(receiverKey:u16 rand) sobre todo lo posterior al
+    /// permutación de cable con clave MD5(receiverKey:u16 rand) sobre todo lo posterior al
     /// byte 3.
     fn encrypt_kad_udp(plain: &[u8], receiver_key: u32, sender_key: u32) -> Vec<u8> {
         use md5::{Digest, Md5};
@@ -173,7 +173,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
         key_data[..4].copy_from_slice(&receiver_key.to_le_bytes());
         key_data[4..6].copy_from_slice(&rand_part.to_le_bytes());
         let md5_key: [u8; 16] = Md5::digest(key_data).into();
-        let mut cipher = Rc4Cipher::new(&md5_key, true);
+        let mut cipher = WireObfuscationCipher::new(&md5_key, true);
         let mut out = vec![0x46u8]; // random proto byte (not a valid Kad proto)
         out.extend_from_slice(&rand_part.to_le_bytes());
         let mut tail = Vec::new();

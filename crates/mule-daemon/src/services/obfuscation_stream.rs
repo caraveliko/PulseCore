@@ -3,7 +3,7 @@
 
 use mule_protocol::ed2k::obfuscation::{
     derive_initiator_peer_ciphers, derive_responder_peer_ciphers, derive_server_ciphers,
-    generate_semi_random_marker, Dh768KeyPair, Rc4Cipher, ENM_OBFUSCATION, MAGICVALUE_SYNC,
+    generate_semi_random_marker, Dh768KeyPair, WireObfuscationCipher, ENM_OBFUSCATION, MAGICVALUE_SYNC,
 };
 use rand::Rng;
 use std::io;
@@ -12,11 +12,11 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 /// Un envoltorio de flujo bidireccional que gestiona de forma transparente la ofuscación de protocolo de eMule
-/// mediante cifrador de flujo RC4, o transmite datos sin modificar en modo texto sin formato.
+/// mediante permutación de cable, o transmite datos sin modificar en modo texto sin formato.
 pub struct ObfuscatedStream<S> {
     inner: S,
-    send_cipher: Option<Rc4Cipher>,
-    recv_cipher: Option<Rc4Cipher>,
+    send_cipher: Option<WireObfuscationCipher>,
+    recv_cipher: Option<WireObfuscationCipher>,
     read_prefix: Vec<u8>,
     read_prefix_offset: usize,
     write_buf: Vec<u8>,

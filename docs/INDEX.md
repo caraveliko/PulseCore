@@ -575,7 +575,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `src/ed2k/obfuscation/dh.rs` | Intercambio de claves Diffie-Hellman |
 | `src/ed2k/obfuscation/framing.rs` | Encuadre de tramas ofuscadas |
 | `src/ed2k/obfuscation/keys.rs` | Derivación de claves |
-| `src/ed2k/obfuscation/rc4.rs` | Cifrado RC4 |
+| `src/ed2k/obfuscation/wire_cipher.rs` | Cifrador de ofuscación de cable (drop1024) |
 
 #### eD2K — sesiones, servidor, intercambios
 

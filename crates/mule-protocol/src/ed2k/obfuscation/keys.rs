@@ -5,7 +5,7 @@
 
 use md5::{Digest, Md5};
 
-use super::rc4::Rc4Cipher;
+use super::wire_cipher::WireObfuscationCipher;
 
 /// Modificación de la clave de envío del solicitante y recepción del servidor (`34` = `0x22`).
 pub const MAGICVALUE_REQUESTER: u8 = 34;
@@ -13,17 +13,17 @@ pub const MAGICVALUE_REQUESTER: u8 = 34;
 /// Modificación de la clave de envío del servidor y recepción del solicitante (`203` = `0xCB`).
 pub const MAGICVALUE_SERVER: u8 = 203;
 
-/// Deriva cifradores RC4-drop1024 para el Cliente A (iniciador de la conexión de par saliente).
+/// Deriva cifradores de ofuscación drop1024 para el Cliente A (iniciador de la conexión de par saliente).
 ///
 /// Devuelve `(send_cipher, recv_cipher)`.
 pub fn derive_initiator_peer_ciphers(
     target_user_hash: &[u8; 16],
     random_key_part: u32,
-) -> (Rc4Cipher, Rc4Cipher) {
+) -> (WireObfuscationCipher, WireObfuscationCipher) {
     let (send_key, recv_key) = derive_initiator_peer_raw_keys(target_user_hash, random_key_part);
     (
-        Rc4Cipher::new_drop1024(&send_key),
-        Rc4Cipher::new_drop1024(&recv_key),
+        WireObfuscationCipher::new_drop1024(&send_key),
+        WireObfuscationCipher::new_drop1024(&recv_key),
     )
 }
 
@@ -49,17 +49,17 @@ pub fn derive_initiator_peer_raw_keys(
     (send_key, recv_key)
 }
 
-/// Deriva cifradores RC4-drop1024 para el Cliente B (receptor de la conexión de par entrante).
+/// Deriva cifradores de ofuscación drop1024 para el Cliente B (receptor de la conexión de par entrante).
 ///
 /// Devuelve `(send_cipher, recv_cipher)`.
 pub fn derive_responder_peer_ciphers(
     local_user_hash: &[u8; 16],
     random_key_part: u32,
-) -> (Rc4Cipher, Rc4Cipher) {
+) -> (WireObfuscationCipher, WireObfuscationCipher) {
     let (send_key, recv_key) = derive_responder_peer_raw_keys(local_user_hash, random_key_part);
     (
-        Rc4Cipher::new_drop1024(&send_key),
-        Rc4Cipher::new_drop1024(&recv_key),
+        WireObfuscationCipher::new_drop1024(&send_key),
+        WireObfuscationCipher::new_drop1024(&recv_key),
     )
 }
 
@@ -85,10 +85,10 @@ pub fn derive_responder_peer_raw_keys(
     (send_key, recv_key)
 }
 
-/// Deriva cifradores RC4-drop1024 para una conexión Cliente <-> Servidor a partir del secreto compartido DH.
+/// Deriva cifradores de ofuscación drop1024 para una conexión Cliente <-> Servidor a partir del secreto compartido DH.
 ///
 /// Devuelve `(send_cipher, recv_cipher)`.
-pub fn derive_server_ciphers(shared_secret: &[u8; 96]) -> (Rc4Cipher, Rc4Cipher) {
+pub fn derive_server_ciphers(shared_secret: &[u8; 96]) -> (WireObfuscationCipher, WireObfuscationCipher) {
     let mut mat_send = [0u8; 97];
     mat_send[..96].copy_from_slice(shared_secret);
     mat_send[96] = MAGICVALUE_REQUESTER;
@@ -100,8 +100,8 @@ pub fn derive_server_ciphers(shared_secret: &[u8; 96]) -> (Rc4Cipher, Rc4Cipher)
     let recv_key: [u8; 16] = Md5::digest(mat_recv).into();
 
     (
-        Rc4Cipher::new_drop1024(&send_key),
-        Rc4Cipher::new_drop1024(&recv_key),
+        WireObfuscationCipher::new_drop1024(&send_key),
+        WireObfuscationCipher::new_drop1024(&recv_key),
     )
 }
 

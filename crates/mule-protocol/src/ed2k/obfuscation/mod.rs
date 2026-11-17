@@ -4,7 +4,7 @@
 //! Implementación de ofuscación del protocolo eD2K conforme a las especificaciones oficiales de eMule.
 //!
 //! Proporciona:
-//! - [`Rc4Cipher`]: cifrado de flujo RC4 de alto rendimiento con soporte para `drop_bytes(1024)`.
+//! - [`WireObfuscationCipher`]: cifrador de flujo de ofuscación de cable conforme a eMule con soporte para `drop_bytes(1024)`.
 //! - [`dh`]: acuerdo de claves Diffie-Hellman MODP de 768 bits para conexiones a servidores.
 //! - [`keys`]: derivación de claves MD5 para conexiones entre pares y con servidores.
 //! - [`framing`]: codificadores/decodificadores de paquetes de red para saludos (handshakes) de ofuscación.
@@ -12,7 +12,7 @@
 pub mod dh;
 pub mod framing;
 pub mod keys;
-pub mod rc4;
+pub mod wire_cipher;
 
 pub use dh::{Dh768KeyPair, DH768_G, DH768_P};
 pub use framing::{
@@ -23,7 +23,7 @@ pub use keys::{
     derive_initiator_peer_ciphers, derive_initiator_peer_raw_keys, derive_responder_peer_ciphers,
     derive_responder_peer_raw_keys, derive_server_ciphers, MAGICVALUE_REQUESTER, MAGICVALUE_SERVER,
 };
-pub use rc4::Rc4Cipher;
+pub use wire_cipher::WireObfuscationCipher;
 
 use thiserror::Error;
 

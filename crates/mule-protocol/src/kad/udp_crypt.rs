@@ -17,7 +17,7 @@
 //! [8+p..] dwReceiverKey:u32 + dwSenderKey:u32 + carga útil (paquete Kad en texto plano)
 //! ```
 
-use crate::ed2k::obfuscation::Rc4Cipher;
+use crate::ed2k::obfuscation::WireObfuscationCipher;
 use md5::{Digest, Md5};
 
 /// eMule `MAGICVALUE_UDP_SYNC_CLIENT` — sanity magic inside encrypted
@@ -54,8 +54,8 @@ pub fn decrypt_kad_udp_packet(buf: &[u8], receiver_verify_key: u32) -> Option<De
     key_data[..4].copy_from_slice(&receiver_verify_key.to_le_bytes());
     key_data[4..6].copy_from_slice(&random_key_part.to_le_bytes());
     let md5_key: [u8; 16] = Md5::digest(key_data).into();
-    // eMule RC4CreateKey(..., bSkipDiscard=true) → no 1024-byte drop.
-    let mut cipher = Rc4Cipher::new(&md5_key, true);
+    // Ofuscación de cable de eMule (bSkipDiscard=true) → sin descarte de 1024 bytes.
+    let mut cipher = WireObfuscationCipher::new(&md5_key, true);
 
     let mut dec = buf[3..].to_vec();
     cipher.process(&mut dec);
@@ -90,7 +90,7 @@ mod tests {
         key_data[..4].copy_from_slice(&receiver_key.to_le_bytes());
         key_data[4..6].copy_from_slice(&random_key_part.to_le_bytes());
         let md5_key: [u8; 16] = Md5::digest(key_data).into();
-        let mut cipher = Rc4Cipher::new(&md5_key, true);
+        let mut cipher = WireObfuscationCipher::new(&md5_key, true);
 
         let mut out = Vec::with_capacity(3 + 5 + 8 + plain.len());
         out.push(0x46u8); // semi-random proto byte (reckey marker bits)

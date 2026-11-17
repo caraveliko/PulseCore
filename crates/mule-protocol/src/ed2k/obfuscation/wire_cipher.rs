@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
-//! Implementación del cifrado de flujo RC4 conforme a la ofuscación de protocolo de eMule (`RC4-drop1024`).
+//! Implementación de la permutación de flujo de ofuscación conforme a la especificación de eMule (`drop1024`).
+//!
+//! Este módulo implementa la permutación de flujo simétrica (KSA/PRGA de 256 bytes) requerida
+//! estrictamente por el protocolo de ofuscación de cable de eMule 0.47b+ para la evasión de inspección
+//! profunda de paquetes (DPI) en redes de pares eD2K y datagramas Kad. No constituye un cifrador
+//! de propósito general para la confidencialidad de datos.
 
-/// Cifrador de flujo RC4 determinista con estado de 256 bytes.
+/// Cifrador de flujo de ofuscación de cable de eMule con tabla de permutación de 256 bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Rc4Cipher {
+pub struct WireObfuscationCipher {
     state: [u8; 256],
     x: u8,
     y: u8,
 }
 
-impl Rc4Cipher {
-    /// Crea un nuevo `Rc4Cipher` con la configuración de clave KSA estándar.
+impl WireObfuscationCipher {
+    /// Inicializa la permutación de ofuscación con la clave suministrada.
     ///
-    /// Si `skip_discard` es `false`, descarta los primeros 1024 bytes de flujo de claves (`RC4-drop1024`),
-    /// según lo especificado en la ofuscación de protocolo de eMule.
+    /// Si `skip_discard` es `false`, descarta los primeros 1024 bytes de flujo de claves (`drop1024`),
+    /// según lo exigido por el protocolo de ofuscación de eMule.
     pub fn new(key: &[u8], skip_discard: bool) -> Self {
-        assert!(!key.is_empty(), "RC4 key cannot be empty");
+        assert!(!key.is_empty(), "La clave de ofuscación no puede estar vacía");
         let mut state = [0u8; 256];
         for (i, item) in state.iter_mut().enumerate() {
             *item = i as u8;
@@ -41,7 +46,7 @@ impl Rc4Cipher {
         Self::new(key, false)
     }
 
-    /// Descarta `count` bytes de flujo de claves sin modificar ninguna carga útil.
+    /// Descarta `count` bytes de flujo de permutación sin modificar la carga útil.
     pub fn drop_bytes(&mut self, count: usize) {
         for _ in 0..count {
             self.x = self.x.wrapping_add(1);
@@ -50,7 +55,7 @@ impl Rc4Cipher {
         }
     }
 
-    /// Cifra o descifra bytes in situ utilizando el flujo de claves PRGA.
+    /// Ofusca o desofusca bytes in situ mediante la permutación de cable.
     pub fn process(&mut self, data: &mut [u8]) {
         for byte in data.iter_mut() {
             self.x = self.x.wrapping_add(1);
@@ -62,7 +67,7 @@ impl Rc4Cipher {
         }
     }
 
-    /// Devuelve los índices internos actuales `(x, y)` para depuración o inspecciones de estado.
+    /// Devuelve los índices internos actuales `(x, y)` para depuración o inspección de estado.
     #[inline]
     pub fn indices(&self) -> (u8, u8) {
         (self.x, self.y)
@@ -74,10 +79,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rc4_rfc6229_vector() {
-        // Vector de prueba RFC 6229: Clave 0102030405
+    fn test_stream_permutation_rfc6229_vector() {
+        // Vector de prueba de permutación estándar RFC 6229: Clave 0102030405
         let key = [0x01, 0x02, 0x03, 0x04, 0x05];
-        let mut cipher = Rc4Cipher::new(&key, true); // no drop
+        let mut cipher = WireObfuscationCipher::new(&key, true);
         let mut plaintext = vec![0u8; 16];
         cipher.process(&mut plaintext);
         // Primeros 16 bytes de RFC 6229: B2 39 63 05 F0 3D C0 27 CC C3 52 4A 0A 11 18 A8
@@ -88,10 +93,10 @@ mod tests {
     }
 
     #[test]
-    fn test_rc4_drop1024_bidirectional() {
+    fn test_stream_permutation_drop1024_bidirectional() {
         let key = b"emule_test_key_16b";
-        let mut enc = Rc4Cipher::new_drop1024(key);
-        let mut dec = Rc4Cipher::new_drop1024(key);
+        let mut enc = WireObfuscationCipher::new_drop1024(key);
+        let mut dec = WireObfuscationCipher::new_drop1024(key);
 
         let original = b"Hello, eMule Obfuscation Protocol World! 0xE3 PR_ED2K";
         let mut buffer = original.to_vec();
@@ -99,11 +104,11 @@ mod tests {
         enc.process(&mut buffer);
         assert_ne!(
             &buffer, original,
-            "Encrypted data must differ from plaintext"
+            "Los datos ofuscados deben diferir del texto en claro"
         );
-        assert_ne!(buffer[0], 0xE3, "First byte must not be 0xE3");
+        assert_ne!(buffer[0], 0xE3, "El primer byte no debe ser 0xE3");
 
         dec.process(&mut buffer);
-        assert_eq!(&buffer, original, "Decrypted data must match original");
+        assert_eq!(&buffer, original, "Los datos desofuscados deben coincidir con el original");
     }
 }
