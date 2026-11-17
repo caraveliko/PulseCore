@@ -4,7 +4,7 @@
 
 # Pulse Core
 
-**Cliente P2P híbrido único que combina las redes BitTorrent y eMule (eD2K + Kad DHT) en un único motor de alto rendimiento escrito en Rust, con automatización multimedia y especialización en Español de España.**
+**Cliente P2P híbrido en Rust que combina las redes eMule (eD2K + Kad DHT) y BitTorrent, con interfaz web integrada y herramientas de organización multimedia.**
 
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/License-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux-lightgrey)](README.md)
@@ -16,57 +16,51 @@
 
 ## ¿Qué es Pulse Core?
 
-**Pulse Core** es un cliente y servidor P2P híbrido moderno, seguro y unificado que integra los protocolos **eD2K (eDonkey2000)**, **Kademlia DHT (Kad)** y **BitTorrent** en un único motor desarrollado en **Rust** con arquitectura asíncrona (Tokio).
+**Pulse Core** es un cliente P2P moderno y asíncrono (Tokio) escrito en **Rust** que unifica los protocolos **eD2K**, **Kademlia DHT (Kad)** y **BitTorrent** en un único servicio (`mule-daemon`).
 
-A diferencia de los clientes tradicionales, nace como un **cliente híbrido integral** pensado para funcionar tanto en escritorio como en modo servidor/headless, con una **interfaz web embebida moderna** y herramientas nativas de organización multimedia **especializadas en el idioma español de España (Castellano)**.
+Está diseñado tanto para su uso en estaciones de trabajo como en servidores domésticos (*headless*), incorporando una interfaz web ligera servida directamente por el ejecutable y utilidades locales para catalogar y organizar descargas.
 
 ---
 
-## Características Principales
+## Características
 
-### 🔀 Cliente P2P Híbrido Único (eMule + BitTorrent)
-- **Motor unificado en Rust**: Gestiona descargas simultáneas de las redes **eD2K / Kad DHT** y **BitTorrent** desde un único daemon (`mule-daemon`) con gestión segura de memoria y almacenamiento disperso eficiente.
-- **Compatibilidad protocolaria eD2K/Kad**: Implementación fiel de tramas, compresión zlib al vuelo (`OP_COMPRESSEDPART`), intercambio de fuentes (SX1/SX2) y tabla de enrutamiento Kademlia v2 de 128 bits.
-
-### 🇪🇸 Especialización en Español de España (Castellano)
-- **Localización y filtrado estricto**: Motor de búsqueda y puntuación (*Scorer*) diseñado específicamente para detectar, priorizar y filtrar lanzamientos en **Español de España**, descartando automáticamente falsos positivos, idiomas no deseados o coincidencias erróneas.
-- **Interfaz 100% en Castellano**: Tanto la interfaz web embebida como la aplicación de escritorio están adaptadas al español.
-
-### 🎬 Automatización Multimedia Integrada (Estilo Servarr)
-- **Gestión de Películas y Series**: Catálogo multimedia persistente en SQLite para organizar y monitorizar títulos completos o episodios pendientes.
-- **AutoGrabber inteligente**: Rastreo y captura automática mediante indexadores compatibles con **Torznab / Prowlarr** y búsquedas en la red **Kad/eD2K**.
-- **Organizador compatible con Plex y Jellyfin**: Clasificación automática (`Movies/Título (Año)/...`) mediante enlaces duros (`hard_link`) instantáneos sin duplicar espacio en disco.
-- **Subtítulos automáticos**: Cliente REST integrado para OpenSubtitles con cálculo de hash de 64 bits, descompresión y normalización UTF-8 (`.es.srt`).
-
-### 🖥️ Interfaz Web Embebida, Modo Tortuga y Control IA
-- **WebUI embebida sin dependencias**: Al arrancar `mule-daemon`, sirve automáticamente su panel de control web completo en `http://127.0.0.1:4660`.
-- **Modo Tortuga**: Limitación rápida de velocidad de subida/bajada con un solo clic para no saturar tu red doméstica cuando lo necesites.
-- **Servidor MCP nativo**: Expone más de 87 herramientas mediante *Model Context Protocol* para automatización y control mediante asistentes de IA.
-- **Seguridad reforzada**: Pipeline anti-SSRF, aislamiento loopback por defecto, soporte de listas de bloqueo IP (`ipfilter.dat`) y utilidades de migración desde aMule/eMule.
+- **Soporte multiprotocolo**: Descarga simultáneamente desde redes eD2K / Kad y enjambres BitTorrent mediante un único proceso.
+- **Fidelidad protocolaria eD2K/Kad**: Soporte de compresión zlib (`OP_COMPRESSEDPART`), intercambio de fuentes (SX1/SX2) y DHT Kademlia v2 de 128 bits.
+- **Interfaz Web integrada**: Panel de control accesible en `http://127.0.0.1:4660` sin necesidad de servidores web externos, con control de velocidad (Modo Tortuga).
+- **Organización multimedia**: Clasificación automática para gestores como Plex o Jellyfin (`Películas/Título (Año)/...`) mediante enlaces duros (`hard_link`) para ahorrar espacio en disco, con descarga opcional de subtítulos vía OpenSubtitles.
+- **Filtrado y puntuación configurable**: Reglas de descarte de falsos positivos y prioridad por calidad o idioma.
+- **Seguridad de red**: Canalización con validación anti-SSRF, filtrado de IPs maliciosas (`ipfilter.dat`) y aislamiento en bucle local.
+- **Control e interoperabilidad**: Servidor MCP (*Model Context Protocol*) integrado para automatización e integración con asistentes.
 
 ---
 
 ## Inicio Rápido
 
-### Compilar y ejecutar el Daemon + WebUI (Windows o Linux)
+### Requisitos
+- **Rust** (`stable`, 1.80 o superior)
 
-#### Requisitos
-- **Rust** (`stable`, 1.80+)
+### Compilación y ejecución
 
-#### Compilación e inicio en Servidor Windows
+**En Linux:**
+```bash
+cargo build --release -p mule-daemon
+./target/release/mule-daemon
+```
+
+**En Windows:**
 ```powershell
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1
 ```
-*(Genera la carpeta `dist\PulseCore-Server-Windows\` con los ejecutables y lanzadores para iniciar en primer o segundo plano).*
+*(O compilar con `cargo build --release -p mule-daemon`).*
 
-Al ejecutar `mule-daemon` (o `Iniciar Servidor.bat` en Windows), abre tu navegador en:
+Una vez iniciado el daemon, abre en el navegador:
 > **`http://127.0.0.1:4660`**
 
 ---
 
 ## Licencia y Atribución
 
-Distribuido bajo licencia **GPL-2.0-or-later** — consulta los archivos [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE) para ver los detalles de atribución del código base original y las referencias protocolarias.
+Distribuido bajo licencia **GPL-2.0-or-later** — consulta los archivos [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE) para detalles de atribución y referencias protocolarias.
 
 ---
 
@@ -74,9 +68,9 @@ Distribuido bajo licencia **GPL-2.0-or-later** — consulta los archivos [`LICEN
 
 > **EXENCIÓN DE RESPONSABILIDAD**
 >
-> **Pulse Core** es un proyecto de software libre de carácter estrictamente técnico y educativo que implementa un cliente neutral para protocolos estándar de comunicación entre pares (*peer-to-peer*: eD2K, Kademlia y BitTorrent), junto con herramientas locales de organización de archivos.
+> **Pulse Core** es un proyecto de software libre de carácter técnico y educativo que implementa un cliente para protocolos estándar de comunicación entre pares (*peer-to-peer*: eD2K, Kademlia y BitTorrent), junto con herramientas locales de organización de archivos.
 >
 > 1. **Ausencia de contenido**: Este software **no aloja, almacena, indexa, distribuye, enlaza ni proporciona acceso** a ningún archivo, película, serie, obra multimedia o material protegido por derechos de autor. No incluye servidores propios, rastreadores (*trackers*) ni catálogos de contenido de terceros.
-> 2. **Neutralidad tecnológica**: Las funciones de búsqueda, filtrado lingüístico y automatización operan exclusivamente sobre redes descentralizadas públicas o indexadores externos configurados libremente por el propio usuario. Los autores y colaboradores del proyecto no tienen control, supervisión ni conocimiento alguno sobre los archivos que cada usuario busca, descarga o comparte.
-> 3. **Responsabilidad exclusiva del usuario**: El uso que se haga de esta herramienta recae **única y exclusivamente sobre el usuario final**, quien es el único responsable de asegurarse de que los contenidos gestionados cuentan con la debida autorización o pertenecen al dominio público, así como de cumplir con la legislación vigente en materia de propiedad intelectual y derechos de autor aplicable en su país o jurisdicción.
-> 4. **Sin garantías**: Este programa se distribuye «TAL CUAL» (*AS IS*), sin garantías de ningún tipo, expresas o implícitas, conforme a los términos de la licencia GPL-2.0-or-later. Los desarrolladores no asumen responsabilidad alguna por cualquier daño directo, indirecto o consecuencia legal derivada del uso o mal uso de este software.
+> 2. **Neutralidad tecnológica**: Las funciones de búsqueda y organización operan exclusivamente sobre redes descentralizadas públicas o indexadores externos configurados libremente por el propio usuario. Los autores y colaboradores del proyecto no supervisan ni tienen conocimiento alguno sobre los archivos gestionados por los usuarios.
+> 3. **Responsabilidad del usuario**: El uso que se haga de esta herramienta recae **única y exclusivamente sobre el usuario final**, quien debe asegurarse de contar con la debida autorización y cumplir la legislación aplicable en materia de propiedad intelectual.
+> 4. **Sin garantías**: Este programa se distribuye «TAL CUAL» (*AS IS*), sin garantías de ningún tipo, conforme a los términos de la licencia GPL-2.0-or-later.
