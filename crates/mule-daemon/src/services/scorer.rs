@@ -24,7 +24,7 @@ const FORBIDDEN_EXTENSIONS: &[&str] = &[
     ".exe", ".scr", ".bat", ".cmd", ".vbs", ".zip", ".rar", ".7z", ".iso", ".tar", ".gz",
 ];
 
-/// Groupes et uploaders de confiance connus sur eD2K et Torznab hispanophones.
+/// Grupos y uploaders de confianza conocidos en eD2K y Torznab hispanohablantes.
 const TRUSTED_RELEASE_GROUPS: &[&str] = &[
     "nara", "geot", "bryan_122", "bryan122", "eth@n", "ethan", "yamil", "hdo", "cartmangold",
     "caloriana", "krom", "mony2007", "zapiron", "pirolo", "wolfmax4k", "pctfenix", "dontorrent",
@@ -34,7 +34,7 @@ const TRUSTED_RELEASE_GROUPS: &[&str] = &[
     "rubesp",
 ];
 
-/// Traductions espagnoles courantes de mots fréquents dans les titres de séries/films anglophones.
+/// Traducciones al español comunes de palabras frecuentes en títulos de series/películas en inglés.
 const EN_ES_TITLE_WORD_EQUIVALENTS: &[(&str, &str)] = &[
     ("station", "estacion"),
     ("eleven", "once"),
@@ -190,7 +190,7 @@ const EN_ES_TITLE_WORD_EQUIVALENTS: &[(&str, &str)] = &[
     ("chernobyl", "chernobil"),
 ];
 
-/// Traductions officielles espagnoles de séries TV dont le titre en Espagne diverge de l'anglais.
+/// Traducciones oficiales al español de series de TV cuyo título en España diverge del inglés.
 const KNOWN_SERIES_SPANISH_TITLES: &[(&str, &[&str])] = &[
     ("station eleven", &["Estación Once", "Estacion Once"]),
     ("house of the dragon", &["La casa del dragón", "La casa del dragon"]),
@@ -229,7 +229,7 @@ const KNOWN_SERIES_SPANISH_TITLES: &[(&str, &[&str])] = &[
     ("ali g who iz i", &["Ali G Kien es yo", "Ali G Quien soy yo", "Ali G"]),
 ];
 
-/// Génère les variantes de titres espagnols pour une série ou un film afin de trouver les releases hispanophones.
+/// Genera las variantes de títulos en español para una serie o película con el fin de hallar las versiones hispanohablantes.
 pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) -> Vec<String> {
     let mut out = Vec::new();
     let mut push_unique = |cand: String| {
@@ -254,7 +254,7 @@ pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) 
             }
         }
 
-        // Traduction mot à mot si tous les mots significatifs ont un équivalent espagnol direct
+        // Traducción palabra por palabra si todas las palabras significativas tienen un equivalente directo en español
         let tokens = clean_title_tokens(src);
         if !tokens.is_empty() && tokens.len() <= 6 {
             let mut translated = Vec::with_capacity(tokens.len());
@@ -283,7 +283,7 @@ pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) 
     out
 }
 
-/// Seuils de taille optimale ("Sweet-Spot" en Mo) pour équilibrer qualité d'image et stockage.
+/// Umbrales de tamaño óptimo ("Sweet-Spot" en MB) para equilibrar calidad de imagen y almacenamiento.
 const MOVIE_1080P_SWEET_MIN_MB: u64 = 1800;
 const MOVIE_1080P_SWEET_MAX_MB: u64 = 9500;
 const MOVIE_1080P_MEDIUM_MAX_MB: u64 = 16000;
@@ -311,7 +311,7 @@ pub fn evaluate_release(
     let mut is_rejected = false;
     let mut rejection_reason = None;
 
-    // 1. Anti-Fake & Dangerous Extension Check
+    // 1. Comprobación antifalsificaciones y extensiones peligrosas
     for &ext in FORBIDDEN_EXTENSIONS {
         if lower.ends_with(ext) || lower.contains(&format!("{ext}.")) {
             is_rejected = true;
@@ -320,7 +320,7 @@ pub fn evaluate_release(
         }
     }
 
-    // 1b. Sample / Trailer / Teaser detection
+    // 1b. Detección de muestra / tráiler / teaser
     for &sample_word in &["sample", "trailer", "teaser", "promo", "featurette", "preview"] {
         let is_sample = lower.contains(&format!(".{sample_word}."))
             || lower.contains(&format!("-{sample_word}-"))
@@ -335,7 +335,7 @@ pub fn evaluate_release(
         }
     }
 
-    // 2. Minimum & Maximum Credible Size
+    // 2. Tamaño creíble mínimo y máximo
     let pref_lower = preferred_quality.to_lowercase();
     let has_tv_marker = !extract_tv_episode_numbers(title, 1).is_empty()
         || lower.contains("1x")
@@ -368,21 +368,21 @@ pub fn evaluate_release(
         || lower.contains("short film");
 
     let min_size = if is_short_or_early_cinema {
-        35 * 1024 * 1024 // 35 MB pour court-métrage ou cinéma muet des origines (ex. Le Voyage dans la Lune 1902)
+        35 * 1024 * 1024 // 35 MB para cortometrajes o cine mudo de los orígenes (ej. Le Voyage dans la Lune 1902)
     } else if effective_is_movie {
         if pref_lower.contains("4k") || pref_lower.contains("2160p") {
-            1800 * 1024 * 1024 // 1.8 GB minimum pour film 4K
+            1800 * 1024 * 1024 // 1,8 GB mínimo para película 4K
         } else if pref_lower.contains("1080p") {
-            450 * 1024 * 1024 // 450 MB minimum pour film 1080p (évite de rejeter les encodages 649 MB / microHD)
+            450 * 1024 * 1024 // 450 MB mínimo para película 1080p (evita rechazar codificaciones 649 MB / microHD)
         } else {
-            250 * 1024 * 1024 // 250 MB minimum pour film standard (SD/720p)
+            250 * 1024 * 1024 // 250 MB mínimo para película estándar (SD/720p)
         }
     } else if is_likely_season_pack {
-        900 * 1024 * 1024 // 900 MB minimum for a full season pack
+        900 * 1024 * 1024 // 900 MB mínimo para un paquete de temporada completo
     } else if pref_lower.contains("1080p") {
-        180 * 1024 * 1024 // 180 MB minimum for 1080p TV episode
+        180 * 1024 * 1024 // 180 MB mínimo para episodio de TV en 1080p
     } else {
-        40 * 1024 * 1024 // 40 MB for TV episode
+        40 * 1024 * 1024 // 40 MB para episodio de TV
     };
     if size_bytes < min_size && !is_rejected {
         is_rejected = true;
@@ -407,7 +407,7 @@ pub fn evaluate_release(
         ));
     }
 
-    // 3. Known Fake Keywords
+    // 3. Palabras clave conocidas de falsificaciones
     for bad in &[
         "codec", "password", "contraseña", "crack", "keygen", "virus",
         "setup.exe", "install.exe", "wmv-codec", "drm-protected", "password.txt"
@@ -419,7 +419,7 @@ pub fn evaluate_release(
         }
     }
 
-    // 4. CAM / TeleSync Penalty or Rejection
+    // 4. Penalización o rechazo de CAM / TeleSync
     if lower.contains("camrip")
         || lower.contains("cam-rip")
         || lower.contains("hdcam")
@@ -433,7 +433,7 @@ pub fn evaluate_release(
         rejection_reason = Some("Cam/TeleSync/Screener low quality release rejected".to_string());
     }
 
-    // 5. Quality Detection
+    // 5. Detección de calidad
     let quality = if lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") {
         "2160p".to_string()
     } else if lower.contains("1080p")
@@ -475,7 +475,7 @@ pub fn evaluate_release(
         _ => score += 15,
     }
 
-    // 6. Language Detection (strict Castellano / Dual / VOSE vs Latino / Foreign / pure English)
+    // 6. Detección de idioma (estricto Castellano / Dual / VOSE vs Latino / Extranjero / puro inglés)
     let norm_words: Vec<String> = normalize_accents_and_symbols(title)
         .split_whitespace()
         .map(String::from)
@@ -621,20 +621,20 @@ pub fn evaluate_release(
         score += 30;
     }
 
-    // 7. Sources / Seeders Bonus (up to 40 pts)
+    // 7. Bonificación por fuentes / seeders (hasta 40 pts)
     score += (sources.min(20) * 2) as i32;
 
-    // 8. BitTorrent Protocol Speed Bonus (+10 pts if high seeders)
+    // 8. Bonificación de velocidad de protocolo BitTorrent (+10 pts si hay muchos seeders)
     if protocol == "torrent" && sources >= 5 {
         score += 10;
     }
 
-    // 9. Modern Space-Saving Codec Bonus (x265 / HEVC / AV1)
+    // 9. Bonificación por códec moderno eficiente en espacio (x265 / HEVC / AV1)
     if lower.contains("x265") || lower.contains("h265") || lower.contains("hevc") || lower.contains("av1") {
         score += 25;
     }
 
-    // 10. Multi-channel Audio Quality Bonus (5.1, DTS, Atmos, TrueHD, AC3, EAC3)
+    // 10. Bonificación por calidad de audio multicanal (5.1, DTS, Atmos, TrueHD, AC3, EAC3)
     if lower.contains("5.1")
         || lower.contains("7.1")
         || lower.contains("atmos")
@@ -646,7 +646,7 @@ pub fn evaluate_release(
         score += 10;
     }
 
-    // 11. Sweet-Spot Bitrate / Size Curve (optimisé pour Raspberry Pi / Jellyfin Direct Play)
+    // 11. Curva de tasa de bits / tamaño óptimo (optimizado para Raspberry Pi / Jellyfin Direct Play)
     let size_mb = size_bytes / (1024 * 1024);
     if is_movie {
         if (MOVIE_1080P_SWEET_MIN_MB..=MOVIE_1080P_SWEET_MAX_MB).contains(&size_mb) {
@@ -668,7 +668,7 @@ pub fn evaluate_release(
         score += 20;
     }
 
-    // 12. Trusted Uploader / Release Group Bonus (+20 pts)
+    // 12. Bonificación por uploader / grupo de lanzamiento de confianza (+20 pts)
     if TRUSTED_RELEASE_GROUPS.iter().any(|&grp| lower.contains(grp)) {
         score += 20;
     }
@@ -694,7 +694,7 @@ const STOP_WORDS: &[&str] = &[
     "the", "a", "an", "and", "or", "in", "on", "of", "to", "for", "with", "by", "at",
 ];
 
-/// Jetons techniques/qualité/langue qui marquent la fin du titre d'une release P2P.
+/// Tokens técnicos/calidad/idioma que marcan el fin del título de una versión P2P.
 const RELEASE_METADATA_BOUNDARY_TOKENS: &[&str] = &[
     "1080p", "m1080p", "1080i", "720p", "m720p", "2160p", "m2160p", "480p", "576p", "4k", "uhd", "fhd", "hd", "sd",
     "bluray", "bdrip", "brrip", "microhd", "hdrip", "webrip", "webdl", "web", "dvdrip",
@@ -707,8 +707,8 @@ const RELEASE_METADATA_BOUNDARY_TOKENS: &[&str] = &[
     "capitulo", "temporada", "season", "completa", "complete", "pack", "episodio", "episodios",
 ];
 
-/// Marqueurs de suites ou de sous-titres de franchise qui ne doivent jamais apparaître
-/// dans le titre candidat s'ils ne figurent pas dans le titre attendu.
+/// Marcadores de secuelas o subtítulos de franquicia que no deben aparecer nunca
+/// en el título candidato si no figuran en el título esperado.
 const SEQUEL_AND_SPINOFF_MARKERS: &[&str] = &[
     "2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix",
     "part", "parte", "vol", "volume", "volumen", "chapter", "capitulo", "returns", "vuelve",
@@ -733,8 +733,8 @@ pub fn clean_title_tokens(title: &str) -> Vec<String> {
     }
 }
 
-/// Répare les séquences UTF-8 doublement encodées en Latin-1 (mojibake fréquent sur eD2K/Kad,
-/// ex: `El seÃ±or` -> `El señor`, `InmolaciÃ³n` -> `Inmolación`, `EstaciÃÂ³n` -> `Estación`).
+/// Repara secuencias UTF-8 doblemente codificadas en Latin-1 (mojibake frecuente en eD2K/Kad,
+/// ej.: `El seÃ±or` -> `El señor`, `InmolaciÃ³n` -> `Inmolación`, `EstaciÃÂ³n` -> `Estación`).
 fn repair_mojibake_utf8(input: &str) -> String {
     if !input.contains('Ã') && !input.contains('Â') {
         return input.to_string();
@@ -820,7 +820,7 @@ fn is_episode_marker_token(w: &str) -> bool {
         return true;
     }
     let bytes = w.as_bytes();
-    // Format s01e01 ou s1e1
+    // Formato s01e01 o s1e1
     if bytes.first() == Some(&b's') && bytes.len() >= 4 && w[1..].contains('e') {
         let parts: Vec<&str> = w[1..].split('e').collect();
         if parts.len() >= 2
@@ -829,7 +829,7 @@ fn is_episode_marker_token(w: &str) -> bool {
             return true;
         }
     }
-    // Format 1x01
+    // Formato 1x01
     if w.contains('x') {
         let parts: Vec<&str> = w.split('x').collect();
         if parts.len() == 2
@@ -849,10 +849,10 @@ fn has_season_pack_indicator(lower: &str) -> bool {
         || lower.contains("pack")
 }
 
-/// Extrait d'un nom de fichier P2P :
-/// 1. Les jetons du titre principal (avant l'année ou les tags techniques).
-/// 2. Les jetons d'un éventuel titre alternatif entre parenthèses ex. `La.semilla.del.diablo.(Rosemary's.Baby)`.
-/// 3. Toutes les années à 4 chiffres (`1920..=2099`) présentes dans le nom de fichier.
+/// Extrae de un nombre de archivo P2P:
+/// 1. Los tokens del título principal (antes del año o etiquetas técnicas).
+/// 2. Los tokens de un posible título alternativo entre paréntesis ej. `La.semilla.del.diablo.(Rosemary's.Baby)`.
+/// 3. Todos los años de 4 dígitos (`1920..=2099`) presentes en el nombre de archivo.
 fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec<String>, Vec<u32>) {
     let mut raw = candidate_title.trim();
     for ext in &[".mkv", ".mp4", ".avi", ".m4v", ".ts", ".iso", ".srt"] {
@@ -862,14 +862,14 @@ fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec
         }
     }
 
-    // Collecter toutes les années présentes dans l'ensemble du nom de fichier
+    // Recopilar todos los años presentes en todo el nombre de archivo
     let full_norm = normalize_accents_and_symbols(raw);
     let all_years: Vec<u32> = full_norm
         .split_whitespace()
         .filter_map(is_year_token)
         .collect();
 
-    // Ignorer les préfixes entre parenthèses ou crochets au tout début : ex. `(Polanski).(1968).Titre...`
+    // Ignorar prefijos entre paréntesis o corchetes al inicio: ej. `(Polanski).(1968).Titre...`
     let mut trimmed = raw.trim_start_matches(['.', ' ', '_', '-']);
     loop {
         if let Some(rest) = trimmed.strip_prefix('(') {
@@ -892,8 +892,8 @@ fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec
         break;
     }
 
-    // Détecter et retirer les préfixes catalogue / catégorie / réalisateur avec tirets :
-    // ex: "Cine - Georges Méliès - 1902 - Viaje a la Luna (1902)..." ou "+ 1902 Méliès - Le voyage dans la lune..."
+    // Detectar y retirar prefijos de catálogo / categoría / director con guiones:
+    // ej.: "Cine - Georges Méliès - 1902 - Viaje a la Luna (1902)..." o "+ 1902 Méliès - Le voyage dans la lune..."
     if trimmed.starts_with('+') {
         trimmed = trimmed.trim_start_matches('+').trim_start_matches(['.', ' ', '_', '-']);
     }
@@ -911,7 +911,7 @@ fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec
         }
     }
 
-    // Séparer la portion avant la première parenthèse/crochet
+    // Separar la porción anterior al primer paréntesis/corchete
     let mut first_boundary_idx = trimmed.len();
     for (i, ch) in trimmed.char_indices() {
         if ch == '(' || ch == '[' {
@@ -936,7 +936,7 @@ fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec
         }
     }
 
-    // Extraire les jetons de titre alternatif depuis tous les blocs entre parenthèses ou crochets
+    // Extraer los tokens de título alternativo de todos los bloques entre paréntesis o corchetes
     let mut alt_title_tokens = Vec::new();
     let mut paren_groups = Vec::new();
     let mut in_paren = false;
@@ -1005,8 +1005,8 @@ fn parse_candidate_release_structure(candidate_title: &str) -> (Vec<String>, Vec
     (main_title_tokens, alt_title_tokens, all_years)
 }
 
-/// Retourne tous les numéros d'épisodes de la saison `season` couverts par `candidate_title`
-/// (épisode simple, double ou plage multi-épisodes ex: `S01E01-E04`, `S01E01E02E03`, `1x01-03`, `Cap.101_103`).
+/// Devuelve todos los números de episodios de la temporada `season` cubiertos por `candidate_title`
+/// (episodio simple, doble o rango multiepisodio ej.: `S01E01-E04`, `S01E01E02E03`, `1x01-03`, `Cap.101_103`).
 pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32> {
     let norm = normalize_accents_and_symbols(candidate_title);
     let words: Vec<&str> = norm.split_whitespace().collect();
@@ -1016,7 +1016,7 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
     let s_raw = format!("s{season}");
 
     for (idx, &w) in words.iter().enumerate() {
-        // 1. Format SxxExx (simple, collé S01E01E02E03 ou plage S01E01-E04 / S01E01 al E04)
+        // 1. Formato SxxExx (simple, consecutivo S01E01E02E03 o rango S01E01-E04 / S01E01 al E04)
         if (w.starts_with(&s_pad) || w.starts_with(&s_raw)) && w.contains('e') {
             let s_len = if w.starts_with(&s_pad) { s_pad.len() } else { s_raw.len() };
             let ep_part = &w[s_len..];
@@ -1033,7 +1033,7 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
             }
 
             if let Some(&first_ep) = ep_nums.first() {
-                // Regarder si le jeton suivant (ou idx+2 après "al"/"a"/"to") indique la fin d'une plage
+                // Comprobar si el siguiente token (o idx+2 tras "al"/"a"/"to") indica el final de un rango
                 let next_candidates = if idx + 2 < words.len()
                     && matches!(words[idx + 1], "al" | "a" | "to")
                 {
@@ -1068,7 +1068,7 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
             }
         }
 
-        // 2. Format 1x01 ou 01x01 (avec plage éventuelle 1x01-03 ou 1x01-1x03)
+        // 2. Formato 1x01 o 01x01 (con rango eventual 1x01-03 o 1x01-1x03)
         let x_prefix_raw = format!("{season}x");
         let x_prefix_pad = format!("{season:02}x");
         if w.starts_with(&x_prefix_raw) || w.starts_with(&x_prefix_pad) {
@@ -1107,7 +1107,7 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
             }
         }
 
-        // 3. Nomenclature espagnole : `Cap.102`, `Cap.0102`, `Capitulo 102`, `Cap.101_104`
+        // 3. Nomenclatura española: `Cap.102`, `Cap.0102`, `Capitulo 102`, `Cap.101_104`
         if (w == "cap" || w == "capitulo" || w == "episodio") && idx + 1 < words.len() {
             let code_w = words[idx + 1];
             if let Some(first_ep) = parse_spanish_cap_code(code_w, season) {
@@ -1155,14 +1155,14 @@ fn parse_spanish_cap_code(code_w: &str, season: u32) -> Option<u32> {
     None
 }
 
-/// Vérifie si le titre candidat correspond exactement à la saison et à l'épisode attendus,
-/// y compris les épisodes doubles/multiples (`S01E01-E02`, `S01E01-E04`, `1x01-02`) et la nomenclature
-/// espagnole (`Cap.102`, `Cap.101_103`, `Capitulo 102`).
+/// Comprueba si el título candidato coincide exactamente con la temporada y el episodio esperados,
+/// incluidos episodios dobles/múltiples (`S01E01-E02`, `S01E01-E04`, `1x01-02`) y la nomenclatura
+/// española (`Cap.102`, `Cap.101_103`, `Capitulo 102`).
 fn matches_tv_episode_marker(candidate_title: &str, season: u32, episode: u32) -> bool {
     extract_tv_episode_numbers(candidate_title, season).contains(&episode)
 }
 
-/// Vérifie si une release correspond à un Pack de Saison complète pour la série et la saison données.
+/// Comprueba si una versión corresponde a un paquete de temporada completa para la serie y temporada dadas.
 pub fn matches_season_pack_release(
     candidate_title: &str,
     expected_title: &str,
@@ -1184,13 +1184,13 @@ pub fn matches_season_pack_release(
     let norm = normalize_accents_and_symbols(candidate_title);
     let words: Vec<&str> = norm.split_whitespace().collect();
 
-    // Si la release mentionne un épisode isolé (ex: S01E02 seul), ce n'est pas un pack de saison
+    // Si la versión menciona un episodio aislado (ej.: S01E02 solo), no es un paquete de temporada
     let covered_eps = extract_tv_episode_numbers(candidate_title, season);
     if !covered_eps.is_empty() && covered_eps.len() < 4 {
         return false;
     }
 
-    // Chercher un marqueur explicite de la saison `season`
+    // Buscar un marcador explícito de la temporada `season`
     for (idx, &w) in words.iter().enumerate() {
         if is_standalone_season_token(w) == Some(season) {
             return true;
@@ -1204,7 +1204,7 @@ pub fn matches_season_pack_release(
         }
     }
 
-    // Ou une plage d'au moins 4 épisodes couvrant le début de la saison (ex: S01E01-E08)
+    // O un rango de al menos 4 episodios que cubra el inicio de la temporada (ej.: S01E01-E08)
     covered_eps.len() >= 4 && covered_eps.contains(&1)
 }
 
@@ -1233,7 +1233,7 @@ fn matches_series_or_movie_title_tokens(
         .filter(|v| !v.is_empty())
         .collect();
 
-    // Strict Year check for movies
+    // Comprobación estricta de año para películas
     if is_movie {
         if let Some(year) = expected_year {
             if !cand_years.is_empty() {
@@ -1277,7 +1277,7 @@ fn matches_series_or_movie_title_tokens(
             }
         }
     }
-    // Ajouter aussi les équivalents bilingues mot à mot pour les jetons attendus
+    // Añadir también equivalentes bilingües palabra por palabra para los tokens esperados
     let mut bilingual_additions = Vec::new();
     for &w in &allowed_union {
         for &(en_w, es_w) in EN_ES_TITLE_WORD_EQUIVALENTS {
@@ -1294,7 +1294,7 @@ fn matches_series_or_movie_title_tokens(
         }
     }
 
-    // Expansion des synonymes de numérotation pour les suites (ex. "part two" <-> "2", "ii", "parte", "dos")
+    // Expansión de sinónimos de numeración para secuelas (ej. "part two" <-> "2", "ii", "parte", "dos")
     let mut syn_expansions = Vec::new();
     let has_two = allowed_union.iter().any(|&w| matches!(w, "2" | "two" | "ii" | "dos"));
     let has_part = allowed_union.iter().any(|&w| matches!(w, "part" | "parte"));
@@ -1340,14 +1340,14 @@ fn matches_series_or_movie_title_tokens(
                     if cw == t.as_str() {
                         return true;
                     }
-                    // Équivalences numériques
+                    // Equivalencias numéricas
                     if matches!(t.as_str(), "2" | "two" | "ii" | "dos") && matches!(cw.as_str(), "2" | "two" | "ii" | "dos") {
                         return true;
                     }
                     if matches!(t.as_str(), "part" | "parte") && matches!(cw.as_str(), "part" | "parte") {
                         return true;
                     }
-                    // Équivalences bilingues anglais <-> espagnol
+                    // Equivalencias bilingües inglés <-> español
                     if EN_ES_TITLE_WORD_EQUIVALENTS
                         .iter()
                         .any(|&(en_w, es_w)| {
@@ -1365,8 +1365,8 @@ fn matches_series_or_movie_title_tokens(
         let recall_ok = if target_tokens.len() <= 2 {
             matched_count == target_tokens.len()
         } else {
-            // Si la cible contient "part"/"parte" mais que le candidat l'a omis au profit d'un chiffre (ex. "Dune: Part Two" -> "Dune 2"),
-            // tolérer l'absence du mot "part" si le chiffre/suite a été matché.
+            // Si el objetivo contiene "part"/"parte" pero el candidato lo omitió a favor de un número (ej. "Dune: Part Two" -> "Dune 2"),
+            // tolerar la ausencia de la palabra "part" si el número/secuela coincidió.
             let has_target_part = target_tokens.iter().any(|t| matches!(t.as_str(), "part" | "parte"));
             let segment_has_number = segment_tokens.iter().any(|cw| cw.chars().all(|c| c.is_ascii_digit()) || matches!(cw.as_str(), "ii" | "iii"));
             if has_target_part && segment_has_number && matched_count + 1 >= target_tokens.len() {
@@ -1621,11 +1621,11 @@ mod tests {
             Some((1, 2)),
         ));
 
-        // Multi-épisodes S01E01-E04
+        // Multiepisodio S01E01-E04
         let span = extract_tv_episode_numbers("VisionQuest.S01E01-E04.1080p.Dual.mkv", 1);
         assert_eq!(span, vec![1, 2, 3, 4]);
 
-        // Pack de saison complète
+        // Paquete de temporada completa
         assert!(matches_season_pack_release(
             "VisionQuest.Temporada.1.Completa.1080p.Castellano.HEVC",
             "VisionQuest",
@@ -1681,7 +1681,7 @@ mod tests {
 
     #[test]
     fn test_english_unknown_and_foreign_releases_strictly_rejected_and_bilingual_matched() {
-        // Unlabeled US English scene releases must be rejected when preferred_language is Spanish
+        // Las versiones de la escena en inglés estadounidense sin etiquetar deben rechazarse cuando preferred_language es español
         let us_scene = evaluate_release(
             "Station.Eleven.2021.S01E07.Goodbye.My.Damaged.Home.1080p.WEBRip.EAC3.HEVC-t3nzin.mkv",
             "ed2k",
@@ -1697,7 +1697,7 @@ mod tests {
         assert!(us_scene.is_rejected);
         assert_eq!(us_scene.language, "Unknown");
 
-        // French VOSTFR and Italian ITA ENG must be rejected as Foreign
+        // Las versiones francesas VOSTFR e italianas ITA ENG deben rechazarse como Foreign
         let fr_rel = evaluate_release(
             "Station.Eleven.S01E02.FASTSUB.VOSTFR.WEBRip.x264-WEEDS.mp4",
             "ed2k",
@@ -1728,7 +1728,7 @@ mod tests {
         assert!(ita_rel.is_rejected);
         assert_eq!(ita_rel.language, "Foreign");
 
-        // Spanish release with (Spa-Eng-Spanishsub) must be accepted as Dual
+        // La versión en español con (Spa-Eng-Spanishsub) debe aceptarse como Dual
         let spa_dual = evaluate_release(
             "Estacion.once.1x01.Rueda.de.fuego.(Spanish.English.Subs).HMAX.WEB-DL.1080p.x264-AC3.(pxl-sharerip).mkv",
             "ed2k",
@@ -1759,7 +1759,7 @@ mod tests {
         assert!(!spa_hyphen.is_rejected);
         assert_eq!(spa_hyphen.language, "Dual");
 
-        // Bilingual title matching: "Station Eleven" <-> "Estacion once"
+        // Coincidencia de título bilingüe: "Station Eleven" <-> "Estacion once"
         assert!(matches_release(
             "Estacion.once.1x01.Rueda.de.fuego.(Spanish.English.Subs).HMAX.WEB-DL.1080p.x264-AC3.(pxl-sharerip).mkv",
             "Station Eleven",
@@ -1777,8 +1777,8 @@ mod tests {
             Some((1, 6)),
         ));
 
-        // (Eng-Sub) release by trusted group must be classified as VOSE, not Castellano,
-        // and must score lower than a true Dual release
+        // La versión (Eng-Sub) de un grupo de confianza debe clasificarse como VOSE, no Castellano,
+        // y debe puntuar más bajo que una versión Dual real
         let geot_vose = evaluate_release(
             "Pantheon.(2023).2x01.The.Gods.Have.Not.Died.In.Vain.(Eng-Sub).HD.1080p.CHDR.HEVC.10b-AAC.by.Geot.(siemprehevc).mkv",
             "ed2k",
@@ -1808,7 +1808,7 @@ mod tests {
         assert_eq!(bryan_dual.language, "Dual");
         assert!(bryan_dual.score > geot_vose.score);
 
-        // _Eng.Subt.Esp must be VOSE, not Dual
+        // _Eng.Subt.Esp debe ser VOSE, no Dual
         let subt_esp = evaluate_release(
             "Estación Once (Station Eleven) S01E04 [Rosencrantz and Guildenstern Aren't Dead]_Eng.Subt.Esp.mkv",
             "ed2k",
@@ -1824,7 +1824,7 @@ mod tests {
         assert_eq!(subt_esp.language, "VOSE");
 
         // Monsieur Ibrahim / El señor Ibrahim y las flores del Corán:
-        // 1. La release catalane/française `.fr.fr.vo.vos_es` doit être rejetée comme `Foreign`
+        // 1. La versión catalana/francesa `.fr.fr.vo.vos_es` debe ser rechazada como `Foreign`
         let cat_fr_rel = evaluate_release(
             "El.senyor.Ibrahim.i.las.flors.de.l'Alcora.(Monsieur.Ibrahim.et.les.fleurs.du.Coran).Francois.Dupeyron.2003.fr.fr.vo.vos_es.vd_es.mkv",
             "ed2k",
@@ -1840,7 +1840,7 @@ mod tests {
         assert!(cat_fr_rel.is_rejected);
         assert_eq!(cat_fr_rel.language, "Foreign");
 
-        // 2. La release Dual 1080p `(spa.fr).1080p.Blurayx264.mkv` doit être acceptée en Dual et matcher le titre
+        // 2. La versión Dual 1080p `(spa.fr).1080p.Blurayx264.mkv` debe aceptarse en Dual y coincidir con el título
         let ibrahim_dual = evaluate_release(
             "El señor Ibrahim y las flores del Coran (2003) François Dupeyron (spa.fr).1080p.Blurayx264.mkv",
             "ed2k",

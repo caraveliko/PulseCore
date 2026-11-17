@@ -16,38 +16,38 @@ use mule_assistant::llm::{ChatMessage, LlmBackend, ToolSchema};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
-/// Validation de l'endpoint : http + IP littérale loopback exigés.
+/// Validación del endpoint: se exige http + IP literal en bucle local (loopback).
 #[test]
 fn test_endpoint_validation() {
-    // OK : loopback littéral
+    // Correcto: bucle local literal
     let ok = AssistantConfig {
         endpoint: "http://127.0.0.1:11434".to_string(),
         ..Default::default()
     };
     assert!(ok.validate().is_ok());
 
-    // OK : IPv6 loopback
+    // Correcto: IPv6 en bucle local
     let ok6 = AssistantConfig {
         endpoint: "http://[::1]:11434".to_string(),
         ..Default::default()
     };
     assert!(ok6.validate().is_ok());
 
-    // Refus : nom d'hôte à résoudre
+    // Rechazo: nombre de host a resolver
     let host = AssistantConfig {
         endpoint: "http://localhost:11434".to_string(),
         ..Default::default()
     };
     assert!(host.validate().is_err());
 
-    // Refus : non loopback sans override
+    // Rechazo: no local sin anulación
     let remote = AssistantConfig {
         endpoint: "http://8.8.8.8:11434".to_string(),
         ..Default::default()
     };
     assert!(remote.validate().is_err());
 
-    // Accepté avec override explicite
+    // Aceptado con anulación explícita
     let remote_allowed = AssistantConfig {
         endpoint: "http://8.8.8.8:11434".to_string(),
         allow_remote_endpoint: true,
@@ -55,7 +55,7 @@ fn test_endpoint_validation() {
     };
     assert!(remote_allowed.validate().is_ok());
 
-    // Refus : scheme non-http
+    // Rechazo: esquema no http
     let https = AssistantConfig {
         endpoint: "https://127.0.0.1:11434".to_string(),
         ..Default::default()
@@ -63,8 +63,8 @@ fn test_endpoint_validation() {
     assert!(https.validate().is_err());
 }
 
-/// Corps NDJSON scripté du faux Ollama : deux fragments de contenu, un
-/// tool_call, puis le chunk final `done` avec métriques.
+/// Cuerpo NDJSON preparado del falso Ollama: dos fragmentos de contenido, un
+/// tool_call y luego el fragmento final `done` con métricas.
 fn scripted_ndjson() -> String {
     [
         json!({"model":"m","message":{"role":"assistant","content":"Bon"},"done":false}),
@@ -78,7 +78,7 @@ fn scripted_ndjson() -> String {
         + "\n"
 }
 
-/// Capture du corps de requête reçu par le faux serveur.
+/// Captura del cuerpo de la petición recibida por el servidor simulado.
 type CapturedBody = Arc<Mutex<Option<Value>>>;
 
 async fn fake_chat(State(captured): State<CapturedBody>, Json(body): Json<Value>) -> impl IntoResponse {
@@ -89,8 +89,8 @@ async fn fake_chat(State(captured): State<CapturedBody>, Json(body): Json<Value>
         .unwrap()
 }
 
-/// Assemble le tour complet depuis le stream : contenu streamé au sink,
-/// tool_calls accumulés, métriques du chunk `done`.
+/// Ensambla el turno completo desde el flujo: contenido transmitido al sumidero (sink),
+/// tool_calls acumulados y métricas del fragmento `done`.
 #[tokio::test]
 async fn test_ollama_stream_parsing() {
     let captured: CapturedBody = Arc::new(Mutex::new(None));
@@ -110,7 +110,7 @@ async fn test_ollama_stream_parsing() {
     };
     let backend = OllamaBackend::new(&config).unwrap();
 
-    // Historique incluant un message tool : vérifie la sérialisation.
+    // Historial que incluye un mensaje tool: verifica la serialización.
     let history = vec![
         ChatMessage::system("sys"),
         ChatMessage::user("salut"),
@@ -131,23 +131,23 @@ async fn test_ollama_stream_parsing() {
 
     let turn = backend.chat(&history, &tools, &sink).await.unwrap();
 
-    // Contenu concaténé + streamé en deux fragments.
+    // Contenido concatenado + transmitido en dos fragmentos.
     assert_eq!(turn.content, "Bonjour");
     assert_eq!(tokens.lock().unwrap().clone(), vec!["Bon", "jour"]);
 
-    // Tool call accumulé et traduit au format neutre.
+    // Llamada a herramienta acumulada y traducida al formato neutro.
     assert_eq!(turn.tool_calls.len(), 1);
     assert_eq!(turn.tool_calls[0].name, "emule_status");
     assert!(turn.tool_calls[0].id.is_none());
 
-    // Métriques converties ns → ms.
+    // Métricas convertidas ns → ms.
     let m = turn.metrics.unwrap();
     assert_eq!(m.load_duration_ms, Some(10));
     assert_eq!(m.prompt_eval_duration_ms, Some(20));
     assert_eq!(m.eval_duration_ms, Some(30));
     assert_eq!(m.eval_count, Some(7));
 
-    // Corps de requête : tools au format function, tool_name sérialisé.
+    // Cuerpo de la petición: tools en formato function, tool_name serializado.
     let sent = captured.lock().unwrap().clone().unwrap();
     assert_eq!(sent["model"], "test-model");
     assert_eq!(sent["stream"], true);
@@ -158,7 +158,7 @@ async fn test_ollama_stream_parsing() {
     assert_eq!(sent["messages"][2]["name"], "emule_status");
 }
 
-/// Réponse d'erreur HTTP → `AssistantError::Backend` avec le statut.
+/// Respuesta de error HTTP → `AssistantError::Backend` con el estado.
 #[tokio::test]
 async fn test_ollama_http_error() {
     async fn err_handler() -> impl IntoResponse {

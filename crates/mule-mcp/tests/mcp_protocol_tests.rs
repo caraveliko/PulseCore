@@ -31,12 +31,12 @@ async fn test_mcp_client_e2e_with_daemon() {
     let (addr, token, _dir) = spawn_test_daemon("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
     let url = format!("ws://{addr}/rpc");
 
-    // 1. Connect and perform hello handshake
+    // 1. Conectar y realizar saludo inicial (handshake)
     let client = DaemonClient::connect(Some(url), Some(token), None, None)
         .await
         .expect("DaemonClient connection should succeed");
 
-    // 2. Test emule_status
+    // 2. Probar emule_status
     let status_res = execute_tool(&client, "emule_status", json!({})).await;
     assert!(
         !status_res.is_error,
@@ -50,7 +50,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         Some(0)
     );
 
-    // 3. Test emule_list_downloads (initially empty)
+    // 3. Probar emule_list_downloads (inicialmente vacío)
     let list_res = execute_tool(&client, "emule_list_downloads", json!({})).await;
     assert!(!list_res.is_error);
     let list_json: serde_json::Value = serde_json::from_str(&list_res.content[0].text).unwrap();
@@ -59,11 +59,11 @@ async fn test_mcp_client_e2e_with_daemon() {
         .and_then(|d| d.as_array())
         .is_some());
 
-    // 4. Test emule_get_settings
+    // 4. Probar emule_get_settings
     let settings_res = execute_tool(&client, "emule_get_settings", json!({})).await;
     assert!(!settings_res.is_error);
 
-    // 5. Test emule_set_limits
+    // 5. Probar emule_set_limits
     let limits_res = execute_tool(
         &client,
         "emule_set_limits",
@@ -75,7 +75,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     .await;
     assert!(!limits_res.is_error);
 
-    // 6. Test emule_add_link
+    // 6. Probar emule_add_link
     let test_link = "ed2k://|file|test_file.bin|1048576|31D6CFE0D16AE931B73C59D7E0C089C0|/";
     let add_res = execute_tool(&client, "emule_add_link", json!({ "link": test_link })).await;
     assert!(!add_res.is_error, "Add link failed: {:?}", add_res);
@@ -85,7 +85,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         .and_then(|id| id.as_str())
         .unwrap();
 
-    // 7. Test emule_get_download_details by hash (resolves automatically)
+    // 7. Probar emule_get_download_details por hash (se resuelve automáticamente)
     let details_res = execute_tool(
         &client,
         "emule_get_download_details",
@@ -100,7 +100,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         details_res
     );
 
-    // 8. Test emule_pause_download by UUID
+    // 8. Probar emule_pause_download por UUID
     let pause_res = execute_tool(
         &client,
         "emule_pause_download",
@@ -109,7 +109,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     .await;
     assert!(!pause_res.is_error, "pause failed: {:?}", pause_res);
 
-    // 9. Test emule_resume_download by hash
+    // 9. Probar emule_resume_download por hash
     let resume_res = execute_tool(
         &client,
         "emule_resume_download",
@@ -120,7 +120,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     .await;
     assert!(!resume_res.is_error, "resume failed: {:?}", resume_res);
 
-    // 10. Test emule_remove_download
+    // 10. Probar emule_remove_download
     let remove_res = execute_tool(
         &client,
         "emule_remove_download",
@@ -132,7 +132,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     .await;
     assert!(!remove_res.is_error, "remove failed: {:?}", remove_res);
 
-    // 11. Test Categories
+    // 11. Probar categorías
     let create_cat_res = execute_tool(
         &client,
         "emule_create_category",
@@ -157,7 +157,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     let del_cat_res = execute_tool(&client, "emule_delete_category", json!({ "id": cat_id })).await;
     assert!(!del_cat_res.is_error);
 
-    // 12. Test Network Policy
+    // 12. Probar directiva de red (Network Policy)
     let net_policy_res = execute_tool(&client, "emule_get_network_policy", json!({})).await;
     assert!(
         !net_policy_res.is_error,
@@ -165,7 +165,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         net_policy_res
     );
 
-    // 13. Test IP Filter
+    // 13. Probar filtro IP
     let filter_res = execute_tool(&client, "emule_get_filter_status", json!({})).await;
     assert!(
         !filter_res.is_error,
@@ -173,11 +173,11 @@ async fn test_mcp_client_e2e_with_daemon() {
         filter_res
     );
 
-    // 14. Test Shares
+    // 14. Probar compartidos
     let shares_res = execute_tool(&client, "emule_list_shares", json!({})).await;
     assert!(!shares_res.is_error, "list_shares failed: {:?}", shares_res);
 
-    // 15. Test History Stats
+    // 15. Probar estadísticas de historial
     let hist_stats_res = execute_tool(&client, "emule_history_stats", json!({})).await;
     assert!(
         !hist_stats_res.is_error,
@@ -185,7 +185,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         hist_stats_res
     );
 
-    // 16. Test Identity
+    // 16. Probar identidad
     let identity_res = execute_tool(&client, "emule_get_identity", json!({})).await;
     assert!(
         !identity_res.is_error,
@@ -193,7 +193,7 @@ async fn test_mcp_client_e2e_with_daemon() {
         identity_res
     );
 
-    // 17. Test UPnP & Listener Status
+    // 17. Probar estado de UPnP y escucha
     let upnp_res = execute_tool(&client, "emule_upnp_status", json!({})).await;
     assert!(!upnp_res.is_error, "upnp_status failed: {:?}", upnp_res);
 

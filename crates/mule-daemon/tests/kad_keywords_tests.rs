@@ -16,7 +16,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // 1. Start daemon Kad UDP
+    // 1. Iniciar Kad UDP en el daemon
     let _bound_addr = state
         .kad
         .udp()
@@ -24,7 +24,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
         .await
         .expect("start kad udp");
 
-    // 2. Start mock Kad peer
+    // 2. Iniciar par Kad simulado
     let mock_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind mock peer");
@@ -90,17 +90,17 @@ async fn test_kad_keyword_publish_and_search_flow() {
         }
     });
 
-    // 3. Bootstrap from mock node
+    // 3. Arrancar (bootstrap) desde nodo simulado
     let imported = state
         .kad
         .bootstrap_from_node(&mock_addr.ip().to_string(), mock_addr.port())
         .await
         .expect("bootstrap should succeed");
-    // eMule 0.72a insère le nœud répondeur lui-même en plus des contacts de
-    // BOOTSTRAP_RES → 2 contacts importés.
+    // eMule 0.72a inserta el propio nodo respondedor además de los contactos de
+    // BOOTSTRAP_RES → 2 contactos importados.
     assert_eq!(imported, 2);
 
-    // 4. Publish keyword for a file
+    // 4. Publicar palabra clave para un archivo
     let published_count = state
         .kad
         .publish_keyword(
@@ -113,7 +113,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
         .expect("publish keyword should succeed");
     assert!(published_count >= 1);
 
-    // 5. Search keyword
+    // 5. Buscar palabra clave
     let results = state
         .kad
         .search_keywords("ubuntu", None, None)
@@ -129,10 +129,10 @@ async fn test_kad_keyword_publish_and_search_flow() {
     mock_task.abort();
 }
 
-/// eMule `PreparePacketForTags` (`Search.cpp:1390`): `TAG_KADAICHHASHPUB`
-/// is only sent to nodes whose Kad version is >= 9
-/// (`KADEMLIA_VERSION9_50a`). The mock peer advertises its version in
-/// bootstrap contacts and records the published entries.
+/// `PreparePacketForTags` de eMule (`Search.cpp:1390`): `TAG_KADAICHHASHPUB`
+/// solo se envía a nodos cuya versión de Kad sea >= 9
+/// (`KADEMLIA_VERSION9_50a`). El par simulado anuncia su versión en
+/// los contactos de arranque y registra las entradas publicadas.
 #[tokio::test]
 async fn test_kad_aich_pub_gated_on_target_version() {
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
@@ -225,7 +225,7 @@ async fn test_kad_aich_pub_gated_on_target_version() {
             .await
             .expect("publish keyword");
 
-        // Collect published entries for a bounded window.
+        // Recopilar entradas publicadas durante una ventana acotada.
         let mut observed: Vec<Option<[u8; 20]>> = Vec::new();
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
         while let Ok(Some(v)) = tokio::time::timeout_at(deadline, aich_seen_rx.recv()).await {

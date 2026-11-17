@@ -210,7 +210,7 @@ pub async fn handle_servers_connect(
         ))
     })?;
 
-    // Check if server is in local database and whether it is disabled
+    // Comprobar si el servidor está en la base de datos local y si está deshabilitado
     let server_record = {
         let dl = state.downloads.lock().await;
         let servers = dl.list_servers()?;
@@ -232,9 +232,9 @@ pub async fn handle_servers_connect(
 
     let server_name = server_record.map(|s| s.name);
 
-    // eMule semantics: asking for another server while a session is
-    // active switches to it (disconnect first); reconnecting to the same
-    // address is idempotent.
+    // Semántica de eMule: solicitar otro servidor mientras una sesión está
+    // activa cambia a este (desconecta primero); reconectarse a la misma
+    // dirección es idempotente.
     {
         let snap = state.server_session.snapshot().await;
         use crate::services::server_session::ServerConnectionStatus as S;
@@ -249,7 +249,7 @@ pub async fn handle_servers_connect(
         }
     }
 
-    // Request TCP connect permit from NetworkPolicyManager
+    // Solicitar permiso de conexión TCP al NetworkPolicyManager
     let permit = state
         .network_policy
         .request_tcp_connect(addr, mule_network_policy::ConnectionPurpose::Ed2kServer)
@@ -260,7 +260,7 @@ pub async fn handle_servers_connect(
     let user_hash = state.identity.lock().await.user_hash();
     let ed2k_port = state.ed2k_port();
 
-    // Start session with WAN-adapted timeouts (10s connect, 15s handshake)
+    // Iniciar sesión con tiempos de espera adaptados a WAN (10 s conexión, 15 s handshake)
     state
         .server_session
         .connect(
@@ -320,16 +320,16 @@ pub async fn handle_servers_search(
             .unwrap_or_default()
     };
 
-    // `udpOnly` (eMule "Global search" scope): skip the TCP search on the
-    // connected server and only fan out over UDP to the server list.
+    // `udpOnly` (ámbito de "Búsqueda global" de eMule): omite la búsqueda TCP en el
+    // servidor conectado y solo se expande por UDP hacia la lista de servidores.
     let udp_only = params["udpOnly"].as_bool().unwrap_or(false);
     if !udp_only {
         state.server_session.search(query).await?;
     }
 
-    // Global UDP search (OP_GLOBSEARCHREQ2/3): eMule also queries servers over
-    // UDP — the connected server plus other enabled known servers, on their
-    // UDP port (TCP+4). Fire-and-forget; answers arrive as OP_GLOBSEARCHRES.
+    // Búsqueda global UDP (OP_GLOBSEARCHREQ2/3): eMule también consulta servidores por
+    // UDP — el servidor conectado más otros servidores conocidos habilitados, en su
+    // puerto UDP (TCP+4). Emisión sin espera; las respuestas llegan como OP_GLOBSEARCHRES.
     if !payload.is_empty() {
         let mut targets: Vec<std::net::SocketAddr> = Vec::new();
         if let Some(addr_str) = state.server_session.snapshot().await.server_address {
@@ -357,9 +357,9 @@ pub async fn handle_servers_search(
         targets.extend(extra);
         let mut udp_targets = Vec::new();
         for (i, target) in targets.iter().enumerate() {
-            // eMule paces global UDP sends at ~50 ms per server
-            // (SearchResultsWnd TimerServerTimeout) — blasting all servers
-            // at once gets dropped by rate-limiting servers.
+            // eMule dosifica los envíos globales UDP a ~50 ms por servidor
+            // (TimerServerTimeout en SearchResultsWnd) — emitir a todos los servidores
+            // a la vez provocaría descartes por límite de tasa en los servidores.
             if i > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
@@ -418,10 +418,10 @@ pub async fn handle_servers_update_from_url(
         .as_str()
         .unwrap_or("http://upd.emule-security.org/server.met");
 
-    // Anti-SSRF : schéma http/https, IP publiques uniquement en profil
-    // public, loopback seul en LocalLab ; redirections désactivées et IP
-    // DNS épinglées (`resolve_to`) — sinon une URL validée pouvait
-    // déléguer vers une cible interne.
+    // Anti-SSRF: esquema http/https, solo IPs públicas en perfil
+    // público, solo loopback en LocalLab; redirecciones desactivadas e IPs
+    // DNS fijadas (`resolve_to`) — de lo contrario, una URL validada podría
+    // redirigir hacia un objetivo interno.
     let (_target, bytes) = crate::net_fetch::fetch_url_bytes(state, url).await?;
     let url = _target.url.to_string();
 

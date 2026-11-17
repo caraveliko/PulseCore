@@ -27,7 +27,7 @@ async fn test_adversarial_socket_open_then_complete_silence_times_out() {
     .await;
     let mut authenticated = true;
 
-    // Start a mock listener that accepts and never responds
+    // Iniciar un oyente simulado que acepta y nunca responde
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let peer_addr = listener.local_addr().unwrap();
 
@@ -35,7 +35,7 @@ async fn test_adversarial_socket_open_then_complete_silence_times_out() {
         let (mut socket, _) = listener.accept().await.unwrap();
         let mut buf = [0u8; 128];
         let _ = socket.read(&mut buf).await;
-        // Never send anything back
+        // Nunca devolver nada
         tokio::time::sleep(Duration::from_secs(15)).await;
     });
 
@@ -49,7 +49,7 @@ async fn test_adversarial_socket_open_then_complete_silence_times_out() {
         .unwrap();
     assert!(resp.error.is_none());
 
-    // Wait until handshake timeout occurs (8s) + a small margin
+    // Esperar a que ocurra el tiempo de espera del apretón de manos (8 s) + un pequeño margen
     tokio::time::sleep(Duration::from_millis(8500)).await;
 
     let req = make_req(2, "sources.status", None);
@@ -60,7 +60,7 @@ async fn test_adversarial_socket_open_then_complete_silence_times_out() {
     assert_eq!(status_obj["status"], "disconnected");
     assert_eq!(status_obj["failureReason"], "timeout_handshake");
 
-    // Check that source in registry is marked Failed with fail_count = 1 and cooldown set
+    // Comprobar que la fuente en el registro quede marcada como Failed con fail_count = 1 y enfriamiento (cooldown) establecido
     let req = make_req(3, "sources.list", Some(json!({ "fileHash": hash })));
     let resp = handle_request(&state, req, &mut authenticated)
         .await
@@ -86,7 +86,7 @@ async fn test_adversarial_cooldown_rejection_and_force_bypass() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let peer_addr = listener.local_addr().unwrap();
 
-    // 1. Manually add source and set it into failed with cooldown
+    // 1. Agregar manualmente la fuente y ponerla en estado fallido con enfriamiento
     {
         let mut dl_svc = state.downloads.lock().await;
         let now = std::time::SystemTime::now()
@@ -118,7 +118,7 @@ async fn test_adversarial_cooldown_rejection_and_force_bypass() {
         let _ = dl_svc.upsert_peer_sources(&hash, &[src]);
     }
 
-    // 2. Attempt connect without force -> must be rejected by cooldown
+    // 2. Intentar conectar sin forzar -> debe ser rechazado por enfriamiento
     let req = make_req(
         1,
         "sources.connect",
@@ -131,7 +131,7 @@ async fn test_adversarial_cooldown_rejection_and_force_bypass() {
     let err = resp.error.unwrap();
     assert!(err.message.contains("Source is in cooldown"));
 
-    // 3. Connect with force: true -> must bypass cooldown and proceed
+    // 3. Conectar con force: true -> debe omitir el enfriamiento y proceder
     let req = make_req(
         2,
         "sources.connect",
@@ -167,7 +167,7 @@ async fn test_adversarial_malformed_hello_answer_fails_handshake() {
         let mut buf = [0u8; 512];
         let _ = socket.read(&mut buf).await.unwrap();
 
-        // Send a malformed OP_HELLO_ANSWER with truncated payload (less than 16 bytes for user hash)
+        // Enviar un OP_HELLO_ANSWER malformado con carga útil truncada (menos de 16 bytes para el hash de usuario)
         let corrupt_payload = vec![0x11, 0x22, 0x33]; // Invalid length
         let mut out = Vec::new();
         out.push(PR_ED2K);
@@ -221,7 +221,7 @@ async fn test_adversarial_file_status_hash_mismatch() {
         let codec = PacketCodec::new();
         let encoder = Ed2kEncoder::default();
 
-        // 1. Read OP_HELLO
+        // 1. Leer OP_HELLO
         let mut received_hello = false;
         while !received_hello {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -234,7 +234,7 @@ async fn test_adversarial_file_status_hash_mismatch() {
             }
         }
 
-        // Send OP_HELLO_ANSWER
+        // Enviar OP_HELLO_ANSWER
         let hello_answer = Ed2kHelloAnswer {
             user_hash: [0x55u8; 16],
             client_id: 0x0100007F,
@@ -252,7 +252,7 @@ async fn test_adversarial_file_status_hash_mismatch() {
         out.extend_from_slice(&ans_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 2. Read OP_FILESTATUSREQ
+        // 2. Leer OP_FILESTATUSREQ
         let mut received_status_req = false;
         while !received_status_req {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -266,7 +266,7 @@ async fn test_adversarial_file_status_hash_mismatch() {
             }
         }
 
-        // Send OP_FILESTATUS with WRONG HASH (different from requested)
+        // Enviar OP_FILESTATUS con HASH INCORRECTO (diferente del solicitado)
         let wrong_hash: [u8; 16] = [0xEEu8; 16];
         let file_status = Ed2kFileStatus {
             file_hash: wrong_hash,
@@ -327,7 +327,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
         let codec = PacketCodec::new();
         let encoder = Ed2kEncoder::default();
 
-        // 1. Read OP_HELLO
+        // 1. Leer OP_HELLO
         let mut received_hello = false;
         while !received_hello {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -340,7 +340,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
             }
         }
 
-        // Send OP_HELLO_ANSWER
+        // Enviar OP_HELLO_ANSWER
         let hello_answer = Ed2kHelloAnswer {
             user_hash: [0x55u8; 16],
             client_id: 0x0100007F,
@@ -358,7 +358,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
         out.extend_from_slice(&ans_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 2. Read OP_FILESTATUSREQ
+        // 2. Leer OP_FILESTATUSREQ
         let mut received_status_req = false;
         while !received_status_req {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -372,7 +372,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
             }
         }
 
-        // Send OP_FILESTATUS
+        // Enviar OP_FILESTATUS
         let hash_bytes: [u8; 16] = hex::decode(&hash_clone).unwrap().try_into().unwrap();
         let file_status = Ed2kFileStatus {
             file_hash: hash_bytes,
@@ -387,7 +387,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
         out.extend_from_slice(&status_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 2b. Read OP_STARTUPLOADREQ and reply with OP_ACCEPTUPLOADREQ
+        // 2b. Leer OP_STARTUPLOADREQ y responder con OP_ACCEPTUPLOADREQ
         let mut received_start_upload = false;
         while !received_start_upload {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -409,7 +409,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
         out.push(accept_pkt.opcode);
         let _ = socket.write_all(&out).await;
 
-        // 3. Read OP_REQUESTPARTS
+        // 3. Leer OP_REQUESTPARTS
         let mut received_req_parts = false;
         while !received_req_parts {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -424,13 +424,13 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
             }
         }
 
-        // Send OP_SENDINGPART with a declared range that does not match the
-        // payload size — eMule ProcessBlockPacket throws IDS_ERR_BADDATABLOCK
-        // (`size != (end-start) + header`) → protocol violation → disconnect.
-        // (An in-file range simply not matching a pending block is *ignored*
-        // by eMule, so it cannot be used to assert the rejection path.)
-        // The encoder itself validates range/payload consistency, so the
-        // malformed frame is assembled manually.
+        // Enviar OP_SENDINGPART con un rango declarado que no coincide con el
+        // tamaño de la carga útil — ProcessBlockPacket de eMule lanza IDS_ERR_BADDATABLOCK
+        // (`size != (end-start) + header`) → infracción de protocolo → desconexión.
+        // (Un rango dentro del archivo que simplemente no coincide con un bloque pendiente es *ignorado*
+        // por eMule, por lo que no puede usarse para comprobar la ruta de rechazo).
+        // El propio codificador valida la coherencia entre rango y carga útil, por lo que la
+        // trama malformada se ensambla manualmente.
         let mut payload = Vec::with_capacity(24 + 1024);
         payload.extend_from_slice(&hash_bytes);
         payload.extend_from_slice(&500_000u32.to_le_bytes()); // start
@@ -491,7 +491,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
         let codec = PacketCodec::new();
         let encoder = Ed2kEncoder::default();
 
-        // 1. Read OP_HELLO & Send OP_HELLO_ANSWER
+        // 1. Leer OP_HELLO y enviar OP_HELLO_ANSWER
         let mut received_hello = false;
         while !received_hello {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -521,7 +521,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
         out.extend_from_slice(&ans_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 2. Read OP_FILESTATUSREQ & Send OP_FILESTATUS
+        // 2. Leer OP_FILESTATUSREQ y enviar OP_FILESTATUS
         let mut received_status_req = false;
         while !received_status_req {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -549,7 +549,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
         out.extend_from_slice(&status_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 2b. Read OP_STARTUPLOADREQ and reply with OP_ACCEPTUPLOADREQ
+        // 2b. Leer OP_STARTUPLOADREQ y responder con OP_ACCEPTUPLOADREQ
         let mut received_start_upload = false;
         while !received_start_upload {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -571,7 +571,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
         out.push(accept_pkt.opcode);
         let _ = socket.write_all(&out).await;
 
-        // 3. Read OP_REQUESTPARTS
+        // 3. Leer OP_REQUESTPARTS
         let mut received_req_parts = false;
         while !received_req_parts {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -586,7 +586,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
             }
         }
 
-        // Send 1st valid chunk then abruptly drop socket (EOF)
+        // Enviar el 1.er fragmento válido y luego cerrar abruptamente el socket (EOF)
         let dummy_chunk = vec![0xABu8; 512];
         let sending_part = Ed2kSendingPart::new(hash_bytes, 0, 512, Bytes::from(dummy_chunk));
         let send_pkt = encoder.encode_sending_part(&sending_part).unwrap();
@@ -597,7 +597,7 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
         out.extend_from_slice(&send_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // Close socket immediately
+        // Cerrar socket inmediatamente
         drop(socket);
     });
 
@@ -620,6 +620,6 @@ async fn test_adversarial_unexpected_disconnect_during_transfer() {
     let status_obj: Value = resp.result.unwrap();
     assert_eq!(status_obj["status"], "disconnected");
 
-    // Permit must be released cleanly and state can accept a new connection
+    // El permiso debe liberarse limpiamente y el estado puede aceptar una nueva conexión
     assert!(!state.peer_session.is_active().await);
 }

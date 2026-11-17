@@ -11,7 +11,7 @@ fn test_sqlite_settings_crud_and_persistence() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test_settings.db");
 
-    // 1. Initial write
+    // 1. Escritura inicial
     {
         let mut db = Database::open(&db_path).unwrap();
         assert_eq!(db.get_setting("test_key").unwrap(), None);
@@ -22,7 +22,7 @@ fn test_sqlite_settings_crud_and_persistence() {
             Some("test_value_123".to_string())
         );
 
-        // Update
+        // Actualización
         db.set_setting("test_key", "test_value_updated").unwrap();
         assert_eq!(
             db.get_setting("test_key").unwrap(),
@@ -30,7 +30,7 @@ fn test_sqlite_settings_crud_and_persistence() {
         );
     }
 
-    // 2. Re-open and verify persistence
+    // 2. Reabrir y verificar persistencia
     {
         let mut db = Database::open(&db_path).unwrap();
         assert_eq!(
@@ -38,13 +38,13 @@ fn test_sqlite_settings_crud_and_persistence() {
             Some("test_value_updated".to_string())
         );
 
-        // Delete
+        // Eliminación
         assert!(db.remove_setting("test_key").unwrap());
         assert_eq!(db.get_setting("test_key").unwrap(), None);
         assert!(!db.remove_setting("test_key").unwrap());
     }
 
-    // 3. Re-open again and verify deletion
+    // 3. Reabrir de nuevo y verificar eliminación
     {
         let db = Database::open(&db_path).unwrap();
         assert_eq!(db.get_setting("test_key").unwrap(), None);
@@ -77,18 +77,18 @@ fn test_sqlite_update_target_path_persists() {
         max_sources: None,
     };
 
-    // 1. Insert download
+    // 1. Insertar descarga
     {
         let mut db = Database::open(&db_path).unwrap();
         db.insert_download(&download).unwrap();
         let loaded = db.get_all_downloads().unwrap();
         assert_eq!(loaded[0].target_path, initial_target);
 
-        // Update target path
+        // Actualizar ruta de destino
         db.update_target_path(&dl_id, &new_target).unwrap();
     }
 
-    // 2. Reopen and verify target path updated while other fields preserved
+    // 2. Reabrir y verificar que la ruta de destino se actualiza mientras se preservan los demás campos
     {
         let db = Database::open(&db_path).unwrap();
         let loaded = db.get_all_downloads().unwrap();

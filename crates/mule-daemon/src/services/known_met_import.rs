@@ -30,28 +30,28 @@ use crate::error::DaemonError;
 use crate::services::downloads::DownloadService;
 use crate::services::incoming_share::collect_shareable_files;
 
-/// Outcome of one `import_known_met` run.
+/// Resultado de una ejecución de `import_known_met`.
 #[derive(Debug, Default, Serialize)]
 pub struct KnownMetImportReport {
-    /// Valid records read from the file (post-verification).
+    /// Registros válidos leídos del archivo (tras verificación).
     pub records: usize,
-    /// Records eMule would drop (failed hash-set verification).
+    /// Registros que eMule descartaría (fallo en la verificación del conjunto de hashes).
     pub dropped_records: usize,
-    /// Shareable files found under the scanned directory.
+    /// Archivos compartibles encontrados bajo el directorio escaneado.
     pub scanned_files: usize,
-    /// New shares registered from matching records.
+    /// Nuevos recursos compartidos registrados a partir de registros coincidentes.
     pub imported: usize,
-    /// Already-shared hashes enriched (aich_root / stats only).
+    /// Hashes ya compartidos enriquecidos (solo aich_root / estadísticas).
     pub enriched: usize,
-    /// `verify=true` candidates whose real hash differs from the record.
+    /// Candidatos con `verify=true` cuyo hash real difiere del registro.
     pub mismatched: usize,
-    /// Records that matched no file on disk.
+    /// Registros que no coincidieron con ningún archivo en disco.
     pub unmatched_records: usize,
-    /// Directory that was scanned.
+    /// Directorio que fue escaneado.
     pub dir: String,
 }
 
-/// eMule `PR_*` → `SharedFile::up_priority` strings.
+/// Cadenas de `PR_*` de eMule → `SharedFile::up_priority`.
 fn pr_to_up_priority(pr: u8) -> &'static str {
     match pr {
         mule_format::PR_VERYLOW => "verylow",
@@ -62,7 +62,7 @@ fn pr_to_up_priority(pr: u8) -> &'static str {
     }
 }
 
-/// Imports `met_path` (eMule `known.met`) for shareable files under `dir`.
+/// Importa `met_path` (`known.met` de eMule) para archivos compartibles bajo `dir`.
 pub async fn import_known_met(
     downloads: &Arc<Mutex<DownloadService>>,
     met_path: PathBuf,
@@ -79,7 +79,7 @@ pub async fn import_known_met(
         .await
         .map_err(|e| DaemonError::Internal(format!("directory walk failed: {e}")))?;
 
-    // (lowercase name, size) → record — the only join key available.
+    // (nombre en minúsculas, tamaño) → registro — la única clave de unión disponible.
     let mut by_name_size: HashMap<(String, u64), usize> = HashMap::new();
     for (i, rec) in met.records.iter().enumerate() {
         if let (Some(name), Some(size)) = (&rec.file_name, rec.file_size) {
@@ -133,7 +133,7 @@ pub async fn import_known_met(
 
         let mut dl = downloads.lock().await;
         if let Some(mut sf) = dl.get_shared_file(&hash_hex)? {
-            // Existing share: enrich only — never reset user config.
+            // Recurso compartido existente: enriquecer solamente — nunca restablecer la configuración del usuario.
             if sf.aich_root.is_none() {
                 sf.aich_root = rec.aich_root.map(|a| a.0);
                 dl.add_shared_file(&sf)?;

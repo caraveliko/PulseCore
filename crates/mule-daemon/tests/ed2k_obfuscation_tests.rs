@@ -19,7 +19,7 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
     let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
-    // Strict mock peer listening on 127.0.0.1
+    // Par simulado estricto escuchando en 127.0.0.1
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let peer_addr = listener.local_addr().unwrap();
     let mock_peer_user_hash = [0xAAu8; 16];
@@ -27,23 +27,23 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
     let mock_peer_task = tokio::spawn(async move {
         let (mut socket, _) = listener.accept().await.unwrap();
 
-        // 1. Read first byte
+        // 1. Leer primer byte
         let mut first_byte = [0u8; 1];
         socket.read_exact(&mut first_byte).await.unwrap();
 
-        // Strict behavior: if remote client connects with plaintext 0xE3, drop immediately!
+        // Comportamiento estricto: si el cliente remoto se conecta con 0xE3 en texto plano, ¡desconectar inmediatamente!
         if first_byte[0] == PR_ED2K {
             panic!("Mock peer received unencrypted PR_ED2K (0xE3)! Should have been obfuscated.");
         }
 
-        // 2. Perform inbound obfuscation handshake
+        // 2. Realizar negociación (handshake) de ofuscación entrante
         let mut stream =
             ObfuscatedStream::accept_peer_incoming(socket, first_byte[0], &mock_peer_user_hash, 16)
                 .await
                 .expect("Mock peer failed accept_peer_incoming");
         assert!(stream.is_obfuscated());
 
-        // 3. Read encrypted OP_HELLO via packet codec
+        // 3. Leer OP_HELLO cifrado mediante el códec de paquetes
         let mut read_buf = bytes::BytesMut::with_capacity(4096);
         let mut raw_buf = [0u8; 1024];
         let codec = PacketCodec::new();
@@ -67,7 +67,7 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
             }
         }
 
-        // 4. Send encrypted OP_HELLO_ANSWER
+        // 4. Enviar OP_HELLO_ANSWER cifrado
         let hello_ans = Ed2kHelloAnswer {
             user_hash: mock_peer_user_hash,
             client_id: 0x0100007F,
@@ -87,11 +87,11 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
         stream.write_all(&wire).await.unwrap();
         stream.flush().await.unwrap();
 
-        // Keep connection open briefly so client transitions to Connected
+        // Mantener la conexión abierta brevemente para que el cliente pase a Connected
         tokio::time::sleep(Duration::from_millis(150)).await;
     });
 
-    // Request connection through RPC specifying mock peer's user_hash and crypt_options (RequireCrypt = 0x07)
+    // Solicitar conexión mediante RPC especificando el user_hash y crypt_options del par simulado (RequireCrypt = 0x07)
     let peer_hash_hex = hex::encode(mock_peer_user_hash);
     let connect_req = make_req(
         10,
@@ -114,7 +114,7 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
 
     let _ = mock_peer_task.await;
 
-    // Verify session snapshot has obfuscated: true via sources.status
+    // Verificar que la instantánea de sesión tenga obfuscated: true mediante sources.status
     let status_req = make_req(11, "sources.status", None);
     let status_resp = handle_request(&state, status_req, &mut authenticated)
         .await
@@ -135,7 +135,7 @@ async fn test_outgoing_connection_to_strict_peer_fails_when_user_hash_missing() 
     let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
-    // We configure a peer with crypt_options requiring crypt (0x04), but NO user_hash
+    // Configuramos un par con crypt_options que exige cifrado (0x04), pero SIN user_hash
     let peer_addr = "127.0.0.1:49999";
     let connect_req = make_req(
         11,
@@ -143,7 +143,7 @@ async fn test_outgoing_connection_to_strict_peer_fails_when_user_hash_missing() 
         Some(json!({
             "fileHash": hash,
             "address": peer_addr,
-            "cryptOptions": 4 // RequiresCrypt bit set, but no userHash given
+            "cryptOptions": 4 // Bit RequiresCrypt activado, pero sin proporcionar userHash
         })),
     );
     let resp = handle_request(&state, connect_req, &mut authenticated)
@@ -163,11 +163,11 @@ async fn test_outgoing_connection_to_strict_peer_fails_when_user_hash_missing() 
 
 #[tokio::test]
 async fn test_inbound_listener_strict_obfuscation_rejects_plaintext() {
-    // Obfuscation required = true
+    // Ofuscación requerida = true
     let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
     let mut authenticated = true;
 
-    // Start listener on ephemeral port
+    // Iniciar listener en puerto efímero
     let start_req = make_req(20, "listener.start", Some(json!({ "port": 0 })));
     let start_resp = handle_request(&state, start_req, &mut authenticated)
         .await
@@ -178,12 +178,12 @@ async fn test_inbound_listener_strict_obfuscation_rejects_plaintext() {
         .unwrap()
         .to_string();
 
-    // Connect remote peer sending standard unencrypted 0xE3
+    // Conectar par remoto enviando 0xE3 estándar no cifrado
     let mut socket = TcpStream::connect(&listen_addr_str).await.unwrap();
     socket.write_all(&[PR_ED2K]).await.unwrap();
     socket.flush().await.unwrap();
 
-    // Daemon should immediately drop/close the unencrypted connection
+    // El daemon debe descartar/cerrar inmediatamente la conexión no cifrada
     let mut buf = [0u8; 16];
     let n = socket.read(&mut buf).await.unwrap();
     assert_eq!(
@@ -194,11 +194,11 @@ async fn test_inbound_listener_strict_obfuscation_rejects_plaintext() {
 
 #[tokio::test]
 async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() {
-    // Obfuscation required = true
+    // Ofuscación requerida = true
     let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
     let mut authenticated = true;
 
-    // Start listener on ephemeral port
+    // Iniciar listener en puerto efímero
     let start_req = make_req(30, "listener.start", Some(json!({ "port": 0 })));
     let start_resp = handle_request(&state, start_req, &mut authenticated)
         .await
@@ -211,14 +211,14 @@ async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() 
 
     let daemon_user_hash = state.identity.lock().await.user_hash();
 
-    // Connect client and perform obfuscated handshake
+    // Conectar cliente y realizar negociación ofuscada
     let socket = TcpStream::connect(&listen_addr_str).await.unwrap();
     let mut stream = ObfuscatedStream::connect_peer_outgoing(socket, &daemon_user_hash, 16)
         .await
         .expect("Client outgoing obfuscation handshake to daemon failed");
     assert!(stream.is_obfuscated());
 
-    // Send OP_HELLO through encrypted stream
+    // Enviar OP_HELLO a través del flujo cifrado
     let encoder = Ed2kEncoder::default();
     let decoder = Ed2kDecoder::default();
     let codec = PacketCodec::new();
@@ -243,7 +243,7 @@ async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() 
     stream.write_all(&wire).await.unwrap();
     stream.flush().await.unwrap();
 
-    // Read and verify encrypted OP_HELLO_ANSWER from daemon
+    // Leer y verificar OP_HELLO_ANSWER cifrado del daemon
     let mut read_buf = bytes::BytesMut::with_capacity(4096);
     let mut raw_buf = [0u8; 1024];
     let mut received_ans = false;
@@ -274,7 +274,7 @@ async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() 
 
 #[tokio::test]
 async fn test_inbound_listener_opportunistic_accepts_both_plaintext_and_encrypted() {
-    // Obfuscation enabled = true, required = false (opportunistic)
+    // Ofuscación habilitada = true, requerida = false (oportunista)
     let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
@@ -293,7 +293,7 @@ async fn test_inbound_listener_opportunistic_accepts_both_plaintext_and_encrypte
     let decoder = Ed2kDecoder::default();
     let codec = PacketCodec::new();
 
-    // 1. Test plaintext inbound connection
+    // 1. Probar conexión entrante en texto plano
     {
         let mut socket = TcpStream::connect(&listen_addr_str).await.unwrap();
         let hello = Ed2kHello {
@@ -342,7 +342,7 @@ async fn test_inbound_listener_opportunistic_accepts_both_plaintext_and_encrypte
         );
     }
 
-    // 2. Test encrypted inbound connection
+    // 2. Probar conexión entrante cifrada
     {
         let socket = TcpStream::connect(&listen_addr_str).await.unwrap();
         let mut stream = ObfuscatedStream::connect_peer_outgoing(socket, &daemon_user_hash, 16)

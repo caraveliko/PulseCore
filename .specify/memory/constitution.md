@@ -37,7 +37,7 @@ El ciclo de vida es estrictamente:
 - Pruebas basadas en propiedades (`proptest`) para codificadores/decodificadores binarios de cable.
 
 ### VII. Idioma único (Español de España)
-- Todas las especificaciones (`specs/`), documentos Markdown (`.md`) e *Inner Doc Comments* (`//!`) de los archivos que componen el programa deben estar redactados exclusivamente en **español de España**.
+- Todas las especificaciones (`specs/`), documentos Markdown (`.md`), cadenas de documentación (`///`) y **TODOS los comentarios del código** (`//`, `///`, `//!`, `/* ... */`) de los archivos que componen el programa deben estar redactados exclusivamente en **español de España** (no se admite ningún otro idioma: ni francés, ni inglés, ni otros).
 
 ## Pila tecnológica y estándares
 - **Lenguaje**: Rust (Edición 2021+, estrictamente seguro en memoria, `#![deny(unsafe_code)]` donde proceda).

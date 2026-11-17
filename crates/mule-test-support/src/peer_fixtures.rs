@@ -6,7 +6,7 @@
 
 use mule_core::model::{PeerSource, PeerSourceOrigin, PeerSourceStatus};
 
-/// Construit un `PeerSource` candidat issu d'une réponse serveur.
+/// Construye un `PeerSource` candidato procedente de una respuesta de servidor.
 pub fn peer_source(file_hash: &str, addr: &str) -> PeerSource {
     PeerSource {
         file_hash: file_hash.to_string(),

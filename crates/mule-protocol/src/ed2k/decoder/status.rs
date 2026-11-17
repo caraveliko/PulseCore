@@ -15,7 +15,7 @@ use crate::ed2k::packet::{
 use crate::ed2k::profile::Ed2kCompatibilityProfile;
 use crate::ed2k::tags::TagReader;
 
-/// Decodes a file status request payload with an explicit compatibility profile.
+/// Decodifica una carga útil de petición de estado de archivo con un perfil de compatibilidad explícito.
 pub fn decode_file_status_req_with_profile(
     profile: Ed2kCompatibilityProfile,
     protocol: u8,
@@ -127,7 +127,7 @@ pub fn decode_file_status_req_with_profile(
     Ok(Ed2kFileStatusReq { file_hash })
 }
 
-/// Decodes an `OP_FILESTATUS` payload.
+/// Decodifica una carga útil `OP_FILESTATUS`.
 pub fn decode_file_status(
     limits: &Ed2kLimits,
     protocol: u8,
@@ -164,10 +164,10 @@ pub fn decode_file_status(
         &[]
     };
 
-    // eMule ignores bytes trailing the bitfield (CUpDownClient::
-    // ProcessFileStatus): complete files are announced with part_count = 0
-    // and some clients still append padding/flag bytes. Tolerate them up to
-    // a bounded slack to avoid dropping real peers.
+    // eMule ignora los bytes que siguen al mapa de bits (CUpDownClient::
+    // ProcessFileStatus): los archivos completos se anuncian con part_count = 0
+    // y algunos clientes todavía adjuntan bytes de relleno/indicadores. Se toleran hasta
+    // una holgura acotada para evitar desconectar pares reales.
     if reader.remaining() > 1024 {
         return Err(Ed2kParseError::new(
             protocol,
@@ -202,7 +202,7 @@ pub fn decode_file_status(
     })
 }
 
-/// Decodes an `OP_FILEREQANSNOFILE` (`0x48`) payload (16 bytes file hash).
+/// Decodifica una carga útil `OP_FILEREQANSNOFILE` (`0x48`) (hash de archivo de 16 bytes).
 pub fn decode_file_req_ans_no_file(
     protocol: u8,
     opcode: u8,

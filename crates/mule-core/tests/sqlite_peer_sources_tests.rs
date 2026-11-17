@@ -9,11 +9,11 @@ fn test_peer_sources_crud_and_deduplication() {
     let mut db = Database::open_in_memory().expect("open DB in memory");
     let hash = "0123456789abcdef0123456789abcdef";
 
-    // 1. Initially empty
+    // 1. Inicialmente vacío
     let list = db.list_peer_sources(hash).expect("list peer sources");
     assert_eq!(list.len(), 0);
 
-    // 2. Upsert two peer sources
+    // 2. Insertar o actualizar dos fuentes de pares
     let s1 = PeerSource {
         file_hash: hash.to_string(),
         address: "192.168.1.50:39735".to_string(),
@@ -27,7 +27,7 @@ fn test_peer_sources_crud_and_deduplication() {
         last_error: None,
         cooldown_until_unix_ms: None,
         user_hash: Some("0123456789abcdef0123456789abcdef".to_string()),
-        crypt_options: 0x07, // supports, requests, requires
+        crypt_options: 0x07, // admite, solicita, requiere
         buddy_id: None,
         software: None,
         availability: None,
@@ -66,7 +66,7 @@ fn test_peer_sources_crud_and_deduplication() {
     let list = db.list_peer_sources(hash).expect("list peer sources");
     assert_eq!(list.len(), 2);
 
-    // 3. Deduplication: Upsert s1 again with updated last_seen_unix_ms
+    // 3. Desduplicación: insertar/actualizar s1 de nuevo con last_seen_unix_ms actualizado
     let s1_updated = PeerSource {
         last_seen_unix_ms: 2000,
         ..s1.clone()
@@ -99,8 +99,8 @@ fn test_peer_sources_crud_and_deduplication() {
     assert!(found_s1.user_hash_bytes().is_some());
     assert_eq!(found_s1.udp_port, 49673);
 
-    // 3b. A later upsert that does not know the UDP port (0 = unknown)
-    // keeps the stored value — `CASE WHEN excluded.udp_port != 0`.
+    // 3b. Una inserción o actualización posterior que desconoce el puerto UDP (0 = desconocido)
+    // conserva el valor almacenado — `CASE WHEN excluded.udp_port != 0`.
     let s1_no_udp = PeerSource {
         udp_port: 0,
         last_seen_unix_ms: 3000,
@@ -116,7 +116,7 @@ fn test_peer_sources_crud_and_deduplication() {
         .expect("found s1");
     assert_eq!(found_s1.udp_port, 49673);
 
-    // 4. Update status and failure with cooldown
+    // 4. Actualizar estado y fallo con enfriamiento
     let updated = db
         .update_peer_source_status(
             hash,
@@ -141,7 +141,7 @@ fn test_peer_sources_crud_and_deduplication() {
     );
     assert_eq!(s1_failed.cooldown_until_unix_ms, Some(1005000));
 
-    // 4b. Reset cooldown (manual retry)
+    // 4b. Restablecer enfriamiento (reintento manual)
     let reset = db
         .reset_peer_source_cooldown(hash, "192.168.1.50:39735")
         .expect("reset cooldown");
@@ -154,7 +154,7 @@ fn test_peer_sources_crud_and_deduplication() {
     assert_eq!(s1_reset.status, PeerSourceStatus::Allowed);
     assert_eq!(s1_reset.cooldown_until_unix_ms, None);
 
-    // 5. Delete single source
+    // 5. Eliminar una sola fuente
     let deleted = db
         .delete_peer_source(hash, "10.0.0.88:39735")
         .expect("delete source");
@@ -163,7 +163,7 @@ fn test_peer_sources_crud_and_deduplication() {
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].address, "192.168.1.50:39735");
 
-    // 6. Clear sources for file hash
+    // 6. Limpiar fuentes para el hash de archivo
     let cleared = db.clear_peer_sources(hash).expect("clear sources");
     assert_eq!(cleared, 1);
     let list = db.list_peer_sources(hash).expect("list after clear");

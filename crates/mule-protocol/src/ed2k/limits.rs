@@ -3,44 +3,44 @@
 
 //! Umbrales de seguridad y límites de recursos dedicados al análisis de red eD2K.
 
-/// Default maximum frame size for general eD2K packets (256 KiB).
+/// Tamaño de trama máximo predeterminado para paquetes eD2K generales (256 KiB).
 pub const ED2K_MAX_FRAME_DEFAULT: usize = 256 * 1024;
 
-/// Maximum frame size permitted specifically for `OP_HELLO` and `OP_HELLO_ANSWER` (64 KiB).
+/// Tamaño de trama máximo permitido específicamente para `OP_HELLO` y `OP_HELLO_ANSWER` (64 KiB).
 pub const ED2K_MAX_HELLO_FRAME: usize = 64 * 1024;
 
-/// Maximum frame size permitted for status / hashset packets (64 KiB).
+/// Tamaño de trama máximo permitido para paquetes de estado / conjunto de hashes (64 KiB).
 pub const ED2K_MAX_STATUS_FRAME: usize = 64 * 1024;
 
-/// Maximum number of tags allowed in any single message (256).
+/// Número máximo de etiquetas permitido en un único mensaje (256).
 pub const ED2K_MAX_TAGS: usize = 256;
 
-/// Maximum length in bytes permitted for any string tag value or tag name (1 KiB).
+/// Longitud máxima en bytes permitida para cualquier valor o nombre de etiqueta de texto (1 KiB).
 pub const ED2K_MAX_STRING_BYTES: usize = 1024;
 
-/// Maximum length in bytes permitted for server strings such as MOTD / server ident banner (64 KiB).
+/// Longitud máxima en bytes permitida para cadenas de servidor como MOTD / banner de identificación (64 KiB).
 pub const ED2K_MAX_SERVER_STRING_BYTES: usize = 64 * 1024;
 
-/// Maximum number of file parts in a status bitfield (65,530 parts).
+/// Número máximo de partes de fichero en un mapa de bits de estado (65.530 partes).
 pub const ED2K_MAX_PARTS: usize = 65_530;
 
-/// Maximum blob length permitted in a tag (64 KiB).
+/// Longitud máxima de blob permitida en una etiqueta (64 KiB).
 pub const ED2K_MAX_BLOB_BYTES: usize = 64 * 1024;
 
-/// Dedicated resource boundaries for eD2K decoding.
+/// Límites de recursos dedicados para la decodificación de eD2K.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kLimits {
-    /// Maximum allowable frame size (opcode + payload) for standard packets.
+    /// Tamaño de trama máximo admisible (código de operación + carga útil) para paquetes estándar.
     pub max_frame_bytes: usize,
-    /// Maximum allowable frame size for hello / handshake packets.
+    /// Tamaño de trama máximo admisible para paquetes de saludo / negociación inicial.
     pub max_hello_frame_bytes: usize,
-    /// Maximum number of tags allowed in a single packet.
+    /// Número máximo de etiquetas permitidas en un único paquete.
     pub max_tags: usize,
-    /// Maximum allowable byte length for strings.
+    /// Longitud máxima admisible en bytes para cadenas.
     pub max_string_bytes: usize,
-    /// Maximum number of file parts permitted in status messages.
+    /// Número máximo de partes de fichero permitidas en mensajes de estado.
     pub max_parts: usize,
-    /// Maximum allowable byte length for tag blobs.
+    /// Longitud máxima admisible en bytes para blobs de etiquetas.
     pub max_blob_bytes: usize,
 }
 
@@ -58,12 +58,12 @@ impl Default for Ed2kLimits {
 }
 
 impl Ed2kLimits {
-    /// Creates a new `Ed2kLimits` with default values.
+    /// Crea una nueva estructura `Ed2kLimits` con valores predeterminados.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates limits tuned for eD2K server communication, allowing larger MOTD / server ident strings.
+    /// Crea límites ajustados para la comunicación con servidores eD2K, permitiendo cadenas MOTD / identificación más grandes.
     pub fn for_server() -> Self {
         Self {
             max_string_bytes: ED2K_MAX_SERVER_STRING_BYTES,
@@ -71,10 +71,10 @@ impl Ed2kLimits {
         }
     }
 
-    /// Returns the maximum permitted frame size for a specific opcode.
+    /// Devuelve el tamaño máximo de trama permitido para un código de operación específico.
     pub fn max_frame_for_opcode(&self, opcode: u8) -> usize {
         match opcode {
-            // Opcode 0x01 covers OP_HELLO (PR_ED2K 0xE3) and OP_EMULE_INFO (PR_EMULE 0xC5)
+            // El código de operación 0x01 cubre OP_HELLO (PR_ED2K 0xE3) y OP_EMULE_INFO (PR_EMULE 0xC5)
             super::opcodes::OP_HELLO | super::opcodes::OP_HELLO_ANSWER => {
                 self.max_hello_frame_bytes
             }

@@ -8,7 +8,7 @@ use crate::kad::{KadContact, KadIndexedSource};
 use crate::model::{Download, DownloadStatus, Ed2kServer, PeerSource, PeerSourceStatus};
 use crate::ranges::RangeSet;
 
-/// Abstraction trait for download persistence operations.
+/// Rasgo de abstracción para operaciones de persistencia de descargas.
 pub trait DownloadRepository {
     fn insert_download(&mut self, download: &Download) -> Result<(), CoreError>;
     fn get_download(&self, id: &Uuid) -> Result<Option<Download>, CoreError>;
@@ -19,7 +19,7 @@ pub trait DownloadRepository {
     fn load_received_ranges(&self, id: &Uuid) -> Result<RangeSet, CoreError>;
 }
 
-/// Abstraction trait for peer sources persistence operations.
+/// Rasgo de abstracción para operaciones de persistencia de fuentes de pares.
 pub trait PeerSourceRepository {
     fn upsert_peer_sources(
         &mut self,
@@ -39,7 +39,7 @@ pub trait PeerSourceRepository {
         -> Result<bool, CoreError>;
 }
 
-/// Abstraction trait for server list persistence.
+/// Rasgo de abstracción para la persistencia de la lista de servidores.
 pub trait ServerRepository {
     fn list_servers(&self) -> Result<Vec<Ed2kServer>, CoreError>;
     fn upsert_servers(&mut self, servers: &[Ed2kServer]) -> Result<usize, CoreError>;
@@ -47,7 +47,7 @@ pub trait ServerRepository {
     fn clear_servers(&mut self) -> Result<usize, CoreError>;
 }
 
-/// Abstraction trait for Kademlia routing and indexing storage.
+/// Rasgo de abstracción para almacenamiento de indexación y enrutamiento Kademlia.
 pub trait KadRepository {
     fn upsert_kad_contact(&mut self, contact: &KadContact) -> Result<(), CoreError>;
     fn list_kad_contacts(&self, limit: usize) -> Result<Vec<KadContact>, CoreError>;

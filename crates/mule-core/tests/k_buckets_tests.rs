@@ -9,7 +9,7 @@ use std::net::Ipv4Addr;
 fn test_kad_id_xor_metric_and_distance() {
     let id_a = KadId([0u8; 16]);
     let mut bytes_b = [0u8; 16];
-    bytes_b[3] = 0x80; // Differ in MSB (bit 31 of DWORD 0)
+    bytes_b[3] = 0x80; // Difiere en el MSB (bit 31 del DWORD 0)
     let id_b = KadId(bytes_b);
 
     assert_eq!(id_a.xor_distance(&id_b), id_b);
@@ -17,12 +17,12 @@ fn test_kad_id_xor_metric_and_distance() {
     assert_eq!(id_a.bucket_index_for(&id_b), Some(127));
 
     let mut bytes_c = [0u8; 16];
-    bytes_c[12] = 0x01; // Differ in LSB (bit 0 of DWORD 3)
+    bytes_c[12] = 0x01; // Difiere en el LSB (bit 0 del DWORD 3)
     let id_c = KadId(bytes_c);
     assert_eq!(id_c.leading_zeros(), 127);
     assert_eq!(id_a.bucket_index_for(&id_c), Some(0));
 
-    assert_eq!(id_a.bucket_index_for(&id_a), None); // Self distance 0
+    assert_eq!(id_a.bucket_index_for(&id_a), None); // Distancia a sí mismo es 0
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn test_routing_table_insertion_and_capacity() {
     let local_id = KadId([0u8; 16]);
     let mut table = KBucketTable::new(local_id);
 
-    // Insert 20 contacts into bucket 127 (using distinct /24 subnets)
+    // Insertar 20 contactos en la cubeta 127 (usando distintas subredes /24)
     for i in 0..K_BUCKET_SIZE {
         let mut b = [0u8; 16];
         b[3] = 0x80;
@@ -50,7 +50,7 @@ fn test_routing_table_insertion_and_capacity() {
     assert_eq!(table.total_contacts(), K_BUCKET_SIZE);
     assert_eq!(table.total_replacements(), 0);
 
-    // 21st contact into bucket 127 -> goes to replacement cache, returns head candidate
+    // El contacto 21 en la cubeta 127 -> va a la caché de reemplazo, devuelve el candidato de cabeza
     let mut b21 = [0u8; 16];
     b21[3] = 0x80;
     b21[12] = 255;
@@ -67,7 +67,7 @@ fn test_routing_table_insertion_and_capacity() {
     assert_eq!(table.total_contacts(), K_BUCKET_SIZE);
     assert_eq!(table.total_replacements(), 1);
 
-    // Removing the head of the bucket should promote the replacement
+    // Eliminar la cabeza de la cubeta debería promocionar el reemplazo
     let head_id = evict_candidate.unwrap().kad_id;
     let removed = table.remove(&head_id);
     assert!(removed.is_some());
@@ -81,7 +81,7 @@ fn test_routing_table_subnet_sybil_protection() {
     let local_id = KadId([0u8; 16]);
     let mut table = KBucketTable::new(local_id);
 
-    // Insert 2 contacts from same /24 subnet (192.168.1.0/24)
+    // Insertar 2 contactos de la misma subred /24 (192.168.1.0/24)
     for i in 0..2 {
         let mut b = [0u8; 16];
         b[3] = 0x80;
@@ -99,7 +99,7 @@ fn test_routing_table_subnet_sybil_protection() {
     }
     assert_eq!(table.total_contacts(), 2);
 
-    // 3rd contact from same /24 subnet must be rejected by anti-Sybil protection
+    // El 3.er contacto de la misma subred /24 debe ser rechazado por la protección anti-Sybil
     let mut b3 = [0u8; 16];
     b3[3] = 0x80;
     b3[12] = 3;
@@ -147,7 +147,7 @@ fn test_sqlite_kad_contacts_persistence() {
 
     let list = db.list_kad_contacts(10).unwrap();
     assert_eq!(list.len(), 2);
-    // Ordered by last_seen DESC -> c2 first
+    // Ordenado por last_seen DESC -> c2 primero
     assert_eq!(list[0].kad_id, KadId([2u8; 16]));
     assert_eq!(list[1].kad_id, KadId([1u8; 16]));
     assert_eq!(list[1].tcp_port, Some(39735));

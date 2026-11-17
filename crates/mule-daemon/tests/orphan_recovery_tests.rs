@@ -42,7 +42,7 @@ fn orphan_part_met_is_recovered_and_adopted_in_place() {
     let recovered = svc.recover_orphan_part_mets(tmp.path());
     assert_eq!(recovered, 1);
 
-    // Adoption: source pair is consumed, staged {uuid}.part exists.
+    // Adopción: el par de origen se consume, el {uuid}.part preparado existe.
     assert!(!temp_dir.join("003.part.met").exists());
     assert!(!temp_dir.join("003.part").exists());
 
@@ -59,7 +59,7 @@ fn orphan_part_met_is_recovered_and_adopted_in_place() {
     assert!(staged.exists());
     assert_eq!(std::fs::metadata(&staged).unwrap().len(), 500);
 
-    // Idempotent: nothing left to recover.
+    // Idempotente: no queda nada por recuperar.
     assert_eq!(svc.recover_orphan_part_mets(tmp.path()), 0);
 }
 
@@ -73,8 +73,8 @@ fn tracked_part_met_is_not_reimported() {
     svc.add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // The {uuid}.part.met written by add is owned by a tracked download:
-    // the orphan scan must skip it.
+    // El {uuid}.part.met escrito por add es propiedad de una descarga rastreada:
+    // el escaneo de huérfanos debe omitirlo.
     assert_eq!(svc.recover_orphan_part_mets(tmp.path()), 0);
     assert_eq!(svc.list_downloads().len(), 1);
 }
@@ -91,7 +91,7 @@ fn malformed_orphan_met_is_skipped_without_panicking() {
 
     assert_eq!(svc.recover_orphan_part_mets(tmp.path()), 0);
     assert!(svc.list_downloads().is_empty());
-    // Malformed input is left on disk for manual inspection.
+    // La entrada malformada se deja en disco para inspección manual.
     assert!(temp_dir.join("007.part.met").exists());
 }
 
@@ -120,13 +120,13 @@ fn removed_download_with_kept_files_does_not_resurrect() {
 
     svc.remove_download(&snap.id, false).unwrap();
 
-    // Data preserved: .part stays, met tombstoned to .keep (scan-ignored).
+    // Datos preservados: .part permanece, el met pasa a lápida con .keep (ignorado por el escaneo).
     assert!(temp_path.exists());
     assert!(!met_path.exists());
     assert!(keep_path.exists());
     assert!(svc.list_downloads().is_empty());
 
-    // The kept pair must not resurrect on the next startup scan.
+    // El par conservado no debe resucitar en el siguiente escaneo de inicio.
     assert_eq!(svc.recover_orphan_part_mets(tmp.path()), 0);
     assert!(svc.list_downloads().is_empty());
 }
@@ -143,7 +143,7 @@ fn save_active_part_mets_flushes_all_in_progress() {
         .unwrap();
     svc.inject_range(&snap.id, 0, &[0xAAu8; 100], None).unwrap();
 
-    // Simulate a dirty met: corrupt the on-disk companion, then flush.
+    // Simular un met sucio: corromper el acompañante en disco y luego vaciar (flush).
     let (temp_path, _, _, _) = svc.get_download_file_info(&snap.id).unwrap();
     let mut met_name = temp_path.as_os_str().to_os_string();
     met_name.push(".met");

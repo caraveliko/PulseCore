@@ -9,36 +9,36 @@ use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Snapshot of UPnP status and active port mappings.
+/// Instantánea del estado de UPnP y de los mapeos de puertos activos.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[derive(Default)]
 pub struct UpnpStatusSnapshot {
-    /// Whether UPnP is enabled in settings.
+    /// Indica si UPnP está habilitado en los ajustes.
     pub enabled: bool,
-    /// Whether a UPnP gateway router was discovered.
+    /// Indica si se ha descubierto un router/puerta de enlace UPnP.
     pub available: bool,
-    /// Address of the gateway device if found.
+    /// Dirección del dispositivo de puerta de enlace si se ha encontrado.
     pub gateway_addr: Option<String>,
-    /// External WAN IP reported by the gateway.
+    /// IP pública WAN notificada por la puerta de enlace.
     pub external_ip: Option<String>,
-    /// Whether the TCP port is currently mapped on the gateway.
+    /// Indica si el puerto TCP está actualmente mapeado en la puerta de enlace.
     pub tcp_mapped: bool,
-    /// Whether the UDP port is currently mapped on the gateway.
+    /// Indica si el puerto UDP está actualmente mapeado en la puerta de enlace.
     pub udp_mapped: bool,
-    /// TCP port requested / mapped.
+    /// Puerto TCP solicitado / mapeado.
     pub tcp_port: u16,
-    /// UDP port requested / mapped.
+    /// Puerto UDP solicitado / mapeado.
     pub udp_port: u16,
-    /// Whether the gateway is behind Carrier-Grade NAT (CGNAT / 100.64.x.x).
+    /// Indica si la puerta de enlace está tras un CGNAT (Carrier-Grade NAT / 100.64.x.x).
     pub cgnat_detected: bool,
-    /// Last error message if any.
+    /// Último mensaje de error, si lo hubiera.
     pub last_error: Option<String>,
-    /// Timestamp of last refresh (milliseconds since epoch).
+    /// Marca temporal de la última actualización (milisegundos unix).
     pub updated_at_unix_ms: u64,
 }
 
-/// Returns current unix milliseconds.
+/// Devuelve los milisegundos unix actuales.
 pub fn current_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -46,12 +46,12 @@ pub fn current_unix_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Checks if an address is a valid public routable WAN IP.
+/// Comprueba si una dirección es una IP pública WAN enrutable válida.
 pub fn is_valid_wan_ip(ip: IpAddr) -> bool {
     classify_ip(ip) == IpCategory::PublicRoutable
 }
 
-/// Checks if an address falls in the CGNAT range (100.64.0.0/10, RFC 6598).
+/// Comprueba si una dirección pertenece al rango CGNAT (100.64.0.0/10, RFC 6598).
 pub fn is_cgnat_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -62,13 +62,13 @@ pub fn is_cgnat_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Checks if an address is a valid local network gateway address (anti-rogue-IGD check).
+/// Comprueba si una dirección es una dirección de puerta de enlace de red local válida (comprobación anti-IGD no autorizado).
 pub fn is_valid_gateway_addr(addr: SocketAddr) -> bool {
     let cat = classify_ip(addr.ip());
     cat == IpCategory::PrivateLan || cat == IpCategory::Loopback
 }
 
-/// Discovers the local IPv4 address used to reach the default gateway.
+/// Descubre la dirección IPv4 local empleada para alcanzar la puerta de enlace predeterminada.
 pub fn detect_primary_local_ipv4() -> Option<Ipv4Addr> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("1.1.1.1:53").ok()?;
@@ -78,7 +78,7 @@ pub fn detect_primary_local_ipv4() -> Option<Ipv4Addr> {
     }
 }
 
-/// Discovers the local IPv4 address used to communicate with the given gateway.
+/// Descubre la dirección IPv4 local empleada para comunicarse con la puerta de enlace dada.
 pub fn detect_local_ipv4_for_gateway(gateway_addr: SocketAddr) -> Option<Ipv4Addr> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect(gateway_addr).ok()?;
@@ -88,26 +88,26 @@ pub fn detect_local_ipv4_for_gateway(gateway_addr: SocketAddr) -> Option<Ipv4Add
     }
 }
 
-/// Result of inspecting an existing IGD port mapping rule on the router.
+/// Resultado de inspeccionar una regla de mapeo de puertos IGD existente en el router.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MappingOwnership {
-    /// The existing rule on the gateway is identical and already maps to our exact internal endpoint and description.
+    /// La regla existente en la puerta de enlace es idéntica y ya mapea a nuestro extremo interno y descripción exactos.
     ExactMatch,
-    /// The existing rule belongs to eMuleRust on this machine, but targets an old local IP or port (stale lease to update).
+    /// La regla existente pertenece a eMuleRust en esta máquina, pero apunta a una IP local o puerto antiguos (concesión obsoleta a actualizar).
     StaleLease,
-    /// The rule belongs to another application or another host on the LAN. Must NOT be touched.
+    /// La regla pertenece a otra aplicación o a otro host en la LAN. NO debe tocarse.
     ForeignConflict,
-    /// No matching rule found for this external port / protocol.
+    /// No se encontró ninguna regla coincidente para este puerto externo / protocolo.
     NotFound,
 }
 
-/// Anciens préfixes de description (« EMule-Rust » puis « eMule-Rust », avant
-/// le renommage en « eMuleRust ») : les baux créés par les versions
-/// antérieures doivent rester reconnus comme nous appartenant pour être mis
-/// à jour ou supprimés.
+/// Prefijos de descripción heredados («EMule-Rust» y luego «eMule-Rust», antes
+/// del renombre a «eMuleRust»): las concesiones creadas por versiones
+/// anteriores deben seguir reconociéndose como nuestras para poder ser
+/// actualizadas o eliminadas.
 const LEGACY_DESCRIPTION_PREFIXES: &[&str] = &["EMule-Rust", "eMule-Rust"];
 
-/// Inspects whether a specific port mapping entry matches our expected criteria.
+/// Inspecciona si una entrada de mapeo de puertos específica coincide con los criterios esperados.
 pub fn inspect_mapping_entry(
     entry_protocol: PortMappingProtocol,
     entry_external_port: u16,

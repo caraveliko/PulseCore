@@ -23,49 +23,49 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Inspect and validate an ed2k:// link
+    /// Inspecciona y valida un enlace ed2k://
     InspectLink {
-        /// The ed2k:// URI string
+        /// La cadena URI ed2k://
         link: String,
     },
-    /// Compute deterministic eD2K and AICH hashes for a local file
+    /// Calcula hashes deterministas eD2K y AICH para un archivo local
     Hash {
-        /// Path to the file
+        /// Ruta al archivo
         file: PathBuf,
     },
-    /// Inspect an eMule .part.met file
+    /// Inspecciona un archivo .part.met de eMule
     InspectPartMet {
-        /// Path to the .part.met file
+        /// Ruta al archivo .part.met
         file: PathBuf,
     },
-    /// Inspect an eMule known.met file (shared-files index)
+    /// Inspecciona un archivo known.met de eMule (índice de archivos compartidos)
     InspectKnownMet {
-        /// Path to the known.met file
+        /// Ruta al archivo known.met
         file: PathBuf,
     },
-    /// Generate an ed2k:// file link from a local file
+    /// Genera un enlace de archivo ed2k:// a partir de un archivo local
     MakeLink {
-        /// Path to the local file
+        /// Ruta al archivo local
         file: PathBuf,
-        /// Output detailed information alongside the link
+        /// Muestra información detallada junto al enlace
         #[arg(long, short)]
         detailed: bool,
     },
-    /// Migrate aMule / eMule state (credits, identity, nodes, and active downloads)
+    /// Migra el estado de aMule / eMule (créditos, identidad, nodos y descargas activas)
     ImportAmule {
-        /// Path to the aMule configuration directory
+        /// Ruta al directorio de configuración de aMule
         #[arg(long, default_value_os_t = home_subdir(".aMule"))]
         amule_dir: PathBuf,
 
-        /// Destination eMule-Rust data directory
+        /// Directorio de datos de destino de eMule-Rust
         #[arg(long, default_value_os_t = home_subdir(".mule"))]
         data_dir: PathBuf,
 
-        /// Dry run mode (simulate migration without modifying disk)
+        /// Modo de simulación (simula la migración sin modificar el disco)
         #[arg(long)]
         dry_run: bool,
 
-        /// Hardlink part files instead of copying to save disk space
+        /// Crear enlaces duros (hardlinks) para los archivos part en lugar de copiar para ahorrar espacio en disco
         #[arg(long)]
         link_parts: bool,
     },

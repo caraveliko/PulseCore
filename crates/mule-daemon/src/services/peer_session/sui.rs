@@ -31,23 +31,23 @@ use crate::services::IdentityService;
 
 pub(crate) struct OutboundSui {
     identity: Option<Arc<Mutex<IdentityService>>>,
-    /// Challenger (remote peer) public key DER, learned from its OP_PUBLICKEY.
+    /// DER de la clave pública del desafiador (par remoto), aprendida de su OP_PUBLICKEY.
     peer_pubkey_der: Option<Vec<u8>>,
-    /// Only one signature per connection (eMule anti-flood semantics).
+    /// Solo una firma por conexión (semántica anti-inundación de eMule).
     answered: bool,
-    /// Peer's `m_bySupportSecIdent` announced in the handshake (0 = none).
+    /// `m_bySupportSecIdent` del par anunciado en el apretón de manos (0 = ninguno).
     peer_sec_ident: u8,
-    /// Challenge we issued to the peer (verifier role), consumed once.
+    /// Desafío emitido por nosotros al par (rol de verificador), consumido una sola vez.
     challenge_issued: Option<u32>,
-    /// Whether we already sent our OP_SECIDENTSTATE challenge.
+    /// Indica si ya enviamos nuestro desafío OP_SECIDENTSTATE.
     challenge_sent: bool,
-    /// Challenge the peer asked us to answer, parked until its OP_PUBLICKEY
-    /// arrives — real eMule peers may send OP_SECIDENTSTATE first.
+    /// Desafío que el par nos pidió responder, aparcado hasta que llegue
+    /// su OP_PUBLICKEY — los pares de eMule reales pueden enviar primero OP_SECIDENTSTATE.
     pending_challenge: Option<(u8, u32)>,
-    /// Shared SUI anomaly counters (identity.status `sui` object).
+    /// Contadores de anomalías SUI compartidos (objeto `sui` en identity.status).
     sui_stats: Option<Arc<crate::services::identity::SuiStats>>,
-    /// Peer signature verified — its pubkey identity may accrue download
-    /// credits (eMule only credits cryptographically verified clients).
+    /// Firma del par verificada — su identidad de clave pública puede acumular
+    /// créditos de descarga (eMule solo acredita a clientes criptográficamente verificados).
     peer_verified: bool,
 }
 
@@ -84,10 +84,10 @@ impl OutboundSui {
         self.peer_sec_ident = cap;
     }
 
-    /// eMule `SendSecIdentStatePacket` / `InfoPacketsReceived`: once both info
-    /// packets are exchanged, if the peer announced Secure Ident support we
-    /// challenge it — `state=2` (IS_KEYANDSIGNEEDED) since we never carry a
-    /// stored peer key across connections.
+    /// `SendSecIdentStatePacket` / `InfoPacketsReceived` de eMule: una vez intercambiados ambos
+    /// paquetes de información, si el par anunció soporte de Identificación Segura lo
+    /// desafiamos — `state=2` (IS_KEYANDSIGNEEDED) ya que nunca mantenemos una
+    /// clave de par almacenada entre conexiones.
     pub async fn initiate(
         &mut self,
         target_addr: SocketAddr,
@@ -137,9 +137,9 @@ impl OutboundSui {
         }
     }
 
-    /// Answers a peer challenge (`OP_SECIDENTSTATE` signer role): sends our
-    /// `OP_PUBLICKEY` when the peer requested it (state=2), then `OP_SIGNATURE`
-    /// over `peer_pubkey || challenge` (V1). Requires `peer_pubkey_der`.
+    /// Responde a un desafío del par (rol de firmante en `OP_SECIDENTSTATE`): envía nuestra
+    /// `OP_PUBLICKEY` cuando el par la solicitó (state=2), y luego `OP_SIGNATURE`
+    /// sobre `peer_pubkey || challenge` (V1). Requiere `peer_pubkey_der`.
     async fn answer_challenge(
         &mut self,
         state: u8,
@@ -231,8 +231,8 @@ impl OutboundSui {
         }
     }
 
-    /// Handles an outbound-side SUI packet. Returns true when the packet was
-    /// consumed (SUI opcodes are never fatal to the transfer).
+    /// Gestiona un paquete SUI del lado saliente. Devuelve true cuando el paquete fue
+    /// consumido (los opcodes SUI nunca son fatales para la transferencia).
     pub async fn handle(
         &mut self,
         packet: &mule_protocol::framing::RawPacket,
@@ -305,8 +305,8 @@ impl OutboundSui {
                     return true;
                 }
                 if self.peer_pubkey_der.is_none() {
-                    // eMule may send the challenge before its OP_PUBLICKEY —
-                    // park it and answer when the key arrives.
+                    // eMule puede enviar el desafío antes de su OP_PUBLICKEY —
+                    // aparcarlo y responder cuando llegue la clave.
                     self.pending_challenge = Some((st.state, st.challenge));
                     tracing::debug!(
                         "[SUI] Peer {peer} sent challenge (state={}) before its public key; deferred",
@@ -319,8 +319,8 @@ impl OutboundSui {
                 true
             }
             OP_SIGNATURE => {
-                // Verifier role: the peer answered our OP_SECIDENTSTATE
-                // challenge. Payload: `our_pubkey || challenge [|| ip || kind]`.
+                // Rol de verificador: el par respondió a nuestro desafío
+                // OP_SECIDENTSTATE. Carga útil: `our_pubkey || challenge [|| ip || kind]`.
                 let Some(challenge) = self.challenge_issued.take() else {
                     tracing::debug!(
                         "[SUI] Peer {peer} sent OP_SIGNATURE but we issued no challenge",
@@ -355,7 +355,7 @@ impl OutboundSui {
                         return true;
                     }
                 };
-                // V2 wire: [u8 siglen][sig][u8 kind].
+                // Cable V2: [u8 siglen][sig][u8 kind].
                 let sig_len = packet.payload.first().copied().unwrap_or(0) as usize;
                 let kind = if packet.payload.len() == sig_len + 2 {
                     Some(packet.payload[sig_len + 1])
@@ -417,10 +417,10 @@ impl OutboundSui {
         }
     }
 
-    /// Returns the verified credit identity `(pubkey_md4_hex, pubkey_hex)` of
-    /// the remote peer, or `None` when the signature was not verified.
-    /// Callers persist download bytes under this identity (eMule credits the
-    /// *client key*, never the transient IP).
+    /// Devuelve la identidad de crédito verificada `(pubkey_md4_hex, pubkey_hex)` del
+    /// par remoto, o `None` cuando la firma no fue verificada.
+    /// Quienes llaman persisten los bytes descargados bajo esta identidad (eMule acredita
+    /// la *clave del cliente*, nunca la IP transitoria).
     pub fn verified_credit_identity(&self) -> Option<(String, String)> {
         if !self.peer_verified {
             return None;

@@ -8,21 +8,21 @@ use std::sync::Arc;
 
 use crate::cancellation::CancellationToken;
 
-/// Functional purpose of a connection or listener.
+/// Propósito funcional de una conexión o escucha.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ConnectionPurpose {
-    /// Outbound TCP connection to an eD2K server.
+    /// Conexión TCP saliente a un servidor eD2K.
     Ed2kServer,
-    /// Outbound TCP connection to an eD2K peer.
+    /// Conexión TCP saliente a un par eD2K.
     Ed2kPeer,
-    /// UDP / Kademlia routing operation.
+    /// Operación de enrutamiento UDP / Kademlia.
     KadNode,
-    /// Inbound TCP listener socket.
+    /// Socket de escucha TCP entrante.
     Listener,
 }
 
-/// Shared tracker for active resource counts.
+/// Rastreador compartido de recuentos de recursos activos.
 #[derive(Debug, Default)]
 pub struct PermitTracker {
     pub active_peer_conns: AtomicUsize,
@@ -30,8 +30,8 @@ pub struct PermitTracker {
     pub active_listeners: AtomicUsize,
 }
 
-/// RAII permit authorizing an outbound socket connection under active policy and budgets.
-/// Automatically releases its reserved budget upon drop.
+/// Permiso RAII que autoriza una conexión de socket saliente bajo la política y presupuestos activos.
+/// Libera automáticamente su presupuesto reservado al descartarse.
 #[derive(Debug)]
 pub struct SocketPermit {
     id: u64,
@@ -116,8 +116,8 @@ impl Drop for SocketPermit {
     }
 }
 
-/// RAII permit authorizing a bound listener socket under active policy and budgets.
-/// Automatically decrements active listener count upon drop.
+/// Permiso RAII que autoriza un socket de escucha vinculado bajo la política y presupuestos activos.
+/// Decrementa automáticamente el recuento de escuchas activas al descartarse.
 #[derive(Debug)]
 pub struct ListenPermit {
     id: u64,

@@ -19,7 +19,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake
+    // 1. Apretón de manos (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -39,7 +39,7 @@ async fn test_lab_rpc_full_lifecycle() {
     assert_eq!(resp["result"]["workdirMode"], "Portable");
     assert_eq!(resp["result"]["daemonVersion"], env!("CARGO_PKG_VERSION"));
 
-    // 2. lab.status initially has no fixtures and no active peer
+    // 2. Inicialmente lab.status no tiene recursos de prueba (fixtures) ni pares activos
     let req_status = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -57,7 +57,7 @@ async fn test_lab_rpc_full_lifecycle() {
     assert!(resp["result"]["activeLoopbackPeer"].is_null());
     assert_eq!(resp["result"]["fixtures"].as_array().unwrap().len(), 0);
 
-    // 3. lab.createFixture creates sample_1mb
+    // 3. lab.createFixture crea sample_1mb
     let req_create = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -77,12 +77,12 @@ async fn test_lab_rpc_full_lifecycle() {
     assert!(fixture_link.starts_with("ed2k://|file|sample_1mb.bin|1048576|"));
     assert_eq!(resp["result"]["sizeBytes"], 1048576);
 
-    // 4. Verify file was created on disk
+    // 4. Verificar que el archivo se haya creado en disco
     let fixture_path = dir.path().join("fixtures").join("sample_1mb.bin");
     assert!(fixture_path.exists());
     assert_eq!(std::fs::metadata(&fixture_path).unwrap().len(), 1048576);
 
-    // 5. lab.startLoopbackPeer starts the loopback peer and shares the fixture
+    // 5. lab.startLoopbackPeer inicia el par de loopback y comparte el recurso de prueba
     let req_start_peer = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -101,7 +101,7 @@ async fn test_lab_rpc_full_lifecycle() {
     assert_eq!(resp["result"]["sharedCount"], 1);
     assert_eq!(resp["result"]["status"], "running");
 
-    // 6. lab.status now reports the active loopback peer
+    // 6. lab.status reporta ahora el par de loopback activo
     let req_status_2 = json!({
         "jsonrpc": "2.0",
         "id": 5,
@@ -118,7 +118,7 @@ async fn test_lab_rpc_full_lifecycle() {
     assert_eq!(resp["result"]["activeLoopbackPeer"], peer_addr);
     assert_eq!(resp["result"]["fixtures"].as_array().unwrap().len(), 1);
 
-    // 7. lab.stopLoopbackPeer stops the peer
+    // 7. lab.stopLoopbackPeer detiene el par
     let req_stop_peer = json!({
         "jsonrpc": "2.0",
         "id": 6,
@@ -134,7 +134,7 @@ async fn test_lab_rpc_full_lifecycle() {
     let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
     assert_eq!(resp["result"]["stopped"], true);
 
-    // 8. lab.cleanupTestData purges fixtures in Portable mode
+    // 8. lab.cleanupTestData purga los recursos de prueba en modo Portable
     let req_clean = json!({
         "jsonrpc": "2.0",
         "id": 7,
@@ -168,7 +168,7 @@ async fn test_lab_cleanup_refused_in_installed_default_mode() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Apretón de manos (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -184,7 +184,7 @@ async fn test_lab_cleanup_refused_in_installed_default_mode() {
         .unwrap();
     let _ = read.next().await;
 
-    // Cleanup attempt must fail with business error
+    // El intento de limpieza debe fallar con un error de negocio
     let req_clean = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -196,8 +196,8 @@ async fn test_lab_cleanup_refused_in_installed_default_mode() {
         .await
         .unwrap();
 
-    // Read until the RPC response — event notifications can interleave on
-    // the same WebSocket stream.
+    // Leer hasta la respuesta RPC — las notificaciones de eventos pueden intercalarse en
+    // el mismo flujo WebSocket.
     let mut resp: Option<Value> = None;
     for _ in 0..16 {
         let msg = read.next().await.unwrap().unwrap();
@@ -226,7 +226,7 @@ async fn test_lab_create_fixture_pattern_9728001() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Apretón de manos (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -239,7 +239,7 @@ async fn test_lab_create_fixture_pattern_9728001() {
         .unwrap();
     let _ = recv_response_by_id(&mut read, 1).await;
 
-    // Create pattern_9728001 (1 part + 1 byte)
+    // Crear pattern_9728001 (1 parte + 1 byte)
     let req_create = json!({
         "jsonrpc": "2.0",
         "id": 2,

@@ -141,7 +141,7 @@ pub async fn handle_tool(
             ) {
                 Some(format!("{ip}:{port}"))
             } else {
-                // Auto-pick the first allowed server from servers.list
+                // Selección automática del primer servidor permitido desde servers.list
                 let s_list = client.call("servers.list", json!({})).await.ok();
                 s_list.and_then(|v| {
                     v.get("servers").and_then(|s| s.as_array()).and_then(|arr| {

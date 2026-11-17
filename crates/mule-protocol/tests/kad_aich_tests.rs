@@ -86,14 +86,14 @@ fn find_tag_bytes(entry_bytes: &[u8], want_name: u8) -> Option<Vec<u8>> {
     None
 }
 
-/// Extracts the first keyword entry's serialized tag list from an encoded
+/// Extrae la lista serializada de etiquetas de la primera entrada de palabra clave de un paquete codificado
 /// `[PR][opcode][kh:16][count:u16]` publish request.
 fn first_publish_entry_tags(pkt: &[u8]) -> &[u8] {
     // header 2 + keyword_hash 16 + count u16 + file_hash 16 = tag list at 36
     &pkt[2 + 16 + 2 + 16..]
 }
 
-/// Extracts the first keyword entry's serialized tag list from an encoded
+/// Extrae la lista serializada de etiquetas de la primera entrada de palabra clave de un paquete codificado
 /// `KADEMLIA2_SEARCH_RES` (`[sender 16][target 16][count u16][hash 16]`).
 fn first_res_entry_tags(pkt: &[u8]) -> &[u8] {
     &pkt[2 + 16 + 16 + 2 + 16..]
@@ -114,7 +114,7 @@ fn publish_req_encodes_aich_pub_bsob() {
     assert_eq!(bsob[0], 20, "BSOB len byte = AICH root size");
     assert_eq!(&bsob[1..], &root);
 
-    // Decode extracts aich_pub and strips it from the stored tag list.
+    // Decode extrae aich_pub y lo elimina de la lista de etiquetas almacenada.
     match KadCodec::decode(&pkt).expect("decode publish req") {
         KadMessage::PublishKeywordReq(r) => {
             let e = &r.entries[0];
@@ -226,7 +226,7 @@ fn search_res_encodes_publishinfo_and_aich_result() {
 
 #[test]
 fn aich_result_capped_at_eleven_votes() {
-    // eMule `WriteTagListWithPublishInfo`: the BSOB must stay under 250
+    // eMule `WriteTagListWithPublishInfo`: el BSOB debe mantenerse por debajo de 250
     // bytes — at most 11 `<u8 pop><20B>` pairs fit.
     let kw = [0xAAu8; 16];
     let mut e = kw_entry();
@@ -246,7 +246,7 @@ fn aich_result_capped_at_eleven_votes() {
 
 #[test]
 fn aich_result_zero_popularity_filtered() {
-    // eMule writes only hashes with popularity > 0 into the result BSOB.
+    // eMule solo escribe hashes con popularidad > 0 en el BSOB de resultado.
     let kw = [0xAAu8; 16];
     let mut e = kw_entry();
     e.aich_votes = vec![
@@ -291,7 +291,7 @@ fn aich_result_malformed_bsob_decodes_empty() {
 
 #[test]
 fn publishinfo_pubs_byte_feeds_source_count_fallback() {
-    // eMule readers derive the source count from TAG_PUBLISHINFO's
+    // Los lectores eMule derivan el recuento de fuentes a partir de TAG_PUBLISHINFO
     // publishers byte when no TAG_SOURCES tag is present.
     let kw = [0xAAu8; 16];
     let mut pkt = Vec::new();

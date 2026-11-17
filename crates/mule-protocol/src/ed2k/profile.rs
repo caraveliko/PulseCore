@@ -12,42 +12,42 @@
 
 use std::fmt;
 
-/// Explicit client compatibility profile for eD2K wire encoding and decoding.
+/// Perfil explícito de compatibilidad de cliente para la codificación y decodificación de red eD2K.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Ed2kCompatibilityProfile {
-    /// Canonical eMule 0.72a (current reference implementation):
-    /// - `OP_REQUESTPARTS_EMULE` (`0x47`): 3-slot layout (40 bytes payload).
-    /// - `OP_SETREQFILEID_EMULE` (`0x4F`): File status request (16 bytes file hash).
-    /// - Rejects `0x4B` as block request (`0x4B` is `OP_ASKSHAREDFILESANSWER` in eMule).
-    /// - Rejects `0x49` as file status request (`0x49` is `OP_END_OF_DOWNLOAD` in eMule).
+    /// eMule 0.72a canónico (implementación de referencia actual):
+    /// - `OP_REQUESTPARTS_EMULE` (`0x47`): disposición de 3 ranuras (carga útil de 40 bytes).
+    /// - `OP_SETREQFILEID_EMULE` (`0x4F`): petición de estado de fichero (hash de fichero de 16 bytes).
+    /// - Rechaza `0x4B` como petición de bloque (`0x4B` es `OP_ASKSHAREDFILESANSWER` en eMule).
+    /// - Rechaza `0x49` como petición de estado de fichero (`0x49` es `OP_END_OF_DOWNLOAD` en eMule).
     #[default]
     Emule072a,
 
-    /// Historical eMule 0.50a — wire opcode assignments and layouts are
-    /// identical to `Emule072a` (the ambiguous opcodes `0x47`/`0x49`/`0x4B`/`0x4F`
-    /// never changed between 0.50a and 0.72a). Kept for replaying historical
-    /// fixtures; new code should use `Emule072a`.
+    /// eMule 0.50a histórico: las asignaciones de códigos de operación en cable y disposiciones son
+    /// idénticas a `Emule072a` (los códigos de operación ambiguos `0x47`/`0x49`/`0x4B`/`0x4F`
+    /// nunca cambiaron entre 0.50a y 0.72a). Conservado para reproducir pruebas históricas;
+    /// el nuevo código debería usar `Emule072a`.
     Emule050a,
 
     /// aMule 2.3.3:
-    /// - Follows the same wire opcode assignments and layouts as eMule (`0x47` and `0x4F`).
+    /// - Sigue las mismas asignaciones de códigos de operación en cable y disposiciones que eMule (`0x47` y `0x4F`).
     Amule233,
 
-    /// Legacy eDonkey2000:
-    /// - `OP_REQUESTPARTS` (`0x4B`): Supports both 24-byte single-slot and 40-byte 3-slot layouts.
-    /// - `OP_FILESTATUSREQ` (`0x49`): File status request (16 bytes file hash).
-    /// - Rejects `0x47` as block request (`0x47` was `OP_SETREQFILEID` in early eDonkey).
-    /// - Rejects `0x4F` as file status request.
+    /// eDonkey2000 heredado:
+    /// - `OP_REQUESTPARTS` (`0x4B`): admite disposiciones de una ranura de 24 bytes y de 3 ranuras de 40 bytes.
+    /// - `OP_FILESTATUSREQ` (`0x49`): petición de estado de fichero (hash de fichero de 16 bytes).
+    /// - Rechaza `0x47` como petición de bloque (`0x47` era `OP_SETREQFILEID` en versiones tempranas de eDonkey).
+    /// - Rechaza `0x4F` como petición de estado de fichero.
     LegacyEdonkey,
 
-    /// Strict unknown profile:
-    /// - Never disambiguates overloaded opcodes (`0x47`, `0x4B`, `0x49`, `0x4F`).
-    /// - Strictly returns `Ed2kErrorKind::AmbiguousOpcodeForProfile`.
+    /// Perfil estricto desconocido:
+    /// - Nunca desambigua códigos de operación sobrecargados (`0x47`, `0x4B`, `0x49`, `0x4F`).
+    /// - Devuelve estrictamente `Ed2kErrorKind::AmbiguousOpcodeForProfile`.
     UnknownStrict,
 }
 
 impl Ed2kCompatibilityProfile {
-    /// Returns a human-readable identifier for this profile.
+    /// Devuelve un identificador legible para este perfil.
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Emule072a => "Emule072a",
@@ -58,9 +58,9 @@ impl Ed2kCompatibilityProfile {
         }
     }
 
-    /// Expected opcode for requesting parts under this profile.
+    /// Código de operación esperado para solicitar partes bajo este perfil.
     ///
-    /// Returns `None` if the profile is `UnknownStrict`.
+    /// Devuelve `None` si el perfil es `UnknownStrict`.
     pub const fn request_parts_opcode(&self) -> Option<u8> {
         match self {
             Self::Emule072a | Self::Emule050a | Self::Amule233 => {
@@ -71,9 +71,9 @@ impl Ed2kCompatibilityProfile {
         }
     }
 
-    /// Expected opcode for requesting file status under this profile.
+    /// Código de operación esperado para solicitar el estado del fichero bajo este perfil.
     ///
-    /// Returns `None` if the profile is `UnknownStrict`.
+    /// Devuelve `None` si el perfil es `UnknownStrict`.
     pub const fn file_status_req_opcode(&self) -> Option<u8> {
         match self {
             Self::Emule072a | Self::Emule050a | Self::Amule233 => {

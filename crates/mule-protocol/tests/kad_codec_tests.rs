@@ -817,7 +817,7 @@ fn test_kad_publish_notes_res() {
 
 #[test]
 fn test_search_keyword_req_restrictive_flag() {
-    // eMule `Process_KADEMLIA2_SEARCH_KEY_REQ`: bit 15 of the u16 after the
+    // eMule `Process_KADEMLIA2_SEARCH_KEY_REQ`: bit 15 del u16 tras el
     // keyword hash flags a restrictive search-expression tree; the remaining
     // bytes are the serialized expression (kept opaque here).
     let keyword_hash = [0x77u8; 16];

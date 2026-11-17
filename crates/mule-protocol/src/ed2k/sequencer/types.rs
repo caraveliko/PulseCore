@@ -3,132 +3,132 @@
 
 //! Tipos de error y seguimiento para la secuenciación y planificación de bloques eD2K.
 
-/// Errors arising during download sequencing and block request planning.
+/// Errores que surgen durante la secuenciación de descargas y la planificación de peticiones de bloques.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Ed2kSequencerError {
-    /// Remote peer reported file not shared or unknown via `OP_FILEREQANSNOFILE` (`0x48`).
+    /// El par remoto informó de que el archivo no está compartido o es desconocido mediante `OP_FILEREQANSNOFILE` (`0x48`).
     #[error("File is not shared or known by remote peer: {0}")]
     FileNotFound(String),
 
-    /// File size is zero.
+    /// El tamaño del archivo es cero.
     #[error("File size is 0 bytes")]
     EmptyFile,
 
-    /// Requested file hash does not match status hash.
+    /// El hash del archivo solicitado no coincide con el hash de estado.
     #[error("Hash mismatch: expected {expected}, got {actual}")]
     HashMismatch {
-        /// Expected file hash hex.
+        /// Hexadecimal del hash de archivo esperado.
         expected: String,
-        /// Actual status file hash hex.
+        /// Hexadecimal del hash de archivo de estado real.
         actual: String,
     },
 
-    /// Part index is out of bounds for the file.
+    /// El índice de parte está fuera de límites para el archivo.
     #[error("Part index {part_index} is out of bounds (total parts: {total_parts})")]
     PartIndexOutOfBounds {
-        /// Requested part index.
+        /// Índice de parte solicitado.
         part_index: u16,
-        /// Total number of parts in file.
+        /// Número total de partes en el archivo.
         total_parts: u16,
     },
 
-    /// Part index is not available from the remote peer.
+    /// El índice de parte no está disponible en la fuente remota.
     #[error(
         "Part index {part_index} is not available from remote source (total parts: {total_parts})"
     )]
     PartNotAvailable {
-        /// Requested part index.
+        /// Índice de parte solicitado.
         part_index: u16,
-        /// Total number of parts in file.
+        /// Número total de partes en el archivo.
         total_parts: u16,
     },
 
-    /// Invalid block range parameters.
+    /// Parámetros de rango de bloque no válidos.
     #[error("Invalid block range [{start}, {end}): {reason}")]
     InvalidBlockRange {
-        /// Start byte offset.
+        /// Desplazamiento de byte inicial.
         start: u64,
-        /// End byte offset (exclusive).
+        /// Desplazamiento de byte final (exclusivo).
         end: u64,
-        /// Failure explanation.
+        /// Explicación del fallo.
         reason: String,
     },
 
-    /// Block range improperly crosses an eD2K part boundary.
+    /// El rango de bloque cruza indebidamente el límite de una parte eD2K.
     #[error("Block range [{start}, {end}) crosses part boundary at {part_boundary}")]
     CrossPartBoundary {
-        /// Start byte offset.
+        /// Desplazamiento de byte inicial.
         start: u64,
-        /// End byte offset (exclusive).
+        /// Desplazamiento de byte final (exclusivo).
         end: u64,
-        /// Byte offset of the crossed part boundary.
+        /// Desplazamiento en bytes del límite de parte cruzado.
         part_boundary: u64,
     },
 
-    /// Number of requested ranges exceeds protocol maximum (3).
+    /// El número de rangos solicitados supera el máximo del protocolo (3).
     #[error("Requested {count} ranges exceeds maximum allowed {max} ranges per packet")]
     TooManyRanges {
-        /// Number of ranges specified.
+        /// Número de rangos especificados.
         count: usize,
-        /// Maximum allowed ranges.
+        /// Máximo de rangos permitidos.
         max: usize,
     },
 
-    /// No block ranges specified.
+    /// Cero rangos especificados para la petición de bloque.
     #[error("Zero ranges specified for block request")]
     EmptyRanges,
 
-    /// Wire encoding failure.
+    /// Fallo de codificación en cable.
     #[error("Encoding error: {0}")]
     Encode(String),
 
-    /// Block payload data length does not match specified range bounds.
+    /// La longitud de los datos de carga útil del bloque no coincide con los límites del rango especificado.
     #[error("Block data length mismatch: expected {expected} bytes, got {actual} bytes")]
     BlockDataMismatch {
-        /// Expected byte count (`end - start`).
+        /// Recuento de bytes esperado (`end - start`).
         expected: usize,
-        /// Actual payload byte count.
+        /// Recuento de bytes de carga útil real.
         actual: usize,
     },
 
-    /// Block range was already received and written.
+    /// El rango de bloque ya se había recibido y escrito.
     #[error("Duplicate block received for range [{start}, {end})")]
     DuplicateBlock {
-        /// Start byte offset.
+        /// Desplazamiento de byte inicial.
         start: u64,
-        /// End byte offset (exclusive).
+        /// Desplazamiento de byte final (exclusivo).
         end: u64,
     },
 
-    /// Compressed frame received when uncompressed block transfer was expected.
+    /// Se recibió una trama comprimida cuando se esperaba una transferencia de bloque sin comprimir.
     #[error("Compressed block transfer is not negotiated or supported in passive profile")]
     CompressedNotSupported,
 
-    /// Storage, filesystem, or serialization error.
+    /// Error de almacenamiento, sistema de archivos o serialización.
     #[error("Storage error: {0}")]
     Storage(String),
 }
 
-/// Represents an active in-flight block range assigned to a specific peer.
+/// Representa un rango de bloque activo en curso asignado a un par específico.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InFlightBlock {
-    /// Identifier or address of the owning peer.
+    /// Identificador o dirección del par propietario.
     pub peer_id: String,
-    /// Target part index.
+    /// Índice de parte de destino.
     pub part_index: u16,
-    /// Half-open start byte offset.
+    /// Desplazamiento de byte inicial semiabierto.
     pub start: u64,
-    /// Half-open end byte offset (exclusive).
+    /// Desplazamiento de byte final semiabierto (exclusivo).
     pub end: u64,
-    /// Timestamp when block was requested (unix ms).
+    /// Marca de tiempo de cuándo se solicitó el bloque (ms unix).
     pub issued_at_unix_ms: i64,
-    /// Expiration deadline after which block may be reallocated (unix ms).
+    /// Plazo de expiración tras el cual el bloque puede reasignarse (ms unix).
     pub deadline_unix_ms: i64,
 }
 
 impl InFlightBlock {
-    /// Creates a new in-flight block tracking entry.
+    /// Crea una nueva entrada de seguimiento de bloque en curso.
     pub fn new(
         peer_id: String,
         part_index: u16,
@@ -147,12 +147,12 @@ impl InFlightBlock {
         }
     }
 
-    /// Returns true if the block range has expired at `now_unix_ms`.
+    /// Devuelve verdadero si el rango de bloque ha expirado en `now_unix_ms`.
     pub fn is_expired(&self, now_unix_ms: i64) -> bool {
         now_unix_ms >= self.deadline_unix_ms
     }
 
-    /// Checks if this in-flight block overlaps with range `[s, e)`.
+    /// Comprueba si este bloque en curso se solapa con el rango `[s, e)`.
     pub fn overlaps(&self, s: u64, e: u64) -> bool {
         self.start < e && s < self.end
     }

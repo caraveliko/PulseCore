@@ -33,7 +33,7 @@ impl std::fmt::Debug for DaemonClient {
 }
 
 impl DaemonClient {
-    /// Discovers and connects to a running mule-daemon instance.
+    /// Descubre y se conecta a una instancia en ejecución de mule-daemon.
     pub async fn connect(
         explicit_url: Option<String>,
         explicit_token: Option<String>,
@@ -59,7 +59,7 @@ impl DaemonClient {
         >::new()));
         let (search_events_tx, _) = broadcast::channel::<Value>(128);
 
-        // Background task to send messages to WebSocket
+        // Tarea en segundo plano para enviar mensajes a WebSocket
         tokio::spawn(async move {
             while let Some(msg) = write_rx.recv().await {
                 if let Err(e) = ws_write.send(msg).await {
@@ -69,7 +69,7 @@ impl DaemonClient {
             }
         });
 
-        // Background task to read messages from WebSocket
+        // Tarea en segundo plano para leer mensajes de WebSocket
         let pending_clone = pending.clone();
         let search_tx_clone = search_events_tx.clone();
         tokio::spawn(async move {
@@ -124,7 +124,7 @@ impl DaemonClient {
             search_events_tx,
         };
 
-        // Handshake: system.hello
+        // Saludo de protocolo (handshake): system.hello
         let hello_params = json!({
             "protocolVersion": 1,
             "token": token
@@ -149,7 +149,7 @@ impl DaemonClient {
             return Ok((url, token));
         }
 
-        // 1. Resolve work directory
+        // 1. Resolver directorio de trabajo
         let workdir = if let Some(app_path) = explicit_app {
             let bundle_root = if app_path.is_file() {
                 app_path.parent().unwrap_or(&app_path).to_path_buf()
@@ -188,8 +188,8 @@ impl DaemonClient {
     }
 
     pub async fn call(&self, method: &str, params: Value) -> Result<Value, String> {
-        // Iterative Kad lookups and multi-node queries can legitimately run
-        // longer than the default timeout on a real WAN.
+        // Las búsquedas iterativas de Kad y las consultas a varios nodos pueden ejecutarse
+        // legítimamente durante más tiempo que el tiempo de espera por defecto en una WAN real.
         let timeout_secs = if method.starts_with("kad.search") || method.starts_with("kad.publish")
         {
             60
@@ -238,7 +238,7 @@ impl DaemonClient {
         }
     }
 
-    /// Triggers search on Kad and/or server and collects results.
+    /// Dispara la búsqueda en Kad y/o servidor y recopila los resultados.
     pub async fn search_and_collect(
         &self,
         term: &str,
@@ -249,15 +249,15 @@ impl DaemonClient {
         wait_seconds: u64,
     ) -> Result<Value, String> {
         let net = network.unwrap_or("kad");
-        // Le schéma MCP expose "both" ; "all" reste accepté pour
-        // compatibilité avec les clients existants.
+        // El esquema MCP expone "both" ; "all" sigue aceptándose por
+        // compatibilidad con los clientes existentes.
         let search_kad = matches!(net, "kad" | "all" | "both");
         let search_server = matches!(net, "server" | "all" | "both");
 
         let mut collected_files: Vec<Value> = Vec::new();
         let mut seen_hashes = std::collections::HashSet::new();
 
-        // 1. Kad Search
+        // 1. Búsqueda en Kad
         if search_kad {
             let mut kad_params = json!({ "term": term });
             if let Some(min) = min_size {
@@ -308,7 +308,7 @@ impl DaemonClient {
             }
         }
 
-        // 2. Server Search
+        // 2. Búsqueda en servidor
         if search_server {
             let mut rx = self.search_events_tx.subscribe();
 
@@ -361,7 +361,7 @@ impl DaemonClient {
             }
         }
 
-        // Sort by sourceCount descending
+        // Ordenar por número de fuentes descendente
         collected_files.sort_by(|a, b| {
             let sa = a.get("sourceCount").and_then(|s| s.as_u64()).unwrap_or(0);
             let sb = b.get("sourceCount").and_then(|s| s.as_u64()).unwrap_or(0);

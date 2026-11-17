@@ -5,47 +5,47 @@
 
 use std::fmt;
 
-/// Standard eD2K protocol identifier byte (`0xE3`).
+/// Byte identificador del protocolo eD2K estándar (`0xE3`).
 pub const PR_ED2K: u8 = 0xE3;
 
-/// Extended eMule protocol identifier byte (`0xC5`).
+/// Byte identificador del protocolo eMule extendido (`0xC5`).
 pub const PR_EMULE: u8 = 0xC5;
 
-/// Recognized wire protocol identifier for eMule compressed payloads (`0xD4`).
+/// Identificador de protocolo de cable reconocido para cargas útiles comprimidas de eMule (`0xD4`).
 ///
-/// NOTE: Framing support recognizes and frames these packets at the transport boundary;
-/// compliant decompression and post-decompression safety limits (decompression ratio caps,
-/// message-type length ceilings, and decompression bomb mitigation) are implemented in a
-/// dedicated decompression stage.
+/// NOTA: El soporte de entramado reconoce y enmarca estos paquetes en el límite de transporte;
+/// la descompresión conforme y los límites de seguridad posteriores a la descompresión (topes de
+/// tasa de descompresión, límites máximos de longitud según tipo de mensaje y mitigación de bombas
+/// de descompresión) se implementan en una etapa de descompresión dedicada.
 pub const PR_EMULE_COMPRESSED: u8 = 0xD4;
 
-/// Alias for [`PR_EMULE_COMPRESSED`] (`0xD4`).
+/// Alias de [`PR_EMULE_COMPRESSED`] (`0xD4`).
 pub const PR_ZLIB: u8 = PR_EMULE_COMPRESSED;
 
-/// Laboratory and deterministic loopback testbed protocol identifier (`0xEE`).
+/// Identificador de protocolo para pruebas de laboratorio y entorno de pruebas determinista en bucle local (`0xEE`).
 ///
-/// Explicitly separated from historical eD2K wire formats to prevent accidental leakage
-/// or premature claims of external eMule network interoperation.
+/// Separado explícitamente de los formatos de cable históricos de eD2K para evitar fugas accidentales
+/// o afirmaciones prematuras de interoperabilidad con la red eMule externa.
 pub const PR_LAB: u8 = 0xEE;
 
-/// Verifies whether the given byte is a recognized protocol magic byte.
+/// Verifica si el byte proporcionado es un byte mágico de protocolo reconocido.
 #[inline]
 pub fn is_valid_protocol(protocol: u8) -> bool {
     matches!(protocol, PR_ED2K | PR_EMULE | PR_EMULE_COMPRESSED | PR_LAB)
 }
 
-/// 16-byte Peer Identifier (User Hash).
+/// Identificador de par de 16 bytes (hash de usuario).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PeerId(pub [u8; 16]);
 
 impl PeerId {
-    /// Creates a new `PeerId` from an array of 16 bytes.
+    /// Crea un nuevo `PeerId` a partir de una matriz de 16 bytes.
     #[inline]
     pub const fn new(bytes: [u8; 16]) -> Self {
         Self(bytes)
     }
 
-    /// Creates a `PeerId` from a byte slice if its length is exactly 16 bytes.
+    /// Crea un `PeerId` a partir de un fragmento de bytes si su longitud es exactamente de 16 bytes.
     pub fn from_slice(slice: &[u8]) -> Option<Self> {
         if slice.len() == 16 {
             let mut arr = [0u8; 16];
@@ -56,19 +56,19 @@ impl PeerId {
         }
     }
 
-    /// Parses a 32-character hexadecimal string into a `PeerId`.
+    /// Analiza una cadena hexadecimal de 32 caracteres en un `PeerId`.
     pub fn from_hex(s: &str) -> Result<Self, hex::FromHexError> {
         let mut bytes = [0u8; 16];
         hex::decode_to_slice(s, &mut bytes)?;
         Ok(Self(bytes))
     }
 
-    /// Formats the `PeerId` as a 32-character lowercase hexadecimal string.
+    /// Da formato al `PeerId` como una cadena hexadecimal en minúsculas de 32 caracteres.
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)
     }
 
-    /// Returns a reference to the underlying 16 bytes.
+    /// Devuelve una referencia a los 16 bytes subyacentes.
     #[inline]
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
@@ -82,61 +82,61 @@ impl fmt::Display for PeerId {
 }
 
 // ---------------------------------------------------------------------------
-// Standard eD2K Client-to-Client Opcodes (Protocol 0xE3)
+// Códigos de operación estándar de cliente a cliente eD2K (Protocolo 0xE3)
 // ---------------------------------------------------------------------------
 
-/// Peer handshake initialization.
+/// Inicialización del protocolo de enlace con el par.
 pub const OP_HELLO: u8 = 0x01;
-/// Response to OP_HELLO.
+/// Respuesta a OP_HELLO.
 pub const OP_HELLO_ANSWER: u8 = 0x4C;
-/// Request file name by hash.
+/// Petición de nombre de archivo por hash.
 pub const OP_REQUESTFILENAME: u8 = 0x59;
-/// File name response.
+/// Respuesta con el nombre de archivo.
 pub const OP_REQFILENAME_ANSWER: u8 = 0x59;
-/// Tell peer which file hash we are requesting.
+/// Informa al par qué hash de archivo estamos solicitando.
 pub const OP_SETREQFILEID: u8 = 0x47;
-/// Response indicating requested file is not shared.
+/// Respuesta que indica que el archivo solicitado no está compartido.
 pub const OP_FILEREQANSNOFILE: u8 = 0x48;
-/// Request remote file status (parts availability bitmask).
+/// Petición del estado del archivo remoto (máscara de bits de disponibilidad de partes).
 pub const OP_FILESTATUSREQ: u8 = 0x49;
-/// Parts availability status bitmask response.
+/// Respuesta con la máscara de bits del estado de disponibilidad de partes.
 pub const OP_FILESTATUS: u8 = 0x50;
-/// Request to enter upload queue.
+/// Petición para entrar en la cola de subida.
 pub const OP_STARTUPLOADREQ: u8 = 0x54;
-/// Peer accepted upload request; slot is ready.
+/// El par aceptó la petición de subida; el puesto está listo.
 pub const OP_ACCEPTUPLOADREQ: u8 = 0x55;
-/// Cancel active transfer or remove from upload queue.
+/// Cancela la transferencia activa o retira de la cola de subida.
 pub const OP_CANCELTRANSFER: u8 = 0x56;
-/// Inform peer that we no longer need the parts.
+/// Informa al par de que ya no necesitamos las partes.
 pub const OP_OUTOFPARTS: u8 = 0x57;
-/// Request specific block range within a part.
+/// Petición de un rango específico de bloques dentro de una parte.
 pub const OP_REQUESTPARTS: u8 = 0x4B;
-/// Data block payload response.
+/// Respuesta con la carga útil del bloque de datos.
 pub const OP_SENDINGPART: u8 = 0x46;
-/// eMule: signal that client completed the download of this file (`0x49`).
-/// Same wire value as legacy `OP_FILESTATUSREQ` above.
+/// eMule: señaliza que el cliente completó la descarga de este archivo (`0x49`).
+/// Mismo valor en cable que el `OP_FILESTATUSREQ` heredado anterior.
 pub const OP_END_OF_DOWNLOAD: u8 = 0x49;
-/// eMule: client-ID change notification (`0x4D`) —
+/// eMule: notificación de cambio de ID de cliente (`0x4D`) —
 /// `<u32 newUserID><u32 newServerIP>` (`ListenSocket.cpp:590`).
 pub const OP_CHANGE_CLIENT_ID: u8 = 0x4D;
-/// Request hashset for multi-part file.
+/// Petición del conjunto de hashes (hashset) para un archivo multipartición.
 pub const OP_HASHSETREQUEST: u8 = 0x51;
-/// Hashset payload answer.
+/// Respuesta con la carga útil del conjunto de hashes (hashset).
 pub const OP_HASHSETANSWER: u8 = 0x52;
 
 // ---------------------------------------------------------------------------
-// Extended eMule Opcodes (Protocol 0xC5)
+// Códigos de operación eMule extendidos (Protocolo 0xC5)
 // ---------------------------------------------------------------------------
 
-/// Extended eMule handshake capabilities exchange.
+/// Intercambio de capacidades del protocolo de enlace extendido de eMule.
 pub const OP_EMULE_INFO: u8 = 0x01;
-/// Extended eMule handshake capabilities answer.
+/// Respuesta de capacidades del protocolo de enlace extendido de eMule.
 pub const OP_EMULE_INFO_ANSWER: u8 = 0x02;
-/// Request AICH root hash.
+/// Petición de hash raíz AICH.
 pub const OP_AICH_REQUEST: u8 = 0x12;
-/// AICH root hash answer.
+/// Respuesta de hash raíz AICH.
 pub const OP_AICH_ANSWER: u8 = 0x13;
-/// Request AICH recovery hashset / proof tree for corrupted part.
+/// Petición de conjunto de hashes / árbol de prueba de recuperación AICH para una parte dañada.
 pub const OP_AICHFILEHASHREQ: u8 = 0x14;
-/// AICH recovery hashset / proof tree response.
+/// Respuesta con el conjunto de hashes / árbol de prueba de recuperación AICH.
 pub const OP_AICHFILEHASHRES: u8 = 0x15;

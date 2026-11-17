@@ -141,7 +141,7 @@ async fn test_servers_rpc_workflow() {
     assert_eq!(import_res["allowedCount"], 1);
     assert_eq!(import_res["blockedCount"], 1);
 
-    // 6. Test servers.list (Should return 2 servers with correct filter_status)
+    // 6. Prueba servers.list (debe devolver 2 servidores con filter_status correcto)
     let list_req = make_req(6, "servers.list", None);
     let resp = handle_request(&state, list_req, &mut authenticated)
         .await

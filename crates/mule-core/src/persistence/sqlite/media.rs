@@ -247,8 +247,8 @@ pub fn insert_episode(conn: &Connection, ep: &EpisodeItem) -> Result<(), CoreErr
     Ok(())
 }
 
-/// Insertion ou mise à jour en lot (batch) d'épisodes dans une unique transaction SQLite.
-/// Évite la multiplication des écritures WAL et des fsyncs lors de l'ajout ou scan d'une série.
+/// Inserción o actualización por lotes (batch) de episodios en una única transacción SQLite.
+/// Evita la multiplicación de escrituras WAL y llamadas fsync al añadir o escanear una serie.
 pub fn insert_episodes_batch(
     conn: &mut Connection,
     episodes: &[EpisodeItem],

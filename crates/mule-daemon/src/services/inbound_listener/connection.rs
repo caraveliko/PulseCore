@@ -20,7 +20,7 @@ use mule_protocol::framing::PacketCodec;
 use super::types::{InboundListenerService, MAX_READ_BUFFER_SIZE};
 
 impl InboundListenerService {
-    /// Handles an accepted inbound connection from a remote peer.
+    /// Gestiona una conexión entrante aceptada de un par remoto.
     pub async fn handle_inbound_connection(
         &self,
         mut socket: TcpStream,
@@ -31,7 +31,7 @@ impl InboundListenerService {
         let _ = socket.set_nodelay(true);
         let remote_str = remote_addr.to_string();
 
-        // 1. IP Filter check
+        // 1. Comprobación del filtro IP
         if let Some(rule) = self.network_policy.ip_filter().check_ip(remote_addr.ip()) {
             tracing::info!(
                 "[IP_FILTER] Dropped inbound TCP connection from {} (rule: '{}', level: {})",
@@ -42,9 +42,9 @@ impl InboundListenerService {
             return;
         }
 
-        // 1b. eMule `IsBannedClient` (`ListenSocket.cpp:1987`) : une IP
-        // bannie (corruption, flood de requêtes, userhash changé) est
-        // refusée avant tout traitement protocolaire, comme l'ipfilter.
+        // 1b. `IsBannedClient` de eMule (`ListenSocket.cpp:1987`): una IP
+        // baneada (corrupción, inundación de peticiones, userhash cambiado) se
+        // rechaza antes de cualquier procesamiento protocolario, al igual que el ipfilter.
         if self
             .downloads
             .lock()
@@ -58,7 +58,7 @@ impl InboundListenerService {
             return;
         }
 
-        // Protocol Obfuscation detection on first byte
+        // Detección de ofuscación de protocolo en el primer byte
         let mut first_byte = [0u8; 1];
         let read_res = tokio::select! {
             _ = cancel_token.cancelled() => return,
@@ -123,7 +123,7 @@ impl InboundListenerService {
 
         let handshake_timeout = Duration::from_secs(8);
 
-        // --- Step 1: Handshake (OP_HELLO) ---
+        // --- Paso 1: Apretón de manos (OP_HELLO) ---
         let handshake_res = tokio::time::timeout(handshake_timeout, async {
             loop {
                 let n = stream.read(&mut raw_buf).await.map_err(|e| e.to_string())?;
@@ -182,10 +182,10 @@ impl InboundListenerService {
                     peer_info.has_compression_capability(),
                     peer_info.unknown_tags.len()
                 , peer = log_addr_str(&remote_str));
-                // eMule `ComparePriorUserhash` (`BaseClient.cpp:614` /
-                // `ClientList.cpp:386`) : ce (IP, port TCP annoncé) a déjà
-                // été suivi sous un userhash différent → indice fort
-                // d'usurpation → `Ban()` (IP 2 h) + déconnexion.
+                // `ComparePriorUserhash` de eMule (`BaseClient.cpp:614` /
+                // `ClientList.cpp:386`): este (IP, puerto TCP anunciado) ya ha
+                // sido rastreado bajo un userhash diferente → indicio fuerte
+                // de usurpación → `Ban()` (IP 2 h) + desconexión.
                 {
                     let mut dl = self.downloads.lock().await;
                     if !dl.check_prior_userhash(
@@ -204,16 +204,16 @@ impl InboundListenerService {
                 callback_hello = Some(hello);
                 let mut tags = Vec::new();
 
-                // Mirror the outbound OP_HELLO tag set: eMule expects name,
-                // ed2k version, UDP ports and eMule version in HELLOANSWER too.
+                // Reflejar el conjunto de etiquetas del OP_HELLO saliente: eMule espera nombre,
+                // versión ed2k, puertos UDP y versión eMule también en HELLOANSWER.
                 use mule_protocol::ed2k::tags::{
                     Ed2kTag, TagName, TagValue, TAG_SPECIAL_CT_EMULE_VERSION,
                     TAG_SPECIAL_EMULE_MISCOPTIONS1, TAG_SPECIAL_EMULE_MISCOPTIONS2,
                     TAG_SPECIAL_EMULE_UDPPORTS, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
                 };
-                // TAG_NAME = le nickname effectif (eMule `nick` pref —
-                // l'HELLOANSWER doit refléter le pseudo configuré, pas une
-                // constante), avec le même défaut que `current_nickname`.
+                // TAG_NAME = el apodo efectivo (preferencia `nick` de eMule —
+                // el HELLOANSWER debe reflejar el seudónimo configurado, no una
+                // constante), con el mismo valor predeterminado que `current_nickname`.
                 let nickname = self
                     .downloads
                     .lock()
@@ -237,20 +237,20 @@ impl InboundListenerService {
                     name: TagName::Id(TAG_SPECIAL_EMULE_UDPPORTS),
                     value: TagValue::UInt32(udp_ports),
                 });
-                // Announced as eMule 0.70a (software ID 0, CT_EMULE_VERSION).
+                // Anunciado como eMule 0.70a (ID de software 0, CT_EMULE_VERSION).
                 tags.push(Ed2kTag {
                     name: TagName::Id(TAG_SPECIAL_CT_EMULE_VERSION),
                     value: TagValue::UInt32(70 << 10),
                 });
 
-                // eMule MiscOptions1 — SecIdent=3 (v1|v2) in bits 16-19 when a
-                // usable RSA key is loaded, mirroring the outbound HELLO.
+                // MiscOptions1 de eMule — SecIdent=3 (v1|v2) en bits 16-19 cuando hay una
+                // clave RSA utilizable cargada, reflejando el HELLO saliente.
                 let sec_ident: u32 = if self.sui_pubkey_der.read().unwrap().is_some() {
                     3
                 } else {
                     0
                 };
-                // MultiPacket = 1 (comme eMule), Preview = 0 (non implémenté).
+                // MultiPacket = 1 (como en eMule), Preview = 0 (no implementado).
                 let misc1: u32 = (1 << 29)
                     | (1 << 28)
                     | (4 << 24)
@@ -264,19 +264,19 @@ impl InboundListenerService {
                     name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS1),
                     value: TagValue::UInt32(misc1),
                 });
-                // Identité ed2k réelle — remontée avant MiscOptions2 pour
-                // le bit « DirectUDPCallback » (`IsFirewalled` ⇔ pas de
+                // Identidad ed2k real — enviada antes de MiscOptions2 para
+                // el bit «DirectUDPCallback» (`IsFirewalled` ⇔ sin
                 // HighID).
                 let ids = self.sx_local_ids(actual_listen_addr.port()).await;
 
-                // MiscOptions2 — same layout as the outbound HELLO:
+                // MiscOptions2 — misma disposición que el HELLO saliente:
                 // FileIdent<<13 | DirectUDPCallback<<12 | SrcExch2<<10 |
                 // CryptReq<<9 | CryptWants<<8 | CryptSup<<7 | ExtMultiPkt<<5
                 // | LargeFiles<<4 | KadVersion<<0.
-                // eMule `BaseClient.cpp:1007` — bit 12 quand TCP est
-                // inatteignable (client_id < 0x01000000) mais l'UDP Kad est
-                // testé ouvert (full-cone NAT) : un pair peut alors nous
-                // demander un `OP_DIRECTCALLBACKREQ`.
+                // `BaseClient.cpp:1007` de eMule — bit 12 cuando TCP es
+                // inalcanzable (client_id < 0x01000000) pero el UDP Kad está
+                // comprobado como abierto (NAT full-cone): un par puede entonces
+                // solicitarnos un `OP_DIRECTCALLBACKREQ`.
                 let udp_verified_open = {
                     let svc = self.kad_udp.read().unwrap().clone();
                     match svc {
@@ -302,10 +302,10 @@ impl InboundListenerService {
                     value: TagValue::UInt32(misc2),
                 });
 
-                // Identité ed2k réelle (ID assigné par le serveur courant,
-                // IP/port du serveur) — eMule `SendHelloTypePacket` écrit
-                // `GetUserIDHybrid()` et `GetCurrentServer()` ; 0 si non
-                // connecté.
+                // Identidad ed2k real (ID asignado por el servidor actual,
+                // IP/puerto del servidor) — `SendHelloTypePacket` de eMule escribe
+                // `GetUserIDHybrid()` y `GetCurrentServer()`; 0 si no
+                // está conectado.
                 let ans = Ed2kHelloAnswer {
                     user_hash: *self.user_hash.read().unwrap(),
                     client_id: ids.client_id,
@@ -316,9 +316,9 @@ impl InboundListenerService {
                     server_port: ids.server_port,
                 };
                 if let Ok(ans_pkt) = encoder.encode_hello_answer(&ans) {
-                    // eMule `ListenSocket.cpp:273-275` : le répondeur envoie
-                    // OP_EMULEINFO *avant* OP_HELLOANSWER quand le pair est
-                    // eMule-compatible (`SendMuleInfoPacket(false)`).
+                    // `ListenSocket.cpp:273-275` de eMule: el respondedor envía
+                    // OP_EMULEINFO *antes* de OP_HELLOANSWER cuando el par es
+                    // compatible con eMule (`SendMuleInfoPacket(false)`).
                     if peer_info.is_emule() {
                         let info = crate::services::peer_session::handshake::build_emule_info(
                             self.kad_udp_port,
@@ -346,9 +346,9 @@ impl InboundListenerService {
             }
         }
 
-        // Kad bootstrap from clients: an inbound peer advertising a Kad UDP
-        // port (CT_EMULE_UDPPORTS high word) can seed our routing table when
-        // it is thin — mirrors eMule's "bootstrap from clients" behaviour.
+        // Arranque Kad desde clientes: un par entrante que anuncia un puerto
+        // UDP de Kad (palabra alta de CT_EMULE_UDPPORTS) puede sembrar nuestra tabla de enrutamiento
+        // cuando está dispersa — refleja el comportamiento de "bootstrap from clients" de eMule.
         if let Some(hello) = callback_hello.as_ref() {
             for tag in &hello.tags {
                 if let mule_protocol::ed2k::tags::TagName::Id(
@@ -381,11 +381,11 @@ impl InboundListenerService {
             }
         }
 
-        // Buddy link adoption: a LowID client we accepted via
-        // KADEMLIA_FINDBUDDY_REQ connects to our TCP port; the link is kept
-        // alive (OP_BUDDYPING→OP_BUDDYPONG) and used to relay OP_CALLBACK /
-        // OP_REASKCALLBACKTCP from requesters (eMule `IncomingBuddy` +
-        // `KS_CONNECTED_BUDDY`).
+        // Adopción de enlace de compañero: un cliente LowID que aceptamos mediante
+        // KADEMLIA_FINDBUDDY_REQ se conecta a nuestro puerto TCP; el enlace se mantiene
+        // vivo (OP_BUDDYPING→OP_BUDDYPONG) y se usa para retransmitir OP_CALLBACK /
+        // OP_REASKCALLBACKTCP de los solicitantes (`IncomingBuddy` +
+        // `KS_CONNECTED_BUDDY` de eMule).
         let pending_buddy = {
             let kad_udp = self.kad_udp.read().unwrap().clone();
             match kad_udp {
@@ -407,9 +407,9 @@ impl InboundListenerService {
             return;
         }
 
-        // LowID callback adoption: if the connecting peer announced a LowID
-        // client_id that matches a pending server-relayed callback, adopt the
-        // socket as a client-role download session instead of serving uploads.
+        // Adopción de devolución LowID: si el par conectado anunció un client_id
+        // LowID que coincide con una devolución pendiente retransmitida por el servidor,
+        // adoptar el socket como sesión de descarga en rol de cliente en lugar de servir subidas.
         let pending_cb = callback_hello.as_ref().and_then(|hello| {
             if hello.client_id == 0 || hello.client_id >= 16_777_216 {
                 return None;
@@ -457,12 +457,12 @@ impl InboundListenerService {
             {
                 return;
             }
-            // Adoption refused (limits/dedup): fall through to normal serving.
+            // Adopción rechazada (límites/deduplicación): continuar hacia el servicio normal.
             return;
         }
 
-        // Kad buddy callback adoption: a LowID Kad source we pinged via
-        // KADEMLIA_CALLBACK_REQ connects inbound; matched by remote IP.
+        // Adopción de devolución de compañero Kad: una fuente Kad LowID a la que hicimos
+        // ping vía KADEMLIA_CALLBACK_REQ se conecta entrante; asociada por IP remota.
         let pending_kad_cb = {
             let ps = self.peer_session.read().unwrap().clone();
             ps.and_then(|ps| {
@@ -524,8 +524,8 @@ impl InboundListenerService {
             return;
         }
 
-        // Record the peer's client-UDP version so OP_REASKACK replies match
-        // its GetUDPVersion() semantics (part status only for ver > 3).
+        // Registrar la versión UDP de cliente del par para que las respuestas OP_REASKACK
+        // coincidan con la semántica de su GetUDPVersion() (estado de partes solo para ver > 3).
         if let Some(hello) = callback_hello.as_ref() {
             let peer_info = mule_protocol::ed2k::Ed2kPeerInfo::from_hello(hello);
             let svc = self.client_udp.read().unwrap().clone();
@@ -535,23 +535,23 @@ impl InboundListenerService {
             }
         }
 
-        // eMule MiscOptions1 bit 4 (nDataCompVer): the peer may accept
-        // OP_COMPRESSEDPART zlib blocks on uploads.
+        // Bit 4 de MiscOptions1 de eMule (nDataCompVer): el par puede aceptar
+        // bloques zlib OP_COMPRESSEDPART en las subidas.
         let peer_supports_compression = callback_hello
             .as_ref()
             .map(|h| mule_protocol::ed2k::Ed2kPeerInfo::from_hello(h).has_compression_capability())
             .unwrap_or(false);
 
-        // Upload identity: userhash from OP_HELLO when announced (eMule
-        // keys the upload queue on the client identity, not the IP).
+        // Identidad de subida: userhash de OP_HELLO cuando se anuncia (eMule
+        // indexa la cola de subida por identidad del cliente, no por IP).
         let peer_user_hash = callback_hello
             .as_ref()
             .map(|h| h.user_hash)
             .filter(|h| *h != [0u8; 16]);
 
-        // Capacités SX + version de requêtes étendues du pair, extraites du
-        // HELLO (CT_EMULE_MISCOPTIONS*) — raffinées par OP_EMULEINFO dans le
-        // dispatcher.
+        // Capacidades SX + versión de peticiones extendidas del par, extraídas del
+        // HELLO (CT_EMULE_MISCOPTIONS*) — refinadas por OP_EMULEINFO en el
+        // despachador.
         let peer_info = callback_hello
             .as_ref()
             .map(mule_protocol::ed2k::Ed2kPeerInfo::from_hello);
@@ -581,9 +581,9 @@ impl InboundListenerService {
         .await;
     }
 
-    /// Outbound connect-back after a server-relayed `OP_CALLBACKREQUESTED`
-    /// (eMule `ServerSocket` → `TryToConnect`): we dial the requester, do
-    /// the eD2K hello, then serve its requests like an inbound session.
+    /// Devolución de conexión saliente tras un `OP_CALLBACKREQUESTED` retransmitido por el servidor
+    /// (`ServerSocket` → `TryToConnect` de eMule): marcamos al solicitante, realizamos
+    /// el hello eD2K y luego servimos sus peticiones como una sesión entrante.
     pub async fn connect_back(
         &self,
         target: SocketAddr,
@@ -613,9 +613,9 @@ impl InboundListenerService {
             .map(|a| a.ip())
             .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
-        // Obfuscation: when the requester announced crypt support and we have
-        // its user hash (CALLBACKREQUESTED ≥23B form), use the encrypted
-        // handshake; otherwise plaintext.
+        // Ofuscación: cuando el solicitante anunció soporte de cifrado y tenemos
+        // su user hash (forma de CALLBACKREQUESTED ≥23B), usar el apretón
+        // de manos cifrado; si no, texto claro.
         let use_obfu = crypt_options & 0x01 != 0
             && self
                 .obfuscation_enabled
@@ -633,7 +633,7 @@ impl InboundListenerService {
             crate::services::obfuscation_stream::ObfuscatedStream::plaintext(stream)
         };
 
-        // Send OP_HELLO (same capability tags as the inbound answer).
+        // Enviar OP_HELLO (mismas etiquetas de capacidad que en la respuesta entrante).
         let encoder = Ed2kEncoder::default();
         let decoder = Ed2kDecoder::default();
         let codec = PacketCodec::new();
@@ -656,8 +656,8 @@ impl InboundListenerService {
             ),
             value: mule_protocol::ed2k::tags::TagValue::UInt32(misc1),
         }];
-        // Même MiscOptions2 que les hellos normaux — eMule utilise le même
-        // `SendHelloPacket` pour le connect-back callback.
+        // Mismo MiscOptions2 que en los hellos normales — eMule utiliza el mismo
+        // `SendHelloPacket` para la devolución de llamada conectada.
         let udp_verified_open = {
             let svc = self.kad_udp.read().unwrap().clone();
             match svc {
@@ -706,7 +706,7 @@ impl InboundListenerService {
             .await
             .map_err(|e| format!("Failed to send OP_HELLO to {target}: {e}"))?;
 
-        // Read OP_HELLO_ANSWER.
+        // Leer OP_HELLO_ANSWER.
         let mut read_buf = BytesMut::with_capacity(65536);
         let mut raw_buf = [0u8; 8192];
         let remote_str = target.to_string();
@@ -770,10 +770,10 @@ impl InboundListenerService {
         Ok(())
     }
 
-    /// Serves an adopted Kad buddy link (eMule `KS_CONNECTED_BUDDY`): keeps
-    /// the TCP connection open, answers `OP_BUDDYPING` with `OP_BUDDYPONG`,
-    /// and forwards packets queued by the buddy relay (`OP_CALLBACK`,
-    /// `OP_REASKCALLBACKTCP`) through an mpsc writer.
+    /// Sirve un enlace de compañero Kad adoptado (`KS_CONNECTED_BUDDY` de eMule): mantiene
+    /// abierta la conexión TCP, responde a `OP_BUDDYPING` con `OP_BUDDYPONG`,
+    /// y reenvía paquetes encolados por el relevo de compañero (`OP_CALLBACK`,
+    /// `OP_REASKCALLBACKTCP`) a través de un escritor mpsc.
     pub(crate) async fn serve_buddy_link(
         &self,
         stream: crate::services::obfuscation_stream::ObfuscatedStream<TcpStream>,
@@ -836,8 +836,8 @@ impl InboundListenerService {
                                 if pkt.protocol == PR_EMULE
                                     && pkt.opcode == mule_protocol::ed2k::OP_BUDDYPING
                                 {
-                                    // eMule ListenSocket.cpp: OP_BUDDYPING →
-                                    // empty OP_BUDDYPONG.
+                                    // ListenSocket.cpp de eMule: OP_BUDDYPING →
+                                    // OP_BUDDYPONG vacío.
                                     let pong = {
                                         let mut f = Vec::with_capacity(6);
                                         f.push(PR_EMULE);

@@ -27,28 +27,28 @@ use crate::error::DaemonError;
 
 use super::db_err;
 
-/// eMule credit expiry (`ClientCredits.cpp:207` — `DAY2S(150)`).
+/// Caducidad de créditos de eMule (`ClientCredits.cpp:207` — `DAY2S(150)`).
 const CREDIT_EXPIRY_SECS: u64 = 150 * 86_400;
 
-/// Outcome of `import_clients_met`.
+/// Resultado de `import_clients_met`.
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientsMetImportReport {
-    /// `clients.met` records read.
+    /// Registros de `clients.met` leídos.
     pub records: usize,
-    /// Credits imported into `peer_credits`.
+    /// Créditos importados en `peer_credits`.
     pub imported: usize,
-    /// Entries older than 150 days — dropped like eMule.
+    /// Entradas con más de 150 días de antigüedad — descartadas igual que en eMule.
     pub expired: usize,
-    /// Entries without a stored pubkey — unclaimable under our
-    /// pubkey-keyed credit model.
+    /// Entradas sin clave pública almacenada — no reclamables bajo nuestro
+    /// modelo de créditos indexado por clave pública.
     pub skipped_no_pubkey: usize,
-    /// `true` when the file used the legacy `0x11` layout.
+    /// `true` cuando el archivo utilizaba el formato heredado `0x11`.
     pub legacy_format: bool,
 }
 
-/// `CClientCreditsList::LoadList` — imports an eMule `clients.met` into
-/// `peer_credits` (upsert by `pubkey_hash`, like eMule's map overwrite).
+/// `CClientCreditsList::LoadList` — importa un `clients.met` de eMule en
+/// `peer_credits` (inserción o actualización por `pubkey_hash`, igual que la sobreescritura de mapa en eMule).
 pub fn import_clients_met(
     db: &mut Database,
     path: &Path,
@@ -82,7 +82,7 @@ pub fn import_clients_met(
             pubkey_hex: hex::encode(pubkey),
             uploaded_bytes: record.uploaded,
             downloaded_bytes: record.downloaded,
-            // eMule stores only `tLastSeen` — first_seen unknown.
+            // eMule solo almacena `tLastSeen` — first_seen desconocido.
             first_seen_unix_ms: seen_ms,
             last_seen_unix_ms: seen_ms,
         })

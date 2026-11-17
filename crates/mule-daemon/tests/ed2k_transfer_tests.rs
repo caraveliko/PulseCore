@@ -28,19 +28,19 @@ const AUTH_TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef012345
 
 #[tokio::test]
 async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
-    // 1. Prepare isolated directories
+    // 1. Preparar directorios aislados
     let dir_client = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
     let fixture_hash = Ed2kHash::from_hex(FIXTURE_EXACT_ONE_PART.expected_ed2k_hex).unwrap();
 
-    // Generate exact fixture data (9 728 000 bytes)
+    // Generar datos de prueba exactos (9.728.000 bytes)
     let mut pattern_reader = PatternReader::new(&REPEATING_0_TO_255, FIXTURE_FILE_SIZE);
     let mut fixture_data = Vec::with_capacity(FIXTURE_FILE_SIZE as usize);
     pattern_reader.read_to_end(&mut fixture_data).unwrap();
     let fixture_bytes = Bytes::from(fixture_data);
 
-    // 2. Start controlled loopback test peer sharing the exact fixture
+    // 2. Iniciar par de prueba controlado en loopback compartiendo la prueba exacta
     let test_peer = Ed2kTestPeer::bind(TestPeerMode::Nominal)
         .await
         .expect("bind test peer");
@@ -55,16 +55,16 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
 
     let (peer_handle, peer_stopped) = test_peer.spawn_service();
 
-    // 3. Start Client Daemon B
+    // 3. Iniciar daemon de cliente B
     let client_daemon = RunningDaemon::start(dir_client.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr = client_daemon.addr;
 
-    // Connect WebSocket
+    // Conectar WebSocket
     let ws_url = format!("ws://{client_addr}/rpc");
     let (ws_stream, _) = connect_async(&ws_url).await.expect("connects to daemon B");
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -81,7 +81,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     let hello_val = next_response(&mut read, 1).await;
     assert_eq!(hello_val["result"]["protocolVersion"], 1);
 
-    // Subscribe to events
+    // Suscribirse a eventos
     let req_sub = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -94,7 +94,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         .unwrap();
     let _ = read.next().await.unwrap().unwrap();
 
-    // Add eD2K download link
+    // Añadir enlace de descarga eD2K
     let ed2k_link = format!(
         "ed2k://|file|fixture_9728000.bin|{}|{}|/",
         FIXTURE_FILE_SIZE, fixture_hash
@@ -113,8 +113,8 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         .await
         .unwrap();
 
-    // Réponses et events broadcast sont multiplexés via select! : lire jusqu'à
-    // obtenir la réponse id=3 puis le premier event.downloadUpdated.
+    // Las respuestas y eventos de difusión se multiplexan mediante select!: leer hasta
+    // obtener la respuesta id=3 y luego el primer event.downloadUpdated.
     let mut add_val: Option<Value> = None;
     let mut evt_val: Option<Value> = None;
     for _ in 0..16 {
@@ -138,7 +138,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     assert_eq!(add_val["result"]["status"], "queued");
     assert_eq!(evt_val["params"]["download"]["status"], "queued");
 
-    // 4. Start eD2K transfer via ed2k.startDownload
+    // 4. Iniciar transferencia eD2K mediante ed2k.startDownload
     let req_start = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -164,7 +164,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     let start_val = start_val.expect("start response not received");
     assert_eq!(start_val["result"]["started"], true);
 
-    // 5. Monitor transfer progress until ~50% (at least 4.5 MB = ~25 blocks)
+    // 5. Monitorizar el progreso de la transferencia hasta ~50% (al menos 4,5 MB = ~25 bloques)
     let mut saw_waiting_for_sources = false;
     let mut saw_downloading = false;
     let mut received_at_interrupt = 0u64;
@@ -201,15 +201,15 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         received_at_interrupt
     );
 
-    // 6. Abruptly kill Client Daemon B (crash simulation)
+    // 6. Finalizar abruptamente el daemon de cliente B (simulación de caída)
     drop(write);
     drop(read);
     client_daemon.stop().await;
 
-    // Small delay to ensure file lock cleanup on Windows
+    // Pequeña pausa para asegurar la liberación del cerrojo de archivos en Windows
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // 7. Verify disk and SQLite WAL state at interruption
+    // 7. Verificar el estado del disco y SQLite WAL en la interrupción
     let part_file_path = dir_client
         .path()
         .join("part")
@@ -221,7 +221,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         ".part file size ({part_size_at_interrupt}) must be at least received ({received_at_interrupt})"
     );
 
-    // Verify SQLite WAL DB has synced received ranges
+    // Verificar que la BD SQLite WAL haya sincronizado los rangos recibidos
     let db_path = dir_client.path().join("mule.db");
     let db = Database::open(&db_path).expect("open SQLite DB");
     let restored_id = uuid::Uuid::parse_str(&download_id).unwrap();
@@ -233,7 +233,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     );
     drop(db);
 
-    // 8. Cold restart Client Daemon on the EXACT SAME workdir
+    // 8. Reinicio en frío del daemon de cliente en el EXACTO MISMO directorio de trabajo
     let client_daemon_2 = RunningDaemon::start(dir_client.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr_2 = client_daemon_2.addr;
 
@@ -243,7 +243,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         .expect("reconnects to restarted daemon B");
     let (mut write_2, mut read_2) = ws_stream_2.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello_2 = json!({
         "jsonrpc": "2.0",
         "id": 10,
@@ -260,7 +260,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     let hello_val_2 = next_response(&mut read_2, 10).await;
     assert_eq!(hello_val_2["result"]["protocolVersion"], 1);
 
-    // 9. Verify restored download status and neutral SourceAvailabilitySummary
+    // 9. Verificar estado restaurado de descarga y SourceAvailabilitySummary neutral
     let req_list = json!({
         "jsonrpc": "2.0",
         "id": 11,
@@ -282,7 +282,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         "Restored receivedBytes ({restored_received}) is >= observed interrupt ({received_at_interrupt})"
     );
 
-    // Subscribe to events
+    // Suscribirse a eventos
     let req_sub_2 = json!({
         "jsonrpc": "2.0",
         "id": 12,
@@ -295,7 +295,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         .unwrap();
     let _ = read_2.next().await.unwrap().unwrap();
 
-    // 10. Resume transfer by re-invoking ed2k.startDownload
+    // 10. Reanudar transferencia reinvocando ed2k.startDownload
     let req_resume = json!({
         "jsonrpc": "2.0",
         "id": 13,
@@ -310,7 +310,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         .await
         .unwrap();
 
-    // 11. Collect events through Verifying and Completed
+    // 11. Recopilar eventos hasta Verifying y Completed
     let mut saw_verifying = false;
     let mut saw_completed = false;
 
@@ -343,7 +343,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
     assert!(saw_verifying, "Expected verifying state transition");
     assert!(saw_completed, "Expected completed state transition");
 
-    // 12. Verify neutral source summary via downloads.getSources
+    // 12. Verificar resumen neutral de fuentes mediante downloads.getSources
     let req_sources = json!({
         "jsonrpc": "2.0",
         "id": 14,
@@ -382,7 +382,7 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         "Raw SocketAddr must NEVER be exposed in DTO"
     );
 
-    // 12. Verify finalized file on disk
+    // 12. Verificar archivo finalizado en disco
     let finalized_path = client_target_dir.path().join("fixture_9728000.bin");
     assert!(
         finalized_path.exists(),
@@ -401,13 +401,13 @@ async fn test_ed2k_transfer_with_interruption_and_gap_only_resumption() {
         "Final eD2K root hash must match fixture_exact_one_part exactly"
     );
 
-    // Verify byte-for-byte fidelity
+    // Verificar fidelidad byte a byte
     let mut finalized_bytes = Vec::with_capacity(FIXTURE_FILE_SIZE as usize);
     target_file = std::fs::File::open(&finalized_path).unwrap();
     target_file.read_to_end(&mut finalized_bytes).unwrap();
     assert_eq!(finalized_bytes, fixture_bytes.as_ref());
 
-    // Clean shutdown
+    // Cierre limpio
     client_daemon_2.stop().await;
     peer_stopped.store(true, Ordering::SeqCst);
     peer_handle.abort();
@@ -418,17 +418,17 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
     let file_size = FIXTURE_ONE_PART_PLUS_ONE.length; // 9_728_001 bytes
     let fixture_hash = Ed2kHash::from_hex(FIXTURE_ONE_PART_PLUS_ONE.expected_ed2k_hex).unwrap();
 
-    // 1. Prepare isolated directories
+    // 1. Preparar directorios aislados
     let dir_client = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
-    // Generate exact fixture data (9 728 001 bytes: 1 full part + 1 byte residual)
+    // Generar datos de prueba exactos (9.728.001 bytes: 1 parte completa + 1 byte residual)
     let mut pattern_reader = PatternReader::new(&REPEATING_0_TO_255, file_size);
     let mut fixture_data = Vec::with_capacity(file_size as usize);
     pattern_reader.read_to_end(&mut fixture_data).unwrap();
     let fixture_bytes = Bytes::from(fixture_data);
 
-    // 2. Start controlled loopback test peer sharing 2 parts
+    // 2. Iniciar par de prueba controlado en loopback compartiendo 2 partes
     let test_peer = Ed2kTestPeer::bind(TestPeerMode::Nominal)
         .await
         .expect("bind test peer");
@@ -447,16 +447,16 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
 
     let (peer_handle, peer_stopped) = test_peer.spawn_service();
 
-    // 3. Start Client Daemon
+    // 3. Iniciar daemon de cliente
     let client_daemon = RunningDaemon::start(dir_client.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr = client_daemon.addr;
 
-    // Connect WebSocket RPC
+    // Conectar RPC por WebSocket
     let ws_url = format!("ws://{client_addr}/rpc");
     let (ws_stream, _) = connect_async(&ws_url).await.expect("connects to daemon");
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -473,7 +473,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
     let hello_val = next_response(&mut read, 1).await;
     assert_eq!(hello_val["result"]["protocolVersion"], 1);
 
-    // Subscribe to events
+    // Suscribirse a eventos
     let req_sub = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -486,7 +486,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
         .unwrap();
     let _ = read.next().await.unwrap().unwrap();
 
-    // Add eD2K download link
+    // Añadir enlace de descarga eD2K
     let ed2k_link = format!(
         "ed2k://|file|fixture_9728001.bin|{}|{}|/",
         file_size, fixture_hash
@@ -520,7 +520,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
         .unwrap()
         .to_string();
 
-    // 4. Start eD2K transfer
+    // 4. Iniciar transferencia eD2K
     let req_start = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -535,7 +535,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
         .await
         .unwrap();
 
-    // 5. Monitor transfer through to completion
+    // 5. Monitorizar transferencia hasta su finalización
     let mut saw_verifying = false;
     let mut saw_completed = false;
 
@@ -568,7 +568,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
     assert!(saw_verifying, "Expected verifying state transition");
     assert!(saw_completed, "Expected completed state transition");
 
-    // 6. Verify source summary has 2 parts available
+    // 6. Verificar que el resumen de fuentes tenga 2 partes disponibles
     let req_sources = json!({
         "jsonrpc": "2.0",
         "id": 5,
@@ -603,7 +603,7 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
         "Raw SocketAddr must NEVER be exposed"
     );
 
-    // 7. Verify finalized file on disk
+    // 7. Verificar archivo finalizado en disco
     let finalized_path = client_target_dir.path().join("fixture_9728001.bin");
     assert!(finalized_path.exists(), "Finalized file must exist");
     assert_eq!(
@@ -619,13 +619,13 @@ async fn test_ed2k_transfer_residual_part_file_completion() {
         "Final eD2K root hash must match fixture_one_part_plus_one (695b81b1727666818988524bd7fc823c)"
     );
 
-    // Verify byte-for-byte fidelity
+    // Verificar fidelidad byte a byte
     let mut finalized_bytes = Vec::with_capacity(file_size as usize);
     target_file = std::fs::File::open(&finalized_path).unwrap();
     target_file.read_to_end(&mut finalized_bytes).unwrap();
     assert_eq!(finalized_bytes, fixture_bytes.as_ref());
 
-    // Clean shutdown
+    // Cierre limpio
     client_daemon.stop().await;
     peer_stopped.store(true, Ordering::SeqCst);
     peer_handle.abort();

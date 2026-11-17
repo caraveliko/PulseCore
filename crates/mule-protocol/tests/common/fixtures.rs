@@ -19,7 +19,7 @@ use mule_protocol::ed2k::tags::{
 #[cfg(feature = "ed2k-loopback")]
 use mule_protocol::ed2k::Ed2kLoopbackClient;
 
-/// Hash utilisateur déterministe partagé par les handshakes de test.
+/// Hash de usuario determinista compartido por los handshakes de prueba.
 #[cfg(feature = "ed2k-loopback")]
 pub fn sample_user_hash() -> [u8; 16] {
     let mut h = [0x11; 16];
@@ -27,7 +27,7 @@ pub fn sample_user_hash() -> [u8; 16] {
     h
 }
 
-/// Tags client nominaux : nom affiché + version eMule 0.60a (`0x3C`).
+/// Etiquetas de cliente nominales: nombre mostrado + versión de eMule 0.60a (`0x3C`).
 #[cfg(feature = "ed2k-loopback")]
 pub fn sample_client_tags(nick: &str) -> Vec<Ed2kTag> {
     vec![
@@ -42,7 +42,7 @@ pub fn sample_client_tags(nick: &str) -> Vec<Ed2kTag> {
     ]
 }
 
-/// Hash fichier déterministe indexé (octet `i` = `i`).
+/// Hash de archivo determinista indexado (byte `i` = `i`).
 pub fn sample_file_hash() -> [u8; 16] {
     let mut h = [0u8; 16];
     for (i, b) in h.iter_mut().enumerate() {
@@ -51,7 +51,7 @@ pub fn sample_file_hash() -> [u8; 16] {
     h
 }
 
-/// Hash 16 octets fixe des scénarios de reprise partielle / séquenceur.
+/// Hash de 16 bytes fijo de los escenarios de reanudación parcial / secuenciador.
 pub fn resume_file_hash() -> [u8; 16] {
     [
         0x69, 0x5b, 0x81, 0xb1, 0x72, 0x76, 0x66, 0x81, 0x89, 0x88, 0x52, 0x4b, 0xd7, 0xfc, 0x82,
@@ -59,7 +59,7 @@ pub fn resume_file_hash() -> [u8; 16] {
     ]
 }
 
-/// Hash pseudo-aléatoire déterministe de taille arbitraire (octet `i` = `seed + i`).
+/// Hash seudoaleatorio determinista de tamaño arbitrario (byte `i` = `seed + i`).
 pub fn seeded_hash<const N: usize>(seed: u8) -> [u8; N] {
     let mut h = [0u8; N];
     for (i, b) in h.iter_mut().enumerate() {
@@ -68,7 +68,7 @@ pub fn seeded_hash<const N: usize>(seed: u8) -> [u8; N] {
     h
 }
 
-/// Handshake nominal sur un pair loopback : user hash + tags standard.
+/// Apretón de manos (handshake) nominal sobre un par loopback: user hash + etiquetas estándar.
 #[cfg(feature = "ed2k-loopback")]
 pub async fn connect_nominal_client(
     peer_addr: SocketAddr,
@@ -88,7 +88,7 @@ pub async fn connect_nominal_client(
     .expect("handshake failed")
 }
 
-/// Variante ne renvoyant que le client (majorité des tests).
+/// Variante que devuelve únicamente el cliente (mayoría de las pruebas).
 #[cfg(feature = "ed2k-loopback")]
 pub async fn nominal_client(peer_addr: SocketAddr, nick: &str) -> Ed2kLoopbackClient {
     connect_nominal_client(peer_addr, nick).await.0

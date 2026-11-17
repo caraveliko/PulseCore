@@ -32,29 +32,29 @@ async fn test_corrupted_database_fails_explicitly_in_daemon() {
     let res = DownloadService::new(&db_path, temp_parts_dir);
     assert!(res.is_err(), "DownloadService::new must fail on corrupt DB");
 
-    // Must not delete or overwrite the corrupt DB
+    // No debe borrar ni sobrescribir la base de datos dañada
     assert!(db_path.exists(), "Corrupt DB must still exist");
     assert_eq!(fs::read(&db_path).unwrap(), garbage);
 }
 
 #[tokio::test]
 async fn test_concurrent_downloads_no_crosstalk() {
-    // 1. Generate two synthetic files with different sizes and data
-    // File 1: 2 blocks (368_640 bytes) filled with 0xAA
+    // 1. Generar dos archivos sintéticos con diferentes tamaños y datos
+    // Archivo 1: 2 bloques (368_640 bytes) rellenos con 0xAA
     let data1 = vec![0xAAu8; 368_640];
     let hash1 = ed2k::hash_reader(&mut Cursor::new(&data1))
         .unwrap()
         .root_hash;
     let hash1_hex = hex::encode(hash1.0);
 
-    // File 2: 3 blocks (552_960 bytes) filled with 0xBB
+    // Archivo 2: 3 bloques (552_960 bytes) rellenos con 0xBB
     let data2 = vec![0xBBu8; 552_960];
     let hash2 = ed2k::hash_reader(&mut Cursor::new(&data2))
         .unwrap()
         .root_hash;
     let hash2_hex = hex::encode(hash2.0);
 
-    // 2. Setup Source Daemon A hosting both files
+    // 2. Configurar el daemon de origen A alojando ambos archivos
     let mut engine = LabSourceEngine::new();
     engine.host_file(hash1.0, "concurrent_1.txt", Bytes::from(data1.clone()));
     engine.host_file(hash2.0, "concurrent_2.txt", Bytes::from(data2.clone()));
@@ -62,19 +62,19 @@ async fn test_concurrent_downloads_no_crosstalk() {
     let source_service = LabSourceService::start(engine).await.unwrap();
     let source_addr = source_service.local_addr();
 
-    // 3. Setup Client Daemon B
+    // 3. Configurar el daemon de cliente B
     let client_dir = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
     let client_daemon = RunningDaemon::start(client_dir.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr = client_daemon.addr;
 
-    // Connect WebSocket client to Daemon B
+    // Conectar cliente WebSocket al daemon B
     let ws_url = format!("ws://{client_addr}/rpc");
     let (ws_stream, _) = connect_async(&ws_url).await.unwrap();
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Negociación (handshake)
     let handshake_req = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -90,7 +90,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
         .unwrap();
     let _ = read_response(&mut read, 1).await;
 
-    // Add File 1
+    // Añadir archivo 1
     let link1 = format!("ed2k://|file|concurrent_1.txt|368640|{}|/", hash1_hex);
     let add1_req = json!({
         "jsonrpc": "2.0",
@@ -111,7 +111,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
         .unwrap()
         .to_string();
 
-    // Add File 2
+    // Añadir archivo 2
     let link2 = format!("ed2k://|file|concurrent_2.txt|552960|{}|/", hash2_hex);
     let add2_req = json!({
         "jsonrpc": "2.0",
@@ -132,7 +132,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
         .unwrap()
         .to_string();
 
-    // Start both transfers simultaneously
+    // Iniciar ambas transferencias simultáneamente
     let src_add1_req = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -163,7 +163,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
         .unwrap();
     let _ = read_response(&mut read, 5).await; // response for lab.addPeerSource 2
 
-    // Monitor events until BOTH downloads reach "Completed"
+    // Monitorizar eventos hasta que AMBAS descargas alcancen "Completed"
     let mut id1_completed = false;
     let mut id2_completed = false;
 
@@ -192,7 +192,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
     assert!(id1_completed, "Download 1 must reach completed");
     assert!(id2_completed, "Download 2 must reach completed");
 
-    // Verify isolation and accuracy of final files on physical disk
+    // Verificar el aislamiento y la exactitud de los archivos finales en el disco físico
     let file1_final = client_target_dir.path().join("concurrent_1.txt");
     let file2_final = client_target_dir.path().join("concurrent_2.txt");
 
@@ -207,7 +207,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
     assert_eq!(read_data2.len(), 552_960);
     assert_eq!(read_data2, data2, "File 2 content must match data2 exactly");
 
-    // Clean up
+    // Limpieza
     client_daemon.stop().await;
     source_service.stop();
 }
@@ -220,7 +220,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         .root_hash;
     let hash_hex = hex::encode(hash.0);
 
-    // Mock slow server listening on 127.0.0.1:0
+    // Simular servidor lento escuchando en 127.0.0.1:0
     let slow_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let slow_addr = slow_listener.local_addr().unwrap();
 
@@ -229,10 +229,10 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         let codec = mule_protocol::PacketCodec::new();
         let mut buf = bytes::BytesMut::new();
 
-        // 1. Read Hello
+        // 1. Leer Hello
         let _ = read_lab_msg(&mut stream, &codec, &mut buf).await.unwrap();
 
-        // 2. Send HelloAck
+        // 2. Enviar HelloAck
         let ack = mule_protocol::lab::LabMessage::HelloAck {
             server_version: 1,
             nonce_ack: [0x42; 16],
@@ -240,7 +240,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         };
         send_lab_msg(&mut stream, &codec, &ack).await.unwrap();
 
-        // 3. Send FileOffer
+        // 3. Enviar FileOffer
         let offer = mule_protocol::lab::LabMessage::FileOffer {
             file_hash: hash.0,
             file_size: 10_000,
@@ -248,7 +248,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         };
         send_lab_msg(&mut stream, &codec, &offer).await.unwrap();
 
-        // 4. Read RequestBlock
+        // 4. Leer RequestBlock
         let req = read_lab_msg(&mut stream, &codec, &mut buf).await.unwrap();
         if let mule_protocol::lab::LabMessage::RequestBlock {
             start_offset,
@@ -256,7 +256,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
             ..
         } = req
         {
-            // Intentionally delay 1 second to simulate slow source / high latency
+            // Retrasar intencionadamente 1 segundo para simular fuente lenta / alta latencia
             tokio::time::sleep(Duration::from_millis(1000)).await;
 
             let block = mule_protocol::lab::LabMessage::BlockData {
@@ -269,11 +269,11 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
             send_lab_msg(&mut stream, &codec, &block).await.unwrap();
         }
 
-        // 5. Read Goodbye
+        // 5. Leer Goodbye
         let _ = read_lab_msg(&mut stream, &codec, &mut buf).await;
     });
 
-    // Start Client Daemon
+    // Iniciar daemon de cliente
     let client_dir = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
@@ -284,7 +284,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
     let (ws_stream, _) = connect_async(&ws_url).await.unwrap();
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -300,7 +300,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         .unwrap();
     let _ = read_response(&mut read, 1).await;
 
-    // Subscribe
+    // Suscribirse
     let req_sub = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -313,7 +313,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         .unwrap();
     let _ = read_response(&mut read, 2).await;
 
-    // Add download
+    // Añadir descarga
     let link = format!("ed2k://|file|slow_file.txt|10000|{hash_hex}|/");
     let req_add = json!({
         "jsonrpc": "2.0",
@@ -333,11 +333,11 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         .as_str()
         .unwrap()
         .to_string();
-    // Drain the queued lifecycle event if it has not already been consumed
-    // by read_response above.
+    // Purgar el evento de ciclo de vida en cola si no ha sido consumido ya
+    // por read_response arriba.
     let _ = tokio::time::timeout(Duration::from_millis(500), read.next()).await;
 
-    // Add slow peer source
+    // Añadir fuente de par lenta
     let req_src = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -353,7 +353,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         .unwrap();
     let _ = read_response(&mut read, 4).await;
 
-    // Wait for completed with timeout
+    // Esperar a que se complete con tiempo de espera
     let mut completed = false;
     let timeout = Duration::from_secs(5);
     let start = std::time::Instant::now();

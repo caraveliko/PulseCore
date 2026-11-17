@@ -9,21 +9,21 @@ use mule_mcp::DaemonClient;
 use mule_test_support::spawn_test_daemon;
 use serde_json::json;
 
-/// Exhaustivité de la classification : tout outil exposé doit avoir un
-/// niveau de risque — c'est ce test qui force la revue de risque à
-/// l'ajout d'un nouvel outil.
+/// Exhaustividad de la clasificación: toda herramienta expuesta debe tener un
+/// nivel de riesgo — esta prueba es la que obliga a revisar el riesgo al
+/// añadir una nueva herramienta.
 #[test]
 fn test_every_tool_is_classified() {
     for tool in list_tools() {
         assert!(
             classify(&tool.name).is_some(),
-            "outil non classé dans policy.rs : {}",
+            "herramienta no clasificada en policy.rs: {}",
             tool.name
         );
     }
 }
 
-/// Le profil `read` n'expose que des outils de lecture.
+/// El perfil `read` solo expone herramientas de lectura.
 #[test]
 fn test_read_profile_exposes_only_read_tools() {
     let tools = list_tools_for(ToolProfile::Read);
@@ -32,18 +32,18 @@ fn test_read_profile_exposes_only_read_tools() {
         assert_eq!(
             classify(&tool.name),
             Some(ToolRisk::Read),
-            "outil non-Read exposé en profil read : {}",
+            "herramienta no-Read expuesta en perfil read: {}",
             tool.name
         );
     }
-    // Repères connus : une lecture présente, une mutation et un
-    // destructif absents.
+    // Referencias conocidas: una lectura presente, una mutación y una
+    // destructiva ausentes.
     assert!(tools.iter().any(|t| t.name == "emule_status"));
     assert!(!tools.iter().any(|t| t.name == "emule_add_link"));
     assert!(!tools.iter().any(|t| t.name == "emule_shutdown"));
 }
 
-/// Le profil `safe` exclut les destructifs mais garde les mutations.
+/// El perfil `safe` excluye las destructivas pero mantiene las mutaciones.
 #[test]
 fn test_safe_profile_excludes_destructive_tools() {
     let tools = list_tools_for(ToolProfile::Safe);
@@ -51,7 +51,7 @@ fn test_safe_profile_excludes_destructive_tools() {
         assert_ne!(
             classify(&tool.name),
             Some(ToolRisk::Destructive),
-            "outil destructif exposé en profil safe : {}",
+            "herramienta destructiva expuesta en perfil safe: {}",
             tool.name
         );
     }
@@ -61,14 +61,14 @@ fn test_safe_profile_excludes_destructive_tools() {
     assert!(!tools.iter().any(|t| t.name == "emule_remove_download"));
 }
 
-/// Le profil `full` reproduit la liste complète.
+/// El perfil `full` reproduce la lista completa.
 #[test]
 fn test_full_profile_exposes_everything() {
     assert_eq!(list_tools_for(ToolProfile::Full).len(), list_tools().len());
 }
 
-/// Le refus d'exécution a lieu AVANT tout contact daemon : un outil hors
-/// profil est rejeté même avec un client valide.
+/// El rechazo de ejecución tiene lugar ANTES de cualquier contacto con el daemon:
+/// una herramienta fuera de perfil se rechaza incluso con un cliente válido.
 #[tokio::test]
 async fn test_execute_tool_blocked_by_profile() {
     let (addr, token, _dir) =
@@ -77,7 +77,7 @@ async fn test_execute_tool_blocked_by_profile() {
         .await
         .expect("DaemonClient connection should succeed");
 
-    // Mutation refusée en profil read
+    // Mutación rechazada en perfil read
     let res = execute_tool_for(
         ToolProfile::Read,
         &client,
@@ -88,17 +88,17 @@ async fn test_execute_tool_blocked_by_profile() {
     assert!(res.is_error);
     assert!(res.content[0].text.contains("blocked by profile 'read'"));
 
-    // Destructif refusé en profil safe
+    // Destructiva rechazada en perfil safe
     let res = execute_tool_for(ToolProfile::Safe, &client, "emule_shutdown", json!({})).await;
     assert!(res.is_error);
     assert!(res.content[0].text.contains("blocked by profile 'safe'"));
 
-    // Outil inconnu : refus quel que soit le profil
+    // Herramienta desconocida: rechazo independientemente del perfil
     let res = execute_tool_for(ToolProfile::Full, &client, "emule_nope", json!({})).await;
     assert!(res.is_error);
     assert!(res.content[0].text.contains("Unknown tool"));
 
-    // Lecture autorisée en profil read : l'appel atteint le daemon
+    // Lectura autorizada en perfil read: la llamada llega al daemon
     let res = execute_tool_for(ToolProfile::Read, &client, "emule_status", json!({})).await;
     assert!(!res.is_error, "status blocked unexpectedly: {:?}", res);
 }

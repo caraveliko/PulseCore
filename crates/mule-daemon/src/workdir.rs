@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 
 pub const PORTABLE_FLAG_FILENAME: &str = "portable.flag";
 pub const ENV_WORKDIR: &str = "EMULERUST_WORKDIR";
-/// Alias déprécié (avant le renommage eMuleRust), honoré avant `MULE_DATA_DIR`.
+/// Alias obsoleto (antes del cambio de nombre a eMuleRust), considerado antes que `MULE_DATA_DIR`.
 pub const ENV_SION_WORKDIR: &str = "EMULE_SION_WORKDIR";
 pub const ENV_LEGACY_WORKDIR: &str = "MULE_DATA_DIR";
 pub const ENV_DOWNLOADS_DIR: &str = "EMULERUST_DOWNLOADS_DIR";
-/// Alias déprécié (avant le renommage eMuleRust).
+/// Alias obsoleto (antes del cambio de nombre a eMuleRust).
 pub const ENV_SION_DOWNLOADS_DIR: &str = "EMULE_SION_DOWNLOADS_DIR";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +26,7 @@ pub struct ResolvedDirectories {
     pub workdir: PathBuf,
     pub default_download_dir: PathBuf,
     pub mode: WorkDirMode,
-    /// Compatibility field identical to `workdir`.
+    /// Campo de compatibilidad idéntico a `workdir`.
     pub path: PathBuf,
 }
 
@@ -35,12 +35,12 @@ pub type ResolvedWorkDir = ResolvedDirectories;
 pub struct WorkDirectoryResolver;
 
 impl WorkDirectoryResolver {
-    /// Resolves the runtime directories using the deterministic priority cascade:
-    /// 1. `--workdir <path>` (explicit CLI argument)
-    /// 2. `EMULERUST_WORKDIR` (env var, with deprecated `EMULE_SION_WORKDIR`
-    ///    and legacy `MULE_DATA_DIR` fallbacks)
-    /// 3. `portable.flag` adjacent to executable or bundle root -> `<bundle_root>/data` & `<bundle_root>/downloads`
-    /// 4. System default (%LOCALAPPDATA%\eMuleRust on Windows, ~/.emulerust on Unix; downloads in %USERPROFILE%\Downloads\eMuleRust)
+    /// Resuelve los directorios en tiempo de ejecución usando la cascada determinista de prioridades:
+    /// 1. `--workdir <path>` (argumento explícito de línea de comandos)
+    /// 2. `EMULERUST_WORKDIR` (variable de entorno, con alternativas para el obsoleto `EMULE_SION_WORKDIR`
+    ///    y el heredado `MULE_DATA_DIR`)
+    /// 3. `portable.flag` contiguo al ejecutable o a la raíz del paquete -> `<bundle_root>/data` y `<bundle_root>/downloads`
+    /// 4. Valor predeterminado del sistema (%LOCALAPPDATA%\eMuleRust en Windows, ~/.emulerust en Unix; descargas en %USERPROFILE%\Downloads\eMuleRust)
     pub fn resolve(
         cli_workdir: Option<PathBuf>,
         cli_downloads_dir: Option<PathBuf>,
@@ -53,8 +53,8 @@ impl WorkDirectoryResolver {
         )
     }
 
-    /// Pure resolver method with dependency injection for environment and exe location,
-    /// enabling 100% deterministic unit testing of all cascade tiers.
+    /// Método de resolución puro con inyección de dependencias para el entorno y la ubicación del ejecutable,
+    /// lo que permite realizar pruebas unitarias 100 % deterministas en todos los niveles de la cascada.
     pub fn resolve_with_context<F>(
         cli_workdir: Option<PathBuf>,
         cli_downloads_dir: Option<PathBuf>,
@@ -74,7 +74,7 @@ impl WorkDirectoryResolver {
                     .map(PathBuf::from)
             });
 
-        // 1. Explicit CLI argument
+        // 1. Argumento explícito de línea de comandos
         if let Some(arg) = cli_workdir {
             if !arg.as_os_str().is_empty() {
                 let bundle_root = arg.parent().and_then(|parent| {
@@ -103,8 +103,8 @@ impl WorkDirectoryResolver {
             }
         }
 
-        // 2. Environment variable: EMULERUST_WORKDIR (or deprecated
-        //    EMULE_SION_WORKDIR, or legacy MULE_DATA_DIR)
+        // 2. Variable de entorno: EMULERUST_WORKDIR (o el obsoleto
+        //    EMULE_SION_WORKDIR, o el heredado MULE_DATA_DIR)
         let env_workdir = get_env(ENV_WORKDIR)
             .or_else(|| get_env(ENV_SION_WORKDIR))
             .or_else(|| get_env(ENV_LEGACY_WORKDIR))
@@ -138,7 +138,7 @@ impl WorkDirectoryResolver {
             };
         }
 
-        // 3. Portable mode: strictly bounded bundle root detection
+        // 3. Modo portable: detección estrictamente acotada de la raíz del paquete
         if let Some(exe) = exe_path {
             if let Some(exe_dir) = exe.parent() {
                 let is_bin = exe_dir
@@ -171,7 +171,7 @@ impl WorkDirectoryResolver {
             }
         }
 
-        // 4. Installed default
+        // 4. Valor predeterminado de instalación
         let default_workdir = Self::resolve_system_default_workdir(&get_env);
         let default_download_dir = explicit_download_dir.unwrap_or_else(|| {
             Self::resolve_system_default_downloads_dir(&get_env, &default_workdir)

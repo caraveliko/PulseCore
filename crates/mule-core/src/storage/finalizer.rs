@@ -6,22 +6,22 @@ use std::path::{Path, PathBuf};
 
 use crate::error::CoreError;
 
-/// Strategy to follow if target destination file already exists.
+/// Estrategia a seguir si el archivo de destino objetivo ya existe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CollisionStrategy {
     #[default]
     FailIfExists,
     Overwrite,
-    /// eMule `CPartFile::PerformFileComplete` semantics: never overwrite an
-    /// existing destination — generate `name(1).ext`, `name(2).ext`, …
-    /// continuing numbering from an existing `(N)` suffix when present.
+    /// Semántica de `CPartFile::PerformFileComplete` de eMule: nunca sobrescribir un
+    /// destino existente — generar `name(1).ext`, `name(2).ext`, …
+    /// continuando la numeración a partir de un sufijo `(N)` existente si está presente.
     Rename,
 }
 
-/// Atomically finalizes a completed download from its `.part` file to a
-/// destination path. Returns the path actually written (identical to
-/// `target_path` unless `strategy` is [`CollisionStrategy::Rename`] and a
-/// collision had to be resolved).
+/// Finaliza de forma atómica una descarga completada desde su archivo `.part` hacia una
+/// ruta de destino. Devuelve la ruta realmente escrita (idéntica a
+/// `target_path` a menos que `strategy` sea [`CollisionStrategy::Rename`] y se
+/// haya tenido que resolver una colisión).
 pub fn finalize_file(
     temp_path: &Path,
     target_path: &Path,
@@ -39,9 +39,9 @@ pub fn finalize_file(
         fs::create_dir_all(parent)?;
     }
 
-    // Try atomic rename first
+    // Intentar primero el renombrado atómico
     if fs::rename(temp_path, &resolved).is_err() {
-        // Fallback to chunked copy (128 KiB aligned for NFS/network filesystems) + remove across filesystem boundaries
+        // Alternativa mediante copia por fragmentos (alineada a 128 KiB para NFS/sistemas de archivos en red) + eliminación entre límites de sistemas de archivos
         copy_chunked(temp_path, &resolved)?;
         let _ = fs::remove_file(temp_path);
     }
@@ -49,10 +49,10 @@ pub fn finalize_file(
     Ok(resolved)
 }
 
-/// Copies a file in chunks of 128 KiB (matching standard NFS wsize) with a final sync,
-/// optimizing cross-filesystem transfers across local NVMe and network mounts.
+/// Copia un archivo en fragmentos de 128 KiB (coincidiendo con el wsize estándar de NFS) con una sincronización final,
+/// optimizando transferencias entre sistemas de archivos a través de NVMe local y montajes de red.
 pub fn copy_chunked(src_path: &Path, dst_path: &Path) -> std::io::Result<u64> {
-    const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB aligned to NFS wsize
+    const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB alineados con el wsize de NFS
     let mut src = std::fs::File::open(src_path)?;
     let mut dst = std::fs::OpenOptions::new()
         .write(true)
@@ -76,11 +76,11 @@ pub fn copy_chunked(src_path: &Path, dst_path: &Path) -> std::io::Result<u64> {
     Ok(total_copied)
 }
 
-/// eMule `PerformFileComplete` collision naming: if `target` exists, try
-/// `stem(1).ext`, `stem(2).ext`, … When the file stem already ends with
-/// `(N)` (all-digits or empty, e.g. `file(3).mkv`), numbering continues at
-/// N+1 on the stripped stem. Extensionless files yield `stem(N)` (eMule
-/// emits `stem(N).` — a trailing dot Windows folds away anyway).
+/// Nomenclatura de colisiones de `PerformFileComplete` de eMule: si `target` existe, probar
+/// `stem(1).ext`, `stem(2).ext`, … Cuando el tronco del archivo ya termina en
+/// `(N)` (solo dígitos o vacío, p. ej. `file(3).mkv`), la numeración continúa en
+/// N+1 en el tronco desprovisto del sufijo. Los archivos sin extensión producen `stem(N)` (eMule
+/// emite `stem(N).` — un punto final que Windows descarta de todos modos).
 fn resolve_collision_path(target: &Path) -> PathBuf {
     if !target.exists() {
         return target.to_path_buf();
@@ -95,7 +95,7 @@ fn resolve_collision_path(target: &Path) -> PathBuf {
         None => (file_name, ""),
     };
 
-    // Existing `(N)` suffix: `file(3).mkv` colliding restarts at `file(4).mkv`.
+    // Sufijo `(N)` existente: `file(3).mkv` en colisión reinicia en `file(4).mkv`.
     let mut stem = base;
     let mut namecount: u64 = 0;
     if base.ends_with(')') {

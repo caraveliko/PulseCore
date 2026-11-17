@@ -9,19 +9,19 @@ use crate::ed2k::opcodes::{OP_GETSOURCES, OP_GETSOURCES_OBFU};
 use crate::ed2k::protocol::PR_ED2K;
 use crate::framing::RawPacket;
 
-/// Request to find sources for a specific file (`OP_GETSOURCES` = `0x19` or `OP_GETSOURCES_OBFU` = `0x23`).
+/// Petición para encontrar fuentes de un archivo específico (`OP_GETSOURCES` = `0x19` o `OP_GETSOURCES_OBFU` = `0x23`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct GetSourcesRequest {
-    /// 16-byte MD4 file hash.
+    /// Hash MD4 de archivo de 16 bytes.
     pub file_hash: [u8; 16],
-    /// File size in bytes.
+    /// Tamaño del archivo en bytes.
     pub file_size: u64,
-    /// Whether to request sources with obfuscation parameters (`OP_GETSOURCES_OBFU` = `0x23`).
+    /// Si se solicitan fuentes con parámetros de ofuscación (`OP_GETSOURCES_OBFU` = `0x23`).
     pub obfuscation: bool,
 }
 
 impl GetSourcesRequest {
-    /// Creates a new GetSourcesRequest (legacy plaintext OP_GETSOURCES = 0x19).
+    /// Crea un nuevo GetSourcesRequest (OP_GETSOURCES = 0x19 en texto plano heredado).
     pub fn new(file_hash: [u8; 16], file_size: u64) -> Self {
         Self {
             file_hash,
@@ -30,7 +30,7 @@ impl GetSourcesRequest {
         }
     }
 
-    /// Creates a new GetSourcesRequest with obfuscation toggle (0x23 if true, 0x19 if false).
+    /// Crea un nuevo GetSourcesRequest con conmutador de ofuscación (0x23 si es true, 0x19 si es false).
     pub fn with_obfuscation(file_hash: [u8; 16], file_size: u64, obfuscation: bool) -> Self {
         Self {
             file_hash,
@@ -39,7 +39,7 @@ impl GetSourcesRequest {
         }
     }
 
-    /// Encodes the request into a `RawPacket`.
+    /// Codifica la petición en un `RawPacket`.
     pub fn encode(&self, limits: &Ed2kLimits) -> Result<RawPacket, Ed2kEncodeError> {
         let opcode = if self.obfuscation {
             OP_GETSOURCES_OBFU
@@ -72,17 +72,17 @@ impl GetSourcesRequest {
     }
 }
 
-/// A peer source entry returned by the server.
+/// Entrada de fuente de par devuelta por el servidor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoundSourcePeer {
-    /// IPv4 address in network byte order or host integer.
+    /// Dirección IPv4 en orden de bytes de red o entero de host.
     pub ip: u32,
-    /// Port number.
+    /// Número de puerto.
     pub port: u16,
 }
 
 impl FoundSourcePeer {
-    /// Converts the source address to "A.B.C.D:port" string format.
+    /// Convierte la dirección de la fuente al formato de cadena "A.B.C.D:puerto".
     pub fn to_address_string(&self) -> String {
         let bytes = self.ip.to_le_bytes();
         format!(
@@ -92,30 +92,30 @@ impl FoundSourcePeer {
     }
 }
 
-/// Found sources response from server (`OP_FOUNDSOURCES` = `0x42`).
+/// Respuesta de fuentes encontradas del servidor (`OP_FOUNDSOURCES` = `0x42`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FoundSources {
-    /// 16-byte MD4 file hash.
+    /// Hash MD4 de archivo de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Sources list.
+    /// Lista de fuentes.
     pub sources: Vec<FoundSourcePeer>,
 }
 
-/// A peer source entry with obfuscation flags and optional UserHash (`OP_FOUNDSOURCES_OBFU` = `0x44`).
+/// Entrada de fuente de par con indicadores de ofuscación y UserHash opcional (`OP_FOUNDSOURCES_OBFU` = `0x44`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoundSourcePeerObfu {
-    /// IPv4 address in network byte order / host integer.
+    /// Dirección IPv4 en orden de bytes de red / entero de host.
     pub ip: u32,
-    /// Port number.
+    /// Número de puerto.
     pub port: u16,
-    /// Obfuscation settings byte.
+    /// Byte de configuración de ofuscación.
     pub obf_settings: u8,
-    /// Optional 16-byte user hash (present if obf_settings & 0x80 != 0).
+    /// Hash de usuario opcional de 16 bytes (presente si obf_settings & 0x80 != 0).
     pub user_hash: Option<[u8; 16]>,
 }
 
 impl FoundSourcePeerObfu {
-    /// Converts the source address to "A.B.C.D:port" string format.
+    /// Convierte la dirección de la fuente al formato de cadena "A.B.C.D:puerto".
     pub fn to_address_string(&self) -> String {
         let bytes = self.ip.to_le_bytes();
         format!(
@@ -124,30 +124,30 @@ impl FoundSourcePeerObfu {
         )
     }
 
-    /// Whether this peer supports protocol obfuscation (bit 0).
+    /// Si este par admite ofuscación de protocolo (bit 0).
     #[inline]
     pub fn supports_crypt(&self) -> bool {
         (self.obf_settings & 0x01) != 0
     }
 
-    /// Whether this peer requests protocol obfuscation (bit 1).
+    /// Si este par solicita ofuscación de protocolo (bit 1).
     #[inline]
     pub fn requests_crypt(&self) -> bool {
         (self.obf_settings & 0x02) != 0
     }
 
-    /// Whether this peer strictly requires protocol obfuscation (bit 2).
+    /// Si este par requiere estrictamente ofuscación de protocolo (bit 2).
     #[inline]
     pub fn requires_crypt(&self) -> bool {
         (self.obf_settings & 0x04) != 0
     }
 }
 
-/// Found sources response with obfuscation from server (`OP_FOUNDSOURCES_OBFU` = `0x44`).
+/// Respuesta de fuentes encontradas con ofuscación del servidor (`OP_FOUNDSOURCES_OBFU` = `0x44`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FoundSourcesObfu {
-    /// 16-byte MD4 file hash.
+    /// Hash MD4 de archivo de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Sources list with obfuscation parameters.
+    /// Lista de fuentes con parámetros de ofuscación.
     pub sources: Vec<FoundSourcePeerObfu>,
 }

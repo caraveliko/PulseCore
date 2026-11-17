@@ -11,15 +11,15 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
-/// Nombre maximal de trames lues en quête d'une réponse (les events broadcast
-/// peuvent précéder la réponse RPC sur le même socket).
+/// Número máximo de tramas leídas en busca de una respuesta (los eventos de difusión
+/// pueden preceder a la respuesta RPC en el mismo socket).
 const MAX_RESPONSE_FRAMES: usize = 64;
 
-/// Timeout par trame lue — borne la patience totale sans bloquer
-/// indéfiniment un test sur un socket silencieux.
+/// Tiempo de espera por trama leída — limita la paciencia total sin bloquear
+/// indefinidamente una prueba en un socket silencioso.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Envoie `val` sérialisé en JSON sur le flux d'écriture WS.
+/// Envía `val` serializado en JSON en el flujo de escritura WS.
 pub async fn send_json(
     write: &mut (impl SinkExt<Message, Error = WsError> + Unpin),
     val: Value,
@@ -30,9 +30,9 @@ pub async fn send_json(
         .unwrap();
 }
 
-/// Lit le flux WS jusqu'à la réponse JSON-RPC portant `id == expected_id`.
-/// Panique si aucune réponse ne survient dans [`MAX_RESPONSE_FRAMES`] trames
-/// ou si une trame dépasse [`FRAME_TIMEOUT`].
+/// Lee el flujo WS hasta la respuesta JSON-RPC que contiene `id == expected_id`.
+/// Entra en pánico si no se produce ninguna respuesta en [`MAX_RESPONSE_FRAMES`] tramas
+/// o si una trama supera [`FRAME_TIMEOUT`].
 pub async fn recv_response_by_id(
     read: &mut (impl StreamExt<Item = Result<Message, WsError>> + Unpin),
     expected_id: u64,

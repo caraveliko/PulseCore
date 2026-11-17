@@ -23,7 +23,7 @@ pub async fn handle_downloads_list(state: &AppState) -> Result<Value, JsonRpcErr
     let seq = state.sequence.load(std::sync::atomic::Ordering::SeqCst);
     let mut list = state.downloads.lock().await.list_download_details();
     let active_nas_id = state.current_nas_transfer().await;
-    // Attach in-flight block ranges (eMule "pending" yellow segments) and NAS queue flag.
+    // Adjuntar rangos de bloques en vuelo (segmentos amarillos "pendientes" de eMule) y bandera de cola del NAS.
     let pending_map = state.peer_session.pending_ranges_by_file().await;
     for detail in &mut list {
         if let Some(ranges) = pending_map.get(&detail.snapshot.ed2k_hash) {
@@ -34,7 +34,7 @@ pub async fn handle_downloads_list(state: &AppState) -> Result<Value, JsonRpcErr
         }
     }
 
-    // Attach active BitTorrent downloads from mule-torrent engine
+    // Adjuntar descargas activas de BitTorrent desde el motor mule-torrent
     if let Some(engine) = state.torrent.get() {
         for t in engine.list() {
             let u = torrent_info_hash_to_uuid(&t.info_hash);
@@ -167,11 +167,11 @@ pub async fn handle_add_ed2k_link(
         .clone()
         .unwrap_or_else(|| fallback_bundle_dir.clone());
 
-    // 4-Tier Resolution:
-    // Tier 1: Explicit targetDirectory
-    // Tier 2: Category default destination
-    // Tier 3: Global SQLite setting default_download_directory
-    // Tier 4: Bundle root default download dir
+    // Resolución en 4 niveles:
+    // Nivel 1: targetDirectory explícito
+    // Nivel 2: destino predeterminado de la categoría
+    // Nivel 3: ajuste global de SQLite default_download_directory
+    // Nivel 4: directorio de descarga predeterminado de la raíz del paquete
     let target_dir = if let Some(p) = target_dir_opt {
         let path = std::path::PathBuf::from(p);
         if path.is_absolute() {
@@ -237,7 +237,7 @@ pub async fn handle_add_ed2k_link(
 
     state.broadcast_download_update(snapshot.clone());
 
-    // Trigger immediate source query from server and Kad
+    // Desencadenar consulta inmediata de fuentes al servidor y a Kad
     let file_info = {
         state
             .downloads
@@ -247,8 +247,8 @@ pub async fn handle_add_ed2k_link(
     };
     if let Some((_, _, hash, size)) = file_info {
         let hash_hex = hex::encode(hash.0);
-        // Hash tronqué dans le span (8 hex suffisent à corréler ; le lien
-        // complet et le nom de fichier ne sont jamais loggés).
+        // Hash truncado en el span (8 caracteres hex bastan para correlacionar; el enlace
+        // completo y el nombre de archivo nunca se registran).
         tracing::Span::current().record("ed2k_hash", &hash_hex[..8.min(hash_hex.len())]);
         tracing::info!(
             "Download added: requesting immediate sources from server and Kad for file {}",
@@ -322,8 +322,8 @@ pub async fn handle_resume(state: &AppState, params: Option<Value>) -> Result<Va
         }
     }
 
-    // eMule `SafeConnect`: refuse to resume while neither the eD2K server
-    // nor Kad is reachable — sources could only be dead cache entries.
+    // `SafeConnect` de eMule: rechaza reanudar si ni el servidor eD2K
+    // ni Kad están accesibles — las fuentes solo podrían ser entradas de caché inactivas.
     if state.setting_bool("safe_connect", false).await {
         let server_up = state.server_session.snapshot().await.status
             == crate::services::server_session::ServerConnectionStatus::Connected;
@@ -338,7 +338,7 @@ pub async fn handle_resume(state: &AppState, params: Option<Value>) -> Result<Va
     let snapshot = state.downloads.lock().await.resume_download(&id)?;
     state.broadcast_download_update(snapshot.clone());
 
-    // Trigger immediate source query on resume
+    // Desencadenar consulta inmediata de fuentes al reanudar
     let file_info = {
         state
             .downloads
@@ -423,9 +423,9 @@ pub async fn handle_set_destination(
     Ok(crate::rpc::handlers::json_value(&detail))
 }
 
-/// `downloads.rename` — renomme le fichier (`{id, newName}`). Pour un
-/// download terminé, renomme aussi le fichier sur disque et l'entrée de
-/// partage associée.
+/// `downloads.rename` — renombra el archivo (`{id, newName}`). Para una
+/// descarga completada, renombra también el archivo en disco y la entrada de
+/// compartición asociada.
 pub async fn handle_rename(state: &AppState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
     let id_str = params["id"]
@@ -466,8 +466,8 @@ pub async fn handle_set_priority(
     Ok(crate::rpc::handlers::json_value(&snapshot))
 }
 
-/// `downloads.setMaxSources` — per-file source limit (eMule FT_MAXSOURCES).
-/// Params: `{id, maxSources}` — `maxSources` null/omitted restores global.
+/// `downloads.setMaxSources` — límite de fuentes por archivo (FT_MAXSOURCES de eMule).
+/// Parámetros: `{id, maxSources}` — `maxSources` nulo u omitido restablece el valor global.
 pub async fn handle_set_max_sources(
     state: &AppState,
     params: Option<Value>,
@@ -600,10 +600,10 @@ pub async fn handle_import_part_met(
     Ok(crate::rpc::handlers::json_value(&result))
 }
 
-/// `downloads.importCancelledMet` — `CKnownFileList::LoadCancelled` :
-/// imports an eMule `cancelled.met` file. `0x0F` masked entries keep
-/// their seed; legacy `0x0E` real hashes are masked under ours.
-/// Params: `metPath` (required).
+/// `downloads.importCancelledMet` — `CKnownFileList::LoadCancelled`:
+/// importa un archivo `cancelled.met` de eMule. Las entradas enmascaradas `0x0F` conservan
+/// su semilla; los hashes reales legados `0x0E` se enmascaran bajo la nuestra.
+/// Parámetros: `metPath` (obligatorio).
 pub async fn handle_import_cancelled_met(
     state: &AppState,
     params: Option<Value>,
@@ -620,10 +620,10 @@ pub async fn handle_import_cancelled_met(
     Ok(crate::rpc::handlers::json_value(&report))
 }
 
-/// `downloads.isCancelled` — `IsCancelledFileByID` : reports whether an
-/// eD2K hash belongs to the cancelled set (search-result marking; it is
-/// not a download block, like eMule).
-/// Params: `fileHash` (hex, required).
+/// `downloads.isCancelled` — `IsCancelledFileByID`: informa si un
+/// hash eD2K pertenece al conjunto cancelado (marcado en resultados de búsqueda; no es
+/// un bloqueo de descarga, al igual que en eMule).
+/// Parámetros: `fileHash` (hexadecimal, obligatorio).
 pub async fn handle_is_cancelled(
     state: &AppState,
     params: Option<Value>,

@@ -38,7 +38,7 @@ fn test_nodes_dat_v2_roundtrip() {
     let mut buf = Vec::new();
     file.write(&mut buf).unwrap();
 
-    // 12 bytes header (0, 2, 1) + 34 bytes contact = 46 bytes
+    // 12 bytes de cabecera (0, 2, 1) + 34 bytes de contacto = 46 bytes
     assert_eq!(buf.len(), 12 + 34);
 
     let parsed = NodesDatFile::parse(Cursor::new(buf)).unwrap();
@@ -58,7 +58,7 @@ fn test_nodes_dat_v2_roundtrip() {
 
 #[test]
 fn test_nodes_dat_corrupted_header_fails_gracefully() {
-    let raw = vec![0u8; 3]; // too short for count
+    let raw = vec![0u8; 3]; // demasiado corto para el recuento
     let res = NodesDatFile::parse(Cursor::new(raw));
     assert!(res.is_err());
 }
@@ -67,7 +67,7 @@ fn test_nodes_dat_corrupted_header_fails_gracefully() {
 fn test_nodes_dat_oversized_count_rejected() {
     let mut buf = Vec::new();
     let excessive_count = (MAX_NODES_COUNT + 100) as u32;
-    // v2 header with excessive count
+    // Cabecera v2 con recuento excesivo
     buf.extend_from_slice(&0u32.to_le_bytes());
     buf.extend_from_slice(&2u32.to_le_bytes());
     buf.extend_from_slice(&excessive_count.to_le_bytes());

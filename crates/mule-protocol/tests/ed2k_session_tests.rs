@@ -282,7 +282,7 @@ async fn test_early_hello_answer_rejected() {
 
     assert_eq!(packet.opcode, mule_protocol::ed2k::opcodes::OP_HELLO_ANSWER);
 
-    // Listener session processing this packet fails with HelloAnswerBeforeHello
+    // La sesión oyente procesando este paquete falla con HelloAnswerBeforeHello
     let mut session = Ed2kSession::new_listener(sample_user_hash(), 0, 39735);
     let session_res = session.on_packet_received(&packet);
     assert!(session_res.is_err());
@@ -605,7 +605,7 @@ fn test_non_mutation_property_on_raw_and_unhandled_frames() {
     );
     assert_eq!(snap2.unhandled_packets_count, 2);
 
-    // 6. Inject Raw frame 3: Unknown opcode 0xF0 (0xFE est désormais
+    // 6. Inyectar trama Raw 3: Opcode desconocido 0xF0 (0xFE es ahora
     //    OP_PORTTEST en 0.72a)
     let pkt_fe = RawPacket {
         protocol: PR_ED2K,

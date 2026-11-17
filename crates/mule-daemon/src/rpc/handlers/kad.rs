@@ -329,9 +329,9 @@ pub async fn handle_kad_publish_keywords(
         .as_u64()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'fileSize' parameter"))?;
 
-    // eMule publishes `TAG_KADAICHHASHPUB` only when the AICH root hash is
-    // already known (`HasAICHHash()` — computed lazily on first request),
-    // never recomputing it at publish time.
+    // eMule publica `TAG_KADAICHHASHPUB` solo cuando el hash raíz AICH ya
+    // se conoce (`HasAICHHash()` — calculado de forma diferida en la primera petición),
+    // sin recalcularlo nunca en el momento de la publicación.
     let aich_root = state
         .downloads
         .lock()
@@ -419,10 +419,10 @@ pub async fn handle_kad_bootstrap_from_url(
         .as_str()
         .unwrap_or("http://upd.emule-security.org/nodes.dat");
 
-    // Anti-SSRF : schéma http/https, IP publiques uniquement en profil
-    // public, loopback seul en LocalLab ; redirections désactivées et IP
-    // DNS épinglées (`resolve_to`) — sinon une URL validée pouvait
-    // déléguer vers une cible interne.
+    // Anti-SSRF: esquema http/https, solo IPs públicas en perfil
+    // público, solo loopback en LocalLab; redirecciones desactivadas e IPs
+    // DNS fijadas (`resolve_to`) — de lo contrario, una URL validada podría
+    // redirigir hacia un objetivo interno.
     let (_target, bytes) = crate::net_fetch::fetch_url_bytes(state, url).await?;
     let url = _target.url.to_string();
 
@@ -432,7 +432,7 @@ pub async fn handle_kad_bootstrap_from_url(
         .await
         .map_err(JsonRpcError::business)?;
 
-    // Spawn background bootstrap across seed contacts to discover active live neighbors
+    // Lanzar arranque (bootstrap) en segundo plano entre los contactos semilla para descubrir vecinos activos
     let kad_clone = state.kad.clone();
     tokio::spawn(async move {
         kad_clone.bootstrap_active_contacts(15).await;

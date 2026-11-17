@@ -36,37 +36,37 @@ use super::source_exchange::{
 use super::types::PeerError;
 use mule_core::model::PeerFailureReason;
 
-/// Inputs of one `SendFileRequest` bundle, gathered once per send so the
-/// multipacket and split forms carry identical content.
+/// Entradas de un paquete `SendFileRequest`, recopiladas una vez por envío para que las
+/// formas multipaquete y dividida transporten contenido idéntico.
 pub(crate) struct FileRequestInputs {
-    /// MD4 hash of the requested file.
+    /// Hash MD4 del archivo solicitado.
     pub file_hash: [u8; 16],
-    /// File size in bytes (EXT/EXT2 envelopes).
+    /// Tamaño del archivo en bytes (envoltorios EXT/EXT2).
     pub file_size: u64,
-    /// Number of eD2K parts — `OP_SETREQFILEID` is skipped for
-    /// single-part files (`DownloadClient.cpp:292`).
+    /// Número de partes eD2K — `OP_SETREQFILEID` se omite para
+    /// archivos de una sola parte (`DownloadClient.cpp:292`).
     pub part_count: u16,
-    /// Negotiated extended-requests version (`m_byExtendedRequestsVer`).
+    /// Versión negociada de peticiones extendidas (`m_byExtendedRequestsVer`).
     pub peer_ext_req: u8,
-    /// Our own part availability for the file — `WritePartStatus`
-    /// ext-info, present iff `peer_ext_req > 0`.
+    /// Nuestra propia disponibilidad de partes para el archivo — información extendida
+    /// de `WritePartStatus`, presente si y solo si `peer_ext_req > 0`.
     pub our_part_status: Option<PartAvailabilityMask>,
-    /// SX request admitted by `IsSourceRequestAllowed` this cycle.
+    /// Petición SX admitida por `IsSourceRequestAllowed` en este ciclo.
     pub sx_request: Option<Ed2kRequestSources>,
-    /// Whether to request the AICH root — `peer_supports_aich` and no
-    /// trusted root known yet (eMule asks unconditionally; skipping once
-    /// the root is learned is a documented optimization).
+    /// Si se debe solicitar la raíz AICH — `peer_supports_aich` y aún sin raíz
+    /// de confianza conocida (eMule la pide incondicionalmente; omitirla una vez
+    /// aprendida la raíz es una optimización documentada).
     pub aich_file_hash_req: bool,
-    /// Our trusted AICH root — embedded in the EXT2 `FileIdentifier`
-    /// (`bHasAICHHash` → `WriteIdentifier` includes it).
+    /// Nuestra raíz AICH de confianza — incrustada en el `FileIdentifier` EXT2
+    /// (`bHasAICHHash` → `WriteIdentifier` la incluye).
     pub aich_root: Option<[u8; 20]>,
-    /// Negotiated multipacket envelope level.
+    /// Nivel de envoltorio multipaquete negociado.
     pub level: MultiPacketLevel,
 }
 
-/// Gathers everything `SendFileRequest` needs for `file_hash_str` on
-/// `target_addr`: part geometry, our part-status ext-info, the SX
-/// decision (`IsSourceRequestAllowed`) and the AICH state.
+/// Recopila todo lo que `SendFileRequest` necesita para `file_hash_str` en
+/// `target_addr`: geometría de partes, nuestra información extendida de estado de partes, la decisión
+/// de SX (`IsSourceRequestAllowed`) y el estado AICH.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn gather_file_request_inputs(
     downloads: &Arc<Mutex<DownloadService>>,
@@ -97,8 +97,8 @@ pub(crate) async fn gather_file_request_inputs(
     } else {
         0
     };
-    // Notre propre part-status : parts dont la plage complète est déjà
-    // téléchargée — eMule `WritePartStatus` (envoyé iff ext_req > 0).
+    // Nuestro propio estado de partes: partes cuyo rango completo ya está
+    // descargado — `WritePartStatus` de eMule (enviado si y solo si ext_req > 0).
     let our_part_status = if peer_ext_req > 0 && part_count > 0 {
         let available: Vec<u16> = (0..part_count)
             .filter(|&p| {
@@ -135,10 +135,10 @@ pub(crate) async fn gather_file_request_inputs(
     }
 }
 
-/// eMule `SendFileRequest` — returns the wire packets in send order:
-/// a single `OP_MULTIPACKET*` when negotiated, else the split bundle
+/// `SendFileRequest` de eMule — devuelve los paquetes de cable en orden de envío:
+/// un único `OP_MULTIPACKET*` cuando se negoció, o bien el lote dividido
 /// `REQFILENAME(+extinfo)` → `SETREQFILEID` → `REQUESTSOURCES` →
-/// `AICHFILEHASHREQ` (same sub-request order as eMule's multipacket).
+/// `AICHFILEHASHREQ` (mismo orden de subpeticiones que el multipaquete de eMule).
 pub(crate) fn build_file_request_packets(
     encoder: &Ed2kEncoder,
     inputs: &FileRequestInputs,
@@ -160,9 +160,9 @@ pub(crate) fn build_file_request_packets(
     };
 
     if inputs.level != MultiPacketLevel::None {
-        // Enveloppe — EXT2 porte le FileIdentifier (hash+size+AICH si
-        // connu), EXT hash+size, BASIC hash seul. Un fichier de taille
-        // inconnue dégrade proprement vers l'enveloppe hash seule.
+        // Envoltorio — EXT2 porta el FileIdentifier (hash+tamaño+AICH si
+        // se conoce), EXT hash+tamaño, BASIC solo hash. Un archivo de tamaño
+        // desconocido se degrada limpiamente hacia el envoltorio de solo hash.
         let file_ref = match inputs.level {
             MultiPacketLevel::Ext2 if inputs.file_size > 0 => {
                 let mut id = Ed2kFileIdentifier::new(inputs.file_hash, inputs.file_size);
@@ -177,9 +177,9 @@ pub(crate) fn build_file_request_packets(
             }
             _ => Ed2kMultiPacketFileRef::Hash(inputs.file_hash),
         };
-        // Sous-opcodes dans l'ordre eMule : REQFILENAME → SETREQFILEID →
-        // REQUESTSOURCES(2) → AICHFILEHASHREQ (jamais sous EXT2 : la
-        // racine AICH voyage déjà dans le FileIdentifier).
+        // Sub-opcodes en el orden de eMule: REQFILENAME → SETREQFILEID →
+        // REQUESTSOURCES(2) → AICHFILEHASHREQ (nunca bajo EXT2: la
+        // raíz AICH ya viaja en el FileIdentifier).
         let mut subs = Vec::with_capacity(4);
         subs.push(Ed2kMultiPacketSubRequest::FileName { ext_info });
         if inputs.part_count > 1 {
@@ -209,8 +209,8 @@ pub(crate) fn build_file_request_packets(
         return Ok(vec![pkt]);
     }
 
-    // Forme éclatée (héritage) — même ordre que la branche `else` de
-    // `SendFileRequest` : REQFILENAME, SETREQFILEID, SOURCES, AICH.
+    // Forma dividida (heredada) — mismo orden que la rama `else` de
+    // `SendFileRequest`: REQFILENAME, SETREQFILEID, SOURCES, AICH.
     let mut packets = Vec::with_capacity(4);
     let req_filename_pkt = if let (Some(mask), true) =
         (inputs.our_part_status.as_ref(), inputs.peer_ext_req > 0)
@@ -269,12 +269,12 @@ pub(crate) fn build_file_request_packets(
     Ok(packets)
 }
 
-/// eMule `ListenSocket.cpp:1071-1099` — expands an inbound
-/// `OP_MULTIPACKETANSWER`/`OP_MULTIPACKETANSWER_EXT2` into the equivalent
-/// standalone packets (the envelope's file hash is prepended back to each
-/// sub-answer), so the normal per-opcode dispatch processes them
-/// unchanged. Returns `None` for packets that are not multipacket
-/// answers, and `Some(vec![])` for malformed answers (consumed).
+/// `ListenSocket.cpp:1071-1099` de eMule — expande una respuesta entrante
+/// `OP_MULTIPACKETANSWER`/`OP_MULTIPACKETANSWER_EXT2` en los paquetes independientes
+/// equivalentes (el hash de archivo del envoltorio se antepone de nuevo a cada
+/// subrespuesta), de modo que el despacho normal por opcode los procesa sin
+/// cambios. Devuelve `None` para paquetes que no son respuestas multipaquete,
+/// y `Some(vec![])` para respuestas malformadas (consumidas).
 pub(crate) fn expand_multipacket_answer(packet: &RawPacket) -> Option<Vec<RawPacket>> {
     use mule_protocol::ed2k::{
         Ed2kMultiPacketSubAnswer, OP_AICHFILEHASHRES, OP_MULTIPACKETANSWER,
@@ -306,7 +306,7 @@ pub(crate) fn expand_multipacket_answer(packet: &RawPacket) -> Option<Vec<RawPac
     for sub in ans.sub_answers {
         match sub {
             Ed2kMultiPacketSubAnswer::FileName(name) => {
-                // Standalone `OP_REQFILENAMEANSWER` = hash16 + len u16 + name.
+                // `OP_REQFILENAMEANSWER` independiente = hash16 + len u16 + name.
                 let mut payload = Vec::with_capacity(18 + name.len());
                 payload.extend_from_slice(&file_hash);
                 payload.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -321,7 +321,7 @@ pub(crate) fn expand_multipacket_answer(packet: &RawPacket) -> Option<Vec<RawPac
                 part_count,
                 part_status,
             } => {
-                // Standalone `OP_FILESTATUS` = hash16 + u16 + bitfield.
+                // `OP_FILESTATUS` independiente = hash16 + u16 + bitfield.
                 let mut payload = Vec::with_capacity(18 + part_status.len());
                 payload.extend_from_slice(&file_hash);
                 payload.extend_from_slice(&part_count.to_le_bytes());
@@ -333,7 +333,7 @@ pub(crate) fn expand_multipacket_answer(packet: &RawPacket) -> Option<Vec<RawPac
                 ));
             }
             Ed2kMultiPacketSubAnswer::AichFileHash(root) => {
-                // Standalone `OP_AICHFILEHASHANS` = hash16 + root 20B.
+                // `OP_AICHFILEHASHANS` independiente = hash16 + root 20B.
                 let mut payload = Vec::with_capacity(36);
                 payload.extend_from_slice(&file_hash);
                 payload.extend_from_slice(&root);
@@ -348,9 +348,9 @@ pub(crate) fn expand_multipacket_answer(packet: &RawPacket) -> Option<Vec<RawPac
     Some(out)
 }
 
-/// Builds and writes the `SendFileRequest` bundle, then applies
-/// `SetLastAskedForSources` bookkeeping when an SX request went out
-/// (eMule marks it after `SendPacket`).
+/// Construye y escribe el lote de `SendFileRequest`, aplicando después la
+/// contabilidad de `SetLastAskedForSources` cuando se envió una petición SX
+/// (eMule la marca tras `SendPacket`).
 pub(crate) async fn send_file_request_packets(
     stream: &mut ObfuscatedStream<TcpStream>,
     encoder: &Ed2kEncoder,

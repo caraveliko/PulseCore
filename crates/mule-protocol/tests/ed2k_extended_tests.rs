@@ -47,9 +47,9 @@ fn roundtrip(msg: Ed2kMessage) -> Ed2kMessage {
     roundtrip_v(msg, 2)
 }
 
-/// Round-trip avec un `ExtendedRequestsVersion` négocié explicite (eMule
-/// `m_byExtendedRequestsVer`) — nécessaire pour les corps `MULTIPACKET*` dont
-/// l'ext-info de `0x58` dépend de cette version.
+/// Ida y vuelta con una `ExtendedRequestsVersion` negociada explícita (eMule
+/// `m_byExtendedRequestsVer`) — necesaria para los cuerpos `MULTIPACKET*` cuya
+/// ext-info de `0x58` depende de esta versión.
 fn roundtrip_v(msg: Ed2kMessage, extended_requests_version: u8) -> Ed2kMessage {
     let encoder = Ed2kEncoder::default();
     let decoder = Ed2kDecoder::default().with_extended_requests_version(extended_requests_version);
@@ -90,7 +90,7 @@ fn file_identifier_requires_md4_on_tcp() {
     buf.extend_from_slice(&9_728_000u64.to_le_bytes());
     let mut r = mule_protocol::ed2k::TagReader::new(&buf, 0, PR_EMULE, Some(OP_MULTIPACKET_EXT2));
     assert!(Ed2kFileIdentifier::read_from(&mut r, false).is_err());
-    // … but tolerated when the caller allows empty MD4 (Kad context).
+    // … pero tolerado cuando el llamador permite MD4 vacío (contexto Kad).
     let mut r2 = mule_protocol::ed2k::TagReader::new(&buf, 0, PR_EMULE, Some(OP_MULTIPACKET_EXT2));
     let id = Ed2kFileIdentifier::read_from(&mut r2, true).unwrap();
     assert_eq!(id.file_size, Some(9_728_000));
@@ -256,7 +256,7 @@ fn multipacket_rejects_unknown_subopcode() {
 
 #[test]
 fn multipacket_extinfo_version0_absent() {
-    // Version 0 : les octets suivant 0x58 sont des sous-opcodes (pas d'ext-info).
+    // Versión 0: los bytes que siguen a 0x58 son sub-opcodes (sin ext-info).
     let mut payload = Vec::new();
     payload.extend_from_slice(&hash16(2));
     payload.push(OP_REQFILENAME);
@@ -274,7 +274,7 @@ fn multipacket_extinfo_version0_absent() {
 
 #[test]
 fn multipacket_extinfo_version1_bitfield_only() {
-    // Version 1 : u16 part count + bitfield, pas de complete_sources.
+    // Versión 1: u16 recuento de partes + bitfield, sin complete_sources.
     let mut payload = Vec::new();
     payload.extend_from_slice(&hash16(2));
     payload.push(OP_REQFILENAME);
@@ -317,12 +317,12 @@ fn multipacket_extinfo_version2_with_complete_sources() {
 
 #[test]
 fn multipacket_extinfo_truncated_rejected() {
-    // Version 1, bitfield annoncé pour 10 parts mais tronqué à 1 octet.
+    // Versión 1, bitfield anunciado para 10 partes pero truncado a 1 byte.
     let mut payload = Vec::new();
     payload.extend_from_slice(&hash16(2));
     payload.push(OP_REQFILENAME);
     payload.extend_from_slice(&10u16.to_le_bytes());
-    payload.push(0xFF); // manque le 2e octet du bitfield
+    payload.push(0xFF); // falta el 2.º byte del bitfield
     assert!(
         decode_multipacket_request(PR_EMULE, OP_MULTIPACKET, &payload, 0, &limits(), 1).is_err()
     );
@@ -330,8 +330,8 @@ fn multipacket_extinfo_truncated_rejected() {
 
 #[test]
 fn multipacket_extinfo_strict_profile() {
-    // UnknownStrict : la version est explicite — le parsing reste
-    // déterministe (ici v0 → 0x4F lu comme sous-opcode, pas d'ext-info).
+    // UnknownStrict: la versión es explícita — el análisis sintáctico sigue siendo
+    // determinista (aquí v0 → 0x4F leído como sub-opcode, sin ext-info).
     let mut payload = Vec::new();
     payload.extend_from_slice(&hash16(2));
     payload.push(OP_REQFILENAME);
@@ -453,9 +453,9 @@ fn captcha_response_roundtrip() {
 
 // ---------- OP_REQFILENAME extended info (negotiated version) ----------
 
-/// eMule 0.72a `SendFileRequest`: `0x58` = hash16 + ext-info selon la
-/// `ExtendedRequestsVersion` négociée. Un paquet nu vers un pair ext_req>0
-/// provoque une exception filaire côté eMule (connexion fermée).
+/// eMule 0.72a `SendFileRequest`: `0x58` = hash16 + ext-info según la
+/// `ExtendedRequestsVersion` negociada. Un paquete desnudo hacia un par con ext_req>0
+/// provoca una excepción de cable en el lado de eMule (conexión cerrada).
 #[test]
 fn req_filename_ext_info_matches_negotiated_version() {
     use mule_protocol::ed2k::encoder::encode_req_filename;
@@ -463,7 +463,7 @@ fn req_filename_ext_info_matches_negotiated_version() {
 
     let hash = hash16(0x40);
 
-    // v0 : hash seul (legacy)
+    // v0: solo hash (heredado)
     let pkt = encode_req_filename(
         &limits(),
         &hash,
@@ -476,13 +476,13 @@ fn req_filename_ext_info_matches_negotiated_version() {
     assert_eq!(pkt.opcode, OP_REQFILENAME);
     assert_eq!(pkt.payload.len(), 16);
 
-    // v1 : hash + u16 part_count + bitfield
+    // v1: hash + u16 recuento de partes + bitfield
     let mask = PartAvailabilityMask::from_parts(&[0, 2], 3); // 0b00000101
     let pkt = encode_req_filename(&limits(), &hash, &mask, 7, 1).unwrap();
     assert_eq!(pkt.payload.len(), 16 + 2 + 1);
     assert_eq!(&pkt.payload[16..], &[0x03, 0x00, 0x05]);
 
-    // v2 : + u16 complete_sources
+    // v2: + u16 complete_sources
     let pkt = encode_req_filename(&limits(), &hash, &mask, 7, 2).unwrap();
     assert_eq!(pkt.payload.len(), 16 + 2 + 1 + 2);
     assert_eq!(&pkt.payload[19..], &[0x07, 0x00]);

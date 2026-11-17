@@ -13,7 +13,7 @@ async fn test_filter_import_status_and_clear_rpc() {
     let (state, dir) = rpc_state("filter_test_token_123");
     let mut authenticated = false;
 
-    // 1. Authenticate with system.hello
+    // 1. Autenticar con system.hello
     let hello_req = make_req(
         1,
         "system.hello",
@@ -35,7 +35,7 @@ async fn test_filter_import_status_and_clear_rpc() {
     assert!(caps.iter().any(|c| c.as_str() == Some("ip-filter")));
     assert!(caps.iter().any(|c| c.as_str() == Some("rate-limits")));
 
-    // 2. Initial filter status -> empty
+    // 2. Estado inicial del filtro -> vacío
     let status_req = make_req(2, "filter.getStatus", None);
     let resp = handle_request(&state, status_req, &mut authenticated)
         .await
@@ -44,7 +44,7 @@ async fn test_filter_import_status_and_clear_rpc() {
     assert_eq!(res["range_count"], 0);
     assert_eq!(res["enabled"], true);
 
-    // 3. Create a temporary ipfilter.dat file
+    // 3. Crear un archivo temporal ipfilter.dat
     let filter_path = dir.path().join("ipfilter.dat");
     {
         let mut file = File::create(&filter_path).unwrap();
@@ -58,8 +58,8 @@ async fn test_filter_import_status_and_clear_rpc() {
         .unwrap();
     }
 
-    // 4. Import file via filter.importFile — même shape que getStatus
-    //    (le rapport d'import est exposé via `last_import_report`).
+    // 4. Importar archivo mediante filter.importFile — misma estructura que getStatus
+    //    (el informe de importación se expone mediante `last_import_report`).
     let import_req = make_req(
         3,
         "filter.importFile",
@@ -76,7 +76,7 @@ async fn test_filter_import_status_and_clear_rpc() {
     assert_eq!(res["last_import_report"]["coalesced_count"], 1); // 2 adjacent ranges merged
     assert_eq!(res["last_import_report"]["final_range_count"], 2);
 
-    // 5. Check filter stats
+    // 5. Comprobar estadísticas del filtro
     let stats_req = make_req(4, "filter.getStats", None);
     let resp = handle_request(&state, stats_req, &mut authenticated)
         .await
@@ -84,8 +84,8 @@ async fn test_filter_import_status_and_clear_rpc() {
     let res = resp.result.unwrap();
     assert_eq!(res["range_count"], 2);
 
-    // 6. Disable/enable filter — les plages et le rapport survivent au
-    //    toggle (régression : la carte UI disparaissait au ré-enable).
+    // 6. Deshabilitar/habilitar filtro — los rangos y el informe sobreviven a la
+    //    conmutación (regresión: la tarjeta en la UI desaparecía al volver a habilitar).
     let set_enabled_req = make_req(5, "filter.setEnabled", Some(json!({ "enabled": false })));
     let resp = handle_request(&state, set_enabled_req, &mut authenticated)
         .await
@@ -104,7 +104,7 @@ async fn test_filter_import_status_and_clear_rpc() {
     assert_eq!(res["range_count"], 2);
     assert_eq!(res["last_import_report"]["final_range_count"], 2);
 
-    // 7. Clear filter
+    // 7. Limpiar filtro
     let clear_req = make_req(6, "filter.clear", None);
     let resp = handle_request(&state, clear_req, &mut authenticated)
         .await
@@ -117,7 +117,7 @@ async fn test_rate_limits_get_and_set_rpc() {
     let (state, _dir) = rpc_state("filter_test_token_123");
     let mut authenticated = true;
 
-    // 1. Get initial limits
+    // 1. Obtener límites iniciales
     let get_req = make_req(1, "limits.get", None);
     let resp = handle_request(&state, get_req, &mut authenticated)
         .await
@@ -127,7 +127,7 @@ async fn test_rate_limits_get_and_set_rpc() {
     assert_eq!(res["uploadBytesPerSec"], 0);
     assert_eq!(res["connectionsPerMinute"], 120);
 
-    // 2. Set custom limits
+    // 2. Establecer límites personalizados
     let set_req = make_req(
         2,
         "limits.set",
@@ -150,17 +150,17 @@ async fn test_rate_limits_get_and_set_rpc() {
     assert_eq!(res["kadPacketsPerSec"], 20);
 }
 
-/// eMule `GetMaxDownloadInBytesPerSec` (« don't be a Lam3r :) ») : quand
-/// la limite upload descend sous 20 Ko/s, le download *effectif* est
-/// plafonné à coef×upload, mais la valeur *configurée* persistée reste
-/// intacte — remonter l'upload restaure le download sans le re-saisir.
+/// `GetMaxDownloadInBytesPerSec` de eMule («don't be a Lam3r :)»): cuando
+/// el límite de subida baja de 20 KB/s, la descarga *efectiva* se
+/// limita a coef×subida, pero el valor *configurado* persistido permanece
+/// intacto — subir la subida restablece la descarga sin volver a introducirla.
 #[tokio::test]
 async fn test_ud_ratio_caps_download_when_upload_low() {
     let (state, _dir) = rpc_state("filter_test_token_123");
     let mut authenticated = true;
 
-    // Upload 5 Ko/s (coef 4) + download 1000 Ko/s → effectif 20 Ko/s,
-    // configuré conservé.
+    // Subida 5 KB/s (coef 4) + descarga 1000 KB/s → efectivo 20 KB/s,
+    // configurado conservado.
     let set_req = make_req(
         1,
         "limits.set",
@@ -178,8 +178,8 @@ async fn test_ud_ratio_caps_download_when_upload_low() {
     assert_eq!(res["downloadConfiguredBytesPerSec"], 1_024_000);
     assert_eq!(res["downloadRatioApplied"], true);
 
-    // Remonter l'upload à 50 Ko/s lève le plafond sans re-saisir le
-    // download configuré.
+    // Subir la subida a 50 KB/s elimina el tope sin volver a introducir la
+    // descarga configurada.
     let set_req = make_req(
         2,
         "limits.set",
@@ -192,7 +192,7 @@ async fn test_ud_ratio_caps_download_when_upload_low() {
     assert_eq!(res["downloadBytesPerSec"], 1_024_000);
     assert_eq!(res["downloadRatioApplied"], false);
 
-    // Upload illimité (0) → pas de ratio.
+    // Subida ilimitada (0) → sin ratio.
     let set_req = make_req(3, "limits.set", Some(json!({ "uploadBytesPerSec": 0 })));
     let resp = handle_request(&state, set_req, &mut authenticated)
         .await

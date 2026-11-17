@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::RwLock;
 
-/// Deterministic session pseudonymizer for addresses in audit logs and reports.
-/// Transforms `198.51.100.23:39735` into `peer-01:39735` or `server-01:39735` without leaking raw IP.
+/// Seudonimizador determinista de sesión para direcciones en registros de auditoría e informes.
+/// Transforma `198.51.100.23:39735` en `peer-01:39735` o `server-01:39735` sin filtrar la IP real.
 pub struct SessionPseudonymizer {
     peer_map: RwLock<HashMap<String, String>>,
     server_map: RwLock<HashMap<String, String>>,
@@ -26,8 +26,8 @@ impl SessionPseudonymizer {
         }
     }
 
-    /// Returns a deterministic identifier for a peer address, preserving the port.
-    /// Example: `peer-01:39735`.
+    /// Devuelve un identificador determinista para una dirección de par, preservando el puerto.
+    /// Ejemplo: `peer-01:39735`.
     pub fn pseudonymize_peer(&self, addr: SocketAddr) -> String {
         let ip_str = addr.ip().to_string();
         let mut map = self.peer_map.write().unwrap();
@@ -38,10 +38,10 @@ impl SessionPseudonymizer {
         format!("{}:{}", prefix, addr.port())
     }
 
-    /// Returns a deterministic identifier for a bare IP (no port),
-    /// sharing the peer table so `peer-NN` stays consistent with
+    /// Devuelve un identificador determinista para una IP pura (sin puerto),
+    /// compartiendo la tabla de pares para que `peer-NN` se mantenga coherente con
     /// [`SessionPseudonymizer::pseudonymize_peer`].
-    /// Example: `peer-01`.
+    /// Ejemplo: `peer-01`.
     pub fn pseudonymize_ip(&self, ip: std::net::IpAddr) -> String {
         let ip_str = ip.to_string();
         let mut map = self.peer_map.write().unwrap();
@@ -51,8 +51,8 @@ impl SessionPseudonymizer {
             .clone()
     }
 
-    /// Returns a deterministic identifier for a server address, preserving the port.
-    /// Example: `server-01:49661`.
+    /// Devuelve un identificador determinista para una dirección de servidor, preservando el puerto.
+    /// Ejemplo: `server-01:49661`.
     pub fn pseudonymize_server(&self, addr: SocketAddr) -> String {
         let ip_str = addr.ip().to_string();
         let mut map = self.server_map.write().unwrap();

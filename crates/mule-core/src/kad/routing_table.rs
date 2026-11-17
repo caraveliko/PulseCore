@@ -5,15 +5,15 @@ use super::contact::KadContact;
 use super::kad_id::KadId;
 use std::collections::VecDeque;
 
-/// Bucket capacity — eMule `K` (`kademlia/Defines.h:42` = 10; eMule uses a
-/// binary zone tree of K-sized bins rather than flat buckets, but the
-/// per-bin capacity is the wire-relevant constant).
+/// Capacidad de la cubeta — `K` de eMule (`kademlia/Defines.h:42` = 10; eMule usa un
+/// árbol de zonas binario de contenedores de tamaño K en lugar de cubetas planas, pero la
+/// capacidad por contenedor es la constante relevante para el cable).
 pub const K_BUCKET_SIZE: usize = 10;
-/// Replacement cache capacity per bucket.
+/// Capacidad de la caché de reemplazo por cubeta.
 pub const REPLACEMENT_CACHE_SIZE: usize = 10;
-/// Total number of K-buckets for 128-bit Kad ID.
+/// Número total de cubetas K para un Kad ID de 128 bits.
 pub const NUM_BUCKETS: usize = 128;
-/// Maximum number of contacts allowed from the same /24 IPv4 subnet per bucket (anti-Sybil).
+/// Número máximo de contactos permitidos de la misma subred IPv4 /24 por cubeta (anti-Sybil).
 pub const MAX_CONTACTS_PER_SUBNET_24: usize = 2;
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,7 @@ impl KBucket {
             .iter()
             .position(|c| c.kad_id == contact.kad_id)
         {
-            // Already present: move to tail (most recently seen) and update
+            // Ya presente: mover al final (visto más recientemente) y actualizar
             if let Some(mut existing) = self.contacts.remove(pos) {
                 existing.ip = contact.ip;
                 existing.udp_port = contact.udp_port;
@@ -64,7 +64,7 @@ impl KBucket {
             }
             None
         } else if self.contacts.len() < K_BUCKET_SIZE {
-            // Anti-Sybil protection: limit maximum number of contacts from the same /24 subnet in one bucket
+            // Protección anti-Sybil: limitar el número máximo de contactos de la misma subred /24 en una cubeta
             if !contact.ip.is_loopback() {
                 let subnet_count = self
                     .contacts
@@ -72,15 +72,15 @@ impl KBucket {
                     .filter(|c| c.ip.octets()[..3] == contact.ip.octets()[..3])
                     .count();
                 if subnet_count >= MAX_CONTACTS_PER_SUBNET_24 {
-                    // Do not admit more from the same /24 subnet into the active bucket
+                    // No admitir más de la misma subred /24 en la cubeta activa
                     return None;
                 }
             }
-            // Not full: push to tail
+            // No llena: insertar al final
             self.contacts.push_back(contact);
             None
         } else {
-            // Full: add to replacement cache if not already present
+            // Llena: añadir a la caché de reemplazo si no está ya presente
             if let Some(pos) = self
                 .replacements
                 .iter()
@@ -91,7 +91,7 @@ impl KBucket {
                 self.replacements.pop_front();
             }
             self.replacements.push_back(contact.clone());
-            // Return candidate to ping/evict (the head of the bucket)
+            // Devolver candidato para hacer ping/desalojar (la cabeza de la cubeta)
             self.contacts.front().cloned()
         }
     }
@@ -99,7 +99,7 @@ impl KBucket {
     pub fn remove(&mut self, kad_id: &KadId) -> Option<KadContact> {
         if let Some(pos) = self.contacts.iter().position(|c| &c.kad_id == kad_id) {
             let removed = self.contacts.remove(pos);
-            // Promote candidate from replacement cache
+            // Promocionar candidato desde la caché de reemplazo
             if let Some(replacement) = self.replacements.pop_back() {
                 self.contacts.push_back(replacement);
             }
@@ -113,7 +113,7 @@ impl KBucket {
     }
 }
 
-/// Kademlia Routing Table containing 128 buckets.
+/// Tabla de enrutamiento Kademlia que contiene 128 cubetas.
 #[derive(Debug, Clone)]
 pub struct KBucketTable {
     local_id: KadId,
@@ -139,7 +139,7 @@ impl KBucketTable {
 
     pub fn insert_or_update(&mut self, contact: KadContact) -> Option<KadContact> {
         if contact.kad_id == self.local_id {
-            return None; // Do not insert self
+            return None; // No insertarse a sí mismo
         }
         if let Some(idx) = self.bucket_index_for(&contact.kad_id) {
             self.buckets[idx].insert_or_update(contact)
@@ -164,10 +164,10 @@ impl KBucketTable {
         }
     }
 
-    /// Records a failed query against a contact. Like eMule (`CContact::Update`
-    /// / `Expire`), a contact that reaches 2 consecutive failures is evicted
-    /// from the bucket (and its replacement slot). Returns `true` if the
-    /// contact was evicted.
+    /// Registra una consulta fallida contra un contacto. Como en eMule (`CContact::Update`
+    /// / `Expire`), un contacto que alcanza 2 fallos consecutivos es desalojado
+    /// de la cubeta (y de su ranura de reemplazo). Devuelve `true` si el
+    /// contacto fue desalojado.
     pub fn mark_failed(&mut self, kad_id: &KadId) -> bool {
         let Some(idx) = self.bucket_index_for(kad_id) else {
             return false;
@@ -203,8 +203,8 @@ impl KBucketTable {
         }
     }
 
-    /// Records a successful response from a contact: refreshes `last_seen`,
-    /// resets `fail_count` and marks it verified (`KadContact::mark_seen`).
+    /// Registra una respuesta exitosa de un contacto: actualiza `last_seen`,
+    /// reinicia `fail_count` y lo marca como verificado (`KadContact::mark_seen`).
     pub fn mark_seen(&mut self, kad_id: &KadId, now_ms: u64) {
         let Some(idx) = self.bucket_index_for(kad_id) else {
             return;
@@ -226,7 +226,7 @@ impl KBucketTable {
         self.buckets.iter().map(|b| b.replacements.len()).sum()
     }
 
-    /// Collects every known contact (bucket entries + replacement cache).
+    /// Recopila todos los contactos conocidos (entradas de cubeta + caché de reemplazo).
     fn collect_all(&self) -> Vec<KadContact> {
         let mut all_contacts = Vec::new();
         for b in &self.buckets {
@@ -236,7 +236,7 @@ impl KBucketTable {
         all_contacts
     }
 
-    /// Finds up to `count` closest contacts to the given target key.
+    /// Encuentra hasta `count` contactos más cercanos a la clave objetivo dada.
     pub fn find_closest(&self, target: &KadId, count: usize) -> Vec<KadContact> {
         let mut all_contacts = self.collect_all();
         all_contacts.sort_by(|a, b| {
@@ -248,7 +248,7 @@ impl KBucketTable {
         all_contacts
     }
 
-    /// Finds up to `count` closest contacts, prioritizing verified contacts.
+    /// Encuentra hasta `count` contactos más cercanos, priorizando los contactos verificados.
     pub fn find_closest_verified(&self, target: &KadId, count: usize) -> Vec<KadContact> {
         let mut all_contacts = self.collect_all();
         all_contacts.sort_by(|a, b| match (a.verified, b.verified) {
@@ -264,13 +264,13 @@ impl KBucketTable {
         all_contacts
     }
 
-    /// Finds up to `count` closest *verified* contacts to `target`.
+    /// Encuentra hasta `count` contactos *verificados* más cercanos a `target`.
     ///
-    /// Mirrors eMule `GetClosestTo(..., bOnlyVerified=true)` used to answer
-    /// `KADEMLIA2_REQ`/`BOOTSTRAP_REQ`: only contacts whose IP ownership was
-    /// proven (answered one of our requests, or completed the
-    /// `HELLO_RES_ACK` handshake) may be handed to other nodes — returning
-    /// unverified contacts would propagate potentially spoofed entries.
+    /// Refleja `GetClosestTo(..., bOnlyVerified=true)` de eMule utilizado para responder
+    /// a `KADEMLIA2_REQ`/`BOOTSTRAP_REQ`: solo los contactos cuya propiedad de IP fue
+    /// demostrada (respondieron a una de nuestras solicitudes, o completaron el
+    /// protocolo de enlace `HELLO_RES_ACK`) pueden entregarse a otros nodos — devolver
+    /// contactos no verificados propagaría entradas potencialmente falseadas.
     pub fn find_verified_closest(&self, target: &KadId, count: usize) -> Vec<KadContact> {
         let mut verified: Vec<KadContact> = self
             .collect_all()
@@ -286,10 +286,10 @@ impl KBucketTable {
         verified
     }
 
-    /// Returns up to `max` verified contacts spread across the keyspace
-    /// (round-robin over non-empty buckets), mirroring eMule
-    /// `GetBootstrapContacts`: a bootstrap answer must give the requester a
-    /// diverse sample of the DHT, not a clump of same-prefix contacts.
+    /// Devuelve hasta `max` contactos verificados distribuidos a lo largo del espacio de claves
+    /// (por turnos (round-robin) sobre cubetas no vacías), reflejando `GetBootstrapContacts`
+    /// de eMule: una respuesta de bootstrap debe proporcionar al solicitante una
+    /// muestra diversa de la DHT, no un grupo de contactos con el mismo prefijo.
     pub fn spread_verified(&self, max: usize) -> Vec<KadContact> {
         let mut out = Vec::new();
         let mut round = 0;
@@ -311,7 +311,7 @@ impl KBucketTable {
         out
     }
 
-    /// Returns a snapshot of non-empty buckets and their contact counts.
+    /// Devuelve una instantánea de las cubetas no vacías y sus recuentos de contactos.
     pub fn bucket_distribution(&self) -> Vec<(usize, usize)> {
         self.buckets
             .iter()

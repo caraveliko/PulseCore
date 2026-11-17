@@ -10,8 +10,8 @@ use tracing::debug;
 
 use super::types::detect_primary_local_ipv4;
 
-/// Discovers the UPnP gateway, trying first the primary default-route interface,
-/// then falling back to wildcard `0.0.0.0:0` broadcast.
+/// Descubre la puerta de enlace UPnP, probando primero la interfaz de ruta
+/// predeterminada primaria y recurriendo en caso de fallo a la difusión comodín en `0.0.0.0:0`.
 pub fn discover_gateway_with_fallback() -> Result<Gateway, String> {
     let primary_bind = detect_primary_local_ipv4()
         .map(|v4| SocketAddr::V4(SocketAddrV4::new(v4, 0)))

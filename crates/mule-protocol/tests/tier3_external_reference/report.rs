@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A single divergence record observed between eMuleRust and the external reference binary.
+/// Un registro de divergencia individual observado entre eMuleRust y el binario de referencia externo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DivergenceEntry {
     pub area: String,
@@ -21,7 +21,7 @@ pub struct DivergenceEntry {
     pub severity: String,
 }
 
-/// A serialized representation of tags observed during the handshake with the reference binary.
+/// Una representación serializada de etiquetas observadas durante el saludo con el binario de referencia.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservedTagReport {
     pub name: String,
@@ -60,7 +60,7 @@ fn default_ref_kind_external() -> String {
     "external-reference-binary".to_string()
 }
 
-/// The complete divergence report generated after running a Tier 3 loopback session.
+/// El informe completo de divergencia generado tras ejecutar una sesión en bucle local Tier 3.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[allow(dead_code)]
 pub struct Tier3DivergenceReport {
@@ -107,7 +107,7 @@ impl Tier3DivergenceReport {
         }
     }
 
-    /// Records an observed tag from the reference peer.
+    /// Registra una etiqueta observada del par de referencia.
     pub fn record_tag(&mut self, name: &str, value_summary: &str) {
         self.observed_tags.push(ObservedTagReport {
             name: name.to_string(),
@@ -153,7 +153,7 @@ impl Tier3DivergenceReport {
         });
     }
 
-    /// Validates that the report does not leak any non-loopback IP, absolute host username,
+    /// Valida que el informe no filtre ninguna IP ajena al bucle local, nombre de usuario absoluto del anfitrión,
     /// or non-ephemeral file paths.
     pub fn validate_anonymity(&self) -> Result<(), String> {
         let serialized = serde_json::to_string(self)

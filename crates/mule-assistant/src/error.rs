@@ -3,24 +3,24 @@
 
 //! Errores tipados del bucle del asistente.
 
-/// Erreur fatale de l'assistant (configuration, backend, daemon ou
-/// transport). Les refus de policy ne sont pas des erreurs : ils sont
-/// renvoyés au modèle comme résultats d'outil.
+/// Error fatal del asistente (configuración, backend, daemon o
+/// transporte). Los rechazos de política no son errores: se devuelven al
+/// modelo como resultados de herramienta.
 #[derive(Debug, thiserror::Error)]
 pub enum AssistantError {
-    /// Configuration invalide (endpoint non loopback sans override…).
+    /// Configuración no válida (punto de conexión no local sin anulación…).
     #[error("configuration invalide : {0}")]
     Config(String),
 
-    /// Échec côté backend LLM (HTTP, parsing, stream).
+    /// Fallo en el backend LLM (HTTP, análisis, flujo).
     #[error("backend LLM : {0}")]
     Backend(String),
 
-    /// Échec de connexion ou d'appel au daemon.
+    /// Fallo de conexión o de llamada al daemon.
     #[error("daemon : {0}")]
     Daemon(String),
 
-    /// Erreur de transport (REPL, WebSocket).
+    /// Error de transporte (REPL, WebSocket).
     #[error("transport : {0}")]
     Transport(String),
 }

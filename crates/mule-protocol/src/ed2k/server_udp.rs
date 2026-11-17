@@ -15,47 +15,47 @@ use super::opcodes::{
     OP_GLOBSEARCHREQ3, OP_GLOBSEARCHRES, OP_GLOBSERVSTATREQ, OP_GLOBSERVSTATRES,
 };
 
-/// eMule `SRV_UDPFLG_EXT_GETFILES` — the server answers global UDP search.
+/// `SRV_UDPFLG_EXT_GETFILES` de eMule: el servidor responde a la búsqueda global por UDP.
 pub const SRV_UDPFLG_EXT_GETFILES: u32 = 0x0000_0002;
-/// eMule `SRV_UDPFLG_LARGEFILES` — the server handles >4 GiB entries.
+/// `SRV_UDPFLG_LARGEFILES` de eMule: el servidor maneja entradas mayores de 4 GiB.
 pub const SRV_UDPFLG_LARGEFILES: u32 = 0x0000_0100;
 
-/// `OP_SERVER_DESC_REQ` (`0xA2`) on the server UDP channel — collides with
-/// `OP_SENDINGPART_I64` on the peer channel, disambiguated by channel.
+/// `OP_SERVER_DESC_REQ` (`0xA2`) en el canal UDP del servidor: colisiona con
+/// `OP_SENDINGPART_I64` en el canal entre pares, desambiguado por el canal.
 pub const OP_SERVER_DESC_REQ: u8 = 0xA2;
-/// `OP_SERVER_DESC_RES` (`0xA3`) — collides with `OP_REQUESTPARTS_I64`.
+/// `OP_SERVER_DESC_RES` (`0xA3`): colisiona con `OP_REQUESTPARTS_I64`.
 pub const OP_SERVER_DESC_RES: u8 = 0xA3;
-/// eMule `INV_SERV_DESC_LEN` (`0xF0FF`) — the "invalid string length" low
-/// half of an `OP_SERVER_DESC_REQ` challenge. Its presence as the first
-/// u16 of an answer marks the new (challenge + tag list) format.
+/// `INV_SERV_DESC_LEN` (`0xF0FF`) de eMule: la mitad baja de "longitud de cadena no válida"
+/// de un desafío `OP_SERVER_DESC_REQ`. Su presencia como primer u16 de una respuesta
+/// marca el nuevo formato (desafío + lista de etiquetas).
 pub const INV_SERV_DESC_LEN: u16 = 0xF0FF;
 
-/// eMule `ST_SERVERNAME` (`0x01`) — server list name.
+/// `ST_SERVERNAME` (`0x01`) de eMule: nombre en la lista de servidores.
 pub const ST_SERVERNAME: u8 = 0x01;
-/// eMule `ST_DESCRIPTION` (`0x0B`) — server description.
+/// `ST_DESCRIPTION` (`0x0B`) de eMule: descripción del servidor.
 pub const ST_DESCRIPTION: u8 = 0x0B;
-/// eMule `ST_DYNIP` (`0x85`) — dynamic DNS name of the server.
+/// `ST_DYNIP` (`0x85`) de eMule: nombre DNS dinámico del servidor.
 pub const ST_DYNIP: u8 = 0x85;
-/// eMule `ST_VERSION` (`0x91`) — server software version (str or u32).
+/// `ST_VERSION` (`0x91`) de eMule: versión del software del servidor (str o u32).
 pub const ST_VERSION: u8 = 0x91;
 
-/// Builds the `OP_SERVER_DESC_REQ` challenge exactly like eMule
-/// (`UDPSocket.cpp`): `(rand_u16 << 16) | INV_SERV_DESC_LEN` so the first
-/// two wire bytes are an invalid string length.
+/// Construye el desafío `OP_SERVER_DESC_REQ` exactamente igual que eMule
+/// (`UDPSocket.cpp`): `(rand_u16 << 16) | INV_SERV_DESC_LEN` para que los dos
+/// primeros bytes de red sean una longitud de cadena no válida.
 pub fn make_desc_req_challenge(rand16: u16) -> u32 {
     ((rand16 as u32) << 16) | INV_SERV_DESC_LEN as u32
 }
 
-/// eMule `CT_SERVER_UDPSEARCH_FLAGS` (`0x0E`) tag name id, sent as the single
-/// tag of `OP_GLOBSEARCHREQ3`.
+/// Identificador de nombre de etiqueta `CT_SERVER_UDPSEARCH_FLAGS` (`0x0E`) de eMule,
+/// enviado como la única etiqueta de `OP_GLOBSEARCHREQ3`.
 pub const CT_SERVER_UDPSEARCH_FLAGS: u8 = 0x0E;
-/// eMule `SRVCAP_UDP_NEWTAGS_LARGEFILES` — value carried by that tag.
+/// `SRVCAP_UDP_NEWTAGS_LARGEFILES` de eMule: valor que transporta dicha etiqueta.
 pub const SRVCAP_UDP_NEWTAGS_LARGEFILES: u8 = 0x01;
 use super::protocol::{PR_ED2K, PR_EMULE_COMPRESSED};
 use super::tags::TagReader;
 
-/// zlib-inflates a packed UDP payload with a hard cap (eMule
-/// `Packet::UnPackPacket` — server packets cap at 250 KB).
+/// Descomprime con zlib una carga útil UDP empaquetada con un límite estricto (`Packet::UnPackPacket`
+/// de eMule: los paquetes del servidor tienen un tope de 250 KB).
 fn unpack_udp_payload(data: &[u8]) -> Option<Vec<u8>> {
     use std::io::Read;
     const MAX_DECOMPRESSED: u64 = 250_000;
@@ -68,12 +68,12 @@ fn unpack_udp_payload(data: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// One file's found sources inside an `OP_GLOBFOUNDSOURCES` datagram.
+/// Fuentes encontradas para un archivo dentro de un datagrama `OP_GLOBFOUNDSOURCES`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobFoundSourcesEntry {
-    /// File hash the sources refer to.
+    /// Hash del archivo al que se refieren las fuentes.
     pub file_hash: [u8; 16],
-    /// `(ip_le, port)` source endpoints.
+    /// Puntos de conexión de las fuentes `(ip_le, port)`.
     pub sources: Vec<(u32, u16)>,
 }
 
@@ -349,13 +349,13 @@ pub fn decode_server_udp(data: &[u8]) -> Result<ServerUdpMessage, String> {
     }
 }
 
-/// Decodes an `OP_SERVER_DESC_RES` payload (`UDPSocket.cpp:438-496`).
+/// Decodifica la carga útil de un `OP_SERVER_DESC_RES` (`UDPSocket.cpp:438-496`).
 ///
-/// New format (eserver ≥16.45) is detected by the first u16 being
-/// `INV_SERV_DESC_LEN` — challenges are constructed so this cannot be a
-/// valid string length. Everything after the 4-byte challenge is a tag
-/// list. The old format is two length-prefixed strings; eMule assigns the
-/// first to the description and the second to the list name.
+/// El formato nuevo (eserver ≥16.45) se detecta si el primer u16 es `INV_SERV_DESC_LEN`:
+/// los desafíos se construyen de modo que esto no pueda ser una longitud de cadena válida.
+/// Todo lo posterior al desafío de 4 bytes es una lista de etiquetas. El formato antiguo
+/// son dos cadenas con prefijo de longitud; eMule asigna la primera a la descripción y
+/// la segunda al nombre en la lista.
 fn decode_server_desc_res(payload: &[u8]) -> Result<ServerUdpMessage, String> {
     use super::tags::{TagName, TagValue};
 
@@ -398,8 +398,8 @@ fn decode_server_desc_res(payload: &[u8]) -> Result<ServerUdpMessage, String> {
                 (ST_DYNIP, TagValue::String(s)) => *dyn_ip = Some(s),
                 (ST_VERSION, TagValue::String(s)) => *version = Some(s),
                 (ST_VERSION, TagValue::UInt32(v)) => {
-                    // eMule renders the packed version as "maj.min" with a
-                    // two-digit minor (`UDPSocket.cpp:473-477`).
+                    // eMule representa la versión empaquetada como "maj.min" con un
+                    // menor de dos dígitos (`UDPSocket.cpp:473-477`).
                     *version = Some(format!("{}.{:02}", v >> 16, v & 0xffff));
                 }
                 _ => {}
@@ -407,9 +407,9 @@ fn decode_server_desc_res(payload: &[u8]) -> Result<ServerUdpMessage, String> {
         }
         Ok(res)
     } else {
-        // Old format: [u16 len][desc][u16 len][name] — eMule's code reads
-        // the description string first (see enum doc for the Opcodes.h
-        // comment discrepancy).
+        // Formato antiguo: [u16 len][desc][u16 len][name]: el código de eMule lee
+        // la cadena de descripción primero (véase la documentación del enum para la
+        // discrepancia con el comentario de Opcodes.h).
         let mut reader = TagReader::new(payload, 0, PR_ED2K, Some(OP_SERVER_DESC_RES));
         let limits = super::limits::Ed2kLimits::for_server();
         let description = reader

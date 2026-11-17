@@ -16,58 +16,57 @@ use mule_protocol::kad::{
     AICH_ROOT_HASH_SIZE,
 };
 
-/// Lifetime of a stored **source** entry — eMule `KADEMLIAREPUBLISHTIMES`
-/// (`Opcodes.h:78`, 5 h); sources are republished each cycle.
+/// Tiempo de vida de una entrada de **fuente** almacenada — eMule `KADEMLIAREPUBLISHTIMES`
+/// (`Opcodes.h:78`, 5 h); las fuentes se republican en cada ciclo.
 pub const KAD_SOURCE_TTL: Duration = Duration::from_secs(5 * 60 * 60);
-/// Lifetime of a stored **keyword** entry — eMule `KADEMLIAREPUBLISHTIMEK`
+/// Tiempo de vida de una entrada de **palabra clave** almacenada — eMule `KADEMLIAREPUBLISHTIMEK`
 /// (`Opcodes.h:80`, 24 h).
 pub const KAD_KEYWORD_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-/// Lifetime of a stored **note** entry — eMule `KADEMLIAREPUBLISHTIMEN`
+/// Tiempo de vida de una entrada de **nota** almacenada — eMule `KADEMLIAREPUBLISHTIMEN`
 /// (`Opcodes.h:79`, 24 h).
 pub const KAD_NOTE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-/// Maximum distinct keys indexed — eMule `KADEMLIAMAXINDEX` (`Opcodes.h:82`).
+/// Número máximo de claves distintas indexadas — eMule `KADEMLIAMAXINDEX` (`Opcodes.h:82`).
 pub const MAX_STORE_KEYS: usize = 50_000;
-/// Maximum source/keyword entries stored per key — eMule
+/// Entradas máximas de fuentes/palabras clave almacenadas por clave — eMule
 /// `KADEMLIAMAXSOURCEPERFILE` (`Opcodes.h:84`).
 pub const MAX_ENTRIES_PER_KEY: usize = 1_000;
-/// Maximum results served per search page — eMule `iMaxResults`
-/// (`Indexed.cpp:619/707`, fragmented over `UDP_KAD_MAXFRAGMENT`).
+/// Resultados máximos servidos por página de búsqueda — eMule `iMaxResults`
+/// (`Indexed.cpp:619/707`, fragmentados sobre `UDP_KAD_MAXFRAGMENT`).
 pub const MAX_SEARCH_RESULT_PAGE: usize = 300;
-/// Hard cap on total stored entries — eMule `KADEMLIAMAXENTRIES`
-/// (`Opcodes.h:83`), also an anti-flood bound.
+/// Límite estricto sobre el total de entradas almacenadas — eMule `KADEMLIAMAXENTRIES`
+/// (`Opcodes.h:83`), también límite anti-inundación.
 pub const MAX_TOTAL_ENTRIES: usize = 60_000;
-/// Maximum note entries stored per target file — eMule
+/// Entradas de notas máximas almacenadas por archivo de destino — eMule
 /// `KADEMLIAMAXNOTESPERFILE` (`Opcodes.h:85`).
 pub const MAX_NOTES_PER_TARGET: usize = 150;
-/// Maximum tracked publishers per keyword entry — eMule keeps at most 100
-/// `structPublishingIP` records, evicting the oldest
+/// Publicadores máximos rastreados por entrada de palabra clave — eMule conserva como máximo 100
+/// registros `structPublishingIP`, desalojando el más antiguo
 /// (`Entry.cpp` `MergeIPsAndFilenames`).
 const MAX_TRACKED_PUBLISHERS: usize = 100;
-/// Maximum distinct filenames tracked per keyword entry — eMule "natural
-/// limit" of `m_aFileNames` (`Entry.cpp:437`).
+/// Nombres de archivo distintos máximos rastreados por entrada de palabra clave — «límite natural»
+/// de `m_aFileNames` en eMule (`Entry.cpp:437`).
 const MAX_TRACKED_FILENAMES: usize = 255;
-/// `PUBLISHPOINTSSPERSUBNET` (`Entry.cpp:477`) — trust points a publisher
-/// contributes, divided by its /24 subnet's global publish count.
+/// `PUBLISHPOINTSSPERSUBNET` (`Entry.cpp:477`) — puntos de confianza aportados por un publicador,
+/// divididos entre el recuento global de publicaciones de su subred /24.
 const PUBLISH_POINTS_PER_SUBNET: f32 = 10.0;
-/// Trust threshold for the first result pass — eMule serves entries with
-/// `GetTrustValue() >= 1.0` before lower-trust ones (`Indexed.cpp:640`).
+/// Umbral de confianza para la primera pasada de resultados — eMule sirve entradas con
+/// `GetTrustValue() >= 1.0` antes que las de menor confianza (`Indexed.cpp:640`).
 const TRUSTED_RESULT_THRESHOLD: f32 = 1.0;
-/// Window for eMule `bFastRefresh`: a republish by the *same* publisher
-/// sooner than `KADEMLIAREPUBLISHTIMES - HR2S(1)` (5 h - 1 h) does not
-/// increase filename popularity.
+/// Ventana para `bFastRefresh` de eMule: una republicación por el *mismo* publicador
+/// antes de `KADEMLIAREPUBLISHTIMES - HR2S(1)` (5 h - 1 h) no incrementa la popularidad del nombre.
 const FAST_REFRESH_WINDOW: Duration = Duration::from_secs(4 * 60 * 60);
-/// Publisher TTL inside one entry — eMule `KADEMLIAREPUBLISHTIMEK`
-/// (`CleanUpTrackedPublishers` drops trackers older than 24 h).
+/// TTL del publicador dentro de una entrada — eMule `KADEMLIAREPUBLISHTIMEK`
+/// (`CleanUpTrackedPublishers` descarta rastreadores con más de 24 h).
 const PUBLISHER_TTL: Duration = KAD_KEYWORD_TTL;
 
-/// eMule `EqualKadTagStr` — Unicode case-insensitive filename comparison
-/// used for name deduplication in `MergeIPsAndFilenames`.
+/// `EqualKadTagStr` de eMule — comparación de nombres de archivo insensible a mayúsculas Unicode
+/// empleada para desduplicar nombres en `MergeIPsAndFilenames`.
 fn kad_names_equal(a: &str, b: &str) -> bool {
     a.to_lowercase() == b.to_lowercase()
 }
 
-/// `uIP & ~0xFF` — the /24 subnet key eMule `AdjustGlobalPublishTracking`
-/// aggregates publish counts over (host-order u32 of the IPv4 octets).
+/// `uIP & ~0xFF` — la clave de subred /24 sobre la cual `AdjustGlobalPublishTracking` de eMule
+/// agrega recuentos de publicaciones (u32 en orden de host de los octetos IPv4).
 fn publish_subnet_key(ip: [u8; 4]) -> u32 {
     u32::from_be_bytes(ip) & !0xFF
 }
@@ -78,26 +77,26 @@ struct StoredSource {
     expires_at: Instant,
 }
 
-/// One tracked publisher of a keyword entry — eMule `structPublishingIP`
-/// (`Entry.h`), ordered oldest-first inside `publishers`.
+/// Un publicador rastreado de una entrada de palabra clave — eMule `structPublishingIP`
+/// (`Entry.h`), ordenado del más antiguo al más reciente dentro de `publishers`.
 #[derive(Debug, Clone)]
 struct PublisherTrack {
-    /// Publisher IPv4 octets (the `PUBLISH_KEY_REQ` sender).
+    /// Octetos IPv4 del publicador (remitente de `PUBLISH_KEY_REQ`).
     ip: [u8; 4],
-    /// Last publish time from this publisher.
+    /// Momento de la última publicación desde este publicador.
     last_publish: Instant,
-    /// Index into `aich_hashes` of the AICH root this publisher last
-    /// claimed — eMule `m_wAICHHashIdx`, `None` = `_UI16_MAX`.
+    /// Índice en `aich_hashes` de la raíz AICH que este publicador reclamó por última
+    /// vez — eMule `m_wAICHHashIdx`, `None` = `_UI16_MAX`.
     aich_idx: Option<usize>,
 }
 
-/// One distinct filename and its popularity — eMule
+/// Un nombre de archivo distinto y su popularidad — eMule
 /// `structFileNameEntry` (`Entry.h:38`).
 #[derive(Debug, Clone)]
 struct FileNameTrack {
     name: String,
-    /// Relative popularity index — not an exact publisher count
-    /// (`GetCommonFileName` compares values only).
+    /// Índice de popularidad relativa — no es un recuento exacto de publicadores
+    /// (`GetCommonFileName` compara solo valores).
     popularity: u32,
 }
 
@@ -105,13 +104,13 @@ struct FileNameTrack {
 struct StoredKeywordEntry {
     entry: KadKeywordEntryWire,
     expires_at: Instant,
-    /// Tracked publishers, oldest first — eMule `m_pliPublishingIPs`.
+    /// Publicadores rastreados, el más antiguo primero — eMule `m_pliPublishingIPs`.
     publishers: VecDeque<PublisherTrack>,
-    /// AICH roots indexed for this file — eMule `m_aAICHHashes`.
+    /// Raíces AICH indexadas para este archivo — eMule `m_aAICHHashes`.
     aich_hashes: Vec<[u8; AICH_ROOT_HASH_SIZE]>,
-    /// Per-hash publisher count — eMule `m_anAICHHashPopularity`.
+    /// Recuento de publicadores por hash — eMule `m_anAICHHashPopularity`.
     aich_popularity: Vec<u8>,
-    /// Distinct filenames with popularity — eMule `m_aFileNames`.
+    /// Nombres de archivo distintos con su popularidad — eMule `m_aFileNames`.
     filenames: Vec<FileNameTrack>,
 }
 
@@ -127,10 +126,10 @@ impl StoredKeywordEntry {
         }
     }
 
-    /// eMule `CKeyEntry::AddRemoveAICHHash` — `add` increments (or appends)
-    /// the popularity of `root` and returns its index; `!add` decrements
-    /// and returns `None`. Zero-popularity hashes stay in the array to
-    /// keep publisher `aich_idx` indices stable.
+    /// eMule `CKeyEntry::AddRemoveAICHHash` — `add` incrementa (o añade)
+    /// la popularidad de `root` y devuelve su índice; `!add` decrementa
+    /// y devuelve `None`. Los hashes con popularidad cero permanecen en el array
+    /// para mantener estables los índices `aich_idx` de los publicadores.
     fn add_remove_aich(&mut self, root: &[u8; AICH_ROOT_HASH_SIZE], add: bool) -> Option<usize> {
         let idx = self.aich_hashes.iter().position(|h| h == root);
         if add {
@@ -152,10 +151,10 @@ impl StoredKeywordEntry {
         }
     }
 
-    /// eMule `CKeyEntry::MergeIPsAndFilenames` filename merge: the new
-    /// publication's name is appended with popularity 1 unless it
-    /// case-insensitively matches a known name — then that name's
-    /// popularity increases (except on a same-publisher fast refresh).
+    /// Fusión de nombres de archivo `CKeyEntry::MergeIPsAndFilenames` de eMule: el nombre
+    /// de la nueva publicación se añade con popularidad 1 salvo que coincida
+    /// de forma insensible a mayúsculas con un nombre conocido — en tal caso la popularidad
+    /// de ese nombre aumenta (excepto en refrescos rápidos del mismo publicador).
     fn merge_filenames(&mut self, new_name: &str, fast_refresh: bool) {
         if new_name.is_empty() {
             return;
@@ -179,8 +178,8 @@ impl StoredKeywordEntry {
         }
     }
 
-    /// eMule `CKeyEntry::GetCommonFileName` — the name most publishers
-    /// agree on (first max popularity wins).
+    /// eMule `CKeyEntry::GetCommonFileName` — el nombre en el que coinciden más publicadores
+    /// (la primera popularidad máxima gana).
     fn common_file_name(&self) -> &str {
         let mut best: Option<&FileNameTrack> = None;
         for f in &self.filenames {
@@ -192,10 +191,10 @@ impl StoredKeywordEntry {
             .unwrap_or(&self.entry.file_name)
     }
 
-    /// eMule `CKeyEntry::CleanUpTrackedPublishers` — drops trackers older
-    /// than `PUBLISHER_TTL` from the head of the ordered list. Like eMule,
-    /// AICH popularity is NOT decremented for expired publishers (only
-    /// for >100-publisher purges and republish changes).
+    /// eMule `CKeyEntry::CleanUpTrackedPublishers` — descarta rastreadores con más
+    /// de `PUBLISHER_TTL` desde la cabeza de la lista ordenada. Al igual que en eMule,
+    /// la popularidad AICH NO se decrementa para publicadores caducados (solo para
+    /// purgas de >100 publicadores y cambios de republicación).
     fn cleanup_publishers(&mut self, now: Instant, global: &mut HashMap<u32, u32>) {
         while let Some(front) = self.publishers.front() {
             if now < front.last_publish + PUBLISHER_TTL {
@@ -206,8 +205,8 @@ impl StoredKeywordEntry {
         }
     }
 
-    /// eMule `CKeyEntry::GetTrustValue` — sum of
-    /// `PUBLISH_POINTS_PER_SUBNET / subnet_count` over live publishers.
+    /// eMule `CKeyEntry::GetTrustValue` — suma de
+    /// `PUBLISH_POINTS_PER_SUBNET / subnet_count` sobre publicadores activos.
     fn trust_value(&self, global: &HashMap<u32, u32>) -> f32 {
         self.publishers
             .iter()
@@ -222,9 +221,9 @@ impl StoredKeywordEntry {
             .sum()
     }
 
-    /// Builds the wire entry served in search results: common filename,
-    /// AICH histogram (`TAG_KADAICHHASHRESULT` source) and
-    /// `TAG_PUBLISHINFO` u32 — eMule `WriteTagListWithPublishInfo`.
+    /// Construye la entrada de red servida en los resultados de búsqueda: nombre común,
+    /// histograma AICH (origen de `TAG_KADAICHHASHRESULT`) y `TAG_PUBLISHINFO` u32 —
+    /// eMule `WriteTagListWithPublishInfo`.
     fn to_wire(&self, global: &HashMap<u32, u32>) -> KadKeywordEntryWire {
         let mut wire = self.entry.clone();
         wire.file_name = self.common_file_name().to_string();
@@ -249,8 +248,8 @@ impl StoredKeywordEntry {
     }
 }
 
-/// eMule `CKeyEntry::AdjustGlobalPublishTracking` — ±1 on the publisher's
-/// /24 subnet count.
+/// `CKeyEntry::AdjustGlobalPublishTracking` de eMule — ±1 en el recuento
+/// de subred /24 del publicador.
 fn adjust_publish_tracking(global: &mut HashMap<u32, u32>, ip: [u8; 4], increase: bool) {
     let key = publish_subnet_key(ip);
     let count = global.entry(key).or_insert(0);
@@ -272,7 +271,7 @@ struct StoredNote {
     expires_at: Instant,
 }
 
-/// A note entry rehydrated from persistence (tags already decoded).
+/// Entrada de nota rehidratada desde la persistencia (etiquetas ya decodificadas).
 pub struct HydratedNote {
     pub target_hash: KadIdBytes,
     pub note: KadNoteWire,
@@ -287,19 +286,19 @@ pub struct HydratedNote {
 pub struct KadStorage {
     sources: HashMap<KadIdBytes, Vec<StoredSource>>,
     keywords: HashMap<KadIdBytes, Vec<StoredKeywordEntry>>,
-    /// target file hash → note entries (`CEntry` with `m_bSource = false`),
-    /// deduplicated by `source_id` (the publisher's Kad ID).
+    /// hash del archivo objetivo → entradas de notas (`CEntry` con `m_bSource = false`),
+    /// desduplicadas por `source_id` (el ID Kad del publicador).
     notes: HashMap<KadIdBytes, Vec<StoredNote>>,
-    /// /24 subnet → count of keyword publishers registered from it —
-    /// eMule `CKeyEntry::s_mapGlobalPublishIPs`, used by the trust value.
+    /// subred /24 → recuento de publicadores de palabras clave registrados desde ella —
+    /// `CKeyEntry::s_mapGlobalPublishIPs` de eMule, empleado por el valor de confianza.
     publish_ip_counts: HashMap<u32, u32>,
     total_entries: usize,
 }
 
 impl KadStorage {
-    /// Stores a source contact for `file_hash`. One entry per publisher
-    /// (keyed by `kad_id`, falling back to `ip:port` when the id is null).
-    /// Returns `true` when the entry was accepted.
+    /// Almacena un contacto de fuente para `file_hash`. Una entrada por publicador
+    /// (indexada por `kad_id`, recurriendo a `ip:puerto` cuando el id es nulo).
+    /// Devuelve `true` cuando se aceptó la entrada.
     pub fn store_source(&mut self, file_hash: KadIdBytes, source: KadSourceWire) -> bool {
         let now = Instant::now();
         let expires_at = now + KAD_SOURCE_TTL;
@@ -351,7 +350,7 @@ impl KadStorage {
         true
     }
 
-    /// Returns live sources for `file_hash`, honoring `start_pos` pagination.
+    /// Devuelve fuentes activas para `file_hash`, respetando la paginación `start_pos`.
     pub fn get_sources(&mut self, file_hash: &KadIdBytes, start_pos: u16) -> Vec<KadSourceWire> {
         let now = Instant::now();
         let Some(entries) = self.sources.get_mut(file_hash) else {
@@ -372,16 +371,16 @@ impl KadStorage {
             .collect()
     }
 
-    /// Stores published keyword entries under `keyword_hash`.
+    /// Almacena entradas de palabras clave publicadas bajo `keyword_hash`.
     ///
-    /// Deduplicates by `(file_hash, file_size)` — eMule `AddKeyword` keeps
-    /// separate entries when the same file id is published with a
-    /// different size. `publisher_ip` feeds eMule's publish tracking
-    /// (`MergeIPsAndFilenames`): the same publisher republishing refreshes
-    /// its record (updating/removing its AICH contribution) instead of
-    /// adding a second vote.
+    /// Desduplica por `(file_hash, file_size)` — `AddKeyword` de eMule mantiene
+    /// entradas separadas cuando el mismo id de archivo se publica con un
+    /// tamaño diferente. `publisher_ip` alimenta el seguimiento de publicaciones de eMule
+    /// (`MergeIPsAndFilenames`): la republicación del mismo publicador refresca
+    /// su registro (actualizando/eliminando su contribución AICH) en lugar de
+    /// añadir un segundo voto.
     ///
-    /// Returns `true` when at least one entry was accepted.
+    /// Devuelve `true` cuando se aceptó al menos una entrada.
     pub fn store_keyword_entries(
         &mut self,
         keyword_hash: KadIdBytes,
@@ -406,8 +405,8 @@ impl KadStorage {
 
         let mut accepted = false;
         for mut entry in new_entries {
-            // The publisher's AICH claim is consumed by the merge; it is
-            // never part of the stored tag list (eMule `AddTag` semantics).
+            // La declaración AICH del publicador es consumida por la fusión;
+            // nunca forma parte de la lista de etiquetas almacenada (semántica `AddTag` de eMule).
             let aich_pub = entry.aich_pub.take();
             entry.aich_votes.clear();
             entry.publish_info = None;
@@ -447,9 +446,9 @@ impl KadStorage {
         accepted
     }
 
-    /// eMule `CKeyEntry::MergeIPsAndFilenames` — merges the new
-    /// publication's publisher/name/AICH tracking into `existing`, then
-    /// replaces its wire data (the `*pOldEntry = *pEntry` assignment).
+    /// `CKeyEntry::MergeIPsAndFilenames` de eMule — fusiona el seguimiento de
+    /// publicador/nombre/AICH de la nueva publicación en `existing`, y luego
+    /// reemplaza sus datos de red (la asignación `*pOldEntry = *pEntry`).
     fn merge_keyword_entry(
         existing: &mut StoredKeywordEntry,
         mut new_entry: KadKeywordEntryWire,
@@ -459,16 +458,16 @@ impl KadStorage {
         expires_at: Instant,
         global: &mut HashMap<u32, u32>,
     ) {
-        // Publisher tracking.
+        // Seguimiento de publicadores.
         let mut fast_refresh = false;
         let pub_pos = existing.publishers.iter().position(|p| p.ip == publisher_ip);
         if let Some(pos) = pub_pos {
-            // `bFastRefresh`: same publisher republishing before
-            // KADEMLIAREPUBLISHTIMES - 1h does not bump name popularity.
+            // `bFastRefresh`: el mismo publicador republicando antes de
+            // KADEMLIAREPUBLISHTIMES - 1h no incrementa la popularidad del nombre.
             fast_refresh = existing.publishers[pos].last_publish > now - FAST_REFRESH_WINDOW;
             existing.publishers[pos].last_publish = now;
-            // AICH contribution update (eMule: changed hash decrements
-            // the old and increments the new; removed hash decrements).
+            // Actualización de la contribución AICH (eMule: un hash modificado decrementa
+            // el antiguo e incrementa el nuevo; un hash eliminado decrementa).
             let prev_idx = existing.publishers[pos].aich_idx;
             match (aich_pub, prev_idx) {
                 (Some(root), None) => {
@@ -506,18 +505,18 @@ impl KadStorage {
             }
         }
 
-        // Filename merge (new name appended or matching name popularity).
+        // Fusión de nombres de archivo (nombre nuevo añadido o popularidad de nombre coincidente).
         let new_name = new_entry.file_name.clone();
         existing.merge_filenames(&new_name, fast_refresh);
 
-        // `*pOldEntry = *pEntry`: the newest wire data wins; the node
-        // computed tags are re-synthesized at serve time.
+        // `*pOldEntry = *pEntry`: ganan los datos de red más recientes; las
+        // etiquetas calculadas por el nodo se vuelven a sintetizar en el momento de servirlas.
         new_entry.aich_pub = None;
         existing.entry = new_entry;
         existing.expires_at = expires_at;
     }
 
-    /// Returns live keyword entries for `keyword_hash`, honoring `start_pos`.
+    /// Devuelve entradas de palabras clave activas para `keyword_hash`, respetando `start_pos`.
     pub fn get_keyword_entries(
         &mut self,
         keyword_hash: &KadIdBytes,
@@ -526,14 +525,13 @@ impl KadStorage {
         self.get_keyword_entries_filtered(keyword_hash, start_pos, |_| true)
     }
 
-    /// Returns live keyword entries matching `filter`, honoring `start_pos`
-    /// over the *matching* set — eMule `SendValidKeywordResult` counts the
-    /// start position after `StartSearchTermsMatch` filtering, not before
-    /// (`Indexed.cpp:630`).
+    /// Devuelve entradas de palabras clave activas coincidentes con `filter`, respetando
+    /// `start_pos` sobre el conjunto *coincidente* — eMule `SendValidKeywordResult` cuenta
+    /// la posición inicial tras el filtrado `StartSearchTermsMatch`, no antes (`Indexed.cpp:630`).
     ///
-    /// Results are served in two passes like eMule: trusted entries
-    /// (`trust >= 1.0`) first, then the rest — the `start_pos` offset
-    /// skips matching entries across both passes.
+    /// Los resultados se sirven en dos pasadas como en eMule: entradas de confianza
+    /// (`trust >= 1.0`) primero, luego el resto — el desplazamiento `start_pos`
+    /// omite entradas coincidentes a lo largo de ambas pasadas.
     pub fn get_keyword_entries_filtered(
         &mut self,
         keyword_hash: &KadIdBytes,
@@ -554,10 +552,10 @@ impl KadStorage {
             self.keywords.remove(keyword_hash);
             return Vec::new();
         }
-        // eMule `SendValidKeywordResult`: trusted entries first, then the
-        // rest — both passes share the same `start_pos` counter. The
-        // filter sees the served wire (common filename — eMule matches
-        // `StartSearchTermsMatch` on `GetCommonFileName`).
+        // eMule `SendValidKeywordResult`: entradas de confianza primero, luego el
+        // resto — ambas pasadas comparten el mismo contador `start_pos`. El
+        // filtro ve el formato de red servido (nombre común — eMule aplica
+        // `StartSearchTermsMatch` sobre `GetCommonFileName`).
         let mut out = Vec::with_capacity(MAX_SEARCH_RESULT_PAGE.min(entries.len()));
         let mut skipped = 0usize;
         'passes: for only_trusted in [true, false] {
@@ -583,9 +581,9 @@ impl KadStorage {
         out
     }
 
-    /// Stores a published note entry for `target_hash`, upserted by
-    /// `source_id` (one note per publisher per file, like eMule `CEntry`).
-    /// Returns `true` when accepted.
+    /// Almacena una entrada de nota publicada para `target_hash`, actualizada por
+    /// `source_id` (una nota por publicador y por archivo, como en eMule `CEntry`).
+    /// Devuelve `true` cuando se acepta.
     pub fn store_note(
         &mut self,
         target_hash: KadIdBytes,
@@ -632,9 +630,8 @@ impl KadStorage {
         true
     }
 
-    /// Returns live notes for `target_hash`. Mirrors
-    /// `CIndexed::SendValidNoteResult`: entries whose declared file size
-    /// disagrees with the requested size are filtered out.
+    /// Devuelve notas activas para `target_hash`. Refleja `CIndexed::SendValidNoteResult`:
+    /// se filtran las entradas cuyo tamaño de archivo declarado no coincide con el solicitado.
     pub fn get_notes(
         &mut self,
         target_hash: &KadIdBytes,
@@ -660,14 +657,14 @@ impl KadStorage {
             .collect()
     }
 
-    /// Indexer load for `target_hash` expressed as a percentage (0-100),
-    /// reported back in `KADEMLIA2_PUBLISH_RES` (eMule `uLoad`).
+    /// Carga del indexador para `target_hash` expresada en porcentaje (0-100),
+    /// notificada en `KADEMLIA2_PUBLISH_RES` (eMule `uLoad`).
     pub fn note_load(&self, target_hash: &KadIdBytes) -> u8 {
         let count = self.notes.get(target_hash).map_or(0, |e| e.len());
         ((count * 100) / MAX_NOTES_PER_TARGET).min(100) as u8
     }
 
-    /// (stored source keys, stored keyword keys, stored note keys, total live entries) — for diagnostics.
+    /// (claves de fuentes almacenadas, claves de palabras clave almacenadas, claves de notas almacenadas, total de entradas activas) — para diagnósticos.
     pub fn stats(&mut self) -> (usize, usize, usize, usize) {
         (
             self.sources.len(),
@@ -677,8 +674,8 @@ impl KadStorage {
         )
     }
 
-    /// Rehydrates persisted note entries, preserving each entry's remaining
-    /// TTL (expired or malformed entries are skipped by the caller).
+    /// Rehidrata entradas de notas persistidas, preservando el TTL restante de cada
+    /// entrada (el llamador omite entradas caducadas o malformadas).
     pub fn hydrate_notes(&mut self, notes: Vec<HydratedNote>) {
         for n in notes {
             if n.remaining_ms == 0 || self.total_entries >= MAX_TOTAL_ENTRIES {
@@ -706,8 +703,8 @@ impl KadStorage {
         }
     }
 
-    /// Rehydrates the store from persisted index rows, preserving each
-    /// entry's remaining TTL (entries already expired are skipped).
+    /// Rehidrata el almacenamiento desde filas de índice persistidas, preservando el TTL
+    /// restante de cada entrada (se omiten las entradas ya caducadas).
     pub fn hydrate(
         &mut self,
         sources: Vec<mule_core::kad::KadIndexedSource>,
@@ -771,19 +768,18 @@ impl KadStorage {
                         file_name: e.file_name.clone(),
                         file_size: e.file_size,
                         source_count: e.source_count,
-                        // Published metadata tags are kept in memory only
-                        // (eMule does not persist its index either), so
-                        // rehydrated entries answer filename/filesize
-                        // restrictive terms only.
+                        // Las etiquetas de metadatos publicadas se mantienen solo en memoria
+                        // (eMule tampoco persiste su índice), por lo que las entradas
+                        // rehidratadas responden únicamente a términos restrictivos de nombre/tamaño.
                         tags: Vec::new(),
                         aich_pub: None,
                         aich_votes: Vec::new(),
                         publish_info: None,
                     },
                     expires_at: Instant::now() + Duration::from_millis(remaining),
-                    // Publisher/AICH tracking is not persisted (eMule does
-                    // persist it via `WritePublishTrackingDataToFile` —
-                    // documented gap): rehydrated entries serve at trust 0.
+                    // El seguimiento de publicadores/AICH no se persiste (eMule sí lo
+                    // persiste mediante `WritePublishTrackingDataToFile` — discrepancia
+                    // documentada): las entradas rehidratadas se sirven con confianza 0.
                     publishers: VecDeque::new(),
                     aich_hashes: Vec::new(),
                     aich_popularity: Vec::new(),
@@ -839,7 +835,7 @@ mod tests {
         assert!(st.store_source(key, source(1, [1, 2, 3, 4])));
         assert!(st.store_source(key, source(2, [5, 6, 7, 8])));
         assert_eq!(st.get_sources(&key, 0).len(), 2);
-        // Same publisher kad_id refreshes instead of duplicating.
+        // El mismo kad_id de publicador actualiza en lugar de duplicar.
         let mut updated = source(1, [9, 9, 9, 9]);
         updated.tcp_port = 9999;
         assert!(st.store_source(key, updated));
@@ -849,7 +845,7 @@ mod tests {
             got.iter().find(|s| s.kad_id[0] == 1).unwrap().tcp_port,
             9999
         );
-        // Pagination.
+        // Paginación.
         assert_eq!(st.get_sources(&key, 1).len(), 1);
         assert!(st.get_sources(&key, 2).is_empty());
     }
@@ -862,7 +858,7 @@ mod tests {
             assert!(st.store_source(key, source(i as u16, [1, 1, 1, 1])));
         }
         assert!(!st.store_source(key, source(2000, [2, 2, 2, 2])));
-        // Serving is paged to `MAX_SEARCH_RESULT_PAGE` (eMule iMaxResults).
+        // El servicio está paginado a `MAX_SEARCH_RESULT_PAGE` (eMule iMaxResults).
         assert_eq!(st.get_sources(&key, 0).len(), MAX_SEARCH_RESULT_PAGE);
     }
 
@@ -872,27 +868,27 @@ mod tests {
         let kw = [9u8; 16];
         assert!(st.store_keyword_entries(kw, vec![kw_entry(1), kw_entry(2)], TEST_PUB_IP));
         assert_eq!(st.get_keyword_entries(&kw, 0).len(), 2);
-        // Re-publish same file hash updates rather than duplicating.
+        // La republicación del mismo hash de archivo actualiza en lugar de duplicar.
         let mut upd = kw_entry(1);
         upd.file_name = "renamed.bin".to_string();
         assert!(st.store_keyword_entries(kw, vec![upd], TEST_PUB_IP));
         let got = st.get_keyword_entries(&kw, 0);
         assert_eq!(got.len(), 2);
-        // eMule `GetCommonFileName` serves the most-popular name — a
-        // single rename does not outvote the name publishers agreed on
-        // (both at popularity 1, oldest wins).
+        // eMule `GetCommonFileName` sirve el nombre más popular — un
+        // único renombre no supera en votos al nombre acordado por los publicadores
+        // (ambos con popularidad 1, gana el más antiguo).
         assert_eq!(
             got.iter().find(|e| e.file_hash[0] == 1).unwrap().file_name,
             "file.bin"
         );
-        // Empty entry list is rejected.
+        // Se rechaza una lista de entradas vacía.
         assert!(!st.store_keyword_entries([4u8; 16], Vec::new(), TEST_PUB_IP));
     }
 
     #[test]
     fn keyword_filtered_query_paginates_after_filter() {
-        // eMule `SendValidKeywordResult`: `start_pos` counts the entries
-        // that pass `StartSearchTermsMatch`, not the raw stored set.
+        // eMule `SendValidKeywordResult`: `start_pos` cuenta las entradas
+        // que superan `StartSearchTermsMatch`, no el conjunto sin procesar.
         let mut st = KadStorage::default();
         let kw = [6u8; 16];
         let mk = |id: u16, name: &str| {
@@ -913,11 +909,11 @@ mod tests {
         ));
         let got = st.get_keyword_entries_filtered(&kw, 0, |e| e.file_name.starts_with("keep"));
         assert_eq!(got.len(), 3);
-        // start_pos=2 must skip two *matching* entries.
+        // start_pos=2 debe omitir dos entradas *coincidentes*.
         let got = st.get_keyword_entries_filtered(&kw, 2, |e| e.file_name.starts_with("keep"));
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].file_name, "keep-three.bin");
-        // No match -> empty, no panic.
+        // Sin coincidencia -> vacío, sin pánico.
         assert!(st
             .get_keyword_entries_filtered(&kw, 0, |e| e.file_name == "nope")
             .is_empty());
@@ -1004,7 +1000,7 @@ mod tests {
             vec![kw_with_aich(1, root)],
             [10, 0, 0, 1]
         ));
-        // Second publisher, different IP, same file+size, same root.
+        // Segundo publicador, IP distinta, mismo archivo+tamaño, misma raíz.
         assert!(st.store_keyword_entries(
             kw,
             vec![kw_with_aich(1, root)],
@@ -1013,7 +1009,7 @@ mod tests {
         let got = st.get_keyword_entries(&kw, 0);
         assert_eq!(got.len(), 1);
         assert_eq!(votes_of(&got[0]), vec![(2, root)]);
-        // PUBLISHINFO: 1 name, 2 publishers.
+        // PUBLISHINFO: 1 nombre, 2 publicadores.
         let info = got[0].publish_info.expect("publish info");
         assert_eq!((info >> 24) & 0xFF, 1);
         assert_eq!((info >> 16) & 0xFF, 2);
@@ -1041,8 +1037,8 @@ mod tests {
 
     #[test]
     fn aich_refresh_changes_root_old_vote_released() {
-        // eMule `MergeIPsAndFilenames`: the same publisher republishing
-        // with a different AICH root decrements its old vote.
+        // eMule `MergeIPsAndFilenames`: el mismo publicador republicando
+        // con una raíz AICH diferente decrementa su voto anterior.
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
         let ip = [10, 0, 0, 1];
@@ -1055,7 +1051,7 @@ mod tests {
 
     #[test]
     fn aich_refresh_drops_root_vote_removed() {
-        // Publisher republishing without AICH removes its contribution.
+        // Un publicador que republica sin AICH elimina su contribución.
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
         let ip = [10, 0, 0, 1];
@@ -1078,8 +1074,8 @@ mod tests {
 
     #[test]
     fn common_filename_prefers_popular_name() {
-        // eMule `GetCommonFileName`: three publishers agreeing on "good"
-        // outvote one "bad" name.
+        // eMule `GetCommonFileName`: tres publicadores que coinciden en "good"
+        // superan en votos a un nombre "bad".
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
         let mk = |name: &str| {
@@ -1097,13 +1093,13 @@ mod tests {
 
     #[test]
     fn trusted_entries_served_first() {
-        // eMule `SendValidKeywordResult` two-pass serving: entries whose
-        // trust value >= 1.0 precede lower-trust ones regardless of
-        // storage order.
+        // Servicio en dos pasadas de `SendValidKeywordResult` en eMule: las entradas cuyo
+        // valor de confianza es >= 1.0 preceden a las de menor confianza con independencia
+        // del orden de almacenamiento.
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
-        // 11 publishers from the same /24 on distinct files: each
-        // entry's trust = 10/11 < 1.
+        // 11 publicadores de la misma subred /24 en archivos distintos: la confianza
+        // de cada entrada = 10/11 < 1.
         for i in 0..11u8 {
             assert!(st.store_keyword_entries(
                 kw,
@@ -1111,7 +1107,7 @@ mod tests {
                 [10, 0, 0, i + 1]
             ));
         }
-        // One publisher from a fresh /24: trust = 10.
+        // Un publicador de una subred /24 nueva: confianza = 10.
         assert!(st.store_keyword_entries(kw, vec![kw_entry(100)], [11, 0, 0, 1]));
         let got = st.get_keyword_entries(&kw, 0);
         assert_eq!(got.len(), 12);
@@ -1124,27 +1120,27 @@ mod tests {
 
     #[test]
     fn publisher_cleanup_keeps_aich_popularity() {
-        // eMule `CleanUpTrackedPublishers`: expired publishers leave the
-        // AICH histogram untouched (only >100-publisher purges and
-        // republish changes decrement it).
+        // eMule `CleanUpTrackedPublishers`: los publicadores caducados dejan el
+        // histograma AICH intacto (solo las purgas de >100 publicadores y los
+        // cambios de republicación lo decrementan).
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
         let root = [0x33u8; 20];
         assert!(st.store_keyword_entries(kw, vec![kw_with_aich(1, root)], [10, 0, 0, 1]));
-        // Force the publisher tracker's timestamp into the past.
+        // Forzar la marca temporal del rastreador del publicador al pasado.
         let entries = st.keywords.get_mut(&kw).unwrap();
         entries[0].publishers[0].last_publish =
             Instant::now() - PUBLISHER_TTL - Duration::from_secs(1);
         let got = st.get_keyword_entries(&kw, 0);
         assert_eq!(votes_of(&got[0]), vec![(1, root)], "AICH vote survives expiry");
-        // …but the publisher itself is gone: no PUBLISHINFO tag.
+        // …pero el propio publicador ha desaparecido: sin etiqueta PUBLISHINFO.
         assert!(got[0].publish_info.is_none());
     }
 
     #[test]
     fn same_filehash_different_size_coexists() {
-        // eMule `AddKeyword`: same source id published with a different
-        // size produces a second entry, not a merge.
+        // eMule `AddKeyword`: el mismo ID de fuente publicado con un tamaño
+        // diferente produce una segunda entrada, no una fusión.
         let mut st = KadStorage::default();
         let kw = [9u8; 16];
         let mut big = kw_entry(1);
@@ -1181,14 +1177,14 @@ mod tests {
         let target = [8u8; 16];
         assert!(st.store_note(target, note(1, 1000), [1, 2, 3, 4], 49672));
         assert!(st.store_note(target, note(2, 1000), [5, 6, 7, 8], 49672));
-        // Same publisher re-publishes → upsert, not duplicate.
+        // El mismo publicador republica → actualización (upsert), no duplicado.
         assert!(st.store_note(target, note(1, 1000), [9, 9, 9, 9], 1234));
         assert_eq!(st.get_notes(&target, 1000, 50).len(), 2);
-        // Wrong file size filters the entries out (SendValidNoteResult).
+        // Un tamaño de archivo erróneo filtra las entradas descartándolas (SendValidNoteResult).
         assert!(st.get_notes(&target, 999, 50).is_empty());
-        // Null source_id is rejected.
+        // Se rechaza un source_id nulo.
         assert!(!st.store_note(target, note(0, 1000), [1, 1, 1, 1], 1));
-        // Load reflects occupancy as a percentage of MAX_NOTES_PER_TARGET.
+        // La carga refleja la ocupación como porcentaje de MAX_NOTES_PER_TARGET.
         assert_eq!(st.note_load(&target), (2 * 100 / MAX_NOTES_PER_TARGET) as u8);
         assert_eq!(st.note_load(&[0xEEu8; 16]), 0);
     }

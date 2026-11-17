@@ -130,8 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(mode) = mode_override {
         resolved_workdir.mode = mode;
     } else if resolved_workdir.mode == mule_daemon::WorkDirMode::ExplicitCli {
-        // If an explicit workdir path was passed, check if it lives in a portable bundle root
-        // (i.e. <bundle_root>/portable.flag exists)
+        // Si se pasó una ruta de workdir explícita, comprobar si reside en la raíz de un paquete portable
+        // (es decir, existe <bundle_root>/portable.flag)
         if let Some(parent) = resolved_workdir.workdir.parent() {
             if parent.join(mule_daemon::PORTABLE_FLAG_FILENAME).exists() {
                 resolved_workdir.mode = mule_daemon::WorkDirMode::Portable;
@@ -143,13 +143,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&data_dir)?;
     std::fs::create_dir_all(&default_download_dir)?;
 
-    // === Logging : console lisible + fichier JSONL rotatif ===
-    // Défaut 'info', surcharge via `RUST_LOG` ou à chaud via la clé
-    // `logLevel` de `settings.set` (runtime uniquement, jamais persisté).
-    // Fichiers : <workdir>/logs/daemon.<date>.log — JSONL, rotation
-    // quotidienne, rétention 7 jours, écriture non-bloquante (le swarm ne
-    // doit jamais être ralenti par un fsync). L'ancien `daemon.log` plat
-    // (tronqué à chaque boot) est supprimé.
+    // === Registro (logging): consola legible + archivo JSONL rotativo ===
+    // Predeterminado 'info', sobrescritura mediante `RUST_LOG` o en caliente mediante la clave
+    // `logLevel` de `settings.set` (solo en tiempo de ejecución, nunca persistido).
+    // Archivos: <workdir>/logs/daemon.<fecha>.log — JSONL, rotación
+    // diaria, retención de 7 días, escritura no bloqueante (el enjambre
+    // nunca debe verse ralentizado por un fsync). El antiguo `daemon.log` plano
+    // (truncado en cada arranque) se elimina.
     let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)?;
     let legacy_log = data_dir.join("daemon.log");
@@ -191,12 +191,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
     log_control.install(filter_reload);
-    // Le guard vit jusqu'à la fin de `main` — flush du writer au shutdown.
+    // La guarda vive hasta el final de `main` — vaciado (flush) del escritor al apagar.
     let _log_guard = log_guard;
 
-    // === Capture des panics : crash.log synchrone + event tracing ===
-    // Le writer non-bloquant peut être déjà mort quand le panic survient ;
-    // l'écriture synchrone garantit qu'une trace exploitable existe.
+    // === Captura de pánicos: crash.log síncrono + rastreo de eventos ===
+    // El escritor no bloqueante puede haber muerto cuando ocurra el pánico;
+    // la escritura síncrona garantiza que exista una traza utilizable.
     {
         let crash_log = logs_dir.join("crash.log");
         let default_hook = std::panic::take_hook();
@@ -228,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_download_dir.display()
     );
 
-    // 1. Acquire exclusive directory lock
+    // 1. Adquirir bloqueo exclusivo del directorio
     let _lock = DirectoryLock::acquire(&data_dir).map_err(|e| {
         tracing::error!("==> ERROR: {e}");
         e
@@ -238,7 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = data_dir.join("temp");
     std::fs::create_dir_all(&temp_dir)?;
 
-    // 2. Resolve authentication token
+    // 2. Resolver token de autenticación
     let auth_token = if let Some(tok) = auth_token_arg {
         DaemonSession::write_token(&data_dir, &tok)?;
         tok
@@ -258,7 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tok
     };
 
-    // 3. Resolve socket bind address with automatic ephemeral fallback if port is busy
+    // 3. Resolver dirección de enlace (bind) del socket con alternativa efímera automática si el puerto está ocupado
     let default_bind: std::net::SocketAddr = "127.0.0.1:4660".parse().unwrap();
     let requested_bind = bind_addr_arg
         .or_else(|| {
@@ -291,9 +291,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or(default_download_dir);
 
-    // eMule loads every .part.met found in the temp directory at startup:
-    // orphans (lost DB state or files dropped in from eMule) are recovered
-    // as paused downloads via the sandboxed import path.
+    // eMule carga cada .part.met encontrado en el directorio temporal al inicio:
+    // los huérfanos (estado de BD perdido o archivos copiados desde eMule) se recuperan
+    // como descargas pausadas mediante la ruta de importación aislada.
     let recovered = downloads.recover_orphan_part_mets(&initial_download_dir);
     if recovered > 0 {
         tracing::info!(
@@ -307,9 +307,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let network_profile =
         profile_arg.unwrap_or(mule_network_policy::NetworkProfile::PublicEd2kKadPreview);
 
-    // Embedded web remote UI: `--web-dir`/`MULE_WEB_DIR` wins, otherwise
-    // probe the packaged layout (bin/mule-daemon.exe → <bundle>/web) or
-    // fall back to the compiled-in `web/index.html` assets.
+    // Interfaz de usuario web remota embebida: prevalece `--web-dir`/`MULE_WEB_DIR`, de lo contrario
+    // sondea la estructura empaquetada (bin/mule-daemon.exe → <bundle>/web) o
+    // recurre a los activos compilados de `web/index.html`.
     let web_dir = resolve_web_dir(web_dir_arg);
     if let Some(dir) = &web_dir {
         tracing::info!("==> Web UI: http://{actual_addr}/ (dir: {})", dir.display());
@@ -327,19 +327,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_web_dir(web_dir);
     let mut state = AppState::new(config, downloads);
     state.log_control = Some(log_control);
-    // eMule `Autoconnect`/`Reconnect`/`AutoDeadServer`: background watcher
-    // reconnecting to the last server target (or best known server) when
-    // `server_reconnect`/`server_autoconnect` settings are enabled.
+    // eMule `Autoconnect`/`Reconnect`/`AutoDeadServer`: observador en segundo plano
+    // que se reconecta al último servidor objetivo (o al mejor servidor conocido) cuando
+    // los ajustes `server_reconnect`/`server_autoconnect` están habilitados.
     state.spawn_server_watcher();
-    // eMuleRust : rotation périodique d'identité (`identityRotationHours`)
-    // et quota journalier d'upload (`dailyUploadQuotaGb`).
+    // eMuleRust: rotación periódica de identidad (`identityRotationHours`)
+    // y cuota diaria de subida (`dailyUploadQuotaGb`).
     state.spawn_identity_rotator();
     state.spawn_quota_watcher();
 
-    // eMule "Incoming" folder sharing: hash every file sitting in the
-    // download directory and register it as shared (background task —
-    // hashing can be slow on large files). Opt-out via the
-    // `share_download_dir` setting.
+    // Compartición de la carpeta "Incoming" de eMule: calcula el hash de cada archivo en el
+    // directorio de descargas y lo registra como compartido (tarea en segundo plano —
+    // el cálculo de hash puede ser lento en archivos grandes). Opción de exclusión mediante el
+    // ajuste `share_download_dir`.
     {
         let dl = std::sync::Arc::clone(&state.downloads);
         let dir = state.config.default_download_dir.clone();
@@ -348,7 +348,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // 4. Atomically write session file
+    // 4. Escribir atómicamente el archivo de sesión
     let session = DaemonSession::new(1, state.instance_id, &endpoint);
     session.write_atomic(&data_dir)?;
 
@@ -361,7 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_dir.join("session.json").display()
     );
 
-    // If UPnP is enabled and in a preview profile, attempt background port mapping with progressive retries and periodic refresh
+    // Si UPnP está habilitado y en un perfil de vista previa, intentar el mapeo de puertos en segundo plano con reintentos progresivos y actualización periódica
     let eff_ed2k_port = state.ed2k_port();
     let eff_kad_port = state.kad_port();
     let eff_udp = state.udp_enabled();
@@ -403,7 +403,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.register_task(refresh_handle.abort_handle()).await;
     }
 
-    // Auto-initialize Kad routing table and UDP socket if in a preview profile
+    // Auto-inicializar tabla de enrutamiento Kad y socket UDP si se está en un perfil de vista previa
     if network_profile.allows_udp_kad() && eff_udp {
         let kad_svc = state.kad.clone();
         let kad_cancel = state.network_policy.cancellation_token();
@@ -421,18 +421,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::warn!("Failed to auto-start Kad UDP on {kad_bind_addr}: {e}");
             } else {
                 tracing::info!("Kad UDP socket auto-started on {kad_bind_addr}");
-                // nodes.dat à la racine du dossier data : amorçage
-                // optionnel — eMule le lit dans `s_liBootstrapList` à
-                // chaque démarrage ; les contacts prouvent leur vivacité
-                // en répondant au BOOTSTRAP_REQ du drain.
+                // nodes.dat en la raíz de la carpeta data: arranque (bootstrap)
+                // opcional — eMule lo lee en `s_liBootstrapList` en
+                // cada inicio; los contactos demuestran su disponibilidad
+                // respondiendo al BOOTSTRAP_REQ del vaciado.
                 kad_svc.load_nodes_dat_candidates(&nodes_dat_path).await;
                 kad_svc.bootstrap_active_contacts(15).await;
                 kad_svc.start_background_maintenance(kad_cancel);
             }
         });
 
-        // Server UDP socket (OP_GLOBGETSOURCES2 / OP_GLOBFOUNDSOURCES) —
-        // separate ephemeral socket like eMule's `UDPSocket`.
+        // Socket UDP de servidor (OP_GLOBGETSOURCES2 / OP_GLOBFOUNDSOURCES) —
+        // socket efímero separado como el `UDPSocket` de eMule.
         let server_udp_svc = state.server_udp.clone();
         let server_udp_bind_ip: std::net::IpAddr = kad_bind_ip.parse().unwrap();
         tokio::spawn(async move {
@@ -443,7 +443,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // Auto-start Inbound TCP Listener on the eD2K port if in a preview or enabled profile
+    // Auto-iniciar oyente TCP entrante en el puerto eD2K si se está en un perfil de vista previa o habilitado
     if network_profile.is_preview() || network_profile.is_loopback_only() {
         let listener_svc = state.inbound_listener.clone();
         let inbound_bind_ip = if network_profile.is_loopback_only() {
@@ -468,18 +468,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // USS (Upload Speed Sense) — dynamic upload limiter driven by latency
-    // probes to the connected server (idles while disabled).
+    // USS (Upload Speed Sense) — limitador dinámico de subida guiado por sondas de
+    // latencia al servidor conectado (inactivo mientras esté deshabilitado).
     state.uss.start(
         state.network_policy.rate_limiters(),
         state.network_policy.cancellation_token(),
     );
 
-    // Auto-start autonomous Swarm Coordinator for background source discovery & peer connections
+    // Auto-iniciar el coordinador autónomo de enjambre para el descubrimiento de fuentes y conexiones de pares en segundo plano
     let coordinator_handle = mule_daemon::services::SwarmCoordinator::start(state.clone());
     state.register_task(coordinator_handle.abort_handle()).await;
 
-    // Auto-start autonomous Media Automation (organizer + Bazarr subtitles + auto-grab)
+    // Auto-iniciar automatización multimedia autónoma (organizador + subtítulos Bazarr + auto-descarga)
     let media_automation_handle = mule_daemon::services::MediaAutomation::start(state.clone());
     state.register_task(media_automation_handle.abort_handle()).await;
 
@@ -518,7 +518,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    // 5. Run with graceful shutdown
+    // 5. Ejecutar con apagado ordenado (graceful shutdown)
     let data_dir_cleanup = data_dir.clone();
     axum::serve(
         listener,
@@ -539,16 +539,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             DaemonSession::remove(&data_dir_cleanup);
             listener_cleanup.stop().await;
-            // eMule saves every .part.met on exit so crash-resume state is
-            // never stale (CPartFile::~CPartFile → SavePartFile).
+            // eMule guarda cada .part.met al salir para que el estado de reanudación
+            // nunca quede obsoleto (CPartFile::~CPartFile → SavePartFile).
             {
                 let mut dl = downloads_cleanup.lock().await;
                 dl.save_active_part_mets();
             }
-            // Best-effort borné à 500 ms : les appels SOAP vers la gateway
-            // tournent sur un thread détaché — un routeur lent ou absent ne
-            // doit jamais retarder l'arrêt du process (spawn_blocking serait
-            // attendu par le runtime Tokio à la sortie).
+            // Mejor esfuerzo acotado a 500 ms: las llamadas SOAP hacia la puerta de enlace
+            // se ejecutan en un hilo independiente — un router lento o ausente nunca
+            // debe retrasar la detención del proceso (Tokio esperaría a spawn_blocking
+            // al salir).
             upnp_cleanup.unmap_ports_for_shutdown().await;
         })
         .await?;
@@ -611,11 +611,11 @@ fn spawn_parent_watchdog(parent_pid: u32, shutdown_notify: std::sync::Arc<tokio:
     });
 }
 
-/// Resolves the static web UI directory. An explicit `--web-dir` /
-/// `MULE_WEB_DIR` must contain `index.html` (warns otherwise); absent that,
-/// probes layouts relative to the executable: `<exe>/../web` (packaged
-/// bundle `bin/` → `web/`), `<exe>/web`, and `../../web`
-/// (cargo dev builds under `target/{debug,release}`).
+/// Resuelve el directorio de la interfaz de usuario web estática. Un `--web-dir` /
+/// `MULE_WEB_DIR` explícito debe contener `index.html` (advierte en caso contrario); a falta de ello,
+/// sondea ubicaciones relativas al ejecutable: `<exe>/../web` (paquete
+/// empaquetado `bin/` → `web/`), `<exe>/web` y `../../web`
+/// (compilaciones de desarrollo con cargo en `target/{debug,release}`).
 fn resolve_web_dir(explicit: Option<PathBuf>) -> Option<PathBuf> {
     let candidate = explicit.or_else(|| std::env::var("MULE_WEB_DIR").ok().map(PathBuf::from));
     if let Some(dir) = candidate {

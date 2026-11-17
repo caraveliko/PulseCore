@@ -221,7 +221,7 @@ async fn test_swarm_dual_peer_disjoint_block_allocation() {
         .unwrap();
     assert!(resp.error.is_none());
 
-    // Wait for handshake and request parts exchange
+    // Esperar el intercambio de saludo y solicitud de partes
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     // 3. Inspect swarm status via RPC sources.swarmStatus
@@ -333,7 +333,7 @@ async fn test_swarm_disconnect_releases_in_flight_block_for_reallocation() {
 
     tokio::time::sleep(Duration::from_millis(250)).await;
 
-    // Peer 2 should have been able to request block 0 (which was abandoned by peer 1)
+    // El par 2 debió poder solicitar el bloque 0 (que fue abandonado por el par 1)
     let p2_r = peer2_ranges.lock().unwrap().clone();
     assert!(!p2_r.is_empty());
     assert_eq!(

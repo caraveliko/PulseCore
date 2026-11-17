@@ -341,7 +341,7 @@ async fn test_file_status_double_response_rejected() {
 
     let mut client = nominal_client(peer_addr, "StatusTestInitiator").await;
 
-    // First response succeeds and validates the request
+    // La primera respuesta tiene éxito y valida la petición
     let status = client
         .request_file_status(file_hash, Duration::from_millis(500))
         .await

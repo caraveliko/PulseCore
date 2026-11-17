@@ -772,7 +772,7 @@ fn test_compressed_part_rejects_short_header_and_oversized_slice() {
 
 #[tokio::test]
 async fn test_nominal_compressed_block_transfer_multi_packet() {
-    // eMule 0.72a answers REQUESTPARTS with OP_COMPRESSEDPART (0x40) under
+    // eMule 0.72a responde a REQUESTPARTS con OP_COMPRESSEDPART (0x40) bajo
     // PR_EMULE when compression is advertised; streams >10240 bytes arrive
     // split across several packets.
     let file_hash = [0x5A; 16];

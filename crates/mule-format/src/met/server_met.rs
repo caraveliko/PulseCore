@@ -13,7 +13,7 @@ pub const SERVER_MET_VERSION: u8 = 0xE0;
 pub const MAX_SERVER_COUNT: usize = 10_000;
 pub const MAX_SERVER_TAG_COUNT: usize = 100;
 
-/// A parsed entry from a `server.met` file representing an eD2K server.
+/// Entrada analizada de un archivo `server.met` que representa un servidor eD2K.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerEntry {
     pub ip: Ipv4Addr,
@@ -45,7 +45,7 @@ impl ServerEntry {
     }
 }
 
-/// A parsed `server.met` file containing a list of eD2K servers.
+/// Archivo `server.met` analizado que contiene una lista de servidores eD2K.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerMetFile {
     pub version: u8,
@@ -85,8 +85,8 @@ impl ServerMetFile {
 
         for i in 0..count {
             let ip_u32 = cr.read_u32_le("server ip")?;
-            // eMule stores IP in host or network byte order depending on endianness; standard eMule Ipv4Addr is from_bits(u32::from_be(ip_u32))
-            // In little endian wire format, bytes are b0, b1, b2, b3.
+            // eMule almacena la IP en orden de bytes de host o de red según el endianness; el Ipv4Addr estándar de eMule es from_bits(u32::from_be(ip_u32))
+            // En formato de cable little endian, los bytes son b0, b1, b2, b3.
             let ip_bytes = ip_u32.to_le_bytes();
             let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
 
@@ -176,7 +176,7 @@ impl ServerMetFile {
         Ok(ServerMetFile { version, servers })
     }
 
-    /// Serializes the server.met structure into a writable stream.
+    /// Serializa la estructura server.met en un flujo escribible.
     pub fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         writer.write_all(&[self.version])?;
         writer.write_all(&(self.servers.len() as u32).to_le_bytes())?;
@@ -187,10 +187,10 @@ impl ServerMetFile {
             writer.write_all(&ip_u32.to_le_bytes())?;
             writer.write_all(&s.port.to_le_bytes())?;
 
-            // Write tags
+            // Escribir etiquetas
             writer.write_all(&(s.tags.len() as u32).to_le_bytes())?;
             for tag in &s.tags {
-                // Encode tag
+                // Codificar etiqueta
                 let is_numeric = tag.name_id != 0;
                 let name_bytes = tag.name.as_bytes();
                 let type_byte = match &tag.value {

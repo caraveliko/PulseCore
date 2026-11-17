@@ -31,11 +31,11 @@ use super::types::{
 use crate::services::downloads::DownloadService;
 use crate::services::obfuscation_stream::ObfuscatedStream;
 
-/// Handles an `OP_HASHSETANSWER` (`PR_ED2K` `0x52`) or `OP_HASHSETANSWER2`
-/// (`PR_EMULE` `0xB2`, eMule `ProcessHashSet(bFileIdentifiers=true)`) packet
-/// arriving in any peer session loop: validates the file hash and persists
-/// the per-part MD4 hashset.
-/// Returns true if the packet was a hashset answer and has been consumed.
+/// Gestiona un paquete `OP_HASHSETANSWER` (`PR_ED2K` `0x52`) o `OP_HASHSETANSWER2`
+/// (`PR_EMULE` `0xB2`, `ProcessHashSet(bFileIdentifiers=true)` de eMule)
+/// recibido en cualquier bucle de sesión con un par: valida el hash del archivo
+/// y persiste el conjunto de hashes MD4 por parte.
+/// Devuelve true si el paquete era una respuesta de hashset y fue consumido.
 pub(crate) async fn handle_hashset_answer(
     packet: &RawPacket,
     dl_hash_bytes: [u8; 16],
@@ -44,9 +44,9 @@ pub(crate) async fn handle_hashset_answer(
     decoder: &Ed2kDecoder,
     downloads: &Arc<Mutex<DownloadService>>,
 ) -> bool {
-    // `OP_HASHSETANSWER2` is the FileIdentifiers variant (`UploadClient.cpp`
-    // `SendHashsetPacket`) — `PR_EMULE` wire, composite identifier + per-set
-    // option bits. eMule routes both to `ProcessHashSet`.
+    // `OP_HASHSETANSWER2` es la variante FileIdentifiers (`SendHashsetPacket` en
+    // `UploadClient.cpp`) — cable `PR_EMULE`, identificador compuesto + bits de
+    // opciones por conjunto. eMule enruta ambos a `ProcessHashSet`.
     if packet.protocol == PR_EMULE && packet.opcode == OP_HASHSETANSWER2 {
         return match decoder.decode_hashset_answer2(
             packet.protocol,
@@ -55,8 +55,8 @@ pub(crate) async fn handle_hashset_answer(
             0,
         ) {
             Ok(ans2) => {
-                // `CompareRelaxed` — MD4 must match; size/AICH cross-checked
-                // when present on both sides.
+                // `CompareRelaxed` — MD4 debe coincidir; tamaño/AICH cruzados
+                // cuando estén presentes en ambos lados.
                 if ans2.identifier.md4_hash != Some(dl_hash_bytes) {
                     tracing::warn!(
                         "Peer {peer} sent OP_HASHSETANSWER2 for a different file hash, ignoring",
@@ -103,11 +103,11 @@ pub(crate) async fn handle_hashset_answer(
     }
 }
 
-/// Handles `OP_QUEUERANK` (`0x5C`, PR_ED2K, `<rank u32>`) and
-/// `OP_QUEUERANKING` (`0x60`, PR_EMULE, `<rank u16><10 reserved>`) — eMule
-/// routes both to `SetRemoteQueueRank` (`ProcessEdonkeyQueueRank` /
-/// `ProcessEmuleQueueRank`, `DownloadClient.cpp:1978-2000`). Updates the
-/// session snapshot and emits the peer event; returns true when consumed.
+/// Gestiona `OP_QUEUERANK` (`0x5C`, PR_ED2K, `<rank u32>`) y
+/// `OP_QUEUERANKING` (`0x60`, PR_EMULE, `<rank u16><10 reservados>`) — eMule
+/// enruta ambos a `SetRemoteQueueRank` (`ProcessEdonkeyQueueRank` /
+/// `ProcessEmuleQueueRank`, `DownloadClient.cpp:1978-2000`). Actualiza la
+/// instantánea de la sesión y emite el evento de par; devuelve true cuando se consume.
 pub(crate) async fn handle_queue_rank_packet(
     packet: &RawPacket,
     address_str: &str,
@@ -161,8 +161,8 @@ pub(crate) async fn handle_queue_rank_packet(
     true
 }
 
-/// Validates and persists a decoded MD4 part hashset — shared tail of
-/// `OP_HASHSETANSWER` and `OP_HASHSETANSWER2` (`md4_set` portion).
+/// Valida y persiste un conjunto de hashes MD4 de partes decodificado — cola compartida
+/// de `OP_HASHSETANSWER` y `OP_HASHSETANSWER2` (porción `md4_set`).
 async fn store_part_hashes(
     ans: mule_protocol::ed2k::Ed2kHashSetAnswer,
     dl_hash_bytes: [u8; 16],
@@ -194,8 +194,8 @@ async fn store_part_hashes(
     true
 }
 
-/// Masks a peer IP like eMule `CAICHUntrustedHash` (`dwIP &= 0x00F0FFFF`),
-/// so multiple clients behind the same address range count as one vote.
+/// Enmascara la IP de un par como `CAICHUntrustedHash` de eMule (`dwIP &= 0x00F0FFFF`),
+/// para que múltiples clientes tras el mismo rango de direcciones cuenten como un solo voto.
 fn mask_peer_ip(addr: SocketAddr) -> u32 {
     match addr.ip() {
         std::net::IpAddr::V4(v4) => u32::from_le_bytes(v4.octets()) & 0x00F0FFFF,
@@ -205,7 +205,7 @@ fn mask_peer_ip(addr: SocketAddr) -> u32 {
     }
 }
 
-/// Writes a framed eMule packet onto the peer stream.
+/// Escribe un paquete eMule con entramado en el flujo del par.
 async fn write_packet(
     stream: &mut ObfuscatedStream<TcpStream>,
     pkt: &RawPacket,
@@ -218,9 +218,9 @@ async fn write_packet(
     stream.write_all(&out_wire).await
 }
 
-/// Sends `OP_AICHREQUEST` for every corrupted part awaiting AICH recovery on
-/// this file (eMule `CDownloadClient::SendAICHRequest`). No-op when the peer
-/// does not advertise AICH or no root is trusted yet.
+/// Envía `OP_AICHREQUEST` para cada parte dañada que espera recuperación AICH en
+/// este archivo (`CDownloadClient::SendAICHRequest` de eMule). Sin operación cuando el par
+/// no anuncia AICH o aún no se confía en ninguna raíz.
 pub(crate) async fn send_pending_aich_requests(
     stream: &mut ObfuscatedStream<TcpStream>,
     encoder: &Ed2kEncoder,
@@ -270,9 +270,9 @@ pub(crate) async fn send_pending_aich_requests(
     }
 }
 
-/// Handles `OP_AICHFILEHASHANS` (0x9D): records a master-hash vote. Once the
-/// root reaches consensus, pending recovery requests are sent to this peer.
-/// Returns true if the packet was consumed.
+/// Gestiona `OP_AICHFILEHASHANS` (0x9D): registra un voto para el hash maestro. Una vez
+/// que la raíz alcanza consenso, se envían las peticiones de recuperación pendientes a este par.
+/// Devuelve true si el paquete fue consumido.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_aich_file_hash_res(
     stream: &mut ObfuscatedStream<TcpStream>,
@@ -345,9 +345,9 @@ pub(crate) async fn handle_aich_file_hash_res(
     }
 }
 
-/// Handles `OP_AICHANSWER` (0x9C): applies recovery data to the corrupted
-/// part (block-level eviction) or requeues the part on a failed answer.
-/// Returns true if the packet was consumed.
+/// Gestiona `OP_AICHANSWER` (0x9C): aplica datos de recuperación a la parte dañada
+/// (desalojo a nivel de bloque) o reencola la parte ante una respuesta fallida.
+/// Devuelve true si el paquete fue consumido.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_aich_answer(
     stream: &mut ObfuscatedStream<TcpStream>,
@@ -418,8 +418,8 @@ pub(crate) async fn handle_aich_answer(
                         "Peer {peer} could not serve AICH recovery for {file_hash_str}",
                         peer = log_peer_addr(target_addr)
                     );
-                    // The part index is not echoed in a failed answer; fail the
-                    // most recently sent request.
+                    // El índice de parte no se incluye en una respuesta fallida; se marca
+                    // como fallida la petición enviada más recientemente.
                     dl_svc.fail_last_aich_request(&id);
                 }
                 (None, _) => {}
@@ -467,8 +467,8 @@ pub(crate) async fn query_file_status_and_enter_queue(
     sui: &mut super::sui::OutboundSui,
 ) -> Result<Ed2kFileStatus, PeerError> {
     let encoder = Ed2kEncoder::default();
-    // ExtendedRequestsVersion négociée au handshake (OP_EMULEINFO) — pilote le
-    // parsing déterministe de l'ext-info `0x58` dans les MULTIPACKET*.
+    // ExtendedRequestsVersion negociada en el apretón de manos (OP_EMULEINFO) — controla el
+    // análisis determinista de la ext-info `0x58` en los MULTIPACKET*.
     let decoder = Ed2kDecoder::default().with_extended_requests_version(peer_ext_req);
     let codec = PacketCodec::new();
     let mut out_wire = Vec::with_capacity(64);
@@ -480,11 +480,11 @@ pub(crate) async fn query_file_status_and_enter_queue(
         log_peer_addr(target_addr)
     );
 
-    // 4a-4c. eMule `SendFileRequest` (`DownloadClient.cpp:257-430`) — un
-    // seul `OP_MULTIPACKET*` quand le pair l'a négocié, sinon le bundle
-    // éclaté REQFILENAME(+extinfo) → SETREQFILEID → REQUESTSOURCES →
-    // AICHFILEHASHREQ. `IsSourceRequestAllowed` est évalué une fois dans
-    // `gather` pour décider si la sous-requête SX est embarquée/émise.
+    // 4a-4c. `SendFileRequest` de eMule (`DownloadClient.cpp:257-430`) — un
+    // único `OP_MULTIPACKET*` cuando el par lo negoció, si no el paquete
+    // fragmentado REQFILENAME(+extinfo) → SETREQFILEID → REQUESTSOURCES →
+    // AICHFILEHASHREQ. `IsSourceRequestAllowed` se evalúa una vez en
+    // `gather` para decidir si la subpetición SX se incrusta o emite.
     let req_inputs = super::file_request::gather_file_request_inputs(
         downloads,
         sx_env,
@@ -508,10 +508,10 @@ pub(crate) async fn query_file_status_and_enter_queue(
     )
     .await?;
 
-    // 4b''. AICH : la demande de racine `OP_AICHFILEHASHREQ` fait déjà
-    // partie du bundle `SendFileRequest` (sous-opcode multipacket ou
-    // paquet séparé). Restent les OP_AICHREQUESTs pendantes (recovery
-    // data des parts corrompues) — émises quand le pair annonce AICH.
+    // 4b''. AICH: la solicitud de raíz `OP_AICHFILEHASHREQ` ya forma
+    // parte del paquete `SendFileRequest` (subopcode multipaquete o
+    // paquete separado). Quedan las OP_AICHREQUEST pendientes (datos de recuperación
+    // de partes dañadas) — emitidas cuando el par anuncia AICH.
     if peer_supports_aich {
         send_pending_aich_requests(
             stream,
@@ -537,11 +537,11 @@ pub(crate) async fn query_file_status_and_enter_queue(
     if let Some(snap) = queued_snapshot {
         emit_event(event_tx, sequence, &snap);
     }
-    // Initialise l'échéance de re-ask dès la mise en file (même si le socket se ferme
-    // avant ou pendant l'attente du status, pour que peer_session préserve le queued_deadline).
+    // Inicializa el plazo de repetición de petición desde la puesta en cola (incluso si el socket se cierra
+    // antes o durante la espera del estado, para que peer_session conserve queued_deadline).
     publish_next_reask(inner, address_str, tokio::time::Instant::now() + FILE_REASK_INTERVAL).await;
 
-    // 5. Await OP_FILESTATUS or OP_FILEREQANSNOFILE
+    // 5. Esperar OP_FILESTATUS u OP_FILEREQANSNOFILE
     let status_deadline = tokio::time::Instant::now() + timeouts.status_timeout;
     let mut file_status_opt = None;
 
@@ -561,11 +561,11 @@ pub(crate) async fn query_file_status_and_enter_queue(
                         if read_buf.len() > MAX_PEER_READ_BUFFER_SIZE {
                             return Err(PeerError::new(PeerFailureReason::CorruptedData, "Peer read buffer exceeded limit awaiting file status"));
                         }
-                        // eMule `ListenSocket.cpp:1071` : une réponse
-                        // `OP_MULTIPACKETANSWER*` est éclatée en
-                        // sous-réponses réinjectées dans cette même boucle
-                        // (le hash de l'enveloppe est réinséré dans chaque
-                        // payload — le dispatch standalone s'y applique).
+                        // `ListenSocket.cpp:1071` de eMule: una respuesta
+                        // `OP_MULTIPACKETANSWER*` se desglosa en
+                        // subrespuestas reinyectadas en este mismo bucle
+                        // (el hash del envoltorio se reinserta en cada
+                        // carga útil — el despacho independiente se aplica a ellas).
                         let mut expanded: std::collections::VecDeque<RawPacket> =
                             std::collections::VecDeque::new();
                         loop {
@@ -573,10 +573,10 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                 p
                             } else {
                                 match codec.decode(&mut read_buf) {
-                                    // OP_PACKEDPROT (0xD4) — eMule unpacks
-                                    // inline; the unpacked packet is
-                                    // dispatched as EMULEPROT. Corrupt
-                                    // packed payloads are dropped.
+                                    // OP_PACKEDPROT (0xD4) — eMule descomprime
+                                    // en línea; el paquete descomprimido se
+                                    // despacha como EMULEPROT. Las cargas útiles
+                                    // comprimidas corruptas se descartan.
                                     Ok(Some(p)) => match mule_protocol::ed2k::packed::unpack_owned(
                                         p,
                                         mule_protocol::ed2k::packed::PACKED_PEER_MAX_DECOMPRESSED,
@@ -622,11 +622,11 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                                     "OP_FILESTATUS returned unexpected file hash".to_string(),
                                                 ));
                                             }
-                                            // Propager le bitmap de parts du pair au store
-                                            // swarm (`act.sources`) — il alimente
-                                            // `available_source_count` (eMule
-                                            // `m_SrcPartFrequency` / `DrawStatusBar`).
-                                            // `part_count == 0` = source complète.
+                                            // Propagar el mapa de bits de partes del par al almacén
+                                            // del enjambre (`act.sources`) — alimenta
+                                            // `available_source_count` (`m_SrcPartFrequency` /
+                                            // `DrawStatusBar` de eMule).
+                                            // `part_count == 0` = fuente completa.
                                             let mut dl_svc = downloads.lock().await;
                                             if let Some(dl_id) = dl_svc
                                                 .find_by_ed2k_hash(file_hash_str)
@@ -655,9 +655,9 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                         Err(e) => return Err(PeerError::new(PeerFailureReason::CorruptedData, format!("Malformed OP_FILESTATUS: {e}"))),
                                     }
                                 } else if packet.opcode == OP_REQFILENAME_ANSWER {
-                                    // Fichier ≤ 1 part : `OP_SETREQFILEID`
-                                    // n'a pas été envoyé — la réponse au nom
-                                    // vaut statut « source complète » (eMule
+                                    // Archivo ≤ 1 parte: `OP_SETREQFILEID`
+                                    // no fue enviado — la respuesta al nombre
+                                    // equivale al estado «fuente completa» (eMule
                                     // `DownloadClient.cpp:362-365`).
                                     if file_part_count == 1
                                         && packet.payload.len() >= 16
@@ -689,9 +689,9 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                 } else if packet.opcode == OP_FILEREQANSNOFILE {
                                     return Err(PeerError::new(PeerFailureReason::FileNotFound, "Remote peer does not share this file (OP_FILEREQANSNOFILE)"));
                                 } else if packet.protocol == PR_ED2K && packet.opcode == OP_CHANGE_CLIENT_ID {
-                                    // eMule `ListenSocket.cpp:590` — le
-                                    // pair annonce son nouvel ID/serveur
-                                    // (valable dans les deux sens).
+                                    // `ListenSocket.cpp:590` de eMule — el
+                                    // par anuncia su nuevo ID/servidor
+                                    // (válido en ambos sentidos).
                                     super::change_client_id::apply_change_client_id(
                                         &packet.payload,
                                         address_str,
@@ -734,10 +734,10 @@ pub(crate) async fn query_file_status_and_enter_queue(
 
     let file_status = file_status_opt.unwrap();
 
-    // eMule "No Needed Parts": if the peer advertises a part mask but none
-    // of its parts is still missing locally, the source is useless for this
-    // download — drop it now instead of occupying an upload slot. Complete
-    // sources (part_count == 0) and queue-accepted sessions bypass the check.
+    // "No Needed Parts" de eMule: si el par anuncia una máscara de partes pero ninguna
+    // de sus partes falta localmente, la fuente es inútil para esta descarga —
+    // se descarta de inmediato en lugar de ocupar una ranura de subida. Las fuentes
+    // completas (part_count == 0) y sesiones aceptadas en cola omiten la comprobación.
     if !file_status.is_complete() && file_status.part_count > 0 {
         let has_needed_part = {
             let dl_svc = downloads.lock().await;
@@ -774,7 +774,7 @@ pub(crate) async fn query_file_status_and_enter_queue(
         }
     }
 
-    // Mark source as Connected
+    // Marcar la fuente como Conectada
     {
         let mut dl_svc = downloads.lock().await;
         let _ = dl_svc.update_peer_source_status(
@@ -786,8 +786,8 @@ pub(crate) async fn query_file_status_and_enter_queue(
         );
     }
 
-    // 5b. Request the per-part MD4 hashset once file status is confirmed (eMule
-    // `DownloadClient.cpp:2200-2244`). Only requested when unknown and file has multiple parts.
+    // 5b. Solicitar el conjunto de hashes MD4 por partes una vez confirmado el estado del archivo (eMule
+    // `DownloadClient.cpp:2200-2244`). Solo se solicita cuando se desconoce y el archivo tiene múltiples partes.
     let hashset_known = {
         let dl_svc = downloads.lock().await;
         !dl_svc.get_part_hashes_by_hash(file_hash_str).is_empty()
@@ -833,10 +833,10 @@ pub(crate) async fn query_file_status_and_enter_queue(
         }
     }
 
-    // 6. Send OP_STARTUPLOADREQ
+    // 6. Enviar OP_STARTUPLOADREQ
     send_start_upload_req(stream, dl_hash_bytes, file_hash_str, target_addr).await?;
 
-    // 7. Wait in upload queue (eMule DS_ONQUEUE + FILEREASKTIME re-asks)
+    // 7. Esperar en la cola de subida (DS_ONQUEUE de eMule + repeticiones de petición FILEREASKTIME)
     wait_in_queue(
         stream,
         target_addr,
@@ -861,9 +861,9 @@ pub(crate) async fn query_file_status_and_enter_queue(
     .await
 }
 
-/// eMule `OP_STARTUPLOADREQ` (hash payload) — (re)enters the remote upload
-/// queue for `file_hash`. Repeated at each `FILEREASKTIME` re-ask so the
-/// remote `LastUpRequest` stays fresh (purge horizon is 1 hour).
+/// `OP_STARTUPLOADREQ` de eMule (carga útil de hash) — (re)entra en la cola
+/// de subida remota para `file_hash`. Se repite en cada repetición de petición `FILEREASKTIME`
+/// para que el `LastUpRequest` remoto permanezca fresco (el horizonte de purga es de 1 hora).
 pub(crate) async fn send_start_upload_req(
     stream: &mut ObfuscatedStream<TcpStream>,
     dl_hash_bytes: [u8; 16],
@@ -888,16 +888,16 @@ pub(crate) async fn send_start_upload_req(
     })
 }
 
-/// eMule file re-ask cadence: while queued, the client resends the file-request bundle
-/// every ~10 minutes. A shorter 10 min cadence ensures queue persistence while allowing
-/// the UDP re-ask mechanism to refresh ranks promptly without being blocked by excessive cooldowns.
+/// Cadencia de repetición de petición de archivo de eMule: mientras está en cola, el cliente reenvía el paquete de petición de archivo
+/// cada ~10 minutos. Una cadencia más corta de 10 min asegura la persistencia en cola a la vez que permite
+/// al mecanismo de re-ask por UDP actualizar las posiciones con prontitud sin quedar bloqueado por tiempos de espera excesivos.
 pub(crate) const FILE_REASK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
-/// Publishes the next TCP re-ask deadline into the session snapshot — the
-/// equivalent of eMule `GetTimeUntilReask()` (`PartFile.cpp:2291`). The
-/// swarm coordinator reads it to fire the UDP re-ask inside the
-/// `(1 s, 2 min)` window preceding the TCP re-ask. Bookkeeping only: no
-/// session event is emitted (scheduling-internal value).
+/// Publica el siguiente plazo de repetición de petición TCP en la instantánea de la sesión —
+/// equivalente a `GetTimeUntilReask()` de eMule (`PartFile.cpp:2291`). El coordinador
+/// del enjambre lo lee para disparar la repetición de petición UDP dentro de la
+/// ventana `(1 s, 2 min)` anterior a la repetición TCP. Solo contabilidad: no se
+/// emite ningún evento de sesión (valor interno de planificación).
 async fn publish_next_reask(
     inner: &Arc<Mutex<SwarmInnerState>>,
     address_str: &str,
@@ -910,8 +910,8 @@ async fn publish_next_reask(
         .as_millis() as i64
         + remaining.as_millis() as i64;
     let mut g = inner.lock().await;
-    // `m_bReaskPending` survive au rafraîchissement de deadline : un refresh
-    // ne consomme pas le flag (seule une connexion entrante le fait,
+    // `m_bReaskPending` sobrevive a la actualización del plazo: una actualización
+    // no consume la bandera (solo una conexión entrante lo hace,
     // `BaseClient.cpp:1552`).
     let reask_pending = g
         .queued_peers
@@ -929,21 +929,21 @@ async fn publish_next_reask(
             }
         });
         if let Some(state) = queued {
-            // eMule `DS_ONQUEUE` is a logical state that survives the socket —
-            // register it so the UDP re-ask can still fire after `CheckTimeOut`
-            // kills the idle socket (`DownloadClient.cpp:1326-1344`).
+            // `DS_ONQUEUE` de eMule es un estado lógico que sobrevive al socket —
+            // se registra para que la repetición de petición UDP aún pueda dispararse tras
+            // que `CheckTimeOut` cierre el socket inactivo (`DownloadClient.cpp:1326-1344`).
             g.queued_peers.insert(address_str.to_string(), state);
         }
     }
 }
 
-/// Waits for `OP_ACCEPTUPLOADREQ` on the remote upload queue — eMule
-/// `DS_ONQUEUE`. Shared between the initial status query and the
-/// stall-recovery path (`CheckDownloadTimeout` → `SendCancelTransfer` → back
-/// to queue on the same socket).
+/// Espera `OP_ACCEPTUPLOADREQ` en la cola de subida remota — `DS_ONQUEUE` de
+/// eMule. Compartido entre la consulta de estado inicial y la ruta de
+/// recuperación por atasco (`CheckDownloadTimeout` → `SendCancelTransfer` → regreso
+/// a la cola en el mismo socket).
 ///
-/// `requeue_now` resends `OP_SETREQFILEID` + `OP_STARTUPLOADREQ` immediately
-/// (post-stall re-entry); the initial path already sent them before calling.
+/// `requeue_now` reenvía `OP_SETREQFILEID` + `OP_STARTUPLOADREQ` inmediatamente
+/// (reentrada tras atasco); la ruta inicial ya los envió antes de llamar.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn wait_in_queue(
     stream: &mut ObfuscatedStream<TcpStream>,
@@ -973,8 +973,8 @@ pub(crate) async fn wait_in_queue(
     let mut raw_buf = [0u8; 8192];
 
     if requeue_now {
-        // Réentrée en file (post-stall) : eMule rejoue `SendFileRequest`
-        // complet puis `SendStartupLoadReq`.
+        // Reentrada en cola (post-atasco): eMule reproduce `SendFileRequest`
+        // completo y luego `SendStartupLoadReq`.
         let req_inputs = super::file_request::gather_file_request_inputs(
             downloads,
             sx_env,
@@ -997,12 +997,12 @@ pub(crate) async fn wait_in_queue(
         send_start_upload_req(stream, dl_hash_bytes, file_hash_str, target_addr).await?;
     }
 
-    // eMule re-ask cycle: resend the request bundle every FILE_REASK_INTERVAL;
-    // the SOCKET is dropped after `queue_timeout` (= CONNECTION_TIMEOUT,
-    // 40 s) without any send or receive — `CClientReqSocket::CheckTimeOut`
-    // (`ListenSocket.cpp:120-155`, `ResetTimeOutTimer` on `OnSend`/`OnReceive`/
-    // `SendPacket`). The queued state itself survives on `queued_peers`
-    // (`DS_ONQUEUE` with `socket == NULL`).
+    // Ciclo de repetición de petición de eMule: reenviar el paquete de peticiones cada FILE_REASK_INTERVAL;
+    // el SOCKET se cierra tras `queue_timeout` (= CONNECTION_TIMEOUT,
+    // 40 s) sin ningún envío o recepción — `CClientReqSocket::CheckTimeOut`
+    // (`ListenSocket.cpp:120-155`, `ResetTimeOutTimer` en `OnSend`/`OnReceive`/
+    // `SendPacket`). El estado en cola en sí sobrevive en `queued_peers`
+    // (`DS_ONQUEUE` con `socket == NULL`).
     let mut next_reask = tokio::time::Instant::now() + FILE_REASK_INTERVAL;
     publish_next_reask(inner, address_str, next_reask).await;
     let mut activity_deadline = tokio::time::Instant::now() + timeouts.queue_timeout;
@@ -1018,13 +1018,13 @@ pub(crate) async fn wait_in_queue(
             _ = tokio::time::sleep_until(next_reask) => {
                 next_reask = tokio::time::Instant::now() + FILE_REASK_INTERVAL;
                 publish_next_reask(inner, address_str, next_reask).await;
-                // eMule `SendFileRequest` re-ask : le bundle complet
+                // Repetición de petición `SendFileRequest` de eMule: el paquete completo
                 // (REQFILENAME + SETREQFILEID + REQUESTSOURCES + AICHREQ,
-                // groupé en OP_MULTIPACKET* si négocié) puis
-                // `SendStartupLoadReq` qui rafraîchit `LastUpRequest` sur
-                // la file distante (purge à 1 h). `complete_source` : le
-                // pair est source complète quand son part-status couvre
-                // tout le fichier — eMule ne lui demande pas de sources.
+                // agrupado en OP_MULTIPACKET* si se negoció) y luego
+                // `SendStartupLoadReq`, que refresca `LastUpRequest` en
+                // la cola remota (purga a 1 h). `complete_source`: el
+                // par es fuente completa cuando su estado de partes cubre
+                // todo el archivo — eMule no le solicita fuentes.
                 let reask_caps = PeerSxCaps {
                     complete_source: file_status.is_complete(),
                     ..*sx_caps
@@ -1049,7 +1049,7 @@ pub(crate) async fn wait_in_queue(
                 )
                 .await?;
                 send_start_upload_req(stream, dl_hash_bytes, file_hash_str, target_addr).await?;
-                // `SendPacket` resets `timeout_timer` côté eMule.
+                // `SendPacket` reinicia `timeout_timer` en el lado de eMule.
                 activity_deadline = tokio::time::Instant::now() + timeouts.queue_timeout;
             }
             read_res = stream.read(&mut raw_buf) => {
@@ -1064,15 +1064,15 @@ pub(crate) async fn wait_in_queue(
                         }
                     }
                     Ok(n) => {
-                        // `OnReceive` resets `timeout_timer` côté eMule.
+                        // `OnReceive` reinicia `timeout_timer` en el lado de eMule.
                         activity_deadline = tokio::time::Instant::now() + timeouts.queue_timeout;
                         read_buf.extend_from_slice(&raw_buf[..n]);
                         if read_buf.len() > MAX_PEER_READ_BUFFER_SIZE {
                             return Err(PeerError::new(PeerFailureReason::CorruptedData, "Peer read buffer exceeded limit while in queue"));
                         }
-                        // Réponses `OP_MULTIPACKETANSWER*` éclatées en
-                        // sous-paquets — même mécanisme que la phase de
-                        // requête initiale (`ListenSocket.cpp:1071`).
+                        // Respuestas `OP_MULTIPACKETANSWER*` desglosadas en
+                        // subpaquetes — mismo mecanismo que en la fase de
+                        // petición inicial (`ListenSocket.cpp:1071`).
                         let mut expanded: std::collections::VecDeque<RawPacket> =
                             std::collections::VecDeque::new();
                         loop {
@@ -1080,10 +1080,10 @@ pub(crate) async fn wait_in_queue(
                                 p
                             } else {
                                 match codec.decode(&mut read_buf) {
-                                    // OP_PACKEDPROT (0xD4) — cf. la boucle
-                                    // de transfert : unpack + re-tag
-                                    // EMULEPROT ; payloads corrompus
-                                    // droppés.
+                                    // OP_PACKEDPROT (0xD4) — cf. el bucle
+                                    // de transferencia: desempaquetar + reetiquetar
+                                    // EMULEPROT; cargas útiles corruptas
+                                    // descartadas.
                                     Ok(Some(p)) => match mule_protocol::ed2k::packed::unpack_owned(
                                         p,
                                         mule_protocol::ed2k::packed::PACKED_PEER_MAX_DECOMPRESSED,
@@ -1117,9 +1117,9 @@ pub(crate) async fn wait_in_queue(
                                 break 'queue_loop;
                             } else if handle_queue_rank_packet(&packet, address_str, target_addr, &decoder, inner, event_tx, sequence).await {
                             } else if packet.protocol == PR_ED2K && packet.opcode == OP_FILESTATUS {
-                                // Keep-alive part-status : rafraîchit le bitmap
-                                // du pair (et `last_seen`) — la barre de parts
-                                // reflète alors la dispo courante de la file.
+                                // Keep-alive de estado de partes: actualiza el mapa de bits
+                                // del par (y `last_seen`) — la barra de partes
+                                // refleja así la disponibilidad actual de la cola.
                                 if let Ok(status) = decoder.decode_file_status(
                                     packet.protocol,
                                     packet.opcode,
@@ -1127,9 +1127,9 @@ pub(crate) async fn wait_in_queue(
                                     0,
                                 ) {
                                     if status.file_hash == dl_hash_bytes {
-                                        // eMule ProcessFileStatus : le bitmap
-                                        // du pair est remplacé — le séquenceur
-                                        // recalcule la dispo à la reprise.
+                                        // ProcessFileStatus de eMule: el mapa de bits
+                                        // del par se reemplaza — el secuenciador
+                                        // recalcula la disponibilidad al reanudar.
                                         file_status = status.clone();
                                         let mut dl_svc = downloads.lock().await;
                                         if let Some(dl_id) = dl_svc
@@ -1163,9 +1163,9 @@ pub(crate) async fn wait_in_queue(
                             } else if packet.protocol == PR_EMULE
                                 && (packet.opcode == OP_REQUESTSOURCES || packet.opcode == OP_REQUESTSOURCES2)
                             {
-                                // `reqstatus` : part-status du demandeur (son
-                                // OP_FILESTATUS) — eMule ne sert que des
-                                // sources couvrant des parts qui lui manquent.
+                                // `reqstatus`: estado de partes del solicitante (su
+                                // OP_FILESTATUS) — eMule solo sirve fuentes que
+                                // cubran partes que le falten.
                                 handle_sx_request(&packet, Some(dl_hash_bytes), target_addr, &decoder, &encoder, downloads, stream, sx_env, sx_caps, Some(file_status.availability_mask.raw_bytes())).await;
                             } else if packet.protocol == PR_EMULE
                             {

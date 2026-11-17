@@ -20,24 +20,24 @@ use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey};
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::RsaPrivateKey;
 
-/// Name used by eMule/aMule for the private key file.
+/// Nombre utilizado por eMule/aMule para el archivo de clave privada.
 pub const CRYPTKEY_FILENAME: &str = "cryptkey.dat";
 
 #[derive(Debug)]
 pub enum LegacyKeyLoad {
-    /// Existing key file parsed successfully.
+    /// Archivo de clave existente analizado correctamente.
     Loaded(Box<RsaPrivateKey>),
-    /// No key file present.
+    /// No hay ningún archivo de clave presente.
     Missing,
-    /// File exists but could not be parsed; it was moved to quarantine.
+    /// El archivo existe pero no pudo ser analizado; fue movido a cuarentena.
     Invalid {
         quarantine_path: PathBuf,
         reason: CryptkeyError,
     },
-    /// File contained the pre-RSA 80-byte random blob written by old daemon
-    /// versions. It holds no recoverable key material; it was quarantined and
-    /// the caller should generate a fresh key (this is a migration, not
-    /// corruption of a real key).
+    /// El archivo contenía el blob aleatorio de 80 bytes previo a RSA escrito por
+    /// versiones antiguas del daemon. No contiene material de clave recuperable;
+    /// fue puesto en cuarentena y el llamador debe generar una nueva clave (esto
+    /// es una migración, no la corrupción de una clave real).
     LegacyBlob { quarantine_path: PathBuf },
 }
 
@@ -57,8 +57,8 @@ pub enum CryptkeyError {
 
 use crate::legacy_sui::EMULE_RSA_BITS;
 
-/// Decodes a `cryptkey.dat` byte buffer (Base64-wrapped PKCS#1 DER).
-/// All ASCII whitespace inside the file is ignored.
+/// Decodifica un búfer de bytes de `cryptkey.dat` (PKCS#1 DER envuelto en Base64).
+/// Se ignora todo espacio en blanco ASCII dentro del archivo.
 pub fn parse_cryptkey_bytes(raw: &[u8]) -> Result<RsaPrivateKey, CryptkeyError> {
     let compact: Vec<u8> = raw
         .iter()
@@ -81,8 +81,8 @@ pub fn parse_cryptkey_bytes(raw: &[u8]) -> Result<RsaPrivateKey, CryptkeyError> 
     Ok(key)
 }
 
-/// Serializes a private key in the eMule file format: `Base64(PKCS#1 DER)`,
-/// wrapped at 64 columns like CryptoPP `Base64Encoder` output.
+/// Serializa una clave privada en el formato de archivo de eMule: `Base64(PKCS#1 DER)`,
+/// dividida en líneas de 64 columnas como la salida de `Base64Encoder` de CryptoPP.
 pub fn serialize_cryptkey_bytes(key: &RsaPrivateKey) -> Result<Vec<u8>, CryptkeyError> {
     let der = key.to_pkcs1_der()?;
     let b64 = data_encoding::BASE64.encode(der.as_bytes());
@@ -94,12 +94,12 @@ pub fn serialize_cryptkey_bytes(key: &RsaPrivateKey) -> Result<Vec<u8>, Cryptkey
     Ok(out)
 }
 
-/// Loads `cryptkey.dat` from `data_dir`.
+/// Carga `cryptkey.dat` desde `data_dir`.
 ///
-/// - absent → `Missing` (caller decides whether to generate)
-/// - valid  → `Loaded`
-/// - invalid → file is renamed to `cryptkey.dat.corrupt-<unix_ts>` and
-///   `Invalid` is returned; the caller must not silently regenerate.
+/// - ausente → `Missing` (el llamador decide si generar una nueva)
+/// - válido  → `Loaded`
+/// - inválido → el archivo se renombra a `cryptkey.dat.corrupt-<unix_ts>` y
+///   se devuelve `Invalid`; el llamador no debe regenerar silenciosamente.
 pub fn load_cryptkey(data_dir: &Path) -> LegacyKeyLoad {
     let path = data_dir.join(CRYPTKEY_FILENAME);
     let raw = match std::fs::read(&path) {
@@ -130,9 +130,9 @@ pub fn load_cryptkey(data_dir: &Path) -> LegacyKeyLoad {
     }
 }
 
-/// Old daemon versions stored an 80-byte random blob in `cryptkey.dat`
-/// instead of a real RSA key. Detect it: exactly 80 bytes and not printable
-/// Base64 text.
+/// Las versiones antiguas del daemon almacenaban un blob aleatorio de 80 bytes en `cryptkey.dat`
+/// en lugar de una clave RSA real. Detección: exactamente 80 bytes y sin texto Base64
+/// imprimible.
 fn is_legacy_blob(raw: &[u8]) -> bool {
     raw.len() == 80
         && !raw.iter().all(|b| {
@@ -140,7 +140,7 @@ fn is_legacy_blob(raw: &[u8]) -> bool {
         })
 }
 
-/// Atomically writes `cryptkey.dat` in `data_dir`.
+/// Escribe atómicamente `cryptkey.dat` en `data_dir`.
 pub fn save_cryptkey(data_dir: &Path, key: &RsaPrivateKey) -> Result<(), CryptkeyError> {
     std::fs::create_dir_all(data_dir)?;
     let bytes = serialize_cryptkey_bytes(key)?;
@@ -151,12 +151,12 @@ pub fn save_cryptkey(data_dir: &Path, key: &RsaPrivateKey) -> Result<(), Cryptke
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(&bytes)?;
         f.sync_all()?;
-    } // close handle before rename (required on Windows)
+    } // cerrar el descriptor antes de renombrar (requerido en Windows)
     std::fs::rename(&tmp, &target)?;
     Ok(())
 }
 
-/// Generates a fresh RSA-384 key and persists it atomically.
+/// Genera una clave RSA-384 nueva y la persiste atómicamente.
 pub fn generate_cryptkey(data_dir: &Path) -> Result<RsaPrivateKey, CryptkeyError> {
     let key = RsaPrivateKey::new(&mut rsa::rand_core::OsRng, EMULE_RSA_BITS)?;
     save_cryptkey(data_dir, &key)?;
@@ -188,7 +188,7 @@ mod tests {
             }
             _ => panic!("expected Loaded"),
         }
-        // File content must be Base64 text (eMule compatible), not raw DER.
+        // El contenido del archivo debe ser texto Base64 (compatible con eMule), no DER sin formato.
         let raw = std::fs::read(dir.path().join(CRYPTKEY_FILENAME)).unwrap();
         assert!(raw.iter().all(|b| b.is_ascii_alphanumeric()
             || matches!(b, b'+' | b'/' | b'=')
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn cryptkey_legacy_blob_detected_and_quarantined() {
-        // Pre-RSA daemon versions wrote an 80-byte random blob (non-text).
+        // Las versiones del daemon previas a RSA escribían un blob aleatorio de 80 bytes (no texto).
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(CRYPTKEY_FILENAME);
         let blob: Vec<u8> = (0u8..80)
@@ -240,15 +240,15 @@ mod tests {
 
     #[test]
     fn cryptkey_80_byte_text_file_is_invalid_not_legacy() {
-        // An 80-byte file that *is* Base64-alphabet text is not the legacy
-        // binary blob — treat as ordinary corruption.
+        // Un archivo de 80 bytes que *es* texto del alfabeto Base64 no es el blob
+        // binario heredado; tratar como corrupción ordinaria.
         let raw = vec![b'A'; 80];
         assert!(!is_legacy_blob(&raw));
     }
 
     #[test]
     fn cryptkey_wrong_size_key_rejected() {
-        // RSA-512 key must not be accepted as an eMule SUI key.
+        // Una clave RSA-512 no debe aceptarse como clave SUI de eMule.
         let key = RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 512).unwrap();
         let bytes = serialize_cryptkey_bytes(&key).unwrap();
         let err = parse_cryptkey_bytes(&bytes).unwrap_err();

@@ -3,21 +3,21 @@
 
 use serde::{Deserialize, Serialize};
 
-/// High-level lifecycle state of the network subsystem.
+/// Estado de alto nivel del ciclo de vida del subsistema de red.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum NetworkState {
-    /// Network is completely disabled (Kill Switch engaged, or not initialized).
-    /// No sockets are active and no new connection attempts are allowed.
+    /// La red está completamente deshabilitada (interruptor de corte activado, o no inicializada).
+    /// No hay sockets activos y no se permiten nuevos intentos de conexión.
     Disabled,
-    /// Policy is active and ready in preview mode; no active connections currently open.
+    /// La política está activa y lista en modo de vista previa; actualmente no hay conexiones activas abiertas.
     #[default]
     PreviewActive,
-    /// One or more connections are actively open and operating within policy.
+    /// Una o más conexiones están activamente abiertas y operando dentro de la política.
     Connected,
-    /// Kill switch or graceful shutdown is actively in progress.
+    /// El interruptor de corte o el apagado ordenado están activamente en curso.
     ShuttingDown,
-    /// Network subsystem encountered a fatal error or unrecoverable budget failure.
+    /// El subsistema de red encontró un error fatal o un fallo de presupuesto irrecuperable.
     Error,
 }
 
@@ -32,7 +32,7 @@ impl NetworkState {
         }
     }
 
-    /// Whether this state allows requesting new socket permits.
+    /// Indica si este estado permite solicitar nuevos permisos de socket.
     pub fn is_operational(&self) -> bool {
         matches!(self, Self::PreviewActive | Self::Connected)
     }

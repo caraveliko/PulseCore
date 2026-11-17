@@ -29,7 +29,7 @@ fn test_make_link_nominal_and_spaces() {
     assert!(trimmed.starts_with("ed2k://|file|my test file.bin|17|"));
     assert!(trimmed.ends_with("|/"));
 
-    // Verify it parses back cleanly
+    // Verificar que se analiza de vuelta limpiamente
     let parsed = Ed2kFileLink::parse(trimmed).expect("Should parse back cleanly");
     assert_eq!(parsed.file_name, "my test file.bin");
     assert_eq!(parsed.size, 17);
@@ -86,8 +86,8 @@ fn test_make_link_emoji_in_filename() {
 #[test]
 fn test_make_link_delimiters_escaped_safely() {
     let temp = tempdir().unwrap();
-    // On Windows, '|' is invalid in actual Windows filenames, but we can test
-    // Ed2kFileLink::create and sanitize_filename directly, and test valid Windows chars
+    // En Windows, '|' es inválido en nombres de archivo reales, pero podemos probar
+    // Ed2kFileLink::create y sanitize_filename directamente, y probar caracteres válidos en Windows
     let file_path = temp.path().join("file%20name.bin");
     {
         let mut f = File::create(&file_path).unwrap();
@@ -105,7 +105,7 @@ fn test_make_link_delimiters_escaped_safely() {
     let parsed = Ed2kFileLink::parse(link_str.trim()).unwrap();
     assert_eq!(parsed.size, 15);
 
-    // Direct check of sanitize_filename escaping '|'
+    // Comprobación directa de sanitize_filename escapando '|'
     let sanitized = Ed2kFileLink::sanitize_filename("dangerous|pipe|name.bin");
     assert_eq!(sanitized, "dangerous%7Cpipe%7Cname.bin");
 
@@ -140,7 +140,7 @@ fn test_make_link_exact_part_size_boundary() {
     let file_path = temp.path().join("exact_part_9728000.bin");
     {
         let mut f = File::create(&file_path).unwrap();
-        // 9_728_000 bytes with pattern
+        // 9_728_000 bytes con patrón
         let chunk = vec![0x33u8; 9728];
         for _ in 0..1000 {
             f.write_all(&chunk).unwrap();
@@ -165,7 +165,7 @@ fn test_make_link_fixture_pattern_9728001() {
     let file_path = temp.path().join("pattern_9728001.bin");
     {
         let mut f = File::create(&file_path).unwrap();
-        // Construct fixture: modulo 256 pattern up to 9_728_001 bytes (matching REPEATING_0_TO_255)
+        // Construir fixture: patrón módulo 256 hasta 9_728_001 bytes (coincidente con REPEATING_0_TO_255)
         let mut buf = Vec::with_capacity(65536);
         let mut written: u64 = 0;
         while written < 9_728_001 {

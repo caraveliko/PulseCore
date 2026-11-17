@@ -5,108 +5,108 @@
 
 use thiserror::Error;
 
-/// Errors that occur during packet framing, boundary slicing, or stream decoding.
+/// Errores que ocurren durante el entramado de paquetes, segmentación de límites o decodificación de flujo.
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum FramingError {
-    /// Packet length field exceeds the permitted maximum.
+    /// El campo de longitud del paquete excede el máximo permitido.
     #[error("Frame size {size} bytes exceeds maximum limit of {limit} bytes")]
     FrameTooLarge {
-        /// Actual parsed size in bytes.
+        /// Tamaño real analizado en bytes.
         size: usize,
-        /// Maximum allowed size in bytes.
+        /// Tamaño máximo permitido en bytes.
         limit: usize,
     },
 
-    /// Packet length field is too small (must be at least 1 for the opcode).
+    /// El campo de longitud del paquete es demasiado pequeño (debe ser de al menos 1 para el código de operación).
     #[error("Frame size {size} bytes is too small (must be at least 1 byte for opcode)")]
     FrameTooSmall {
-        /// Actual parsed size in bytes.
+        /// Tamaño real analizado en bytes.
         size: usize,
     },
 
-    /// Accumulator buffer exceeded safety threshold before a complete frame arrived.
+    /// El búfer acumulador superó el umbral de seguridad antes de que llegara una trama completa.
     #[error("Connection buffer overflow: {buffered} bytes accumulated without complete frame (limit {limit})")]
     BufferOverflow {
-        /// Bytes currently buffered.
+        /// Bytes actualmente en búfer.
         buffered: usize,
-        /// Maximum allowable buffer capacity.
+        /// Capacidad máxima admisible del búfer.
         limit: usize,
     },
 
-    /// Unknown or unsupported protocol prefix byte.
+    /// Byte de prefijo de protocolo desconocido o no compatible.
     #[error("Unsupported protocol byte 0x{protocol:02X}")]
     UnsupportedProtocol {
-        /// Rejected protocol byte value.
+        /// Valor del byte de protocolo rechazado.
         protocol: u8,
     },
 
-    /// Low-level I/O failure during framing.
+    /// Fallo de E/S de bajo nivel durante el entramado.
     #[error("Framing I/O error: {0}")]
     Io(String),
 }
 
-/// High-level wire protocol and domain errors.
+/// Errores de dominio y protocolo de cable de alto nivel.
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum ProtocolError {
-    /// Framing-level parsing or encoding failure.
+    /// Fallo de análisis o codificación a nivel de entramado.
     #[error(transparent)]
     Framing(#[from] FramingError),
 
-    /// Received opcode did not match the expected state machine transition.
+    /// El código de operación recibido no coincide con la transición esperada de la máquina de estados.
     #[error("Unexpected opcode 0x{got:02X} (expected 0x{expected:02X})")]
     UnexpectedOpcode {
-        /// Expected opcode byte.
+        /// Byte del código de operación esperado.
         expected: u8,
-        /// Actual opcode byte received.
+        /// Byte del código de operación real recibido.
         got: u8,
     },
 
-    /// Malformed packet payload data.
+    /// Datos de carga útil del paquete mal formados.
     #[error("Malformed packet payload: {0}")]
     MalformedPayload(String),
 
-    /// String length exceeded maximum allowed limit.
+    /// La longitud de la cadena superó el límite máximo permitido.
     #[error("String length {len} exceeds limit of {limit} bytes")]
     OversizedString {
-        /// Length in bytes.
+        /// Longitud en bytes.
         len: usize,
-        /// Maximum allowed limit in bytes.
+        /// Límite máximo permitido en bytes.
         limit: usize,
     },
 
-    /// Number of tags exceeded maximum allowed count.
+    /// El número de etiquetas superó el recuento máximo permitido.
     #[error("Tag count {count} exceeds limit of {limit}")]
     TooManyTags {
-        /// Tag count received.
+        /// Recuento de etiquetas recibido.
         count: usize,
-        /// Maximum allowed tag count.
+        /// Recuento máximo de etiquetas permitido.
         limit: usize,
     },
 
-    /// Offset or range specification is invalid or out of bounds.
+    /// La especificación de desplazamiento o rango es inválida o está fuera de límites.
     #[error("Invalid range [{start}..{end}] for file size {file_size}")]
     InvalidRange {
-        /// Range start offset.
+        /// Desplazamiento de inicio del rango.
         start: u64,
-        /// Range end offset.
+        /// Desplazamiento de fin del rango.
         end: u64,
-        /// Total file size.
+        /// Tamaño total del archivo.
         file_size: u64,
     },
 
-    /// Peer closed connection or timed out.
+    /// El par cerró la conexión o se agotó el tiempo de espera.
     #[error("Peer disconnected: {0}")]
     PeerDisconnected(String),
 
-    /// Storage download sink error.
+    /// Error del sumidero de almacenamiento de descargas.
     #[error("Download sink error: {0}")]
     Sink(String),
 
-    /// Download planner error.
+    /// Error del planificador de descargas.
     #[error("Download planner error: {0}")]
     Planner(String),
 
-    /// Compressed frame (0xD4) rejected pending bounded decompression stage.
+    /// Trama comprimida (0xD4) rechazada a la espera de la etapa de descompresión acotada.
     #[error("Compressed frame 0xD4 (PR_EMULE_COMPRESSED) is not supported prior to bounded decompression stage")]
     CompressedProtocolUnsupported,
 }

@@ -75,7 +75,7 @@ fn test_unsupported_server_met_header() {
 
 #[test]
 fn test_server_met_oversized_count_rejected() {
-    // Version 0xE0, server count 20_000 (exceeds 10_000)
+    // Versión 0xE0, recuento de servidores 20 000 (supera 10 000)
     let mut buf = vec![0xE0];
     buf.extend_from_slice(&20_000u32.to_le_bytes());
     let err = ServerMetFile::read_from(&mut Cursor::new(&buf)).unwrap_err();
@@ -91,7 +91,7 @@ fn test_server_met_oversized_count_rejected() {
 
 #[test]
 fn test_server_met_unexpected_eof_truncated() {
-    // Valid header and count 1, but no data follows
+    // Cabecera válida y recuento 1, pero no le siguen datos
     let mut buf = vec![0xE0];
     buf.extend_from_slice(&1u32.to_le_bytes());
     let err = ServerMetFile::read_from(&mut Cursor::new(&buf)).unwrap_err();

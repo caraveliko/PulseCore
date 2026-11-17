@@ -17,7 +17,7 @@ fn part_hashes_are_stored_from_ed2k_link_and_roundtrip() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    // 2-part file declared via link part hashes (p=... syntax carries them)
+    // Archivo de 2 partes declarado mediante hashes de parte en el enlace (la sintaxis p=... los incluye)
     let p0 = [0x11u8; 16];
     let p1 = [0x22u8; 16];
     let link = format!(
@@ -49,7 +49,7 @@ fn completed_part_is_marked_verified_when_hash_matches() {
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // Store the hashset (1 part)
+    // Guardar el conjunto de hashes (1 parte)
     svc.store_part_hashes_by_hash(&hex::encode(file_hash), &[file_hash])
         .unwrap();
 
@@ -73,13 +73,13 @@ fn corrupted_part_is_evicted_for_redownload() {
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // Store a deliberately wrong hashset
+    // Guardar un conjunto de hashes deliberadamente erróneo
     svc.store_part_hashes_by_hash(&hex::encode(file_hash), &[[0xEE; 16]])
         .unwrap();
 
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
 
-    // Corrupted part must have been evicted: no covered bytes, nothing verified
+    // La parte dañada debe haber sido descartada: 0 bytes cubiertos, nada verificado
     assert_eq!(svc.get_covered_len(&snap.id), Some(0));
     assert!(svc
         .db_ref()
@@ -103,18 +103,18 @@ fn evict_corrupted_parts_resets_to_downloading() {
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // Fill part 0 fully and part 1 partially
+    // Llenar la parte 0 por completo y la parte 1 parcialmente
     svc.inject_range(&snap.id, 0, &vec![0u8; 9_728_000], None)
         .unwrap();
     svc.inject_range(&snap.id, 9_728_000, &[0u8; 10], None).unwrap();
     assert_eq!(svc.get_covered_len(&snap.id), Some(9_728_000 + 10));
 
-    // Evict part 0
+    // Descartar la parte 0
     let updated = svc.evict_corrupted_parts(&snap.id, &[0]).unwrap();
     assert_eq!(updated.status.to_lowercase(), "downloading");
     assert_eq!(svc.get_covered_len(&snap.id), Some(10));
 
-    // Persisted ranges reflect eviction
+    // Los rangos persistidos reflejan el descarte
     let ranges = svc.db_ref().load_received_ranges(&snap.id).unwrap();
     assert_eq!(ranges.covered_len(), 10);
 }

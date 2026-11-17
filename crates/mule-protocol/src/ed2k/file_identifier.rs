@@ -26,44 +26,44 @@
 use super::error::{Ed2kErrorKind, Ed2kParseError};
 use super::tags::TagReader;
 
-/// Option bit0 — hash MD4 présent (`FileIdentifier.cpp` `0x01`).
+/// Bit de opción 0 — hash MD4 presente (`FileIdentifier.cpp` `0x01`).
 pub const FILE_IDENTIFIER_OPT_MD4: u8 = 0x01;
-/// Option bit1 — taille de fichier `u64` présente (`0x02`).
+/// Bit de opción 1 — tamaño de fichero `u64` presente (`0x02`).
 pub const FILE_IDENTIFIER_OPT_SIZE: u8 = 0x02;
-/// Option bit2 — hash racine AICH (20 octets) présent (`0x04`).
+/// Bit de opción 2 — hash raíz AICH (20 bytes) presente (`0x04`).
 pub const FILE_IDENTIFIER_OPT_AICH: u8 = 0x04;
-/// Masque des options obligatoires : eMule rejette tout bit inconnu ici
+/// Máscara de opciones obligatorias: eMule rechaza cualquier bit desconocido aquí
 /// (`bRequiredOptions = 0x0F`, `FileIdentifier.cpp:185`).
 pub const FILE_IDENTIFIER_REQUIRED_MASK: u8 = 0x0F;
-/// Masque des options optionnelles : bits réservés, ignorés à la réception
+/// Máscara de opciones opcionales: bits reservados, ignorados en la recepción
 /// (`bOptionalSubOptions = 0xF0`, `FileIdentifier.cpp:187`).
 pub const FILE_IDENTIFIER_OPTIONAL_MASK: u8 = 0xF0;
 
-/// Taille du hash MD4 eD2K.
+/// Tamaño del hash MD4 eD2K.
 pub const MD4_HASH_LEN: usize = 16;
-/// Taille du hash racine AICH (SHA-1).
+/// Tamaño del hash raíz AICH (SHA-1).
 pub const AICH_HASH_LEN: usize = 20;
 
-/// Identifiant composite d'un fichier (`FileIdentifier`, eMule 0.72a).
+/// Identificador compuesto de un fichero (`FileIdentifier`, eMule 0.72a).
 ///
-/// Sérialisé en tête de `OP_HASHSETREQUEST2`/`OP_HASHSETANSWER2` et
+/// Serializado en cabecera de `OP_HASHSETREQUEST2`/`OP_HASHSETANSWER2` y
 /// `OP_MULTIPACKET_EXT2`/`OP_MULTIPACKETANSWER_EXT2`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileIdentifier {
-    /// Hash MD4 du fichier. `None` uniquement dans les contextes Kad
-    /// (`bAllowEmptyMD4Hash`) ; sur TCP eMule exige sa présence.
+    /// Hash MD4 del fichero. `None` únicamente en contextos Kad
+    /// (`bAllowEmptyMD4Hash`); en TCP eMule exige su presencia.
     pub md4_hash: Option<[u8; MD4_HASH_LEN]>,
-    /// Taille du fichier en octets.
+    /// Tamaño del fichero en bytes.
     pub file_size: Option<u64>,
-    /// Hash racine AICH (SHA-1 de l'arbre de hachage).
+    /// Hash raíz AICH (SHA-1 del árbol de hashes).
     pub aich_hash: Option<[u8; AICH_HASH_LEN]>,
-    /// Bits optionnels supérieurs (`0xF0`) lus sur le fil, préservés tels quels
-    /// pour un round-trip déterministe.
+    /// Bits opcionales superiores (`0xF0`) leídos en el cable, conservados tal cual
+    /// para un viaje de ida y vuelta determinista.
     pub optional_bits: u8,
 }
 
 impl Ed2kFileIdentifier {
-    /// Identifiant standard TCP : hash MD4 + taille (le minimum exigé par eMule).
+    /// Identificador estándar TCP: hash MD4 + tamaño (el mínimo exigido por eMule).
     pub fn new(md4_hash: [u8; MD4_HASH_LEN], file_size: u64) -> Self {
         Self {
             md4_hash: Some(md4_hash),
@@ -73,7 +73,7 @@ impl Ed2kFileIdentifier {
         }
     }
 
-    /// Octet d'options encodé.
+    /// Byte de opciones codificado.
     pub fn options_byte(&self) -> u8 {
         let mut opts = self.optional_bits & FILE_IDENTIFIER_OPTIONAL_MASK;
         if self.md4_hash.is_some() {
@@ -88,7 +88,7 @@ impl Ed2kFileIdentifier {
         opts
     }
 
-    /// Écrit l'identifiant sur le fil (ordre : options, MD4, taille, AICH).
+    /// Escribe el identificador en el cable (orden: opciones, MD4, tamaño, AICH).
     pub fn write_to(&self, out: &mut Vec<u8>) {
         out.push(self.options_byte());
         if let Some(h) = &self.md4_hash {
@@ -102,15 +102,15 @@ impl Ed2kFileIdentifier {
         }
     }
 
-    /// Lit un `FileIdentifier` depuis `reader`.
+    /// Lee un `FileIdentifier` desde `reader`.
     ///
-    /// `allow_empty_md4` correspond à `bAllowEmptyMD4Hash` de
-    /// `CFileIdentifierSA::ReadIdentifier` (`FileIdentifier.cpp:198`) : `false`
-    /// sur TCP (eMule exige le MD4), `true` possible en contexte Kad.
+    /// `allow_empty_md4` se corresponde con `bAllowEmptyMD4Hash` de
+    /// `CFileIdentifierSA::ReadIdentifier` (`FileIdentifier.cpp:198`): `false`
+    /// en TCP (eMule exige el MD4), `true` posible en contexto Kad.
     ///
-    /// Comme eMule (`FileIdentifier.cpp:185-191`), toute option inconnue dans le
-    /// masque obligatoire `0x0F` provoque `InvalidField` ; les bits optionnels
-    /// `0xF0` sont tolérés et conservés dans `optional_bits`.
+    /// Al igual que eMule (`FileIdentifier.cpp:185-191`), cualquier opción desconocida en la
+    /// máscara obligatoria `0x0F` provoca `InvalidField`; los bits opcionales
+    /// `0xF0` se toleran y se conservan en `optional_bits`.
     pub fn read_from(
         reader: &mut TagReader<'_>,
         allow_empty_md4: bool,

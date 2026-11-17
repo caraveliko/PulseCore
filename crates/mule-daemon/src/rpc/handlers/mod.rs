@@ -15,9 +15,9 @@ pub mod shares;
 pub mod sources;
 pub mod upnp;
 
-/// Sérialise une charge utile de handler en `serde_json::Value`.
-/// Les payloads RPC sont `Serialize` par construction ; en cas d'échec
-/// (inatteignable en pratique) on renvoie un objet vide plutôt qu'une erreur.
+/// Serializa la carga útil de un manejador en `serde_json::Value`.
+/// Las cargas útiles de RPC son `Serialize` por construcción; en caso de fallo
+/// (inalcanzable en la práctica), se devuelve un objeto vacío en lugar de un error.
 pub(crate) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> serde_json::Value {
     serde_json::to_value(value).unwrap_or_default()
 }

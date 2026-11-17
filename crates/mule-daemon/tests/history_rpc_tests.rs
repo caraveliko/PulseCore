@@ -19,7 +19,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake: verify 'history' capability is advertised
+    // 1. Negociación (handshake): verificar que la capacidad 'history' esté anunciada
     send_json(
         &mut write,
         json!({
@@ -43,7 +43,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         caps
     );
 
-    // 2. Initial history list should be empty
+    // 2. La lista inicial de historial debe estar vacía
     send_json(
         &mut write,
         json!({
@@ -60,7 +60,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         .expect("history list array");
     assert_eq!(empty_list.len(), 0);
 
-    // 3. Check settings.get returns historyRetentionDays
+    // 3. Comprobar que settings.get devuelve historyRetentionDays
     send_json(
         &mut write,
         json!({
@@ -76,7 +76,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         Some(30)
     );
 
-    // 4. Add an ed2k link
+    // 4. Añadir un enlace ed2k
     let link = "ed2k://|file|test_history.iso|1024|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     send_json(
         &mut write,
@@ -96,7 +96,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         .expect("downloadId")
         .to_string();
 
-    // 5. Pause and resume download (should record 'resumed' history event)
+    // 5. Pausar y reanudar la descarga (debe registrar el evento de historial 'resumed')
     send_json(
         &mut write,
         json!({
@@ -121,7 +121,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     .await;
     let _ = recv_response_by_id(&mut read, 6).await;
 
-    // 6. Verify history.list now contains the 'resumed' event
+    // 6. Verificar que history.list contenga ahora el evento 'resumed'
     send_json(
         &mut write,
         json!({
@@ -140,7 +140,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(list_resume[0]["fileName"], "test_history.iso");
     assert_eq!(list_resume[0]["resumeCount"], 1);
 
-    // 7. Remove download (should record 'removed' history event)
+    // 7. Eliminar la descarga (debe registrar el evento de historial 'removed')
     send_json(
         &mut write,
         json!({
@@ -156,7 +156,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     .await;
     let _ = recv_response_by_id(&mut read, 8).await;
 
-    // Verify history now has both 'removed' and 'resumed'
+    // Verificar que el historial tenga ahora tanto 'removed' como 'resumed'
     send_json(
         &mut write,
         json!({
@@ -173,7 +173,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(list_remove[0]["eventType"], "removed");
     assert_eq!(list_remove[1]["eventType"], "resumed");
 
-    // 8. Test history.stats aggregation
+    // 8. Probar agregación en history.stats
     send_json(
         &mut write,
         json!({
@@ -188,7 +188,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(stats["totalResumesCount"], 1);
     assert_eq!(stats["totalCompletedCount"], 0);
 
-    // 9. Test history.export in JSON format
+    // 9. Probar history.export en formato JSON
     send_json(
         &mut write,
         json!({
@@ -209,7 +209,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         .expect("json content string");
     assert!(json_content.contains("test_history.iso"));
 
-    // 10. Test history.export in CSV format
+    // 10. Probar history.export en formato CSV
     send_json(
         &mut write,
         json!({
@@ -231,7 +231,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert!(csv_content.starts_with("id,download_id,file_name"));
     assert!(csv_content.contains("test_history.iso"));
 
-    // 11. Test settings.setRetentionDays
+    // 11. Probar settings.setRetentionDays
     send_json(
         &mut write,
         json!({
@@ -248,7 +248,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(res_set_ret["result"]["success"], true);
     assert_eq!(res_set_ret["result"]["retentionDays"], 7);
 
-    // Verify settings.get reflects updated retention
+    // Verificar que settings.get refleje la retención actualizada
     send_json(
         &mut write,
         json!({
@@ -264,7 +264,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         Some(7)
     );
 
-    // 12. Test history.clear
+    // 12. Probar history.clear
     send_json(
         &mut write,
         json!({
@@ -278,7 +278,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(res_clear["result"]["success"], true);
     assert_eq!(res_clear["result"]["clearedCount"], 2);
 
-    // Verify history.list is now empty
+    // Verificar que history.list esté ahora vacía
     send_json(
         &mut write,
         json!({

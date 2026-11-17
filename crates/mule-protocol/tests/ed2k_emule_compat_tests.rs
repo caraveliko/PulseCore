@@ -278,7 +278,7 @@ fn emule_info_roundtrip_and_answer_dispatch() {
         unknown_tags: vec![],
     };
 
-    // OP_EMULEINFO roundtrip through the full packet dispatcher.
+    // Viaje de ida y vuelta de OP_EMULEINFO a través del despachador completo de paquetes.
     let pkt = encode_emule_info(&Ed2kLimits::default(), &info).unwrap();
     let mut frame = Vec::new();
     frame.push(pkt.protocol);
@@ -295,7 +295,7 @@ fn emule_info_roundtrip_and_answer_dispatch() {
     assert_eq!(decoded.client_version, 70);
     assert_eq!(decoded.tags.len(), 1);
 
-    // The answer opcode must reach the same decoder through the dispatcher.
+    // El opcode de respuesta debe alcanzar el mismo decodificador mediante el despachador.
     let answer_pkt = encoder.encode_emule_info_answer(&info).unwrap();
     let mut frame = Vec::new();
     frame.push(answer_pkt.protocol);

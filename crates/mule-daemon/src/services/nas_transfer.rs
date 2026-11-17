@@ -5,27 +5,27 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-/// Taille des tampons de transfert pour montages réseau NFS (128 Kio = 131 072 octets),
-/// alignée exactement sur la valeur wsize négociée par NFSv3/NFSv4.
+/// Tamaño de los búferes de transferencia para montajes de red NFS (128 KiB = 131 072 bytes),
+/// alineado exactamente con el valor wsize negociado por NFSv3/NFSv4.
 pub const NFS_CHUNK_SIZE: usize = 128 * 1024;
 
-/// Taille des tampons pour copies locales entre disques physiques distincts (1 Mio).
+/// Tamaño de los búferes para copias locales entre discos físicos distintos (1 MiB).
 pub const LOCAL_CHUNK_SIZE: usize = 1024 * 1024;
 
-/// Débit cible par défaut vers le NAS embarqué (Synology DS212 à 256 Mo RAM) en Mo/s.
-/// Évite le buffer bloat, la saturation mémoire du NAS et les retransmissions TCP.
+/// Tasa de transferencia objetivo por defecto hacia el NAS embebido (Synology DS212 con 256 MB RAM) en MB/s.
+/// Evita la sobrecarga de búfer (buffer bloat), la saturación de memoria del NAS y las retransmisiones TCP.
 pub const DEFAULT_NAS_TRANSFER_RATE_MBPS: u32 = 20;
 
-/// Type de système de fichiers du point de montage cible.
+/// Tipo de sistema de archivos del punto de montaje destino.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilesystemKind {
-    /// Disque bloc local (NVMe, SSD SATA, HDD, ext4, NTFS, XFS, tmpfs).
+    /// Disco de bloques local (NVMe, SSD SATA, HDD, ext4, NTFS, XFS, tmpfs).
     Local,
-    /// Montage réseau NFS (Network File System).
+    /// Montaje de red NFS (Network File System).
     Nfs,
-    /// Montage réseau Windows / Samba (SMB / CIFS).
+    /// Montaje de red Windows / Samba (SMB / CIFS).
     Smb,
-    /// Autre montage réseau ou distant (SSHFS, Gluster, Ceph).
+    /// Otro montaje de red o remoto (SSHFS, Gluster, Ceph).
     Remote,
 }
 
@@ -44,8 +44,8 @@ impl FilesystemKind {
     }
 }
 
-/// Détecte le type de système de fichiers du chemin cible.
-/// Sur Linux, résout le point de montage le plus spécifique dans `/proc/mounts`.
+/// Detecta el tipo de sistema de archivos de la ruta objetivo.
+/// En Linux, resuelve el punto de montaje más específico en `/proc/mounts`.
 #[cfg(target_os = "linux")]
 pub fn detect_filesystem_kind(path: &Path) -> FilesystemKind {
     let mut current = path.to_path_buf();
@@ -103,7 +103,7 @@ pub fn detect_filesystem_kind(path: &Path) -> FilesystemKind {
     }
 }
 
-/// Instantané d'avancement d'un transfert réseau ou local vers la destination finale.
+/// Instantánea de progreso de una transferencia de red o local hacia el destino final.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NasTransferProgress {
@@ -125,11 +125,11 @@ mod fadvise {
     }
 }
 
-/// Transfère un fichier vers sa destination finale avec calibrage protocolaire :
-/// - Blocs de 128 Kio calés sur `wsize` pour NFS (évite la fragmentation RPC).
-/// - Régulation de débit (*pacing*) pour ménager la mémoire vive du NAS (ex. Synology DS212 256 Mo).
-/// - Préchauffage et éviction séquentielle de cache (`posix_fadvise`).
-/// - Appel `fdatasync` final unique pour garantir la persistance physique avant validation.
+/// Transfiere un archivo hacia su destino final con calibración protocolaria:
+/// - Bloques de 128 KiB ajustados a `wsize` para NFS (evita la fragmentación RPC).
+/// - Regulación de tasa (*pacing*) para moderar el uso de memoria RAM del NAS (ej. Synology DS212 256 MB).
+/// - Precarga y expulsión secuencial de caché (`posix_fadvise`).
+/// - Llamada final única a `fdatasync` para garantizar la persistencia física antes de la validación.
 pub fn transfer_to_destination<F>(
     src: &Path,
     tgt: &Path,
@@ -199,7 +199,7 @@ where
         std::io::Write::write_all(&mut tgt_file, &buf[..n])?;
         transferred += n as u64;
 
-        // Régulation de débit (pacing)
+        // Regulación de tasa (pacing)
         if target_rate_bps > 0 {
             let expected_elapsed = std::time::Duration::from_secs_f64(transferred as f64 / target_rate_bps as f64);
             let actual_elapsed = t_start.elapsed();
@@ -211,7 +211,7 @@ where
             }
         }
 
-        // Notification d'avancement toutes les 500 ms
+        // Notificación de progreso cada 500 ms
         if last_progress_time.elapsed().as_millis() >= 500 {
             if let Some(ref mut cb) = progress_cb {
                 let elapsed_secs = t_start.elapsed().as_secs_f64();
@@ -237,7 +237,7 @@ where
         }
     }
 
-    // Persistance physique sur les disques distants ou locaux
+    // Persistencia física en los discos remotos o locales
     tgt_file.sync_data()?;
 
     if let Some(ref mut cb) = progress_cb {

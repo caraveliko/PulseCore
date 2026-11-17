@@ -7,8 +7,8 @@ use mule_format::{KnownMetFile, MetError, MET_HEADER_I64TAGS};
 use mule_test_support::met_fixtures::*;
 use std::io::Cursor;
 
-/// Builds one `known.met` record from a payload hashed with the real
-/// eD2K hasher so the root/part-hash self-check passes.
+/// Construye un registro de `known.met` a partir de una carga útil hasheada con el
+/// hasheador eD2K real para que la autocomprobación raíz/hashes de partes pase con éxito.
 fn push_record(
     buf: &mut Vec<u8>,
     payload: &[u8],
@@ -33,7 +33,7 @@ fn push_record(
     buf.extend_from_slice(&tags);
 }
 
-/// Counts the number of serialized tags in `tags` by re-parsing.
+/// Cuenta el número de etiquetas serializadas en `tags` reanalizándolas.
 fn count_tags(tags: &[u8]) -> u32 {
     let mut cr = mule_format::met::reader::CountingReader::new(Cursor::new(tags));
     let mut n = 0u32;
@@ -85,9 +85,9 @@ fn test_known_met_nominal_two_records() {
     let b = &met.records[1];
     assert_eq!(b.file_name.as_deref(), Some("big.bin"));
     assert_eq!(b.file_size, Some(10_000_000));
-    // 10_000_000 / 9_728_000 → floor 1 + 1 = 2 parts (trailing partial)
+    // 10_000_000 / 9_728_000 → suelo 1 + 1 = 2 partes (parcial final)
     assert_eq!(b.part_hashes.len(), 2);
-    assert_eq!(b.up_priority, Some(2)); // PR_AUTO resolved to PR_HIGH
+    assert_eq!(b.up_priority, Some(2)); // PR_AUTO resuelto a PR_HIGH
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_known_met_drops_record_with_wrong_root() {
     let mut buf = vec![MET_HEADER_I64TAGS];
     buf.extend_from_slice(&1u32.to_le_bytes());
     buf.extend_from_slice(&1_700_000_000u32.to_le_bytes());
-    // Corrupt root hash (does not match the hashset)
+    // Hash raíz corrupto (no coincide con el conjunto de hashes)
     buf.extend_from_slice(&[0xDE; 16]);
     buf.extend_from_slice(&(hashed.part_hashes.len() as u16).to_le_bytes());
     for ph in &hashed.part_hashes {
@@ -117,7 +117,7 @@ fn test_known_met_drops_record_with_wrong_root() {
 
 #[test]
 fn test_known_met_drops_record_with_wrong_part_count() {
-    // file_size declares 2 parts but the hashset stores 1
+    // file_size declara 2 partes pero el conjunto de hashes almacena 1
     let payload = vec![0xDDu8; 5_000];
     let hashed = hash_reader(&mut Cursor::new(&payload)).unwrap();
 
@@ -131,7 +131,7 @@ fn test_known_met_drops_record_with_wrong_part_count() {
     }
     let mut tags = Vec::new();
     push_string_tag(&mut tags, FT_FILENAME, "count.bin");
-    // Lie: pretend the file is > 1 part → expected count = 2
+    // Engaño: simular que el archivo tiene > 1 parte → recuento esperado = 2
     push_u64_tag(&mut tags, FT_FILESIZE, 10_000_000);
     buf.extend_from_slice(&(count_tags(&tags)).to_le_bytes());
     buf.extend_from_slice(&tags);
@@ -167,7 +167,7 @@ fn test_known_met_truncated_eof() {
     let mut buf = vec![MET_HEADER_I64TAGS];
     buf.extend_from_slice(&1u32.to_le_bytes());
     buf.extend_from_slice(&1_700_000_000u32.to_le_bytes());
-    // no hash data follows
+    // no le siguen datos de hash
     let err = KnownMetFile::read_from(&mut Cursor::new(&buf)).unwrap_err();
     assert!(matches!(err, MetError::UnexpectedEof { .. }));
 }
@@ -178,7 +178,7 @@ fn test_known_met_extra_tags_preserved() {
     let mut buf = vec![MET_HEADER_I64TAGS];
     buf.extend_from_slice(&1u32.to_le_bytes());
     push_record(&mut buf, &payload, "song.mp3", 1_700_000_000, &mut |t| {
-        // FT_MEDIA_ARTIST = 0xD0 — goes to extra_tags (ConvertED2KTag path)
+        // FT_MEDIA_ARTIST = 0xD0 — va a extra_tags (ruta ConvertED2KTag)
         push_string_tag(t, 0xD0, "Some Artist");
     });
     let met = KnownMetFile::read_from(&mut Cursor::new(&buf)).unwrap();

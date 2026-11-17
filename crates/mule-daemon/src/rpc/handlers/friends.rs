@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::error::JsonRpcError;
 use crate::state::AppState;
 
-/// `friends.list` — lists configured friends (eMule `friends.met`).
+/// `friends.list` — lista los amigos configurados (`friends.met` de eMule).
 pub async fn handle_friends_list(state: &AppState) -> Result<Value, JsonRpcError> {
     let friends = state.downloads.lock().await.list_friends()?;
     let list: Vec<Value> = friends
@@ -22,8 +22,8 @@ pub async fn handle_friends_list(state: &AppState) -> Result<Value, JsonRpcError
     Ok(json!({ "friends": list, "total": list.len() }))
 }
 
-/// `friends.add` — grants the user hash a dedicated upload slot.
-/// Params: `userHash` (hex, required), `name` (optional).
+/// `friends.add` — concede al hash de usuario una ranura de subida dedicada.
+/// Parámetros: `userHash` (hexadecimal, obligatorio), `name` (opcional).
 pub async fn handle_friends_add(
     state: &AppState,
     params: Option<Value>,
@@ -46,8 +46,8 @@ pub async fn handle_friends_add(
     Ok(json!({ "ok": true, "userHash": user_hash }))
 }
 
-/// `friends.remove` — revokes the friend slot.
-/// Params: `userHash` (hex, required).
+/// `friends.remove` — revoca la ranura de amigo.
+/// Parámetros: `userHash` (hexadecimal, obligatorio).
 pub async fn handle_friends_remove(
     state: &AppState,
     params: Option<Value>,
@@ -65,11 +65,11 @@ pub async fn handle_friends_remove(
     Ok(json!({ "ok": true, "userHash": user_hash }))
 }
 
-/// `friends.importEmfriendsMet` — `CClientList::LoadFriendsList` :
-/// imports an `emfriends.met` file. Records without user hash are
-/// reported but skipped (our friend slot is hash-keyed, like eMule's
-/// `IsFriend` lookup).
-/// Params: `metPath` (required).
+/// `friends.importEmfriendsMet` — `CClientList::LoadFriendsList`:
+/// importa un archivo `emfriends.met`. Los registros sin hash de usuario se
+/// notifican pero se omiten (nuestra ranura de amigo está indexada por hash, como la
+/// búsqueda `IsFriend` de eMule).
+/// Parámetros: `metPath` (obligatorio).
 pub async fn handle_friends_import_emfriends_met(
     state: &AppState,
     params: Option<Value>,

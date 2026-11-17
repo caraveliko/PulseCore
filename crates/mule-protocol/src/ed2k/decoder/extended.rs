@@ -28,11 +28,11 @@ use super::super::packet::{
 };
 use super::super::tags::TagReader;
 
-/// Fallback bound for eD2K part counts inside multipacket fields when the
-/// caller does not supply `Ed2kLimits::max_parts` (kept for clarity in errors).
+/// Límite de respaldo para recuentos de partes eD2K dentro de campos multipaquete cuando
+/// el invocador no proporciona `Ed2kLimits::max_parts` (conservado por claridad en errores).
 const MAX_SUBPART_COUNT: usize = 10_000;
 
-/// Maximum number of sub-opcodes in a multipacket body (eMule sends at most 4).
+/// Número máximo de subcódigos de operación en un cuerpo multipaquete (eMule envía como máximo 4).
 const MAX_SUBOPS: usize = 32;
 
 fn malformed(
@@ -51,8 +51,8 @@ fn malformed(
     )
 }
 
-/// Reads the `<u16 count><ceil(count/8) bitfield>` part-status trailer used by
-/// multipacket `OP_REQFILENAME` ext-info and `OP_FILESTATUS` sub-answers.
+/// Lee la cola de estado de partes `<u16 count><ceil(count/8) bitfield>` usada por
+/// la información extendida `OP_REQFILENAME` multipaquete y subrespuestas `OP_FILESTATUS`.
 fn read_part_status(
     reader: &mut TagReader<'_>,
     limits: &Ed2kLimits,
@@ -82,18 +82,18 @@ fn read_part_status(
     Ok((part_count, Bytes::copy_from_slice(bytes)))
 }
 
-/// Parses the optional extended info trailing a `0x58` sub-request.
+/// Analiza la información extendida opcional que sigue a una subpetición `0x58`.
 ///
-/// The wire has no explicit marker: eMule reads it unconditionally when the
-/// negotiated `ExtendedRequestsVersion` is non-zero
+/// En cable no hay un marcador explícito: eMule la lee incondicionalmente cuando la
+/// `ExtendedRequestsVersion` negociada no es cero
 /// (`ProcessExtendedInfo`, `UploadClient.cpp`/`DownloadClient.cpp`):
-/// - version `0`  → no ext info is present at all;
-/// - version `1`  → `u16` part count + `ceil(count/8)` part-status bitfield;
-/// - version `>=2` → plus a trailing `u16` complete-sources count.
+/// - versión `0`  → no hay ninguna información extendida presente;
+/// - versión `1`  → recuento de partes `u16` + mapa de bits de estado de partes `ceil(count/8)`;
+/// - versión `>=2` → además un recuento final `u16` de fuentes completas.
 ///
-/// `extended_requests_version` is therefore the *negotiated* peer version and
-/// makes the parse fully deterministic — no byte guessing. Under version `0`
-/// any bytes present are consumed by the caller as subsequent sub-opcodes.
+/// `extended_requests_version` es por tanto la versión negociada del par y
+/// hace que el análisis sintáctico sea completamente determinista, sin conjeturas de bytes. Bajo la versión `0`
+/// cualquier byte presente es consumido por el invocador como subcódigos de operación subsiguientes.
 fn read_optional_ext_info(
     reader: &mut TagReader<'_>,
     extended_requests_version: u8,
@@ -127,8 +127,8 @@ fn read_optional_ext_info(
     }))
 }
 
-/// Decodes the sub-request stream shared by `OP_MULTIPACKET` (`0x92`),
-/// `OP_MULTIPACKET_EXT` (`0xA4`) and `OP_MULTIPACKET_EXT2` (`0xA9`).
+/// Decodifica el flujo de subpeticiones compartido por `OP_MULTIPACKET` (`0x92`),
+/// `OP_MULTIPACKET_EXT` (`0xA4`) y `OP_MULTIPACKET_EXT2` (`0xA9`).
 fn decode_sub_requests(
     reader: &mut TagReader<'_>,
     _limits: &Ed2kLimits,
@@ -173,9 +173,9 @@ fn decode_sub_requests(
     Ok(subs)
 }
 
-/// Decodes the sub-answer stream shared by `OP_MULTIPACKETANSWER` (`0x93`) and
-/// `OP_MULTIPACKETANSWER_EXT2` (`0xB0`). Sub-answers never repeat the file
-/// hash (`ListenSocket.cpp:1071-1099`).
+/// Decodifica el flujo de subrespuestas compartido por `OP_MULTIPACKETANSWER` (`0x93`) y
+/// `OP_MULTIPACKETANSWER_EXT2` (`0xB0`). Las subrespuestas nunca repiten el hash
+/// de archivo (`ListenSocket.cpp:1071-1099`).
 fn decode_sub_answers(
     reader: &mut TagReader<'_>,
     limits: &Ed2kLimits,
@@ -225,12 +225,12 @@ fn decode_sub_answers(
     Ok(subs)
 }
 
-/// Decodes a `MULTIPACKET` request payload (`0x92`/`0xA4`/`0xA9`).
+/// Decodifica una carga útil de petición `MULTIPACKET` (`0x92`/`0xA4`/`0xA9`).
 ///
-/// `extended_requests_version` is the peer's negotiated
-/// `ExtendedRequestsVersion` (eMule `m_byExtendedRequestsVer`, exchanged in
-/// `OP_EMULEINFO`); it determines whether the `0x58` sub-request carries the
-/// part-status ext info — see [`read_optional_ext_info`].
+/// `extended_requests_version` es la versión negociada del par para
+/// `ExtendedRequestsVersion` (`m_byExtendedRequestsVer` de eMule, intercambiada en
+/// `OP_EMULEINFO`); determina si la subpetición `0x58` porta la
+/// información extendida de estado de partes — véase [`read_optional_ext_info`].
 pub fn decode_multipacket_request(
     protocol: u8,
     opcode: u8,
@@ -268,7 +268,7 @@ pub fn decode_multipacket_request(
     Ok(Ed2kMultiPacketRequest { file, sub_requests })
 }
 
-/// Decodes a `MULTIPACKETANSWER` payload (`0x93`/`0xB0`).
+/// Decodifica una carga útil `MULTIPACKETANSWER` (`0x93`/`0xB0`).
 pub fn decode_multipacket_answer(
     protocol: u8,
     opcode: u8,
@@ -299,14 +299,14 @@ pub fn decode_multipacket_answer(
     Ok(Ed2kMultiPacketAnswer { file, sub_answers })
 }
 
-/// Option bit requesting the MD4 hashset in `OP_HASHSETREQUEST2`
+/// Bit de opción que solicita el conjunto de hashes MD4 en `OP_HASHSETREQUEST2`
 /// (`UploadClient.cpp` 0.72a `SendHashsetPacket`).
 pub const HASHSET2_OPT_MD4: u8 = 0x01;
-/// Option bit requesting the AICH hashset in `OP_HASHSETREQUEST2`.
+/// Bit de opción que solicita el conjunto de hashes AICH en `OP_HASHSETREQUEST2`.
 pub const HASHSET2_OPT_AICH: u8 = 0x02;
 
-/// Decodes an `OP_HASHSETREQUEST2` (`0xB1`) payload:
-/// `<FileIdentifier><options u8>` — at least one known bit must be set.
+/// Decodifica una carga útil `OP_HASHSETREQUEST2` (`0xB1`):
+/// `<FileIdentifier><opciones u8>` — debe estar activo al menos un bit conocido.
 pub fn decode_hashset_request2(
     protocol: u8,
     opcode: u8,
@@ -343,8 +343,8 @@ pub fn decode_hashset_request2(
     })
 }
 
-/// Decodes an `OP_HASHSETANSWER2` (`0xB2`) payload:
-/// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`.
+/// Decodifica una carga útil `OP_HASHSETANSWER2` (`0xB2`):
+/// `<FileIdentifier><opciones u8>[<conjunto md4>][<conjunto aich>]`.
 pub fn decode_hashset_answer2(
     protocol: u8,
     opcode: u8,
@@ -425,8 +425,8 @@ pub fn decode_hashset_answer2(
     })
 }
 
-/// Decodes an `OP_MESSAGE` (`0x4E`) payload: `<len u16><message bytes>`; the
-/// declared length must consume the payload exactly (eMule behaviour).
+/// Decodifica una carga útil `OP_MESSAGE` (`0x4E`): `<longitud u16><bytes del mensaje>`; la
+/// longitud declarada debe consumir la carga útil con exactitud (comportamiento de eMule).
 pub fn decode_message(
     protocol: u8,
     opcode: u8,
@@ -448,7 +448,7 @@ pub fn decode_message(
     Ok(Ed2kChatMessage { text })
 }
 
-/// Decodes an `OP_QUEUERANK` (`0x5C`) payload: `<rank u32>`.
+/// Decodifica una carga útil `OP_QUEUERANK` (`0x5C`): `<rango u32>`.
 pub fn decode_queue_rank(
     protocol: u8,
     opcode: u8,
@@ -469,8 +469,8 @@ pub fn decode_queue_rank(
     Ok(Ed2kQueueRank { rank })
 }
 
-/// Decodes an `OP_QUEUERANKING` (`0x60`) payload: exactly 12 bytes,
-/// `<rank u16><10 reserved>` (`ProcessEmuleQueueRank`, eMule 0.72a).
+/// Decodifica una carga útil `OP_QUEUERANKING` (`0x60`): exactamente 12 bytes,
+/// `<rango u16><10 reservados>` (`ProcessEmuleQueueRank`, eMule 0.72a).
 pub fn decode_queue_ranking(
     protocol: u8,
     opcode: u8,
@@ -496,7 +496,7 @@ pub fn decode_queue_ranking(
     Ok(Ed2kQueueRanking { rank, reserved })
 }
 
-/// Decodes an `OP_CHANGE_SLOT` (`0x5B`) payload: `<HASH 16>`.
+/// Decodifica una carga útil `OP_CHANGE_SLOT` (`0x5B`): `<HASH 16>`.
 pub fn decode_change_slot(
     protocol: u8,
     opcode: u8,
@@ -517,7 +517,7 @@ pub fn decode_change_slot(
     Ok(Ed2kChangeSlot { file_hash })
 }
 
-/// Decodes an `OP_FILEDESC` (`0x61`) payload: `<rating u8><len u16><desc>`.
+/// Decodifica una carga útil `OP_FILEDESC` (`0x61`): `<calificación u8><longitud u16><descripción>`.
 pub fn decode_file_desc(
     protocol: u8,
     opcode: u8,
@@ -540,7 +540,7 @@ pub fn decode_file_desc(
     Ok(Ed2kFileDesc { rating, description })
 }
 
-/// Decodes an `OP_PORTTEST` (`0xFE`) payload: single status byte.
+/// Decodifica una carga útil `OP_PORTTEST` (`0xFE`): byte de estado único.
 pub fn decode_port_test(
     protocol: u8,
     opcode: u8,
@@ -559,9 +559,9 @@ pub fn decode_port_test(
     Ok(Ed2kPortTest { value: payload[0] })
 }
 
-/// Decodes an `OP_CHATCAPTCHAREQ` (`0xA5`) payload:
-/// `<tag_count u8><tags><bitmap bytes>`. eMule bounds the bitmap to
-/// 128..=4096 bytes; enforced here when `enforce_emule_bounds` semantics apply.
+/// Decodifica una carga útil `OP_CHATCAPTCHAREQ` (`0xA5`):
+/// `<número_etiquetas u8><etiquetas><bytes del mapa de bits>`. eMule acota el mapa de bits a
+/// 128..=4096 bytes; impuesto aquí cuando se aplican semánticas de `enforce_emule_bounds`.
 pub fn decode_captcha_request(
     protocol: u8,
     opcode: u8,
@@ -602,7 +602,7 @@ pub fn decode_captcha_request(
     })
 }
 
-/// Decodes an `OP_CHATCAPTCHARES` (`0xA6`) payload: `<status u8>`.
+/// Decodifica una carga útil `OP_CHATCAPTCHARES` (`0xA6`): `<estado u8>`.
 pub fn decode_captcha_response(
     protocol: u8,
     opcode: u8,

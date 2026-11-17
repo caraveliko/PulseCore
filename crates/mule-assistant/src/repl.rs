@@ -16,12 +16,12 @@ use tokio::sync::mpsc;
 use crate::error::AssistantError;
 use crate::session::{AssistantEvent, ConfirmRequest, Session};
 
-/// Longueur maximale affichée d'un résultat d'outil dans le terminal —
-/// la version complète reste disponible via le WS/les events.
+/// Longitud máxima mostrada de un resultado de herramienta en el terminal:
+/// la versión completa sigue disponible a través del WS/eventos.
 const RESULT_DISPLAY_MAX_CHARS: usize = 1000;
 
-/// Boucle REPL : `> prompt` → tour → affichage. `quit`/`exit`/EOF
-/// terminent proprement.
+/// Bucle REPL: `> prompt` → turno → visualización. `quit`/`exit`/EOF
+/// finalizan limpiamente.
 pub async fn run_repl(session: &mut Session) -> Result<(), AssistantError> {
     let stdin = tokio::io::stdin();
     let mut reader = BufReader::new(stdin);
@@ -59,8 +59,8 @@ pub async fn run_repl(session: &mut Session) -> Result<(), AssistantError> {
     Ok(())
 }
 
-/// Un tour : orchestre l'affichage des events et les lectures de
-/// confirmation pendant que `user_turn` s'exécute.
+/// Un turno: orquesta la visualización de los eventos y las lecturas de
+/// confirmación mientras `user_turn` se ejecuta.
 async fn run_one_turn(
     session: &mut Session,
     input: &str,
@@ -98,7 +98,7 @@ async fn run_one_turn(
     Ok(())
 }
 
-/// Prompt `o/N` avec les arguments exacts de l'appel.
+/// Mensaje interactivo `o/N` con los argumentos exactos de la llamada.
 async fn prompt_confirmation(
     req: &ConfirmRequest,
     reader: &mut BufReader<tokio::io::Stdin>,
@@ -113,14 +113,14 @@ async fn prompt_confirmation(
     reader
         .read_line(&mut answer)
         .await
-        .map_err(|e| AssistantError::Transport(format!("lecture confirmation : {e}")))?;
+        .map_err(|e| AssistantError::Transport(format!("lecture stdin : {e}")))?;
     Ok(matches!(
         answer.trim().to_lowercase().as_str(),
         "o" | "oui" | "y" | "yes"
     ))
 }
 
-/// Rendu terminal d'un event.
+/// Representación en terminal de un evento.
 fn print_event(ev: &AssistantEvent) {
     match ev {
         AssistantEvent::Token { content } => {

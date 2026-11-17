@@ -56,9 +56,9 @@ fn expected_emule_client_version() -> u8 {
     u8::from_str_radix(digits, 16).expect("profile version digits must be hex")
 }
 
-/// `true` si le profil épinglé est un binaire aMule (`Amule*`). Les
-/// assertions spécifiques à la numérotation de version eMule sont alors
-/// relâchées en observations consignées dans le rapport de divergence.
+/// `true` si el perfil fijado es un binario aMule (`Amule*`). Las
+/// aserciones específicas de la numeración de versión de eMule se
+/// relajan entonces como observaciones registradas en el informe de divergencia.
 fn is_amule_profile() -> bool {
     reference_profile().starts_with("Amule")
 }
@@ -232,7 +232,7 @@ async fn test_tier3_live_external_reference_loopback_handshake() {
     );
     println!("Child PID: {pid}");
 
-    // Wait for the reference process to bind to loopback port and connect (up to 5 seconds)
+    // Esperar a que el proceso de referencia se enlace al puerto de bucle local y se conecte (hasta 5 segundos)
     let mut connect_res = None;
     for attempt in 1..=10 {
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -304,9 +304,9 @@ async fn test_tier3_live_external_reference_loopback_handshake() {
 
             assert_eq!(peer_info.name.as_deref(), Some("RefPeer"));
             if is_amule_profile() {
-                // Profil aMule : les champs de version et `OP_EMULEINFO`
-                // obéissent à un encodage différent de celui d'eMule — on les
-                // consigne dans le rapport au lieu d'imposer les valeurs eMule.
+                // Perfil aMule: los campos de versión y `OP_EMULEINFO`
+                // siguen una codificación distinta a la de eMule — se
+                // registran en el informe en lugar de imponer los valores de eMule.
                 report.record_tag("Version", &format!("{:?}", peer_info.version));
                 report.record_tag(
                     "EmuleUdpPort",
@@ -761,7 +761,7 @@ async fn test_tier3_live_file_status_request_and_parts_availability() {
     // In eD2K wire protocol (ClientTCPSocket.cpp), official eMule/aMule write uint16(0)
     // when responding to OP_SETREQFILEID for a completed shared file (CKnownFile).
     // In this canonical case, no bitfield is transmitted, and part_count = 0 signifies
-    // that the peer is a complete source (m_bCompleteSource = true) possessing 100% of the parts.
+    // que el par es una fuente completa (m_bCompleteSource = true) que posee el 100% de las partes.
     assert_eq!(
         status.part_count, 0,
         "eMule 0.50a encodes complete file availability as part_count = 0"
@@ -1092,7 +1092,7 @@ async fn test_tier3_live_download_sequencing_without_payload() {
 /// 2. Confinement to 127.0.0.1 on dynamic ephemeral loopback ports.
 /// 3. Handshake completed cleanly (OP_EMULEINFO and OP_HELLOANSWER).
 /// 4. File status queried via OP_SETREQFILEID_EMULE (0x4F) -> receives OP_FILESTATUS (0x50) with part_count = 0.
-/// 5. Single block request emitted: OP_REQUESTPARTS_EMULE (0x47) for [0, 184_320) with inactive slots zeroed.
+/// 5. Solicitud de bloque único emitida: OP_REQUESTPARTS_EMULE (0x47) para [0, 184_320) con ranuras inactivas a cero.
 /// 6. Response received: OP_SENDINGPART (0x46) under PR_ED2K (0xE3).
 /// 7. Data validation:
 ///    - File hash matches sealed fixture hash.
@@ -1143,7 +1143,7 @@ async fn test_tier3_live_single_uncompressed_block_transfer_from_emule050a() {
         0x3c,
     ];
 
-    // Read the reference 184,320-byte prefix from the generated fixture
+    // Leer el prefijo de referencia de 184.320 bytes del fixture generado
     let fixture_bytes = std::fs::read(&fixture_path).expect("read fixture file");
     let expected_prefix = &fixture_bytes[0..184_320];
 

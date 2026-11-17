@@ -9,28 +9,28 @@ use std::sync::atomic::AtomicU64;
 use mule_crypto::cryptkey::{self, LegacyKeyLoad};
 use mule_crypto::legacy_sui::EMULE_RSA_BITS;
 
-/// Shared SUI counters for anomaly observability — one instance per daemon,
-/// incremented by the inbound listener and outbound peer sessions, exposed
-/// read-only via `identity.status` RPC. Lock-free atomics, never reset.
+/// Contadores SUI compartidos para observabilidad de anomalías — una instancia por daemon,
+/// incrementados por el listener entrante y las sesiones de pares salientes, expuestos
+/// en modo solo lectura mediante el RPC `identity.status`. Atómicos sin bloqueos, nunca reiniciados.
 #[derive(Debug, Default)]
 pub struct SuiStats {
-    /// OP_SECIDENTSTATE challenges sent to inbound peers (we verify them).
+    /// Desafíos OP_SECIDENTSTATE enviados a pares entrantes (nosotros los verificamos).
     pub challenges_issued_in: AtomicU64,
-    /// OP_SECIDENTSTATE challenges sent outbound (we verify the peer).
+    /// Desafíos OP_SECIDENTSTATE enviados salientes (verificamos al par).
     pub challenges_issued_out: AtomicU64,
-    /// OP_SIGNATURE sent outbound answering a peer challenge.
+    /// OP_SIGNATURE enviado hacia afuera respondiendo al desafío de un par.
     pub signatures_sent: AtomicU64,
-    /// Peer signatures that passed RSA verification (inbound + outbound).
+    /// Firmas de pares que superaron la verificación RSA (entrantes + salientes).
     pub signatures_verified: AtomicU64,
-    /// Peer signatures rejected for any reason (bad RSA, wrong challenge, ...).
+    /// Firmas de pares rechazadas por cualquier motivo (RSA incorrecto, desafío erróneo, ...).
     pub signatures_rejected: AtomicU64,
-    /// Rejections specifically due to the one-signature-per-IP anti-flood.
+    /// Rechazos específicamente debidos a la protección anti-inundación de una firma por IP.
     pub signatures_rejected_flood: AtomicU64,
-    /// Malformed/oversized SUI packets dropped before verification.
+    /// Paquetes SUI malformados o de tamaño excesivo descartados antes de la verificación.
     pub malformed_packets: AtomicU64,
 }
 
-/// Serializable snapshot of `SuiStats` for RPC.
+/// Instantánea serializable de `SuiStats` para RPC.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SuiStatsSnapshot {
@@ -64,50 +64,50 @@ pub struct IdentityStatus {
     pub has_key: bool,
     pub pubkey_hash: Option<String>,
     pub key_bits: Option<u32>,
-    /// Set when `cryptkey.dat` was unreadable/corrupt and quarantined.
+    /// Establecido cuando `cryptkey.dat` era ilegible o estaba corrupto y fue puesto en cuarentena.
     pub quarantined_key: Option<String>,
 }
 
-/// `userhash.dat` — imported eMule `m_abyUserHash` (16 raw bytes), kept
-/// separate from `cryptkey.dat` like eMule keeps it in `preferences.dat`.
+/// `userhash.dat` — `m_abyUserHash` importado de eMule (16 bytes sin procesar), mantenido
+/// separado de `cryptkey.dat` al igual que eMule lo mantiene en `preferences.dat`.
 const USERHASH_FILENAME: &str = "userhash.dat";
 
-/// Outcome of `import_emule_identity` — eMule `cryptkey.dat` +
-/// `preferences.dat` migration.
+/// Resultado de `import_emule_identity` — migración de `cryptkey.dat` +
+/// `preferences.dat` de eMule.
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityImportReport {
-    /// `cryptkey.dat` imported (RSA-384 private key, credit continuity).
+    /// `cryptkey.dat` importado (clave privada RSA-384, continuidad de créditos).
     pub key_imported: bool,
-    /// `preferences.dat` user hash imported and activated.
+    /// Hash de usuario de `preferences.dat` importado y activado.
     pub userhash_imported: bool,
-    /// Active user hash after import (hex).
+    /// Hash de usuario activo tras la importación (hexadecimal).
     pub userhash: Option<String>,
 }
 
-/// Service managing the daemon's legacy eMule SUI identity.
+/// Servicio que gestiona la identidad heredada SUI de eMule del daemon.
 ///
-/// The private key is a real RSA-384 key stored in `cryptkey.dat`
-/// (Base64(PKCS#1 DER), eMule format). The public key wire form is the
-/// PKCS#1 `RSAPublicKey` DER sequence (<= 80 bytes) sent in `OP_PUBLICKEY`.
+/// La clave privada es una clave RSA-384 real almacenada en `cryptkey.dat`
+/// (Base64(PKCS#1 DER), formato de eMule). La forma de cable de la clave pública es la
+/// secuencia DER PKCS#1 `RSAPublicKey` (<= 80 bytes) enviada en `OP_PUBLICKEY`.
 ///
-/// The private key never leaves this service: callers may only request
-/// signatures via `sign_sui_payload`.
+/// La clave privada nunca abandona este servicio: los llamadores solo pueden solicitar
+/// firmas mediante `sign_sui_payload`.
 #[derive(Clone)]
 pub struct IdentityService {
     key_path: PathBuf,
-    /// RSA-384 private key; `None` if the stored key was corrupt (quarantined).
+    /// Clave privada RSA-384; `None` si la clave almacenada estaba corrupta (puesta en cuarentena).
     legacy_key: Option<rsa::RsaPrivateKey>,
-    /// PKCS#1 DER encoding of the public key (wire form).
+    /// Codificación DER PKCS#1 de la clave pública (forma en cable).
     public_key: Vec<u8>,
     pubkey_hash: String,
     quarantined_key: Option<String>,
-    /// Imported eMule user hash (`preferences.dat`); when present it wins
-    /// over the derived `MD4(pubkey)` hash — eMule credits are keyed on it.
+    /// Hash de usuario importado de eMule (`preferences.dat`); cuando está presente tiene
+    /// prioridad sobre el hash derivado `MD4(pubkey)` — los créditos de eMule se indexan en él.
     userhash_override: Option<[u8; 16]>,
 }
 
-// Debug intentionally omits private key material.
+// Debug omite intencionadamente el material de la clave privada.
 impl std::fmt::Debug for IdentityService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IdentityService")
@@ -119,11 +119,11 @@ impl std::fmt::Debug for IdentityService {
 }
 
 impl IdentityService {
-    /// Loads an existing `cryptkey.dat` or generates a new RSA-384 key.
+    /// Carga un `cryptkey.dat` existente o genera una nueva clave RSA-384.
     ///
-    /// A corrupt key file is quarantined (`cryptkey.dat.corrupt-<ts>`) and the
-    /// service runs with SUI disabled rather than silently destroying the
-    /// user's historical identity and credits.
+    /// Un archivo de clave corrupto se pone en cuarentena (`cryptkey.dat.corrupt-<ts>`) y el
+    /// servicio se ejecuta con SUI deshabilitado en lugar de destruir silenciosamente la
+    /// identidad histórica y los créditos del usuario.
     pub fn load_or_generate(data_dir: &Path) -> Self {
         let key_path = data_dir.join(cryptkey::CRYPTKEY_FILENAME);
         let mut quarantined_key = None;
@@ -155,8 +155,8 @@ impl IdentityService {
                 None
             }
             LegacyKeyLoad::LegacyBlob { quarantine_path } => {
-                // Pre-RSA 80-byte random identity blob from an old daemon build:
-                // no key material to preserve — safe to migrate to a real key.
+                // Blob de identidad aleatorio de 80 bytes anterior a RSA de una compilación antigua del daemon:
+                // no hay material de clave que preservar — seguro de migrar a una clave real.
                 quarantined_key = Some(quarantine_path.display().to_string());
                 match cryptkey::generate_cryptkey(data_dir) {
                     Ok(key) => {
@@ -194,9 +194,9 @@ impl IdentityService {
         }
     }
 
-    /// Reads `data_dir/userhash.dat` (16 raw bytes). A degenerate or
-    /// malformed file is ignored with a warning — never destroyed, the
-    /// user may still hold a copy of their eMule `preferences.dat`.
+    /// Lee `data_dir/userhash.dat` (16 bytes sin procesar). Un archivo degenerado o
+    /// malformado se ignora con una advertencia — nunca se destruye, el
+    /// usuario aún puede conservar una copia de su `preferences.dat` de eMule.
     fn load_userhash_override(data_dir: &Path) -> Option<[u8; 16]> {
         let path = data_dir.join(USERHASH_FILENAME);
         let raw = std::fs::read(&path).ok()?;
@@ -216,15 +216,15 @@ impl IdentityService {
         Some(bytes)
     }
 
-    /// Generates a fresh `cryptkey.dat`, replacing the current key.
-    /// All credits tied to the previous identity become unclaimable —
-    /// including an imported eMule user hash, removed with the old key.
+    /// Genera un `cryptkey.dat` nuevo, reemplazando la clave actual.
+    /// Todos los créditos vinculados a la identidad previa se vuelven irreclamables —
+    /// incluido un hash de usuario de eMule importado, eliminado junto con la clave antigua.
     pub fn rotate_key(data_dir: &Path) -> std::io::Result<Self> {
         let key_path = data_dir.join(cryptkey::CRYPTKEY_FILENAME);
         let userhash_path = data_dir.join(USERHASH_FILENAME);
         let key = cryptkey::generate_cryptkey(data_dir).map_err(std::io::Error::other)?;
-        // New identity ⇒ the imported `preferences.dat` hash no longer
-        // applies (it belongs to the eMule key we just replaced).
+        // Nueva identidad ⇒ el hash de `preferences.dat` importado ya no
+        // aplica (pertenece a la clave de eMule que acabamos de reemplazar).
         if userhash_path.exists() {
             let _ = std::fs::remove_file(&userhash_path);
         }
@@ -244,13 +244,13 @@ impl IdentityService {
         })
     }
 
-    /// Imports an eMule identity: `cryptkey.dat` (RSA-384 private key)
-    /// and/or the `preferences.dat` user hash. Both files preserve the
-    /// credits peers granted to that identity — eMule keys credits on
-    /// `m_abyUserHash` and verifies them with the SUI pubkey.
+    /// Importa una identidad de eMule: `cryptkey.dat` (clave privada RSA-384)
+    /// y/o el hash de usuario de `preferences.dat`. Ambos archivos preservan los
+    /// créditos que los pares otorgaron a esa identidad — eMule indexa los créditos en
+    /// `m_abyUserHash` y los verifica con la clave pública SUI.
     ///
-    /// `replace` is required when the destination files already exist —
-    /// overwriting an identity discards the credits tied to it.
+    /// Se requiere `replace` cuando los archivos de destino ya existen —
+    /// sobrescribir una identidad descarta los créditos vinculados a ella.
     pub fn import_emule_identity(
         data_dir: &Path,
         cryptkey_src: Option<&Path>,
@@ -270,7 +270,7 @@ impl IdentityService {
                         .to_string(),
                 ));
             }
-            // Validate before touching anything — eMule `cryptkey.dat` is
+            // Validar antes de tocar nada — el `cryptkey.dat` de eMule es
             // `Base64(PKCS#1 DER)` RSA-384.
             let raw = std::fs::read(src)?;
             let key = cryptkey::parse_cryptkey_bytes(&raw)
@@ -305,28 +305,28 @@ impl IdentityService {
         Ok(report)
     }
 
-    /// Whether a usable legacy RSA private key is loaded.
+    /// Si hay cargada una clave privada RSA heredada utilizable.
     pub fn has_key(&self) -> bool {
         self.legacy_key.is_some()
     }
 
-    /// Returns the path to the stored cryptkey file.
+    /// Devuelve la ruta al archivo cryptkey almacenado.
     pub fn key_path(&self) -> &Path {
         &self.key_path
     }
 
-    /// Returns the PKCS#1 DER public key bytes for eD2K `OP_PUBLICKEY` transmission.
+    /// Devuelve los bytes de clave pública DER PKCS#1 para la transmisión de `OP_PUBLICKEY` en eD2K.
     pub fn public_key_bytes(&self) -> &[u8] {
         &self.public_key
     }
 
-    /// Returns the MD4 hash of the public key (32 hex characters).
+    /// Devuelve el hash MD4 de la clave pública (32 caracteres hexadecimales).
     pub fn pubkey_hash(&self) -> &str {
         &self.pubkey_hash
     }
 
-    /// Signs a SUI payload (`pubkey || challenge [|| ip || kind]`) with the
-    /// legacy RSA-384 key (RSASSA-PKCS1v15-SHA1). Fails if no key is loaded.
+    /// Firma una carga útil SUI (`pubkey || challenge [|| ip || kind]`) con la
+    /// clave heredada RSA-384 (RSASSA-PKCS1v15-SHA1). Falla si no hay clave cargada.
     pub fn sign_sui_payload(
         &self,
         payload: &[u8],
@@ -337,12 +337,12 @@ impl IdentityService {
         mule_crypto::legacy_sui::sign_sui_payload(key, payload)
     }
 
-    /// Returns the 16-byte user hash.
-    /// Order (`Preferences.cpp:1484-1492`): the imported eMule
-    /// `preferences.dat` hash wins verbatim — it already carries the
-    /// marker bytes and it is the key peers store credits under.
-    /// Otherwise the derived `MD4(pubkey)` hash marked with eMule magic
-    /// bytes (a rotated key detaches credits).
+    /// Devuelve el hash de usuario de 16 bytes.
+    /// Orden (`Preferences.cpp:1484-1492`): el hash de `preferences.dat` importado
+    /// de eMule prevalece literalmente — ya porta los bytes marcadores y es
+    /// la clave bajo la cual los pares almacenan los créditos.
+    /// En caso contrario, el hash `MD4(pubkey)` derivado marcado con los bytes mágicos
+    /// de eMule (una clave rotada desvincula los créditos).
     pub fn user_hash(&self) -> [u8; 16] {
         if let Some(imported) = self.userhash_override {
             return imported;
@@ -350,13 +350,13 @@ impl IdentityService {
         let hash = Md4::digest(&self.public_key);
         let mut out = [0u8; 16];
         out.copy_from_slice(&hash[..16]);
-        // Official eMule client identification magic bytes (Preferences.cpp:1491-1492)
+        // Bytes mágicos oficiales de identificación de cliente eMule (Preferences.cpp:1491-1492)
         out[5] = 14; // 0x0E
         out[14] = 111; // 0x6F
         out
     }
 
-    /// Returns the public identity status object.
+    /// Devuelve el objeto de estado público de identidad.
     pub fn status(&self) -> IdentityStatus {
         IdentityStatus {
             enabled: self.legacy_key.is_some(),
@@ -368,8 +368,8 @@ impl IdentityService {
     }
 }
 
-/// PKCS#1 DER (`SEQUENCE { n INTEGER, e INTEGER }`) — same bytes as CryptoPP
-/// `GetMaterial().Save()` used for the eMule wire public key.
+/// DER PKCS#1 (`SEQUENCE { n INTEGER, e INTEGER }`) — mismos bytes que CryptoPP
+/// `GetMaterial().Save()` usado para la clave pública de eMule en el cable.
 fn public_key_wire(key: &rsa::RsaPrivateKey) -> Vec<u8> {
     use rsa::pkcs1::EncodeRsaPublicKey;
     rsa::RsaPublicKey::from(key)

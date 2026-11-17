@@ -20,8 +20,8 @@ use super::types::{
 use crate::error::DaemonError;
 use std::time::{Duration, Instant};
 
-/// Taille d'une part eD2K (eMule `PARTSIZE`) — granularité du hachage MD4
-/// incrémental et de la récupération AICH.
+/// Tamaño de una parte eD2K (`PARTSIZE` de eMule) — granularidad del hash MD4
+/// incremental y de la recuperación AICH.
 const ED2K_PART_SIZE_U64: u64 = mule_protocol::ed2k::ED2K_PART_SIZE as u64;
 
 pub fn add_ed2k_link(
@@ -71,12 +71,12 @@ pub fn add_ed2k_link(
             .unwrap_or_default()
             .as_millis() as i64,
         category_id,
-        // eMule `DAPPref` (`GetNewAutoDown`, défaut true) : un nouveau
-        // download démarre en priorité « auto » — le flag est stocké et
-        // l'allocateur résout low/normal/high à chaque tick selon le
-        // nombre de sources (`UpdateAutoDownPriority`). Ce n'est pas une
-        // assignation ponctuelle : « auto » reste actif tant que
-        // l'utilisateur ne choisit pas une priorité manuelle.
+        // `DAPPref` de eMule (`GetNewAutoDown`, predeterminado true): una nueva
+        // descarga se inicia con prioridad «auto» — el indicador se almacena y
+        // el asignador resuelve low/normal/high en cada tick según el
+        // número de fuentes (`UpdateAutoDownPriority`). No es una
+        // asignación puntual: «auto» permanece activo mientras
+        // el usuario no elija una prioridad manual.
         priority: if db
             .get_setting("auto_priority_new_downloads")
             .ok()
@@ -133,7 +133,7 @@ pub fn add_ed2k_link(
         },
     );
 
-    // eMule creates the .part.met companion as soon as the download is added.
+    // eMule crea el archivo complementario .part.met tan pronto como se añade la descarga.
     if let Some(act) = active.get(&id) {
         let _ = super::part_met::save_part_met(db, act);
     }
@@ -237,12 +237,12 @@ pub fn pause_download(
     db.update_status(id, DownloadStatus::Paused)
         .map_err(db_err("persisting state"))?;
 
-    // Flush des données reçues en attente avant la transition : le
-    // bookkeeping des ranges ne doit pas survivre seulement en mémoire
-    // pendant une pause (eMule `SavePartFile` sur changement d'état).
+    // Vaciado de los datos recibidos en espera antes de la transición: la
+    // contabilidad de los rangos no debe sobrevivir únicamente en memoria
+    // durante una pausa (`SavePartFile` de eMule en cambio de estado).
     persist_pending_ranges(db, act, id)?;
 
-    // Persist .part.met on pause (eMule saves met on status transitions).
+    // Persistir .part.met en pausa (eMule guarda el met en transiciones de estado).
     let _ = super::part_met::save_part_met(db, act);
 
     Ok(act.snapshot())
@@ -312,8 +312,8 @@ pub fn remove_download(
 ) -> Result<(), DaemonError> {
     let mut temp_path_to_delete = None;
     let mut temp_path_to_keep = None;
-    // Téléchargement terminé : `delete_files` couvre aussi le fichier final
-    // dans le dossier de destination (retiré de la liste des partages).
+    // Descarga terminada: `delete_files` cubre también el archivo final
+    // en la carpeta de destino (retirado de la lista de compartidos).
     let mut completed_file_to_delete: Option<(PathBuf, String)> = None;
     let (was_active, history_data) = if let Some(mut act) = active.remove(id) {
         let _ = act.part_file.take();
@@ -348,10 +348,10 @@ pub fn remove_download(
     };
 
     if let Some((dl, transferred, attempts, resumes, verif)) = history_data {
-        // eMule `CPartFile::Delete` → `AddCancelledFileID` : l'annulation
-        // d'un téléchargement en cours enregistre son hash masqué dans
-        // `m_mapCancelledFiles`. Les téléchargements terminés sortent du
-        // scope (`Delete` ne s'applique pas aux PartFile finalisés).
+        // `CPartFile::Delete` de eMule → `AddCancelledFileID`: la cancelación
+        // de una descarga en curso registra su hash enmascarado en
+        // `m_mapCancelledFiles`. Las descargas terminadas salen del
+        // ámbito (`Delete` no se aplica a los PartFile finalizados).
         if dl.status != DownloadStatus::Completed {
             cancelled_files::record_cancelled_file(db, &dl.ed2k_hash.0)?;
         }
@@ -378,10 +378,10 @@ pub fn remove_download(
         super::part_met::delete_part_met(&temp_path);
     }
 
-    // Fichier final partagé : supprimé du dossier de destination et retiré
-    // de `shared_files` (enregistré automatiquement à la complétion —
-    // `finalize_download`), sinon la liste des partages pointerait un
-    // fichier inexistant.
+    // Archivo final compartido: eliminado de la carpeta de destino y retirado
+    // de `shared_files` (registrado automáticamente al completarse —
+    // `finalize_download`), de lo contrario la lista de compartidos apuntaría a un
+    // archivo inexistente.
     if let Some((target_path, hash_hex)) = completed_file_to_delete {
         if target_path.exists() {
             let _ = std::fs::remove_file(&target_path);
@@ -389,10 +389,10 @@ pub fn remove_download(
         let _ = db.delete_shared_file(&hash_hex);
     }
 
-    // Files kept on disk after removal: rename the companion met to
-    // `.part.met.keep` so the startup orphan scan does not resurrect the
-    // download the user deliberately removed. The pair stays importable via
-    // `downloads.importPartMet` (explicit partPath).
+    // Archivos conservados en disco tras la eliminación: renombrar el met complementario a
+    // `.part.met.keep` para que el escaneo de huérfanos al inicio no resucite la
+    // descarga que el usuario eliminó deliberadamente. El par sigue siendo importable mediante
+    // `downloads.importPartMet` (partPath explícito).
     if let Some(temp_path) = temp_path_to_keep {
         let met_path = super::part_met::part_met_path_for(&temp_path);
         if met_path.exists() {
@@ -422,11 +422,11 @@ pub fn inject_range(
     inject_range_impl(db, active, id, offset, data, sender, true)
 }
 
-/// Variante hot-path de [`inject_range`] : même ingestion mais le snapshot
-/// retourné n'inclut pas le résumé par part (`parts` vide —
-/// `compute_part_summaries` est O(parts × ranges), coûteux par bloc de
-/// 180 Ko sur les gros fichiers). Ne pas émettre le retour vers les
-/// clients RPC/WS — l'appelant ne lit que `status`/`progress`.
+/// Variante de ruta crítica de [`inject_range`]: misma ingestión pero la instantánea
+/// devuelta no incluye el resumen por parte (`parts` vacío —
+/// `compute_part_summaries` es O(partes × rangos), costoso por bloque de
+/// 180 KiB en archivos grandes). No emitir el retorno hacia los
+/// clientes RPC/WS — el llamador solo lee `status`/`progress`.
 pub(crate) fn inject_range_brief(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -485,11 +485,11 @@ fn inject_range_impl(
 
     let end = offset + data.len() as u64;
 
-    // eMule `WriteToBuffer` : toute donnée touchant une part déjà complète
-    // (sans gap, donc déjà hachée ou en attente de vérif) est ignorée —
-    // « Received data touches already hashed chunk - ignored ». Sans cette
-    // garde, un bloc en vol planifié avant la complétion de la part
-    // écraserait silencieusement des données déjà vérifiées.
+    // `WriteToBuffer` de eMule: cualquier dato que toque una parte ya completa
+    // (sin hueco, por tanto ya procesada por hash o pendiente de verificación) se ignora —
+    // « Received data touches already hashed chunk - ignored ». Sin esta
+    // guarda, un bloque en vuelo planificado antes de completar la parte
+    // sobrescribiría silenciosamente datos ya verificados.
     let first_part = offset / ED2K_PART_SIZE_U64;
     let last_part = (end - 1) / ED2K_PART_SIZE_U64;
     for p in first_part..=last_part {
@@ -503,7 +503,7 @@ fn inject_range_impl(
         }
     }
 
-    // eMule `m_CorruptionBlackBox.ReceivedData` : provenance du bloc par part.
+    // `m_CorruptionBlackBox.ReceivedData` de eMule: procedencia del bloque por parte.
     if let Some(sender) = sender {
         let mut s = offset;
         while s < end {
@@ -515,9 +515,9 @@ fn inject_range_impl(
         }
     }
 
-    // Re-open the .part file when it was closed (failed open at startup,
-    // post-verify eviction): received bytes must reach disk — the range is
-    // only recorded once the write succeeded, never as phantom coverage.
+    // Volver a abrir el archivo .part cuando fue cerrado (fallo de apertura al inicio,
+    // expulsión tras verificación): los bytes recibidos deben llegar al disco — el rango
+    // solo se registra una vez que la escritura tuvo éxito, nunca como cobertura fantasma.
     if act.part_file.is_none() {
         act.part_file = Some(
             PartFile::open_or_create(
@@ -532,15 +532,15 @@ fn inject_range_impl(
         pf.write_segment(offset, data)
             .map_err(|e| DaemonError::Business(format!("Write error: {e}")))?;
     }
-    // Fsync différé : `sync_data` est batché par `persist_pending_ranges`
-    // (cadence `PART_PERSIST_INTERVAL` + points critiques) — pas d'fsync
-    // par bloc de 180 Ko. La sync SQLite des ranges plus bas reste par
-    // bloc via un delta `INSERT` O(1) (contrat crash-resume).
+    // Fsync diferido: `sync_data` se procesa en lotes mediante `persist_pending_ranges`
+    // (cadencia `PART_PERSIST_INTERVAL` + puntos críticos) — sin fsync
+    // por bloque de 180 KiB. La sincronización SQLite de rangos más abajo se mantiene por
+    // bloque mediante un delta `INSERT` O(1) (contrato de reanudación tras fallos).
     act.persist_dirty = true;
 
-    // Staging RAM (eMule `m_tData`, libtorrent staging → hash → flush) :
-    // les octets injectés alimentent le buffer de leur part — la vérification
-    // MD4 à la complétion se fera en mémoire, sans relecture disque.
+    // Preparación en RAM (`m_tData` de eMule, libtorrent staging → hash → vaciado):
+    // los bytes inyectados alimentan el búfer de su parte — la verificación
+    // MD4 al completarse se hará en memoria, sin relectura de disco.
     super::staged::stage_range(
         &mut act.staged_parts,
         act.download.total_size,
@@ -579,11 +579,11 @@ fn inject_range_impl(
             progress
         );
 
-        // Vérif d'intégrité incrémentale inconditionnelle : eMule exécute
-        // `HashSinglePart` (MD4 + AICH) sur chaque part complétée,
-        // indépendamment de la préférence ICH. `ich_enabled` ne gate que le
-        // choix entre récupération AICH par blocs et éviction complète de la
-        // part (`IsCorruptedPart && IsICHEnabled` dans FlushBuffer).
+        // Verificación de integridad incremental incondicional: eMule ejecuta
+        // `HashSinglePart` (MD4 + AICH) en cada parte completada,
+        // independientemente de la preferencia ICH. `ich_enabled` solo condiciona la
+        // elección entre recuperación AICH por bloques y expulsión completa de la
+        // parte (`IsCorruptedPart && IsICHEnabled` en FlushBuffer).
         let ich_enabled = db
             .get_setting("ich_enabled")
             .ok()
@@ -592,10 +592,10 @@ fn inject_range_impl(
             .unwrap_or(true);
         let hash_hex = act.download.ed2k_hash.to_hex().to_lowercase();
         if let Ok(part_hashes) = db.get_part_hashes(&hash_hex) {
-            // For files strictly smaller than one part, the file hash IS the
-            // part hash. For exact multiples of PART_SIZE eMule appends an
-            // MD4(empty) trailing part, so part 0 hash != file hash there —
-            // never fall back to the file hash in that case.
+            // Para archivos estrictamente menores que una parte, el hash del archivo ES el
+            // hash de la parte. Para múltiplos exactos de PART_SIZE, eMule añade una
+            // parte final MD4(empty), por lo que el hash de la parte 0 != hash del archivo allí —
+            // nunca recurrir al hash del archivo en ese caso.
             let expected = part_hashes.get(part_idx as usize).copied().or({
                 if part_hashes.is_empty() && act.download.total_size < ED2K_PART_SIZE_U64 {
                     Some(act.download.ed2k_hash.0)
@@ -605,9 +605,9 @@ fn inject_range_impl(
             });
             if let Some(expected_hash) = expected {
                 let part_len = (part_end - part_start) as usize;
-                // Hash depuis le buffer stagé en RAM (zéro `pread`) quand
-                // la part y est entière ; relecture disque en repli
-                // (reprise à mi-part, borne `MAX_STAGED_PARTS` atteinte).
+                // Hash desde el búfer preparado en RAM (cero `pread`) cuando
+                // la parte está completa en él; relectura de disco como respaldo
+                // (reanudación a media parte, límite `MAX_STAGED_PARTS` alcanzado).
                 let verified = match super::staged::verify_staged(
                     &mut act.staged_parts,
                     part_idx as u32,
@@ -627,11 +627,11 @@ fn inject_range_impl(
                     act.corruption_blackbox
                         .verified_data(part_idx as u32, part_start, part_end);
                 } else {
-                    // eMule AICH path: with a trusted master hash the corrupted
-                    // part is kept and an OP_AICHREQUEST is queued so only the
-                    // corrupted 180 KiB blocks get re-downloaded. Falls back to
-                    // whole-part eviction when AICH is unavailable/exhausted,
-                    // ou quand ICH est désactivé (re-téléchargement complet).
+                    // Ruta AICH de eMule: con un hash maestro de confianza la parte corrupta
+                    // se conserva y se pone en cola un OP_AICHREQUEST para que solo los
+                    // bloques corruptos de 180 KiB se vuelvan a descargar. Recae en la expulsión
+                    // de la parte completa cuando AICH no está disponible/agotado,
+                    // o cuando ICH está desactivado (redescarga completa).
                     let attempts = act
                         .aich_requested
                         .get(&(part_idx as u32))
@@ -653,7 +653,7 @@ fn inject_range_impl(
                         act.aich_pending
                             .push_back((part_idx as u32, Instant::now()));
                     } else {
-                        // Attribution aux expéditeurs seulement en absence d'AICH
+                        // Atribución a los remitentes solo en ausencia de AICH
                         mark_part_corrupted(act, part_idx as u32, part_start, part_end);
                         tracing::warn!(
                         "[PART_CORRUPTED] File '{}' (hash: {}): part {} failed MD4 check, evicting range {}..{} for re-download",
@@ -669,37 +669,37 @@ fn inject_range_impl(
                 }
             }
         }
-        // Buffer stagé libéré à la complétion de la part, qu'elle soit
-        // vérifiée, récupérée par AICH ou évincée (libtorrent
-        // `release_pieces_owned_by` — une part requeueée repart à zéro).
+        // Búfer preparado liberado al completarse la parte, ya esté
+        // verificada, recuperada por AICH o expulsada (`release_pieces_owned_by`
+        // de libtorrent — una parte reencolada vuelve a empezar de cero).
         act.staged_parts.remove(&(part_idx as u32));
     }
 
-    // Bookkeeping des ranges : delta `INSERT` O(1) par bloc (upsert,
-    // les lignes chevauchantes refusionnent au chargement) — exigé pour
-    // le crash-resume. La réécriture complète `sync_received_ranges`
-    // sert de compaction à cadence `PART_PERSIST_INTERVAL` et aux
-    // évictions (suppression de ranges).
+    // Contabilidad de rangos: delta `INSERT` O(1) por bloque (upsert,
+    // las líneas solapadas se refusionan en la carga) — requerido para
+    // la reanudación tras fallos. La reescritura completa `sync_received_ranges`
+    // sirve de compactación a cadencia `PART_PERSIST_INTERVAL` y en
+    // expulsiones (eliminación de rangos).
     db.append_received_range(id, offset, end)
         .map_err(|e| DaemonError::Business(format!("DB sync error: {e}")))?;
 
     let is_now_complete =
         act.download.total_size > 0 && act.ranges.covered_len() == act.download.total_size;
 
-    // Fsync batché du chemin de réception (eMule `FlushBuffer`
-    // périodique) : `sync_data` du `.part` à cadence `PART_PERSIST_INTERVAL`,
-    // forcé à la complétion d'une part et à la fin du fichier — les
-    // évictions de parts corrompues passent par `met_dirty`, donc toujours
-    // flushées immédiatement. Doit précéder `part_file.take()` : à la
-    // complétion le handle est fermé et le fsync deviendrait impossible.
+    // Fsync por lotes de la ruta de recepción (`FlushBuffer` periódico
+    // de eMule): `sync_data` del `.part` a cadencia `PART_PERSIST_INTERVAL`,
+    // forzado al completar una parte y al final del archivo — las
+    // expulsiones de partes corruptas pasan por `met_dirty`, por tanto siempre
+    // vaciadas de inmediato. Debe preceder a `part_file.take()`: al
+    // completarse el descriptor se cierra y el fsync se volvería imposible.
     if met_dirty || is_now_complete || act.last_persist_flush.elapsed() >= PART_PERSIST_INTERVAL {
         persist_pending_ranges(db, act, id)?;
     }
 
     if is_now_complete && !was_complete {
         if let Some(pf) = act.part_file.take() {
-            // Bilan I/O du pipeline disque — invariant cible : 0 `pread`
-            // en réception (toutes les vérifs sont passées par le staging
+            // Balance de E/S del conducto de disco — invariante objetivo: 0 `pread`
+            // en recepción (todas las verificaciones pasaron por la preparación en
             // RAM), `pwrite_bytes == total_size`.
             let s = pf.io_stats();
             tracing::info!(
@@ -721,16 +721,16 @@ fn inject_range_impl(
         act.download.status,
         DownloadStatus::Queued | DownloadStatus::WaitingForSources
     ) {
-        // Only a pending download flips to Downloading on data arrival.
-        // Paused/Failed keep their state: eMule finishes in-flight writes
-        // without un-pausing the partfile.
+        // Solo una descarga pendiente pasa a Downloading al recibir datos.
+        // Paused/Failed mantienen su estado: eMule termina las escrituras en vuelo
+        // sin reanudar el partfile.
         act.download.status = DownloadStatus::Downloading;
         act.download.updated_at = now_ms();
         let _ = db.update_status(id, act.download.status);
     }
 
-    // Persist .part.met on part completion / corruption eviction
-    // (eMule SavePartFile on state transitions).
+    // Persistir .part.met al completar parte / expulsión por corrupción
+    // (SavePartFile de eMule en transiciones de estado).
     if met_dirty {
         let _ = super::part_met::save_part_met(db, act);
     }
@@ -738,14 +738,14 @@ fn inject_range_impl(
     Ok(snap_of(act))
 }
 
-/// Point unique de flush batché du chemin de réception : `sync_data` du
-/// `.part` quand `persist_dirty`, suivi d'une réécriture complète
-/// `sync_received_ranges` — rôle de **compaction** (borne la table et
-/// absorbe les deltas) et de filet de sécurité après éviction. Appelé
-/// par `inject_range_impl` (cadence [`PART_PERSIST_INTERVAL`], complétion
-/// de part, fin de fichier), par les transitions de statut (`pause`,
-/// `update_status`), par le backstop `flush_dirty_downloads` et par
-/// `save_active_part_mets` au shutdown — évite un fsync par bloc de 180 Ko.
+/// Punto único de vaciado por lotes de la ruta de recepción: `sync_data` del
+/// `.part` cuando `persist_dirty`, seguido de una reescritura completa
+/// `sync_received_ranges` — función de **compactación** (delimita la tabla y
+/// absorbe los deltas) y de red de seguridad tras expulsión. Invocado
+/// por `inject_range_impl` (cadencia [`PART_PERSIST_INTERVAL`], finalización
+/// de parte, fin de archivo), por transiciones de estado (`pause`,
+/// `update_status`), por el respaldo `flush_dirty_downloads` y por
+/// `save_active_part_mets` en el apagado — evita un fsync por bloque de 180 KiB.
 pub(crate) fn persist_pending_ranges(
     db: &mut Database,
     act: &mut ActiveDownload,
@@ -765,10 +765,10 @@ pub(crate) fn persist_pending_ranges(
     Ok(())
 }
 
-/// Marque les enregistrements de la part comme corrompus puis évalue la
-/// responsabilité des expéditeurs (eMule `CorruptedData` + `EvaluateData`) :
-/// tout expéditeur dépassant `CBB_BANTHRESHOLD` est empilé dans
-/// `pending_corruption_bans` pour déconnexion/rejet par l'appelant.
+/// Marca los registros de la parte como corruptos y luego evalúa la
+/// responsabilidad de los remitentes (`CorruptedData` + `EvaluateData` de eMule):
+/// todo remitente que supere `CBB_BANTHRESHOLD` se apila en
+/// `pending_corruption_bans` para su desconexión/rechazo por el llamador.
 fn mark_part_corrupted(
     act: &mut ActiveDownload,
     part_idx: u32,
@@ -788,9 +788,9 @@ fn mark_part_corrupted(
     }
 }
 
-/// Evicts corrupted part ranges from the received RangeSet so they are re-downloaded,
-/// and resets the download back to Downloading. Mirrors eMule `CPartFile` corrupted
-/// part handling after a failed hashset check.
+/// Expulsa los rangos de partes corruptas del RangeSet recibido para que se vuelvan a descargar,
+/// y restablece la descarga a Downloading. Refleja el manejo de partes corruptas de
+/// `CPartFile` en eMule tras un fallo de comprobación del hashset.
 pub fn evict_corrupted_parts(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -818,7 +818,7 @@ pub fn evict_corrupted_parts(
     db.sync_received_ranges(id, &act.ranges)
         .map_err(|e| DaemonError::Business(format!("DB sync error: {e}")))?;
 
-    // Re-open the part file for further writes (it was closed when entering Verifying).
+    // Reabrir el archivo de partes para escrituras posteriores (se cerró al entrar en Verifying).
     if act.part_file.is_none() {
         act.part_file =
             PartFile::open_or_create(&act.download.temp_path, total_size, AllocationPolicy::None)
@@ -832,7 +832,7 @@ pub fn evict_corrupted_parts(
     act.verification_in_progress = false;
     let _ = db.update_status(id, DownloadStatus::Downloading);
 
-    // Clear AICH recovery state for evicted parts.
+    // Limpiar el estado de recuperación AICH para partes expulsadas.
     for &part_idx in corrupted {
         act.aich_pending.retain(|&(p, _)| p != part_idx);
         act.aich_requested.remove(&part_idx);
@@ -849,35 +849,35 @@ pub fn evict_corrupted_parts(
     Ok(act.snapshot())
 }
 
-// ── AICH recovery (eMule CAICHRecoveryHashSet semantics) ─────────────────────
+// ── Recuperación AICH (semántica CAICHRecoveryHashSet de eMule) ─────────────────
 
-/// Minimum unique masked IPs (`ip & 0x00F0FFFF`) required to trust a root.
+/// IPs enmascaradas únicas mínimas (`ip & 0x00F0FFFF`) requeridas para confiar en una raíz.
 pub const AICH_MIN_UNIQUE_IPS: usize = 10;
-/// Minimum share of agreeing IPs to trust a root (percent).
+/// Proporción mínima de IPs coincidentes para confiar en una raíz (porcentaje).
 pub const AICH_MIN_PERCENTAGE: usize = 92;
-/// Maximum AICH recovery requests sent per corrupted part before falling back
-/// to whole-part eviction.
+/// Solicitudes máximas de recuperación AICH enviadas por parte corrupta antes de recurrir
+/// a la expulsión de la parte completa.
 pub const AICH_MAX_ATTEMPTS: u32 = 2;
-/// A part pending AICH recovery for longer than this is evicted wholesale
-/// (guards against stalls when no AICH-capable source ever answers).
+/// Una parte pendiente de recuperación AICH durante más tiempo que este se expulsa por completo
+/// (protege contra bloqueos cuando ninguna fuente compatible con AICH responde).
 pub const AICH_PENDING_TIMEOUT: Duration = Duration::from_secs(120);
-/// Re-request delay before an already-requested part may be asked again.
+/// Retardo de nueva solicitud antes de que una parte ya solicitada pueda pedirse de nuevo.
 const AICH_REQUEST_COOLDOWN: Duration = Duration::from_secs(60);
 
-/// Outcome of recording an AICH master-hash vote received from a peer.
+/// Resultado del registro de un voto de hash maestro AICH recibido de un par.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AichVoteOutcome {
-    /// The root is trusted (already known, or consensus reached and persisted).
+    /// La raíz es de confianza (ya conocida, o consenso alcanzado y persistido).
     Trusted,
-    /// Vote recorded but consensus not reached yet.
+    /// Voto registrado pero consenso aún no alcanzado.
     Untrusted,
-    /// Peer reported a different root than the trusted one — dead source.
+    /// El par notificó una raíz distinta de la de confianza — fuente muerta.
     Mismatch,
 }
 
-/// Records an AICH master hash received from a peer for a download.
-/// `masked_ip` must be `ip_u32 & 0x00F0FFFF` (eMule CAICHUntrustedHash).
-/// When consensus is reached the root is persisted on the download record.
+/// Registra un hash maestro AICH recibido de un par para una descarga.
+/// `masked_ip` debe ser `ip_u32 & 0x00F0FFFF` (CAICHUntrustedHash de eMule).
+/// Cuando se alcanza el consenso, la raíz se persiste en el registro de la descarga.
 pub fn record_aich_root_vote(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -900,7 +900,7 @@ pub fn record_aich_root_vote(
 
     act.aich_votes.entry(root).or_default().insert(masked_ip);
 
-    // Find the most-signed candidate (eMule UntrustedHashReceived).
+    // Buscar el candidato más firmado (UntrustedHashReceived de eMule).
     let total_ips: usize = act.aich_votes.values().map(|s| s.len()).sum();
     let (best_root, best_ips) = act
         .aich_votes
@@ -923,14 +923,14 @@ pub fn record_aich_root_vote(
     }
 }
 
-/// Returns the trusted AICH root for a download, if any.
+/// Devuelve la raíz AICH de confianza para una descarga, si existe.
 pub fn trusted_aich_root(active: &HashMap<Uuid, ActiveDownload>, id: &Uuid) -> Option<[u8; 20]> {
     active.get(id)?.download.aich_root.map(|a| a.0)
 }
 
-/// Pops the next corrupted part awaiting AICH recovery data. Parts whose
-/// pending state has expired are evicted wholesale (fallback so downloads
-/// cannot stall when no AICH-capable source ever answers).
+/// Extrae la siguiente parte corrupta en espera de datos de recuperación AICH. Las partes cuyo
+/// estado pendiente haya caducado se expulsan por completo (respaldo para que las descargas
+/// no se queden atascadas si ninguna fuente compatible con AICH responde).
 pub fn next_aich_recovery(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -976,8 +976,8 @@ pub fn next_aich_recovery(
     result
 }
 
-/// Marks a pending AICH recovery request as failed (peer could not serve it):
-/// requeues the part, or evicts it wholesale once attempts are exhausted.
+/// Marca una solicitud de recuperación AICH pendiente como fallida (el par no pudo servirla):
+/// vuelve a poner en cola la parte, o la expulsa por completo una vez agotados los intentos.
 pub fn fail_aich_recovery(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -999,7 +999,7 @@ pub fn fail_aich_recovery(
     }
 }
 
-/// Report produced after applying received AICH recovery data.
+/// Informe producido tras aplicar los datos de recuperación AICH recibidos.
 #[derive(Debug)]
 pub struct AichRecoveryReport {
     pub part: u32,
@@ -1030,9 +1030,9 @@ fn evict_part_range(db: &mut Database, act: &mut ActiveDownload, id: &Uuid, part
     let _ = db.update_status(id, DownloadStatus::Downloading);
 }
 
-/// Applies received AICH recovery data for a corrupted part: verifies the hash
-/// tree against the trusted master hash, then hashes each 180 KiB block of the
-/// downloaded part and evicts only corrupted block ranges.
+/// Aplica los datos de recuperación AICH recibidos para una parte corrupta: verifica el árbol
+/// de hash contra el hash maestro de confianza, luego procesa el hash de cada bloque de 180 KiB
+/// de la parte descargada y expulsa únicamente los rangos de bloques corruptos.
 pub fn apply_aich_recovery(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -1078,8 +1078,8 @@ pub fn apply_aich_recovery(
         }
     };
 
-    // The part file may have been closed when the download entered Verifying;
-    // reopen it so block hashes can be computed.
+    // El archivo de partes puede haberse cerrado cuando la descarga entró en Verifying;
+    // reabrirlo para que se puedan calcular los hashes de los bloques.
     if act.part_file.is_none() {
         act.part_file = PartFile::open_or_create(
             &act.download.temp_path,
@@ -1110,12 +1110,12 @@ pub fn apply_aich_recovery(
             .map(|bytes| mule_format::aich_block_hash(&bytes) == *expected)
             .unwrap_or(false);
         if ok {
-            // eMule `m_CorruptionBlackBox.VerifiedData` sur le bloc récupéré.
+            // `m_CorruptionBlackBox.VerifiedData` de eMule sobre el bloque recuperado.
             act.corruption_blackbox
                 .verified_data(part, block_start, block_end);
         } else {
-            // eMule `CorruptedData` : attribution du bloc fautif à
-            // l'expéditeur avant l'évaluation des bannissements.
+            // `CorruptedData` de eMule: atribución del bloque defectuoso al
+            // remitente antes de evaluar las expulsiones.
             act.corruption_blackbox
                 .corrupted_data(part, block_start, block_end);
             corrupted_blocks += 1;
@@ -1123,7 +1123,7 @@ pub fn apply_aich_recovery(
             let _ = act.ranges.remove(block_start..block_end);
         }
     }
-    // eMule `m_CorruptionBlackBox.EvaluateData` après le balayage des blocs.
+    // `m_CorruptionBlackBox.EvaluateData` de eMule tras el barrido de bloques.
     for guilty in act.corruption_blackbox.evaluate(part) {
         if !act.pending_corruption_bans.contains(&guilty) {
             tracing::warn!(
@@ -1278,7 +1278,7 @@ pub fn commit_finalize(
         )
     };
 
-    // eMule deletes the .part.met companion once the file is complete.
+    // eMule elimina el archivo complementario .part.met una vez que el archivo se ha completado.
     super::part_met::delete_part_met(&temp_path);
 
     let now = now_ms();
@@ -1286,8 +1286,8 @@ pub fn commit_finalize(
         let act = active.get_mut(id).unwrap();
         act.download.status = DownloadStatus::Completed;
         act.download.target_path = final_path.clone();
-        // eMule `m_fullname` suit le nom renommé ; le nom affiché reflète
-        // le fichier réellement produit sur disque.
+        // `m_fullname` de eMule sigue el nombre renombrado; el nombre mostrado refleja
+        // el archivo realmente generado en disco.
         if let Some(name) = final_path.file_name().and_then(|n| n.to_str()) {
             act.download.display_name = name.to_string();
         }
@@ -1296,7 +1296,7 @@ pub fn commit_finalize(
         act.last_status_change_unix_ms = now;
         act.current_rate_bps = 0;
         let _ = act.part_file.take();
-        // Le blackbox de corruption est libéré à la complétion du fichier.
+        // La caja negra de corrupción se libera al completarse el archivo.
         act.corruption_blackbox.clear();
     }
     db.update_status(id, DownloadStatus::Completed)
@@ -1327,13 +1327,13 @@ pub fn commit_finalize(
         finalized_dl.total_size,
         final_path.to_string_lossy().as_ref(),
     );
-    // eMule `UAPPref` : le fichier complété devient un partage « auto ».
+    // `UAPPref` de eMule: el archivo completado se convierte en un compartido «auto».
     if peers_servers::auto_up_priority_enabled(db) {
         shared.up_priority = "auto".to_string();
     }
     let _ = db.upsert_shared_file(&shared);
 
-    // Trigger optional on_download_complete hook configured via MULE_ON_DOWNLOAD_COMPLETE
+    // Disparar gancho opcional on_download_complete configurado mediante MULE_ON_DOWNLOAD_COMPLETE
     trigger_completion_hook(&final_path, finalized_dl.category_id.as_deref());
 
     let act = active
@@ -1349,8 +1349,8 @@ pub fn finalize_download(
 ) -> Result<DownloadSnapshot, DaemonError> {
     let (temp_path, target_path, _) = prepare_finalize(db, active, id)?;
 
-    // eMule `PerformFileComplete` : le fichier de destination n'est jamais
-    // écrasé — collision résolue en `name(1).ext`, `name(2).ext`, …
+    // `PerformFileComplete` de eMule: el archivo de destino nunca se
+    // sobrescribe — colisión resuelta en `name(1).ext`, `name(2).ext`, …
     let final_path = mule_core::finalize_file(
         &temp_path,
         &target_path,
@@ -1421,7 +1421,7 @@ pub fn set_destination(
         .ok_or_else(|| DaemonError::NotFound(format!("Download {id} detail not found")))
 }
 
-/// Met à jour directement le chemin cible d'un téléchargement en base et en mémoire active.
+/// Actualiza directamente la ruta objetivo de una descarga en la base de datos y en memoria activa.
 pub fn update_target_path(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -1451,9 +1451,9 @@ pub fn update_target_path(
     Ok(())
 }
 
-/// Valide un nom de fichier fourni par l'utilisateur (`downloads.rename`,
-/// `shares.rename`) : non vide, sans séparateurs ni caractères interdits
-/// Windows, ni `.`/`..`, ni point/espace terminal (NTFS).
+/// Valida un nombre de archivo proporcionado por el usuario (`downloads.rename`,
+/// `shares.rename`): no vacío, sin separadores ni caracteres prohibidos de
+/// Windows, ni `.`/`..`, ni punto/espacio final (NTFS).
 fn validate_new_file_name(name: &str) -> Result<&str, DaemonError> {
     let trimmed = name.trim();
     let illegal = |c: char| {
@@ -1472,11 +1472,11 @@ fn validate_new_file_name(name: &str) -> Result<&str, DaemonError> {
     Ok(trimmed)
 }
 
-/// `downloads.rename` — renomme un téléchargement (nom affiché + chemin
-/// de destination dérivé). Le `.part`/`.part.met` temporaire garde son
-/// nom UUID ; pour un download terminé, le fichier final est renommé sur
-/// disque et l'entrée `shared_files` suit. (eMule : renommage F2 sur la
-/// liste des téléchargements.)
+/// `downloads.rename` — renombra una descarga (nombre mostrado + ruta
+/// de destino derivada). El `.part`/`.part.met` temporal conserva su
+/// nombre UUID; para una descarga completada, el archivo final se renombra en
+/// disco y la entrada de `shared_files` hace lo propio. (eMule: renombramiento con F2 en la
+/// lista de descargas).
 pub fn rename_download(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,
@@ -1514,9 +1514,9 @@ pub fn rename_download(
         )));
     }
 
-    // Download terminé : le fichier final existe sur disque → renommage
-    // réel + mise à jour de l'entrée de partage (sinon elle pointerait
-    // un chemin inexistant).
+    // Descarga terminada: el archivo final existe en disco → renombramiento
+    // real + actualización de la entrada de compartido (de lo contrario apuntaría
+    // a una ruta inexistente).
     if completed && old_target != new_target && old_target.exists() {
         if new_target.exists() {
             return Err(DaemonError::Business(format!(
@@ -1541,9 +1541,9 @@ pub fn rename_download(
     Ok(act.snapshot())
 }
 
-/// `shares.rename` — renomme un fichier partagé complet (disque +
-/// `shared_files`). Quand le hash adosse un download encore listé, on
-/// délègue à `rename_download` pour garder les deux vues cohérentes.
+/// `shares.rename` — renombra un archivo compartido completo (disco +
+/// `shared_files`). Cuando el hash respalda una descarga aún listada, se
+/// delega en `rename_download` para mantener ambas vistas coherentes.
 pub fn rename_shared_file(
     db: &mut Database,
     active: &mut HashMap<Uuid, ActiveDownload>,

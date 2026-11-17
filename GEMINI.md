@@ -53,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
 
 ## Convenciones de código
 
-- **Idioma**: toda la documentación, los *Inner Doc Comments* (`//!`) de los archivos que componen el programa y todos los archivos Markdown (`.md`) **deben estar redactados exclusivamente en español de España** (no se admiten otros idiomas).
+- **Idioma**: toda la documentación, **TODOS los comentarios del código** (`//`, `///`, `//!`, `/* ... */`), cadenas de documentación de los archivos que componen el programa y todos los archivos Markdown (`.md`) **deben estar redactados exclusivamente en español de España** (no se admiten otros idiomas: ni francés, ni inglés, ni ningún otro).
 - **Errores en Rust**: `thiserror` para errores tipados; prohibido usar `unwrap()` fuera de las pruebas.
 - **Registro (*Logging*)**: `tracing` (nunca `println!` dentro de los crates).
 - **Asincronía**: Tokio; sin bloqueos síncronos en tareas asíncronas.

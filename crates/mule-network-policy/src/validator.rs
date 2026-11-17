@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::profile::NetworkProfile;
 
-/// Violations raised when an address or target fails network policy rules.
+/// Infracciones generadas cuando una dirección o destino incumple las reglas de política de red.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum PolicyViolation {
     #[error("Non-loopback address {0} is prohibited in LocalLab profile")]
@@ -43,7 +43,7 @@ pub enum PolicyViolation {
     ListenOnNonLoopbackDisallowed(SocketAddr),
 }
 
-/// Classifies an IP address category for defense-in-depth inspection.
+/// Clasifica una categoría de dirección IP para inspección de defensa en profundidad.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpCategory {
     Loopback,
@@ -57,7 +57,7 @@ pub enum IpCategory {
     PublicRoutable,
 }
 
-/// Unwraps IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) to native IPv4.
+/// Desenvuelve direcciones IPv6 asignadas a IPv4 (::ffff:a.b.c.d) a IPv4 nativa.
 pub fn canonicalize_ip(ip: IpAddr) -> IpAddr {
     match ip {
         IpAddr::V6(v6) => {
@@ -71,7 +71,7 @@ pub fn canonicalize_ip(ip: IpAddr) -> IpAddr {
     }
 }
 
-/// Classifies an IP address into security and routing categories.
+/// Clasifica una dirección IP en categorías de seguridad y enrutamiento.
 pub fn classify_ip(ip: IpAddr) -> IpCategory {
     let canonical = canonicalize_ip(ip);
     match canonical {
@@ -96,7 +96,7 @@ fn classify_ipv4(v4: Ipv4Addr) -> IpCategory {
         return IpCategory::Multicast;
     }
 
-    // RFC 1918 Private LAN
+    // LAN privada RFC 1918
     // 10.0.0.0/8
     if octets[0] == 10 {
         return IpCategory::PrivateLan;
@@ -110,24 +110,24 @@ fn classify_ipv4(v4: Ipv4Addr) -> IpCategory {
         return IpCategory::PrivateLan;
     }
 
-    // Carrier-Grade NAT RFC 6598: 100.64.0.0/10 (100.64.0.0 to 100.127.255.255)
+    // NAT para operadores (Carrier-Grade NAT) RFC 6598: 100.64.0.0/10 (100.64.0.0 a 100.127.255.255)
     if octets[0] == 100 && (64..=127).contains(&octets[1]) {
         return IpCategory::CarrierGradeNat;
     }
 
-    // Link-local RFC 3927: 169.254.0.0/16
+    // Enlace local RFC 3927: 169.254.0.0/16
     if octets[0] == 169 && octets[1] == 254 {
         return IpCategory::LinkLocal;
     }
 
-    // Special purpose / documentation / benchmarking
+    // Propósito especial / documentación / pruebas de rendimiento (benchmarking)
     // 192.0.2.0/24 (TEST-NET-1), 198.51.100.0/24 (TEST-NET-2), 203.0.113.0/24 (TEST-NET-3)
     if (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
         || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
         || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
         // 198.18.0.0/15 benchmarking
         || (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19))
-        // 240.0.0.0/4 reserved
+        // 240.0.0.0/4 reservado
         || (octets[0] >= 240)
     {
         return IpCategory::SpecialPurpose;
@@ -149,17 +149,17 @@ fn classify_ipv6(v6: Ipv6Addr) -> IpCategory {
 
     let segments = v6.segments();
 
-    // Link-Local: fe80::/10
+    // Enlace local: fe80::/10
     if (segments[0] & 0xffc0) == 0xfe80 {
         return IpCategory::LinkLocal;
     }
 
-    // Unique Local Addresses (ULA): fc00::/7 (RFC 4193, IPv6 private)
+    // Direcciones locales únicas (ULA): fc00::/7 (RFC 4193, IPv6 privada)
     if (segments[0] & 0xfe00) == 0xfc00 {
         return IpCategory::PrivateLan;
     }
 
-    // Documentation RFC 3849: 2001:db8::/32
+    // Documentación RFC 3849: 2001:db8::/32
     if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return IpCategory::SpecialPurpose;
     }
@@ -167,7 +167,7 @@ fn classify_ipv6(v6: Ipv6Addr) -> IpCategory {
     IpCategory::PublicRoutable
 }
 
-/// Validates whether an address is authorized for outbound connection under the given profile.
+/// Valida si una dirección está autorizada para una conexión saliente bajo el perfil dado.
 pub fn validate_connect_address(
     addr: &SocketAddr,
     profile: NetworkProfile,
@@ -199,7 +199,7 @@ pub fn validate_connect_address(
     }
 }
 
-/// Validates whether an address is authorized for binding/listening under the given profile.
+/// Valida si una dirección está autorizada para vincularse/escuchar bajo el perfil dado.
 pub fn validate_listen_address(
     addr: &SocketAddr,
     profile: NetworkProfile,
@@ -208,16 +208,16 @@ pub fn validate_listen_address(
 
     match profile {
         NetworkProfile::LocalLab => {
-            // Lab profile listeners must only bind to loopback
+            // Los listeners en perfil Lab solo deben vincularse a loopback
             if cat != IpCategory::Loopback {
                 return Err(PolicyViolation::ListenOnNonLoopbackDisallowed(*addr));
             }
             Ok(())
         }
         NetworkProfile::PublicEd2kPreview | NetworkProfile::PublicEd2kKadPreview => {
-            // In preview WAN phase, listeners must remain on loopback until WAN listening is specifically enabled
-            // or if explicitly binding 0.0.0.0 / :: for ingress.
-            // For Phase 9.0 defensive foundation, disallow binding to private LAN interfaces or non-loopback.
+            // En fase preview WAN, los listeners deben permanecer en loopback hasta que la escucha WAN se habilite específicamente
+            // o si se vincula explícitamente a 0.0.0.0 / :: para tráfico entrante.
+            // Para la base defensiva de la Fase 9.0, no permitir vincularse a interfaces de LAN privada o no loopback.
             if cat != IpCategory::Loopback && cat != IpCategory::Unspecified {
                 return Err(PolicyViolation::ListenOnNonLoopbackDisallowed(*addr));
             }

@@ -67,16 +67,16 @@ fn test_history_insert_and_query_filtering() {
     assert!(id2 > id1);
     assert!(id3 > id2);
 
-    // Query all (sorted desc by timestamp)
+    // Consultar todo (ordenado desc por marca de tiempo)
     let all = db
         .query_history(&HistoryFilter::default())
         .expect("query all");
     assert_eq!(all.len(), 3);
-    assert_eq!(all[0].event_type, "failed"); // newest timestamp
+    assert_eq!(all[0].event_type, "failed"); // marca de tiempo más reciente
     assert_eq!(all[1].event_type, "completed");
-    assert_eq!(all[2].event_type, "resumed"); // oldest timestamp
+    assert_eq!(all[2].event_type, "resumed"); // marca de tiempo más antigua
 
-    // Filter by event_type
+    // Filtrar por event_type
     let failed_filter = HistoryFilter {
         event_type: Some("failed".to_string()),
         ..Default::default()
@@ -86,7 +86,7 @@ fn test_history_insert_and_query_filtering() {
     assert_eq!(failed_list[0].file_name, "corrupted.bin");
     assert_eq!(failed_list[0].verification_result, "hash_mismatch");
 
-    // Filter by timestamp range
+    // Filtrar por rango de marca de tiempo
     let range_filter = HistoryFilter {
         from_timestamp_ms: Some(now),
         to_timestamp_ms: Some(now + 2000),
@@ -104,9 +104,9 @@ fn test_history_stats_aggregation() {
         .unwrap_or_default()
         .as_millis() as i64;
 
-    let session_start = now_ms - 60_000; // 1 minute ago
+    let session_start = now_ms - 60_000; // hace 1 minuto
 
-    // Insert completed in session
+    // Insertar completado en la sesión
     db.insert_history_entry(&HistoryEntry {
         id: 0,
         download_id: "dl-1".to_string(),
@@ -125,7 +125,7 @@ fn test_history_stats_aggregation() {
     })
     .expect("insert completed");
 
-    // Insert failure
+    // Insertar fallo
     db.insert_history_entry(&HistoryEntry {
         id: 0,
         download_id: "dl-2".to_string(),
@@ -144,7 +144,7 @@ fn test_history_stats_aggregation() {
     })
     .expect("insert failed");
 
-    // Insert resume
+    // Insertar reanudación
     db.insert_history_entry(&HistoryEntry {
         id: 0,
         download_id: "dl-1".to_string(),
@@ -186,8 +186,8 @@ fn test_history_retention_and_clear() {
         .unwrap_or_default()
         .as_millis() as i64;
 
-    let old_ts = now_ms - (40 * 86_400 * 1000); // 40 days ago
-    let fresh_ts = now_ms - (5 * 86_400 * 1000); // 5 days ago
+    let old_ts = now_ms - (40 * 86_400 * 1000); // hace 40 días
+    let fresh_ts = now_ms - (5 * 86_400 * 1000); // hace 5 días
 
     db.insert_history_entry(&HistoryEntry {
         id: 0,
@@ -230,7 +230,7 @@ fn test_history_retention_and_clear() {
         2
     );
 
-    // Apply retention of 30 days: old entry (40 days ago) should be pruned
+    // Aplicar retención de 30 días: la entrada antigua (de hace 40 días) debe purgarse
     let pruned = db.apply_retention_policy(30).expect("apply retention");
     assert_eq!(pruned, 1);
 
@@ -238,7 +238,7 @@ fn test_history_retention_and_clear() {
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].file_name, "fresh.iso");
 
-    // Clear history
+    // Limpiar historial
     let cleared = db.clear_history().expect("clear history");
     assert_eq!(cleared, 1);
     assert_eq!(

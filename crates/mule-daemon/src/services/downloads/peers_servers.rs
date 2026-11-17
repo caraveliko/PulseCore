@@ -132,9 +132,9 @@ pub fn add_shared_file(db: &mut Database, file: &SharedFile) -> Result<(), Daemo
         .map_err(db_err("adding shared file"))
 }
 
-/// eMule `UAPPref` (`GetNewAutoUp`, défaut `true`) : les nouveaux fichiers
-/// partagés démarrent en priorité upload « auto » — `UpdateAutoUpPriority`
-/// recalcule l'effectif selon le nombre de clients en upload.
+/// `UAPPref` de eMule (`GetNewAutoUp`, predeterminado `true`): los nuevos archivos
+/// compartidos se inician con prioridad de subida «auto» — `UpdateAutoUpPriority`
+/// recalcula la prioridad efectiva según el número de clientes en subida.
 pub fn auto_up_priority_enabled(db: &Database) -> bool {
     db.get_setting("auto_priority_uploads")
         .ok()
@@ -153,7 +153,7 @@ pub fn get_shared_file(db: &Database, file_hash: &str) -> Result<Option<SharedFi
         .map_err(db_err("getting shared file"))
 }
 
-/// Ajoute `delta` octets au total uploadé persisté du fichier partagé.
+/// Añade `delta` bytes al total subido persistido del archivo compartido.
 pub fn add_share_uploaded_bytes(
     db: &mut Database,
     file_hash: &str,
@@ -163,7 +163,7 @@ pub fn add_share_uploaded_bytes(
         .map_err(db_err("adding share uploaded bytes"))
 }
 
-/// Totaux uploadés persistés par hash de fichier (clés en minuscules).
+/// Totales subidos persistidos por hash de archivo (claves en minúsculas).
 pub fn list_share_uploaded_bytes(
     db: &Database,
 ) -> Result<std::collections::HashMap<String, u64>, DaemonError> {

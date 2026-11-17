@@ -10,7 +10,7 @@ use super::super::tags::{
     TAGTYPE_STRING, TAGTYPE_UINT16, TAGTYPE_UINT32, TAGTYPE_UINT64, TAGTYPE_UINT8,
 };
 
-/// Encodes a `TagName` into the destination buffer.
+/// Codifica un `TagName` en el búfer de destino.
 pub fn encode_tag_name(
     limits: &Ed2kLimits,
     opcode: u8,
@@ -52,7 +52,7 @@ pub fn encode_tag_name(
     }
 }
 
-/// Encodes a single recognized `Ed2kTag` into the destination buffer.
+/// Codifica una única `Ed2kTag` reconocida en el búfer de destino.
 pub fn encode_tag(
     limits: &Ed2kLimits,
     opcode: u8,
@@ -152,7 +152,7 @@ pub fn encode_tag(
     Ok(())
 }
 
-/// Encodes a raw preserved unknown tag into the destination buffer.
+/// Codifica una etiqueta desconocida sin procesar conservada en el búfer de destino.
 pub fn encode_raw_tag(
     limits: &Ed2kLimits,
     opcode: u8,

@@ -45,13 +45,13 @@ pub(crate) async fn run_peer_connection(
     rate_limiters: Option<Arc<mule_network_policy::PolicyRateLimiters>>,
     sx_env: SxEnv,
 ) -> Result<u64, PeerError> {
-    // eMule advertises SecIdent=3 (v1|v2) in MiscOptions1 bits 16-19 when a
-    // usable RSA key is loaded, 0 otherwise.
+    // eMule anuncia SecIdent=3 (v1|v2) en los bits 16-19 de MiscOptions1 cuando una
+    // clave RSA utilizable está cargada, 0 en caso contrario.
     let sec_ident_cap: u8 = match &identity {
         Some(id) if id.lock().await.has_key() => 3,
         _ => 0,
     };
-    // 1-3. Perform TCP connect, obfuscation negotiation, OP_HELLO, and await OP_HELLO_ANSWER
+    // 1-3. Realizar conexión TCP, negociación de ofuscación, OP_HELLO y esperar OP_HELLO_ANSWER
     let mut handshake_res = perform_peer_handshake(
         target_addr,
         &file_hash_str,
@@ -79,11 +79,11 @@ pub(crate) async fn run_peer_connection(
     )
     .await?;
 
-    // 4-7. Query file status, request filename, start upload req, and wait in queue.
-    // Outbound SUI (OP_SECIDENTSTATE challenges from the remote) is handled
-    // inside the status/queue loops via `sui`.
-    // Record the peer's announced eMule UDP endpoint for client-UDP
-    // reasks (`OP_REASKFILEPING` keep-alives toward queued sources).
+    // 4-7. Consultar estado del archivo, solicitar nombre, iniciar petición de subida y esperar en cola.
+    // El SUI saliente (desafíos OP_SECIDENTSTATE del extremo remoto) se gestiona
+    // dentro de los bucles de estado/cola mediante `sui`.
+    // Registrar el extremo UDP de eMule anunciado por el par para repeticiones de
+    // petición por UDP de cliente (mensajes de mantenimiento `OP_REASKFILEPING` hacia fuentes en cola).
     if let Some(udp_port) = handshake_res.peer_udp_port {
         inner.lock().await.peer_udp.insert(
             address_str.clone(),
@@ -93,17 +93,17 @@ pub(crate) async fn run_peer_connection(
 
     let mut sui = super::sui::OutboundSui::new(identity).with_stats(sui_stats);
     sui.set_peer_sec_ident(handshake_res.peer_sec_ident);
-    // eMule InfoPacketsReceived: once info packets are exchanged, challenge the
-    // peer if it announced Secure Ident support (verifier role).
+    // InfoPacketsReceived de eMule: una vez intercambiados los paquetes de información, desafiar al
+    // par si anunció compatibilidad con Secure Ident (rol de verificador).
     sui.initiate(
         target_addr,
         &Ed2kEncoder::default(),
         &mut handshake_res.stream,
     )
     .await;
-    // Capacités SX négociées au handshake (eMule GetSourceExchange1Version /
-    // SupportsSourceExchange2) + identité locale pour les self-checks
-    // `CanAddSource` (eMule PartFile.cpp:2380-2403).
+    // Capacidades SX negociadas en el apretón de manos (GetSourceExchange1Version /
+    // SupportsSourceExchange2 de eMule) + identidad local para las autocomprobaciones
+    // `CanAddSource` (PartFile.cpp:2380-2403 de eMule).
     let sx_caps = PeerSxCaps {
         sx1_version: handshake_res.peer_sx1_version,
         sx2: handshake_res.peer_supports_sx2,
@@ -132,9 +132,9 @@ pub(crate) async fn run_peer_connection(
         is_high_id: client_id >= 16_777_216,
         kad_open,
     };
-    // 8-10. Multi-source block planner, request blocks, and streaming
-    // transfers — with socket-level A4AF swap on NNP/FNF
-    // (`SwapToAnotherFile`: the live connection re-asks another file).
+    // 8-10. Planificador de bloques multifuente, solicitud de bloques y transferencias
+    // continuas — con intercambio A4AF a nivel de socket en NNP/FNF
+    // (`SwapToAnotherFile`: la conexión activa vuelve a pedir otro archivo).
     run_status_transfer_with_a4af(
         &mut handshake_res.stream,
         target_addr,
@@ -158,12 +158,12 @@ pub(crate) async fn run_peer_connection(
     .await
 }
 
-/// Runs `query_file_status_and_enter_queue` + `run_transfer_loop` for the
-/// requested file, applying eMule's socket-level A4AF on NNP/FNF
-/// (`CUpDownClient::SwapToAnotherFile`): instead of dropping the
-/// connection, the same socket re-issues `OP_SETREQFILEID` for the best
-/// alternate file this peer is a source of. Bounded to
-/// `a4af::max_swaps()` consecutive swaps.
+/// Ejecuta `query_file_status_and_enter_queue` + `run_transfer_loop` para el
+/// archivo solicitado, aplicando el A4AF a nivel de socket de eMule en NNP/FNF
+/// (`CUpDownClient::SwapToAnotherFile`): en lugar de descartar la
+/// conexión, el mismo socket vuelve a emitir `OP_SETREQFILEID` para el mejor
+/// archivo alternativo del que este par es fuente. Limitado a
+/// `a4af::max_swaps()` intercambios consecutivos.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_status_transfer_with_a4af(
     stream: &mut crate::services::obfuscation_stream::ObfuscatedStream<tokio::net::TcpStream>,
@@ -282,10 +282,10 @@ pub(crate) async fn run_status_transfer_with_a4af(
     }
 }
 
-/// Attempts one socket-level A4AF swap: writes the NNP/FNF bookkeeping on
-/// the old file, marks the source live on the new file and updates the
-/// session snapshot (`DoSwap`). Returns the new `(hash_hex, hash_bytes)`
-/// or `None` when no viable alternate file exists.
+/// Intenta un intercambio A4AF a nivel de socket: escribe la contabilidad de NNP/FNF en
+/// el archivo antiguo, marca la fuente activa en el nuevo archivo y actualiza la
+/// instantánea de la sesión (`DoSwap`). Devuelve los nuevos `(hash_hex, hash_bytes)`
+/// o `None` cuando no existe ningún archivo alternativo viable.
 #[allow(clippy::too_many_arguments)]
 async fn try_a4af_swap(
     downloads: &Arc<Mutex<DownloadService>>,
@@ -323,15 +323,15 @@ async fn try_a4af_swap(
         address_str,
         err.reason.as_str()
     );
-    // Reflect the swap in the live session snapshot (eMule `SetRequestFile`)
-    // and release blocks in flight for the old file — eMule resets the
-    // download state on `DoSwap` (`m_PendingBlocks_list` is abandoned).
+    // Reflejar el intercambio en la instantánea de sesión activa (`SetRequestFile` de eMule)
+    // y liberar bloques en vuelo para el archivo antiguo — eMule restablece el
+    // estado de descarga en `DoSwap` (se abandona `m_PendingBlocks_list`).
     let snap = {
         let mut g = inner.lock().await;
         g.in_flight_blocks.retain(|b| b.peer_id != address_str);
         if let Some(session) = g.sessions.get_mut(address_str) {
             session.snapshot.file_hash = Some(to_hash.clone());
-            // The next status query sets Queued/Transferring itself.
+            // La siguiente consulta de estado establece Queued/Transferring por sí misma.
             session.snapshot.queue_rank = None;
             session.snapshot.current_part = None;
             Some(session.snapshot.clone())
@@ -345,11 +345,11 @@ async fn try_a4af_swap(
     Some((to_hash, to_hash_bytes))
 }
 
-/// Runs a client-role download session over an *accepted* inbound connection
-/// established through a server LowID callback (`OP_CALLBACKREQUEST` relay).
-/// The peer already sent `OP_HELLO` and received our `OP_HELLOANSWER`, so
-/// the transport handshake is skipped — we drive `OP_SETREQFILEID`, file
-/// status, queueing, and transfers exactly like an outbound session.
+/// Ejecuta una sesión de descarga con rol de cliente sobre una conexión entrante *aceptada*
+/// establecida a través de un callback de LowID del servidor (retransmisión `OP_CALLBACKREQUEST`).
+/// El par ya envió `OP_HELLO` y recibió nuestro `OP_HELLOANSWER`, por lo que
+/// se omite el apretón de manos de transporte — conducimos `OP_SETREQFILEID`, estado
+/// de archivo, puesta en cola y transferencias exactamente como una sesión saliente.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_callback_session(
     mut stream: crate::services::obfuscation_stream::ObfuscatedStream<tokio::net::TcpStream>,

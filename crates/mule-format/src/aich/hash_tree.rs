@@ -7,17 +7,17 @@ use std::fmt;
 use crate::ed2k::hash::ED2K_PART_SIZE;
 use crate::error::FormatError;
 
-/// Exact AICH block size: 184 320 bytes = 180 KiB.
+/// Tamaño exacto del bloque AICH: 184 320 bytes = 180 KiB.
 pub const AICH_BLOCK_SIZE: usize = 184_320;
 
-/// Number of AICH blocks in a full eD2K part: 53.
+/// Número de bloques AICH en una parte eD2K completa: 53.
 /// (52 * 184 320 + 143 360 = 9 728 000).
 pub const BLOCKS_PER_PART: usize = 53;
 
-/// Size of the last AICH block in a full eD2K part.
+/// Tamaño del último bloque AICH en una parte eD2K completa.
 pub const LAST_BLOCK_SIZE_FULL_PART: usize = 143_360;
 
-/// A 20-byte SHA-1 hash used by AICH.
+/// Hash SHA-1 de 20 bytes utilizado por AICH.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct AichHash(pub [u8; 20]);
 
@@ -60,7 +60,7 @@ impl fmt::Display for AichHash {
     }
 }
 
-/// A node in the AICH Merkle Hash Tree.
+/// Nodo en el árbol de hashes de Merkle de AICH.
 #[derive(Debug, Clone)]
 pub struct AichNode {
     pub data_size: u64,
@@ -72,7 +72,7 @@ pub struct AichNode {
 }
 
 impl AichNode {
-    /// Builds the tree structure for a given data size.
+    /// Construye la estructura de árbol para un tamaño de datos dado.
     pub fn new_tree(data_size: u64) -> Result<Self, FormatError> {
         if data_size == 0 {
             return Err(FormatError::EmptyInput);
@@ -87,7 +87,7 @@ impl AichNode {
 
     fn build_node(data_size: u64, is_left_branch: bool, base_size: u64) -> Self {
         if data_size <= base_size {
-            // Leaf node
+            // Nodo hoja
             Self {
                 data_size,
                 base_size,
@@ -106,8 +106,8 @@ impl AichNode {
             let left_size = left_blocks * base_size;
             let right_size = data_size - left_size;
 
-            // eMule: each child's base size depends on its own coverage
-            // (part granularity above one part, block granularity below).
+            // eMule: el tamaño base de cada hijo depende de su propia cobertura
+            // (granularidad de parte por encima de una parte, granularidad de bloque por debajo).
             let child_base = |size: u64| {
                 if size <= ED2K_PART_SIZE as u64 {
                     AICH_BLOCK_SIZE as u64
@@ -129,9 +129,9 @@ impl AichNode {
         }
     }
 
-    /// Iterates the AICH leaf blocks of a `file_size`-byte file.
-    /// Blocks are aligned to eD2K part boundaries (eMule semantics): each
-    /// part holds 52 full 180 KiB blocks plus a 143,360-byte final block.
+    /// Itera sobre los bloques hoja AICH de un archivo de `file_size` bytes.
+    /// Los bloques se alinean con los límites de partes eD2K (semántica de eMule): cada
+    /// parte contiene 52 bloques completos de 180 KiB más un bloque final de 143 360 bytes.
     pub fn for_each_block_range(file_size: u64, mut f: impl FnMut(u64, u64)) {
         let mut pos = 0u64;
         while pos < file_size {
@@ -142,7 +142,7 @@ impl AichNode {
         }
     }
 
-    /// Sets the SHA-1 hash of a leaf block at `start_pos`.
+    /// Establece el hash SHA-1 de un bloque hoja en `start_pos`.
     pub fn set_leaf_hash(&mut self, start_pos: u64, block_size: u64, hash: AichHash) -> bool {
         if self.left.is_none() && self.right.is_none() {
             if self.data_size == block_size && start_pos == 0 {
@@ -173,7 +173,7 @@ impl AichNode {
         }
     }
 
-    /// Recursively computes parent hashes up to the root.
+    /// Calcula recursivamente los hashes de los padres hasta la raíz.
     pub fn recalculate_hash(&mut self) -> Result<AichHash, FormatError> {
         if let (Some(left), Some(right)) = (&mut self.left, &mut self.right) {
             let left_h = left.recalculate_hash()?;
@@ -195,13 +195,13 @@ impl AichNode {
         }
     }
 
-    /// Returns the root hash if already calculated.
+    /// Devuelve el hash raíz si ya ha sido calculado.
     pub fn root_hash(&self) -> Option<AichHash> {
         self.hash
     }
 }
 
-/// Convenience function to build a full AICH tree from a data slice.
+/// Función de conveniencia para construir un árbol AICH completo a partir de un fragmento de datos.
 pub fn calculate_aich_root(data: &[u8]) -> Result<AichHash, FormatError> {
     if data.is_empty() {
         return Err(FormatError::EmptyInput);

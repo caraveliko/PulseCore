@@ -10,8 +10,8 @@ use crate::met::tags::*;
 pub const MAX_TAG_STRING_LEN: usize = 65_536;
 pub const MAX_BLOB_LEN: usize = 16 * 1024 * 1024; // 16 MiB
 
-/// Opens a `.met` file for reading, mapping I/O failures to `MetError::Io` at
-/// offset 0 (shared by every `*::open` in this module).
+/// Abre un archivo `.met` para lectura, asignando fallos de E/S a `MetError::Io` en
+/// el desplazamiento 0 (compartido por cada `*::open` en este módulo).
 pub(crate) fn open_met_file<P: AsRef<std::path::Path>>(path: P) -> Result<std::fs::File, MetError> {
     std::fs::File::open(path).map_err(|e| MetError::Io {
         offset: 0,
@@ -19,7 +19,7 @@ pub(crate) fn open_met_file<P: AsRef<std::path::Path>>(path: P) -> Result<std::f
     })
 }
 
-/// A reader wrapper that tracks the exact byte offset into the stream.
+/// Un contenedor de lector que rastrea el desplazamiento exacto en bytes en el flujo.
 pub struct CountingReader<R> {
     inner: R,
     offset: u64,
@@ -97,7 +97,7 @@ impl<R: Read> CountingReader<R> {
             });
         }
         let bytes = self.read_exact_bytes(len, context)?;
-        // Parse UTF-8, or fall back to Latin-1 lossy representation, and repair mojibake
+        // Analizar UTF-8, o recurrir a la representación con pérdidas de Latin-1, y reparar mojibake
         let s = match String::from_utf8(bytes.clone()) {
             Ok(s) => crate::ed2k::fix_mojibake(&s),
             Err(_) => {
@@ -108,7 +108,7 @@ impl<R: Read> CountingReader<R> {
         Ok(s)
     }
 
-    /// Reads a single metadata Tag from the stream with exact offset tracking.
+    /// Lee una única etiqueta de metadatos del flujo con seguimiento exacto del desplazamiento.
     pub fn read_tag(&mut self) -> Result<Tag, MetError> {
         let tag_offset = self.offset;
         let raw_type = self.read_u8("tag type")?;
@@ -189,7 +189,7 @@ impl<R: Read> CountingReader<R> {
     }
 }
 
-/// Helper function to read a Tag from any Read implementation.
+/// Función auxiliar para leer una etiqueta desde cualquier implementación de Read.
 pub fn read_tag<R: Read>(reader: &mut R) -> Result<Tag, MetError> {
     let mut cr = CountingReader::new(reader);
     cr.read_tag()

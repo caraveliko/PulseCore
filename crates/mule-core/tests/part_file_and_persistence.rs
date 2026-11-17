@@ -19,7 +19,7 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
     let total_size = 10_000u64;
     let dummy_hash = Ed2kHash([0xab; 16]);
 
-    // 1. Initial process: open Database and PartFile
+    // 1. Proceso inicial: abrir Database y PartFile
     let download = Download::new(
         "final_document.bin",
         total_size,
@@ -37,27 +37,27 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
         let mut part =
             PartFile::open_or_create(&temp_part_path, total_size, AllocationPolicy::None).unwrap();
 
-        // 2. Write segments out of order:
-        // Segment B: offset 5000..10000
+        // 2. Escribir segmentos fuera de orden:
+        // Segmento B: desplazamiento 5000..10000
         let seg_b = vec![0x22; 5000];
         part.write_segment(5000, &seg_b).unwrap();
 
-        // Segment A: offset 0..5000
+        // Segmento A: desplazamiento 0..5000
         let seg_a = vec![0x11; 5000];
         part.write_segment(0, &seg_a).unwrap();
 
         part.flush().unwrap();
 
-        // 3. Update RangeSet and persist
+        // 3. Actualizar RangeSet y persistir
         let mut range_set = RangeSet::new();
         range_set.insert(5000..10000).unwrap();
         range_set.insert(0..5000).unwrap();
         assert_eq!(range_set.ranges(), vec![0..10000]);
 
         db.sync_received_ranges(&download_id, &range_set).unwrap();
-    } // Simulated process shutdown/crash
+    } // Simulación de caída/apagado del proceso
 
-    // 4. Restart: Reopen DB and PartFile
+    // 4. Reinicio: reabrir BD y PartFile
     {
         let mut db = Database::open(&db_path).unwrap();
         let loaded_ranges = db.load_received_ranges(&download_id).unwrap();
@@ -68,7 +68,7 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
             PartFile::open_or_create(&temp_part_path, total_size, AllocationPolicy::None).unwrap();
         let read_back = part.read_range(0, total_size as usize).unwrap();
 
-        // 5. Verify part MD4
+        // 5. Verificar MD4 de la parte
         let mut expected_md4 = Md4::new();
         expected_md4.update(vec![0x11; 5000]);
         expected_md4.update(vec![0x22; 5000]);
@@ -78,14 +78,14 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
         db.mark_part_verified(&download_id, 0).unwrap();
         assert_eq!(db.get_verified_parts(&download_id).unwrap(), vec![0]);
 
-        // 6. Inject corruption: flip 1 byte at offset 100
+        // 6. Inyectar corrupción: alternar 1 byte en el desplazamiento 100
         part.write_segment(100, &[0xff]).unwrap();
         part.flush().unwrap();
 
         let corrupted_read = part.read_range(0, total_size as usize).unwrap();
         assert!(!verify_part_hash(&corrupted_read, &expected_digest));
 
-        // Part corrupted -> unmark part and evict range
+        // Parte corrupta -> desmarcar parte y desalojar rango
         db.unmark_part_verified(&download_id, 0).unwrap();
         assert!(db.get_verified_parts(&download_id).unwrap().is_empty());
 
@@ -95,7 +95,7 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
             .unwrap();
         assert!(db.load_received_ranges(&download_id).unwrap().is_empty());
 
-        // 7. Repair: rewrite valid byte back
+        // 7. Reparación: reescribir el byte válido original
         part.write_segment(100, &[0x11]).unwrap();
         part.flush().unwrap();
 
@@ -110,8 +110,8 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
             .unwrap();
     }
 
-    // 8. Finalize file
-    // First finalize: should succeed
+    // 8. Finalizar archivo
+    // Primera finalización: debe tener éxito
     finalize_file(
         &temp_part_path,
         &target_dest_path,
@@ -121,7 +121,7 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
     assert!(target_dest_path.exists());
     assert!(!temp_part_path.exists());
 
-    // Second finalize with FailIfExists when target exists: must return TargetFileExists
+    // Segunda finalización con FailIfExists cuando el destino existe: debe devolver TargetFileExists
     let dummy_temp = dir.path().join("dummy.part");
     std::fs::write(&dummy_temp, b"test").unwrap();
     assert!(matches!(
@@ -134,13 +134,13 @@ fn test_download_storage_persistence_and_corruption_lifecycle() {
         CoreError::TargetFileExists(_)
     ));
 
-    // Overwrite strategy: succeeds
+    // Estrategia de sobrescritura: tiene éxito
     finalize_file(&dummy_temp, &target_dest_path, CollisionStrategy::Overwrite).unwrap();
 }
 
-/// eMule `CPartFile::PerformFileComplete`: a completed download never
-/// overwrites an existing destination — it generates `name(1).ext`,
-/// `name(2).ext`, … continuing numbering from an existing `(N)` suffix.
+/// `CPartFile::PerformFileComplete` de eMule: una descarga completada nunca
+/// sobrescribe un destino existente — genera `name(1).ext`,
+/// `name(2).ext`, … continuando la numeración desde un sufijo `(N)` existente.
 #[test]
 fn test_finalize_rename_collision() {
     let dir = tempdir().unwrap();
@@ -156,10 +156,10 @@ fn test_finalize_rename_collision() {
         "file(1).bin"
     );
     assert_eq!(std::fs::read(&resolved).unwrap(), b"newdata");
-    // The pre-existing file is untouched.
+    // El archivo preexistente queda intacto.
     assert_eq!(std::fs::read(&target).unwrap(), b"existing");
 
-    // Second collision: numbering continues at (2).
+    // Segunda colisión: la numeración continúa en (2).
     let temp2 = dir.path().join("002.part");
     std::fs::write(&temp2, b"newer").unwrap();
     let resolved2 = finalize_file(&temp2, &target, CollisionStrategy::Rename).unwrap();
@@ -168,8 +168,8 @@ fn test_finalize_rename_collision() {
         "file(2).bin"
     );
 
-    // A stem that already ends with `(N)` continues numbering from N+1:
-    // eMule strips `file(7)` back to `file` before incrementing.
+    // Un tronco que ya termina en `(N)` continúa la numeración desde N+1:
+    // eMule despoja `file(7)` a `file` antes de incrementar.
     let numbered = dir.path().join("file(7).bin");
     std::fs::write(&numbered, b"exists").unwrap();
     let temp3 = dir.path().join("003.part");
@@ -180,7 +180,7 @@ fn test_finalize_rename_collision() {
         "file(8).bin"
     );
 
-    // Extensionless file: `name(N)` without extension.
+    // Archivo sin extensión: `name(N)` sin extensión.
     let noext = dir.path().join("README");
     std::fs::write(&noext, b"old").unwrap();
     let temp4 = dir.path().join("004.part");
@@ -191,7 +191,7 @@ fn test_finalize_rename_collision() {
         "README(1)"
     );
 
-    // No collision: the requested path is used unchanged.
+    // Sin colisión: la ruta solicitada se utiliza sin cambios.
     let free = dir.path().join("free.bin");
     let temp5 = dir.path().join("005.part");
     std::fs::write(&temp5, b"data").unwrap();
@@ -258,7 +258,7 @@ fn test_database_delete_download_persists_across_reopen() {
     );
     let dl_id = dl.id;
 
-    // 1. Insert download, received ranges, and verified parts
+    // 1. Insertar descarga, rangos recibidos y partes verificadas
     {
         let mut db = Database::open(&db_path).unwrap();
         db.insert_download(&dl).unwrap();
@@ -273,14 +273,14 @@ fn test_database_delete_download_persists_across_reopen() {
         assert_eq!(all.len(), 1);
     }
 
-    // 2. Delete the download
+    // 2. Eliminar la descarga
     {
         let mut db = Database::open(&db_path).unwrap();
         let deleted = db.delete_download(&dl_id).unwrap();
         assert!(deleted);
     }
 
-    // 3. Reopen DB in a fresh instance (simulating restart)
+    // 3. Reabrir BD en una nueva instancia (simulando reinicio)
     {
         let db = Database::open(&db_path).unwrap();
         let all = db.get_all_downloads().unwrap();
@@ -298,9 +298,9 @@ fn test_database_delete_download_persists_across_reopen() {
     }
 }
 
-/// Delta `append_received_range` (hot path par bloc) : les lignes
-/// chevauchantes doivent refusionner au chargement en le même RangeSet
-/// qu'une réécriture complète `sync_received_ranges`.
+/// Delta `append_received_range` (ruta crítica por bloque): las filas
+/// solapadas deben refusionarse en la carga en el mismo RangeSet
+/// que una reescritura completa `sync_received_ranges`.
 #[test]
 fn test_append_received_range_delta_merges_on_load() {
     let dir = tempdir().unwrap();
@@ -320,19 +320,19 @@ fn test_append_received_range_delta_merges_on_load() {
     let mut db = Database::open(&db_path).unwrap();
     db.insert_download(&download).unwrap();
 
-    // Blocs injectés un par un, comme le hot path `inject_range`.
+    // Bloques inyectados uno a uno, como la ruta crítica `inject_range`.
     for (start, end) in [(0u64, 5_000u64), (5_000, 10_000), (12_000, 15_000)] {
         db.append_received_range(&download_id, start, end).unwrap();
     }
 
-    // Même `start_offset` réécrit (re-bloc recouvrant) : l'upsert étend
-    // au max sans casser la fusion.
+    // Mismo `start_offset` reescrito (re-bloque solapado): el upsert amplía
+    // al máximo sin romper la fusión.
     db.append_received_range(&download_id, 0, 6_000).unwrap();
 
     let loaded = db.load_received_ranges(&download_id).unwrap();
     assert_eq!(loaded.ranges(), vec![0..10_000, 12_000..15_000]);
 
-    // La compaction `sync_received_ranges` reste cohérente avec le delta.
+    // La compactación `sync_received_ranges` se mantiene coherente con el delta.
     db.sync_received_ranges(&download_id, &loaded).unwrap();
     let reloaded = db.load_received_ranges(&download_id).unwrap();
     assert_eq!(reloaded.ranges(), vec![0..10_000, 12_000..15_000]);

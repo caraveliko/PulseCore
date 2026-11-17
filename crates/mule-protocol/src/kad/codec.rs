@@ -49,7 +49,7 @@ impl KadCodec {
         KadEncoder::encode_hello_req(kad_id, udp_port, version, tcp_port, misc_options)
     }
 
-    /// Encodes a Kad2 Hello response packet (same layout as the request).
+    /// Codifica un paquete de respuesta Kad2 Hello (mismo diseño que la solicitud).
     #[inline]
     pub fn encode_hello_res(
         kad_id: &KadIdBytes,
@@ -274,8 +274,8 @@ impl KadCodec {
     }
 
     /// Re-decodes a raw datagram payload as a notes search response — used
-    /// when the pending transaction context says the `0x3B` reply belongs to
-    /// a notes search (the generic decoder cannot distinguish it from a
+    /// cuando el contexto de transacción pendiente indica que la respuesta `0x3B` pertenece a
+    /// una búsqueda de notas (el decodificador genérico no puede distinguirla de una
     /// keyword response by content alone).
     #[inline]
     pub fn decode_search_notes_res(

@@ -10,45 +10,45 @@ use thiserror::Error;
 use crate::limits::MAX_IN_FLIGHT_REQUESTS;
 use crate::traits::BlockRequest;
 
-/// Errors arising from in-flight request tracking violations.
+/// Errores derivados de violaciones en el seguimiento de peticiones en curso.
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum InFlightError {
-    /// In-flight table has reached maximum concurrent capacity (8).
+    /// La tabla de peticiones en curso ha alcanzado la capacidad concurrente máxima (8).
     #[error("Maximum in-flight requests limit ({limit}) reached")]
     CapacityReached {
-        /// Active in-flight count.
+        /// Recuento de peticiones en curso activas.
         limit: usize,
     },
 
-    /// An identical block request is already pending.
+    /// Ya hay una petición de bloque idéntica pendiente.
     #[error("Duplicate block request for offset {start_offset}")]
     DuplicateRequest {
-        /// Start offset in file.
+        /// Desplazamiento inicial en el archivo.
         start_offset: u64,
     },
 
-    /// Received block was never requested.
+    /// Se recibieron datos de bloque no solicitados.
     #[error("Unsolicited block data received for offset {start_offset}")]
     UnsolicitedBlock {
-        /// Start offset in file.
+        /// Desplazamiento inicial en el archivo.
         start_offset: u64,
     },
 
-    /// Received rejection was never requested.
+    /// Se recibió un rechazo de bloque no solicitado.
     #[error("Unsolicited block rejection received for offset {start_offset}")]
     UnsolicitedRejection {
-        /// Start offset in file.
+        /// Desplazamiento inicial en el archivo.
         start_offset: u64,
     },
 
-    /// Received block length does not match the requested size.
+    /// La longitud del bloque recibido no coincide con el tamaño solicitado.
     #[error("Block length mismatch for offset {start_offset}: expected {expected}, got {actual}")]
     LengthMismatch {
-        /// Start offset in file.
+        /// Desplazamiento inicial en el archivo.
         start_offset: u64,
-        /// Expected byte length.
+        /// Longitud en bytes esperada.
         expected: u32,
-        /// Actual byte length.
+        /// Longitud en bytes real.
         actual: usize,
     },
 }
@@ -59,36 +59,36 @@ struct InFlightEntry {
     requested_at: Instant,
 }
 
-/// Tracks and validates client block requests currently in flight.
+/// Rastrea y valida las peticiones de bloques de clientes actualmente en curso.
 #[derive(Debug, Clone, Default)]
 pub struct InFlightTracker {
     pending: HashMap<([u8; 16], u64), InFlightEntry>,
 }
 
 impl InFlightTracker {
-    /// Creates a new empty `InFlightTracker`.
+    /// Crea un nuevo `InFlightTracker` vacío.
     pub fn new() -> Self {
         Self {
             pending: HashMap::with_capacity(MAX_IN_FLIGHT_REQUESTS),
         }
     }
 
-    /// Returns true if a new block request may be issued.
+    /// Devuelve verdadero si se puede emitir una nueva petición de bloque.
     pub fn can_request(&self) -> bool {
         self.pending.len() < MAX_IN_FLIGHT_REQUESTS
     }
 
-    /// Returns the number of currently active in-flight requests.
+    /// Devuelve el número de peticiones en curso actualmente activas.
     pub fn len(&self) -> usize {
         self.pending.len()
     }
 
-    /// Returns true if there are no pending requests.
+    /// Devuelve verdadero si no hay peticiones pendientes.
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }
 
-    /// Registers an outgoing block request.
+    /// Registra una petición de bloque saliente.
     pub fn record_request(&mut self, req: &BlockRequest) -> Result<(), InFlightError> {
         if self.pending.len() >= MAX_IN_FLIGHT_REQUESTS {
             return Err(InFlightError::CapacityReached {
@@ -113,7 +113,7 @@ impl InFlightTracker {
         Ok(())
     }
 
-    /// Validates an incoming block against pending requests, and consumes it if valid.
+    /// Valida un bloque entrante frente a las peticiones pendientes y lo consume si es válido.
     pub fn validate_and_remove(
         &mut self,
         file_hash: &[u8; 16],
@@ -125,7 +125,7 @@ impl InFlightTracker {
             None => Err(InFlightError::UnsolicitedBlock { start_offset }),
             Some(entry) => {
                 if entry.length as usize != actual_len {
-                    // Re-insert on mismatch to keep state consistent for failure reporting
+                    // Reinsertar en caso de discordancia para mantener la coherencia del estado para el informe de fallos
                     self.pending.insert(key, entry.clone());
                     Err(InFlightError::LengthMismatch {
                         start_offset,
@@ -139,7 +139,7 @@ impl InFlightTracker {
         }
     }
 
-    /// Handles an incoming block rejection, freeing capacity and returning the cancelled request.
+    /// Gestiona un rechazo de bloque entrante, liberando capacidad y devolviendo la petición cancelada.
     pub fn handle_rejection(
         &mut self,
         file_hash: &[u8; 16],
@@ -152,7 +152,7 @@ impl InFlightTracker {
         }
     }
 
-    /// Identifies and extracts expired block requests exceeding `timeout`, restoring capacity.
+    /// Identifica y extrae las peticiones de bloque expiradas que superan `timeout`, restaurando la capacidad.
     pub fn reap_timeouts(&mut self, timeout: Duration) -> Vec<BlockRequest> {
         let now = Instant::now();
         let mut expired_keys = Vec::new();
@@ -173,7 +173,7 @@ impl InFlightTracker {
         expired_requests
     }
 
-    /// Cancels all pending in-flight requests (e.g. on peer disconnect), restoring full capacity.
+    /// Cancela todas las peticiones en curso pendientes (p. ej., ante la desconexión del par), restaurando la capacidad total.
     pub fn cancel_all(&mut self) -> Vec<BlockRequest> {
         let mut requests = Vec::with_capacity(self.pending.len());
         for (key, entry) in self.pending.drain() {
@@ -182,7 +182,7 @@ impl InFlightTracker {
         requests
     }
 
-    /// Clears all pending requests.
+    /// Borra todas las peticiones pendientes.
     pub fn clear(&mut self) {
         self.pending.clear();
     }

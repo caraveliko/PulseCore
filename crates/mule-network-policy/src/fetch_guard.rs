@@ -23,56 +23,56 @@ use url::Url;
 use crate::profile::NetworkProfile;
 use crate::validator::{classify_ip, IpCategory};
 
-/// Port HTTP implicite quand l'URL n'en précise pas.
+/// Puerto HTTP implícito cuando la URL no lo especifica.
 pub const DEFAULT_HTTP_PORT: u16 = 80;
-/// Port HTTPS implicite quand l'URL n'en précise pas.
+/// Puerto HTTPS implícito cuando la URL no lo especifica.
 pub const DEFAULT_HTTPS_PORT: u16 = 443;
 
-/// Erreurs de validation d'une URL de fetch externe.
+/// Errores de validación de una URL de obtención externa.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum FetchPolicyError {
-    /// URL syntaxiquement invalide ou sans hôte.
+    /// URL sintácticamente inválida o sin host.
     #[error("Invalid fetch URL: {0}")]
     InvalidUrl(String),
 
-    /// Schéma autre que http/https (file://, gopher://, …).
+    /// Esquema distinto de http/https (file://, gopher://, …).
     #[error("Forbidden URL scheme '{0}' — only http/https are allowed")]
     ForbiddenScheme(String),
 
-    /// URL contenant un userinfo (`http://user:pass@host/`).
+    /// URL que contiene datos de usuario (userinfo) (`http://user:pass@host/`).
     #[error("Userinfo in fetch URL is prohibited")]
     UserinfoDisallowed,
 
-    /// Aucune IP n'a été fournie pour un hôte non littéral.
+    /// No se proporcionó ninguna IP para un host no literal.
     #[error("Host '{0}' resolved to no IP address")]
     UnresolvableHost(String),
 
-    /// Au moins une IP résolue viole la politique du profil courant.
+    /// Al menos una IP resuelta infringe la política del perfil actual.
     #[error("Resolved address {ip} for '{host}' is prohibited: {reason}")]
     AddressViolation {
-        /// Hôte demandé.
+        /// Host solicitado.
         host: String,
-        /// IP résolue refusée.
+        /// IP resuelta rechazada.
         ip: IpAddr,
-        /// Catégorie d'adresse refusée.
+        /// Categoría de dirección rechazada.
         reason: &'static str,
     },
 }
 
-/// URL de fetch normalisée et validée syntaxiquement.
+/// URL de obtención normalizada y validada sintácticamente.
 #[derive(Debug, Clone)]
 pub struct FetchUrl {
-    /// URL d'origine re-parsée (telle qu'envoyée au client HTTP).
+    /// URL original reanalizada (tal como se envía al cliente HTTP).
     pub url: Url,
-    /// Hôte canonique (sans crochets IPv6).
+    /// Host canónico (sin corchetes IPv6).
     pub host: String,
-    /// Port effectif (explicite ou 80/443 par défaut).
+    /// Puerto efectivo (explícito u 80/443 por defecto).
     pub port: u16,
-    /// IP littérale si l'hôte en est une — court-circuite le DNS.
+    /// IP literal si el host es una; omite la resolución DNS.
     pub literal_ip: Option<IpAddr>,
 }
 
-/// Analyse et valide syntaxiquement une URL de fetch externe.
+/// Analiza y valida sintácticamente una URL de obtención externa.
 pub fn parse_fetch_url(raw: &str) -> Result<FetchUrl, FetchPolicyError> {
     let url = Url::parse(raw.trim())
         .map_err(|e| FetchPolicyError::InvalidUrl(format!("{raw}: {e}")))?;
@@ -110,12 +110,12 @@ pub fn parse_fetch_url(raw: &str) -> Result<FetchUrl, FetchPolicyError> {
     })
 }
 
-/// Vérifie que chaque IP candidate est autorisée par le profil courant.
+/// Comprueba que cada IP candidata esté autorizada por el perfil actual.
 ///
-/// `resolved` = adresses DNS du moment ; ignoré quand `target` porte une
-/// IP littérale. Toutes les adresses doivent passer : une seule entrée
-/// DNS publique + une entrée privée suffit à rejeter (DNS round-robin
-/// pourrait sinon atteindre l'hôte interne).
+/// `resolved` = direcciones DNS actuales; se ignora cuando `target` contiene una
+/// IP literal. Todas las direcciones deben ser válidas: una única entrada DNS
+/// pública junto con una privada basta para rechazarla (el round-robin DNS
+/// podría alcanzar el host interno en caso contrario).
 pub fn validate_fetch_ips(
     target: &FetchUrl,
     resolved: &[IpAddr],
@@ -150,7 +150,7 @@ pub fn validate_fetch_ips(
     Ok(())
 }
 
-/// Libellé court de la catégorie d'adresse pour les messages d'erreur.
+/// Etiqueta corta de la categoría de dirección para los mensajes de error.
 fn category_reason(cat: IpCategory) -> &'static str {
     match cat {
         IpCategory::Loopback => "loopback",
@@ -165,8 +165,8 @@ fn category_reason(cat: IpCategory) -> &'static str {
     }
 }
 
-/// Adresses à épingler dans le client HTTP après validation :
-/// la liste validée telle quelle, ou l'IP littérale seule.
+/// Direcciones a fijar en el cliente HTTP tras la validación:
+/// la lista validada tal cual, o la IP literal sola.
 pub fn pinned_ips(target: &FetchUrl, resolved: &[IpAddr]) -> Vec<IpAddr> {
     match target.literal_ip {
         Some(ip) => vec![ip],
@@ -187,8 +187,8 @@ mod tests {
             "ftp://host/x",
             "ed2k://|server|1.2.3.4|4661|/",
         ] {
-            // Rejet garanti — `InvalidUrl` (syntaxe non-URL comme les
-            // liens ed2k) ou `ForbiddenScheme` selon la parsabilité.
+            // Rechazo garantizado — `InvalidUrl` (sintaxis no válida como los
+            // enlaces ed2k) o `ForbiddenScheme` según la capacidad de análisis.
             assert!(parse_fetch_url(raw).is_err(), "{raw} must be rejected");
         }
         assert!(matches!(

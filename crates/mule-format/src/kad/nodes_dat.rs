@@ -8,11 +8,11 @@ use crate::met::tags::Tag;
 use std::io::{Read, Write};
 use std::net::Ipv4Addr;
 
-/// Maximum size allowed for a nodes.dat file to prevent DoS (5 MiB).
+/// Tamaño máximo permitido para un archivo nodes.dat para prevenir DoS (5 MiB).
 pub const MAX_NODES_DAT_SIZE: usize = 5 * 1024 * 1024;
-/// Maximum number of contacts allowed per nodes.dat file.
+/// Número máximo de contactos permitidos por archivo nodes.dat.
 pub const MAX_NODES_COUNT: usize = 10_000;
-/// Maximum tags allowed per contact entry.
+/// Cantidad máxima de etiquetas permitidas por entrada de contacto.
 pub const MAX_TAGS_PER_NODE: usize = 50;
 
 #[derive(Debug, Clone, PartialEq)]

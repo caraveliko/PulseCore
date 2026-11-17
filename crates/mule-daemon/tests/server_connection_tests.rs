@@ -164,7 +164,7 @@ async fn test_server_connect_nominal_loopback_and_kill_switch() {
     state.network_policy.set_profile(NetworkProfile::LocalLab);
     state.network_policy.enable();
     // The mock server speaks plaintext eD2K only — disable the obfuscated
-    // handshake attempt (which the daemon otherwise tries first).
+    // intento de saludo (que el demonio intentaría en primer lugar).
     state.server_session.set_obfuscation_preference(false, 0);
 
     // Start a mock eD2K TCP server on loopback
@@ -215,7 +215,7 @@ async fn test_server_connect_nominal_loopback_and_kill_switch() {
 
         // Keep socket open until client disconnects — must loop: the daemon
         // sends OP_OFFERFILES right after connect (auto-publish), so a single
-        // read would return early and drop the socket.
+        // la lectura retornaría antes de tiempo y cerraría el socket.
         let mut buf = [0u8; 4096];
         loop {
             match socket.read(&mut buf).await {
@@ -335,7 +335,7 @@ async fn test_server_search_and_query_sources() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
     // The mock server speaks plaintext eD2K only — disable the obfuscated
-    // handshake attempt (which the daemon otherwise tries first).
+    // intento de saludo (que el demonio intentaría en primer lugar).
     state.server_session.set_obfuscation_preference(false, 0);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let mock_addr = listener.local_addr().unwrap();

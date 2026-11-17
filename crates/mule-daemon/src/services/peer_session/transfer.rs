@@ -38,14 +38,13 @@ use crate::services::obfuscation_stream::ObfuscatedStream;
 
 pub use mule_protocol::ed2k::{OP_COMPRESSEDPART_I64, OP_SENDINGPART_I64};
 
-/// Builds a block-request packet for `range`, choosing the 64-bit wire format
-/// (`OP_REQUESTPARTS_I64`) when offsets exceed the 32-bit boundary. I64
-/// requests require the peer's `ExtendedRequestsVer >= 2` (eMule
-/// `GetExtendedRequestsVersion`); returns `None` when the peer cannot serve
-/// the requested range.
-/// Extensions de fichiers prévisualisables — eMule n'applique la priorité
-/// première/dernière part (`PR_VERYHIGH`) qu'aux médias ouvrables en cours
-/// de téléchargement.
+/// Construye un paquete de petición de bloques para `range`, eligiendo el formato
+/// de cable de 64 bits (`OP_REQUESTPARTS_I64`) cuando los desplazamientos superan el límite de 32 bits.
+/// Las peticiones I64 requieren `ExtendedRequestsVer >= 2` del par (`GetExtendedRequestsVersion`
+/// de eMule); devuelve `None` cuando el par no puede servir el rango solicitado.
+/// Extensiones de archivos previsualizables — eMule solo aplica la prioridad
+/// de primera/última parte (`PR_VERYHIGH`) a medios reproducibles durante
+/// la descarga.
 fn is_previewable_media(file_name: &str) -> bool {
     const PREVIEW_EXTS: &[&str] = &[
         "avi", "mpg", "mpeg", "mp4", "mkv", "wmv", "mov", "flv", "ts", "vob", "mp3", "flac", "ogg",
@@ -57,10 +56,10 @@ fn is_previewable_media(file_name: &str) -> bool {
         .is_some_and(|e| PREVIEW_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-/// Statuts pour lesquels une session peer peut émettre de nouvelles requêtes
-/// de blocs. Un download pausé/échoué/retiré ne doit plus rien demander —
-/// les écritures déjà en vol sont tout de même persistées côté `inject_range`
-/// (eMule termine les blocs en vol sans dépauser le partfile).
+/// Estados para los cuales una sesión de par puede emitir nuevas peticiones
+/// de bloques. Una descarga en pausa/fallida/retirada no debe pedir nada más —
+/// las escrituras ya en vuelo aún se persisten en `inject_range`
+/// (eMule completa los bloques en vuelo sin reanudar el partfile).
 fn is_download_active_status(status: &str) -> bool {
     matches!(
         status.to_lowercase().as_str(),
@@ -68,10 +67,10 @@ fn is_download_active_status(status: &str) -> bool {
     )
 }
 
-/// Block request pending toward one peer — eMule `Pending_Block_Struct`:
-/// the range was planned (`fQueued == false`) or already sent in an
-/// `OP_REQUESTPARTS` packet (`fQueued == true`); `recv_to` is the frontier
-/// up to which data has been delivered.
+/// Petición de bloque pendiente hacia un par — `Pending_Block_Struct` de eMule:
+/// el rango fue planificado (`fQueued == false`) o ya fue enviado en un paquete
+/// `OP_REQUESTPARTS` (`fQueued == true`); `recv_to` es la frontera hasta
+/// la cual se han entregado los datos.
 struct PendingBlock {
     part_idx: u16,
     range: Ed2kBlockRange64,
@@ -79,16 +78,16 @@ struct PendingBlock {
     recv_to: u64,
 }
 
-/// eMule `SendBlockRequests` pending-block count, adaptive to the measured
-/// download rate of this source (DownloadClient.cpp):
-/// `<4 KiB/s → 1`, `<9 KiB/s → 2`, `>150 KiB/s → 9`, `>75 KiB/s → 6`, else 3.
-/// The low-rate tiers only apply to eMule clients (`IsEmuleClient()`) once a
-/// transfer rate has been measured; before rate measurement (`peer_bps == 0`),
-/// it defaults to 3 blocks to prime the TCP window pipeline immediately.
+/// Número de bloques pendientes de `SendBlockRequests` de eMule, adaptativo a la velocidad
+/// de descarga medida de esta fuente (DownloadClient.cpp):
+/// `<4 KiB/s → 1`, `<9 KiB/s → 2`, `>150 KiB/s → 9`, `>75 KiB/s → 6`, si no 3.
+/// Los niveles de velocidad baja solo se aplican a clientes eMule (`IsEmuleClient()`) una vez
+/// medida la tasa de transferencia; antes de medir la tasa (`peer_bps == 0`),
+/// toma por defecto 3 bloques para preparar la tubería de ventana TCP de inmediato.
 fn emule_pending_block_count(peer_bps: u64, is_emule_client: bool) -> usize {
     if peer_bps == 0 {
-        // Initial state before transfer rate is measured: start with 3 blocks
-        // (1 full OP_REQUESTPARTS packet with 3 ranges) to pipeline immediately.
+        // Estado inicial antes de medir la tasa de transferencia: comienza con 3 bloques
+        // (1 paquete OP_REQUESTPARTS completo con 3 rangos) para encauzar de inmediato.
         3
     } else if is_emule_client && peer_bps < 9 * 1024 {
         if peer_bps < 4 * 1024 {
@@ -105,23 +104,23 @@ fn emule_pending_block_count(peer_bps: u64, is_emule_client: bool) -> usize {
     }
 }
 
-/// How long an in-flight block stays reserved after its last sign of life —
-/// eMule has no TTL at all (the block is released when the session ends or
-/// stalls into requeue); the refresh-on-data approach bounds stale entries
-/// without duplicating requests toward slow trickle sources.
+/// Tiempo durante el cual un bloque en vuelo permanece reservado tras su última señal de vida —
+/// eMule no tiene TTL en absoluto (el bloque se libera cuando la sesión termina o se
+/// bloquea en cola); el enfoque de refresco con datos acota las entradas obsoletas
+/// sin duplicar peticiones hacia fuentes lentas por goteo.
 const INFLIGHT_BLOCK_TTL_MS: i64 = 100_000;
 
-/// Consecutive stall→requeue recoveries allowed on one socket before the
-/// session is dropped — eMule re-queues forever; the cap keeps a pathological
-/// peer from pinning a session slot while the swarm rotates sources.
+/// Recuperaciones consecutivas de atasco→cola permitidas en un socket antes de que
+/// se descarte la sesión — eMule reencola indefinidamente; el límite evita que un
+/// par patológico retenga una ranura de sesión mientras el enjambre rota fuentes.
 const MAX_CONSECUTIVE_STALL_REQUEUES: u32 = 3;
 
-/// Builds one `OP_REQUESTPARTS`/`OP_REQUESTPARTS_I64` packet carrying up to
-/// [`MAX_REQUEST_RANGES_PER_PACKET`] ranges — the eMule wire layout packs
-/// three `start`/`end` slots per packet. The I64 variant is required when any
-/// range crosses the 4 GiB boundary and needs `ExtendedRequestsVer >= 2`
-/// (eMule `GetExtendedRequestsVersion`); returns `None` when the peer cannot
-/// serve the requested ranges.
+/// Construye un paquete `OP_REQUESTPARTS`/`OP_REQUESTPARTS_I64` con hasta
+/// [`MAX_REQUEST_RANGES_PER_PACKET`] rangos — el formato de cable de eMule empaqueta
+/// tres ranuras `start`/`end` por paquete. La variante I64 es necesaria cuando algún
+/// rango cruza el límite de 4 GiB y requiere `ExtendedRequestsVer >= 2`
+/// (`GetExtendedRequestsVersion` de eMule); devuelve `None` cuando el par no puede
+/// servir los rangos solicitados.
 fn encode_block_request_packet(
     encoder: &Ed2kEncoder,
     file_hash: [u8; 16],
@@ -157,10 +156,10 @@ fn encode_block_request_packet(
     }
 }
 
-/// eMule `SendBlockRequests`: tops `pending` up to `block_count` disjoint
-/// blocks via the sequencer, registers each as in-flight, then emits
-/// `OP_REQUESTPARTS` packets of up to three ranges each. Returns `true` when
-/// at least one new range was sent on the wire.
+/// `SendBlockRequests` de eMule: completa `pending` hasta `block_count` bloques
+/// disjuntos mediante el secuenciador, registra cada uno como en vuelo y luego emite
+/// paquetes `OP_REQUESTPARTS` de hasta tres rangos cada uno. Devuelve `true` cuando
+/// al menos un rango nuevo se envió por el cable.
 #[allow(clippy::too_many_arguments)]
 async fn fill_and_send_block_requests(
     stream: &mut ObfuscatedStream<TcpStream>,
@@ -181,7 +180,7 @@ async fn fill_and_send_block_requests(
         .unwrap_or_default()
         .as_millis() as i64;
 
-    // Plan the missing blocks and reserve them in the shared in-flight list.
+    // Planificar los bloques faltantes y reservarlos en la lista compartida en vuelo.
     let planned = {
         let mut g = inner.lock().await;
         let want = block_count.saturating_sub(pending.len());
@@ -222,7 +221,7 @@ async fn fill_and_send_block_requests(
         blocks.len()
     };
 
-    // Emit the un-queued pending blocks in packets of ≤3 ranges.
+    // Emitir los bloques pendientes no puestos en cola en paquetes de ≤3 rangos.
     let mut sent_any = false;
     let unqueued: Vec<Ed2kBlockRange64> = pending
         .iter()
@@ -232,9 +231,9 @@ async fn fill_and_send_block_requests(
     for chunk in unqueued.chunks(MAX_REQUEST_RANGES_PER_PACKET) {
         let Some(pkt) = encode_block_request_packet(encoder, dl_hash_bytes, chunk, peer_ext_req, file_size)
         else {
-            // Unencodable chunk (e.g. >4 GiB without I64 support): mark the
-            // ranges as sent so they stop blocking the pipeline; they will be
-            // re-planned on the next pass for a different peer.
+            // Fragmento no codificable (p. ej. >4 GiB sin soporte I64): marcar los
+            // rangos como enviados para que dejen de bloquear la canalización; serán
+            // replanificados en la siguiente pasada para un par distinto.
             tracing::warn!(
                 "Peer {peer}: dropping unencodable request chunk ({} range(s))",
                 chunk.len(),
@@ -289,11 +288,11 @@ async fn fill_and_send_block_requests(
     Ok(sent_any)
 }
 
-/// Applique les bannissements demandés par le `CorruptionBlackBox` après
-/// un `inject_range` (eMule `Ban` + `clientlist->AddBannedClient`) : les
-/// sources fautives passent `Rejected` et leurs sessions sont avortées.
-/// Retourne `true` quand le pair de cette session est lui-même banni —
-/// l'appelant doit alors sortir de la boucle de transfert.
+/// Aplica los baneos solicitados por `CorruptionBlackBox` tras
+/// un `inject_range` (`Ban` + `clientlist->AddBannedClient` de eMule): las
+/// fuentes infractoras pasan a `Rejected` y sus sesiones se abortan.
+/// Devuelve `true` cuando el propio par de esta sesión es baneado —
+/// quien llama debe entonces salir del bucle de transferencia.
 async fn apply_corruption_bans(
     inner: &Arc<Mutex<SwarmInnerState>>,
     downloads: &Arc<Mutex<DownloadService>>,
@@ -350,10 +349,10 @@ async fn sync_transfer_rates(
     peer_bps: u64,
     total_received: u64,
 ) {
-    // Coalescing par fichier : les N sessions d'un même download partagent
-    // un budget d'émission `DOWNLOAD_EVENT_INTERVAL` — la sérialisation
-    // JSON du snapshot (`parts` + `pending_ranges`) et son parsing côté UI
-    // sont le coût dominant, payé sinon par session à chaque cadence.
+    // Coalescencia por archivo: las N sesiones de una misma descarga comparten
+    // un presupuesto de emisión `DOWNLOAD_EVENT_INTERVAL` — la serialización
+    // JSON de la instantánea (`parts` + `pending_ranges`) y su análisis en la UI
+    // son el coste dominante, que de otro modo se pagaría por sesión en cada cadencia.
     let (progress_snapshot, total_file_rate_bps, pending_ranges, emit_due) = {
         let mut g = inner.lock().await;
         let emit_due = g
@@ -400,8 +399,8 @@ async fn sync_transfer_rates(
             emit_download_update(event_tx, sequence, &snap);
         }
     } else {
-        // Débit rafraîchi sans snapshot ni événement (la prochaine fenêtre
-        // émet la valeur courante ; `decay_stale_rates` reste informé).
+        // Tasa actualizada sin instantánea ni evento (la siguiente ventana
+        // emite el valor actual; `decay_stale_rates` se mantiene informado).
         dl_svc.update_download_rate_by_hash(file_hash_str, total_file_rate_bps);
     }
 }
@@ -432,19 +431,19 @@ pub(crate) async fn run_transfer_loop(
     let codec = PacketCodec::new();
     let mut read_buf = BytesMut::with_capacity(65536);
     let mut raw_buf = [0u8; 8192];
-    // État du pair capturé avant que `file_status` ne soit consommé par le
-    // sequencer : part-status du demandeur (`reqstatus` eMule pour les
-    // réponses SX) et complétude (`m_bCompleteSource` — eMule ne demande
-    // pas de sources à une source complète).
+    // Estado del par capturado antes de que `file_status` sea consumido por el
+    // secuenciador: estado de partes del solicitante (`reqstatus` de eMule para
+    // respuestas SX) y compleción (`m_bCompleteSource` — eMule no pide fuentes
+    // a una fuente completa).
     let peer_part_status: Vec<u8> = file_status.availability_mask.raw_bytes().to_vec();
     let peer_is_complete = file_status.is_complete();
-    // Copie conservée pour le chemin stall→requeue (`file_status` est consommé
-    // par le séquenceur) ; rafraîchie par `wait_in_queue` à chaque re-entrée.
+    // Copia conservada para la ruta atasco→cola (`file_status` es consumido
+    // por el secuenciador); actualizada por `wait_in_queue` en cada reentrada.
     let file_status_fallback = file_status.clone();
     let mut file_status_refreshed: Option<Ed2kFileStatus> = None;
 
-    // Flush any pending AICH recovery requests accumulated before this session
-    // (eMule SendAICHRequest for corrupted parts).
+    // Vaciar peticiones de recuperación AICH pendientes acumuladas antes de esta sesión
+    // (`SendAICHRequest` de eMule para partes dañadas).
     super::status_query::send_pending_aich_requests(
         stream,
         &encoder,
@@ -456,7 +455,7 @@ pub(crate) async fn run_transfer_loop(
     )
     .await;
 
-    // Multi-source block planner setup
+    // Configuración del planificador de bloques multifuente
     let (file_size, completed_ranges, is_previewable, part_scarcity) = {
         let dl_svc = downloads.lock().await;
         let dl = dl_svc.find_by_ed2k_hash(file_hash_str).ok_or_else(|| {
@@ -465,8 +464,8 @@ pub(crate) async fn run_transfer_loop(
                 "Download not found in local service",
             )
         })?;
-        // The download may have been paused/stopped between scheduling and
-        // session start — never request blocks for an inactive file.
+        // La descarga pudo haberse pausado/detenido entre la planificación y
+        // el inicio de la sesión — nunca pedir bloques para un archivo inactivo.
         if !is_download_active_status(&dl.status) {
             info!(
                 "Peer {peer}: download '{}' is '{}' — no block requests will be sent",
@@ -477,8 +476,8 @@ pub(crate) async fn run_transfer_loop(
             return Ok(0);
         }
         let ranges = dl_svc.get_completed_ranges_by_hash(file_hash_str);
-        // Swarm healing (eMuleRust `swarm_healing` setting) : biaise le
-        // choix de part vers les plus rares du swarm (sources connues).
+        // Sanación de enjambre (ajuste `swarm_healing` de eMuleRust): sesga la
+        // elección de partes hacia las más raras del enjambre (fuentes conocidas).
         let healing = dl_svc
             .get_setting("swarm_healing")
             .ok()
@@ -511,9 +510,9 @@ pub(crate) async fn run_transfer_loop(
         sequencer = sequencer.with_part_scarcity(counts.clone());
     }
 
-    // eMule `SendBlockRequests` — pending-block pipeline. `blockCount` is
-    // adaptive to the measured rate of this source (1/2/3/6/9) and each
-    // OP_REQUESTPARTS packet packs up to three ranges.
+    // `SendBlockRequests` de eMule — canalización de bloques pendientes. `blockCount`
+    // es adaptativo a la tasa medida de esta fuente (1/2/3/6/9) y cada paquete
+    // OP_REQUESTPARTS empaqueta hasta tres rangos.
     let is_emule_client = peer_ext_req > 0;
     let peer_bps = inner
         .lock()
@@ -544,9 +543,9 @@ pub(crate) async fn run_transfer_loop(
             "No unassigned/missing blocks available for peer {}",
             log_peer_addr(target_addr)
         );
-        // eMule CUpDownClient::SendOutOfPartReqsAndPacket: notify the
-        // uploader that we currently have no pending block requests
-        // (OP_OUTOFPARTS, empty payload) before leaving the session.
+        // `CUpDownClient::SendOutOfPartReqsAndPacket` de eMule: notificar al
+        // subidor que actualmente no tenemos peticiones de bloques pendientes
+        // (OP_OUTOFPARTS, carga útil vacía) antes de abandonar la sesión.
         let mut out_wire = Vec::with_capacity(6);
         out_wire.push(PR_ED2K);
         out_wire.extend_from_slice(&1u32.to_le_bytes());
@@ -569,20 +568,20 @@ pub(crate) async fn run_transfer_loop(
         emit_event(event_tx, sequence, &snap);
     }
 
-    // Receive chunks loop
+    // Bucle de recepción de fragmentos
     let mut total_received = 0u64;
-    // eMule DOWNLOADTIMEOUT (100 s) is measured from `m_dwLastBlockReceived`,
-    // which SendBlockRequests refreshes — a request send counts as activity.
+    // DOWNLOADTIMEOUT (100 s) de eMule se mide desde `m_dwLastBlockReceived`,
+    // que SendBlockRequests actualiza — un envío de petición cuenta como actividad.
     let mut last_block_data = tokio::time::Instant::now();
     let mut last_rate_check = std::time::Instant::now();
     let mut bytes_since_rate_check = 0u64;
-    // Zlib streams are per pending block (eMule attaches `zStream` to the
-    // Pending_Block_Struct, keyed here by the block's start offset).
+    // Los flujos zlib son por bloque pendiente (eMule asocia `zStream` al
+    // Pending_Block_Struct, indexado aquí por el desplazamiento inicial del bloque).
     let mut zstreams: HashMap<u64, Decompress> = HashMap::new();
     let mut last_dl_progress_log = std::time::Instant::now();
     let mut consecutive_stall_requeues = 0u32;
-    // eMule credits: received bytes accumulate here and are persisted under
-    // the peer's verified pubkey identity in batches (clients.met semantics).
+    // Créditos de eMule: los bytes recibidos se acumulan aquí y se persisten bajo
+    // la identidad de clave pública verificada del par en lotes (semántica de clients.met).
     let mut credit_pending_bytes = 0u64;
 
     struct RateResetGuard<'a> {
@@ -637,9 +636,9 @@ pub(crate) async fn run_transfer_loop(
         sequence,
     };
 
-    // Re-ask SX périodique — eMule attache `OP_REQUESTSOURCES` au cycle de
-    // reask du client (`SendFileRequest` → `IsSourceRequestAllowed`, cadence
-    // dominée par SOURCECLIENTREASKS = 40 min). Vérifié chaque minute.
+    // Repetición periódica de petición SX — eMule asocia `OP_REQUESTSOURCES` al ciclo
+    // de re-ask del cliente (`SendFileRequest` → `IsSourceRequestAllowed`, cadencia
+    // dominada por SOURCECLIENTREASKS = 40 min). Comprobado cada minuto.
     let mut next_sx_check = tokio::time::Instant::now() + Duration::from_secs(60);
     let reask_caps = PeerSxCaps {
         complete_source: peer_is_complete,
@@ -647,9 +646,9 @@ pub(crate) async fn run_transfer_loop(
     };
 
     'transfer_loop: loop {
-        // eMule DOWNLOADTIMEOUT (100 s): no block data since the last request
-        // send / received packet → SendCancelTransfer + back to queue on the
-        // same socket. `first_data_timeout` covers the pre-first-block window.
+        // DOWNLOADTIMEOUT (100 s) de eMule: sin datos de bloque desde el último envío
+        // de petición o paquete recibido → SendCancelTransfer + regreso a la cola en el
+        // mismo socket. `first_data_timeout` cubre la ventana previa al primer bloque.
         let stall_timeout = if total_received == 0 {
             timeouts.first_data_timeout
         } else {
@@ -658,19 +657,19 @@ pub(crate) async fn run_transfer_loop(
 
         tokio::select! {
             _ = cancel_token.cancelled() => {
-                // eMule sends OP_CANCELTRANSFER (empty payload) when an
-                // ongoing transfer is cancelled, so the uploader frees the
-                // slot immediately instead of relying on TCP teardown.
+                // eMule envía OP_CANCELTRANSFER (carga útil vacía) cuando se cancela
+                // una transferencia en curso, para que el subidor libere la
+                // ranura de inmediato en lugar de depender del cierre TCP.
                 let _ = stream
                     .write_all(&[PR_ED2K, 1, 0, 0, 0, OP_CANCELTRANSFER])
                     .await;
                 return Err(PeerError::new(PeerFailureReason::KillSwitchAborted, "Transfer aborted by kill switch"));
             }
             _ = tokio::time::sleep_until(last_block_data + stall_timeout) => {
-                // eMule CUpDownClient::CheckDownloadTimeout: the remote
-                // uploader stalled → OP_CANCELTRANSFER then re-enter its
-                // upload queue on the same socket (queue position handled by
-                // the remote, which moves us back like a normal re-ask).
+                // `CUpDownClient::CheckDownloadTimeout` de eMule: el subidor
+                // remoto se atascó → OP_CANCELTRANSFER y luego reentrar en su
+                // cola de subida en el mismo socket (posición de cola gestionada por
+                // el remoto, que nos desplaza hacia atrás como en un re-ask normal).
                 consecutive_stall_requeues += 1;
                 if consecutive_stall_requeues > MAX_CONSECUTIVE_STALL_REQUEUES {
                     return Err(PeerError::new(PeerFailureReason::TimeoutInactivity, "Peer stalled repeatedly — giving up on this session"));
@@ -683,8 +682,8 @@ pub(crate) async fn run_transfer_loop(
                 let _ = stream
                     .write_all(&[PR_ED2K, 1, 0, 0, 0, OP_CANCELTRANSFER])
                     .await;
-                // Drop local pending state and free the in-flight ranges so
-                // other peers can take them over while we wait.
+                // Descartar el estado pendiente local y liberar los rangos en vuelo para
+                // que otros pares puedan asumirlos mientras esperamos.
                 pending.clear();
                 zstreams.clear();
                 {
@@ -722,9 +721,9 @@ pub(crate) async fn run_transfer_loop(
                 {
                     Ok(fresh_status) => {
                         file_status_refreshed = Some(fresh_status.clone());
-                        // Rebuild the sequencer with the refreshed part
-                        // bitmap — the peer's availability may have changed
-                        // while we were queued.
+                        // Reconstruir el secuenciador con el mapa de bits de partes
+                        // actualizado — la disponibilidad del par pudo haber cambiado
+                        // mientras estábamos en cola.
                         let mut rebuilt = Ed2kDownloadSequencer::new(dl_hash_bytes, file_size, fresh_status)
                             .map_err(|e| PeerError::new(PeerFailureReason::CorruptedData, format!("Sequencer init error: {e}")))?
                             .with_preview_priority(is_previewable)
@@ -790,7 +789,7 @@ pub(crate) async fn run_transfer_loop(
                         if read_buf.len() > MAX_PEER_READ_BUFFER_SIZE {
                             return Err(PeerError::new(PeerFailureReason::CorruptedData, "Peer read buffer exceeded limit during transfer"));
                         }
-                        // Réponses `OP_MULTIPACKETANSWER*` éclatées —
+                        // Respuestas `OP_MULTIPACKETANSWER*` desglosadas —
                         // `ListenSocket.cpp:1071` (cf. status_query).
                         let mut expanded: std::collections::VecDeque<RawPacket> =
                             std::collections::VecDeque::new();
@@ -799,11 +798,11 @@ pub(crate) async fn run_transfer_loop(
                                 p
                             } else {
                                 match codec.decode(&mut read_buf) {
-                                    // OP_PACKEDPROT (0xD4) — eMule unpacks
-                                    // inline and re-tags OP_EMULEPROT
-                                    // (ListenSocket.cpp:1742 →
-                                    // ProcessExtPacket); corrupt packed
-                                    // payloads are dropped.
+                                    // OP_PACKEDPROT (0xD4) — eMule descomprime
+                                    // en línea y reetiqueta como OP_EMULEPROT
+                                    // (`ListenSocket.cpp:1742` →
+                                    // ProcessExtPacket); cargas útiles empaquetadas
+                                    // corruptas se descartan.
                                     Ok(Some(p)) => match mule_protocol::ed2k::packed::unpack_owned(
                                         p,
                                         mule_protocol::ed2k::packed::PACKED_PEER_MAX_DECOMPRESSED,
@@ -832,10 +831,10 @@ pub(crate) async fn run_transfer_loop(
                             if super::status_query::handle_aich_answer(stream, &packet, dl_hash_bytes, file_hash_str, target_addr, &decoder, &encoder, peer_supports_aich, downloads).await {
                                 continue;
                             }
-                            // Pending block completed by this packet — drained
-                            // after the opcode dispatch (removes the pending
-                            // entry, frees the in-flight range, refills the
-                            // pipeline up to `blockCount`).
+                            // Bloque pendiente completado por este paquete — vaciado
+                            // tras el despacho del opcode (elimina la entrada pendiente,
+                            // libera el rango en vuelo y rellena la canalización
+                            // hasta `blockCount`).
                             let mut finished_pending: Option<(u16, Ed2kBlockRange64)> = None;
                             if (packet.protocol == PR_ED2K || packet.protocol == PR_EMULE)
                                 && (packet.opcode == OP_SENDINGPART || packet.opcode == OP_SENDINGPART_I64)
@@ -865,24 +864,24 @@ pub(crate) async fn run_transfer_loop(
                                     return Err(PeerError::new(PeerFailureReason::HashMismatch, "OP_SENDINGPART returned mismatched file hash"));
                                 }
 
-                                // eMule ProcessBlockPacket: the declared range
-                                // must match the payload size exactly
-                                // (IDS_ERR_BADDATABLOCK → protocol violation).
+                                // `ProcessBlockPacket` de eMule: el rango declarado
+                                // debe coincidir exactamente con el tamaño de la carga útil
+                                // (IDS_ERR_BADDATABLOCK → violación de protocolo).
                                 if part_start >= part_end
                                     || part_data.len() as u64 != part_end - part_start
                                 {
                                     return Err(PeerError::new(PeerFailureReason::InvalidRange, format!("OP_SENDINGPART declared range [{}, {}) does not match {} bytes payload", part_start, part_end, part_data.len())));
                                 }
 
-                                // eMule ProcessBlockPacket: locate the pending
-                                // block this packet belongs to — any of the up
-                                // to `blockCount` queued ranges may be served.
+                                // `ProcessBlockPacket` de eMule: localizar el bloque
+                                // pendiente al que pertenece este paquete — cualquiera de los hasta
+                                // `blockCount` rangos en cola puede ser servido.
                                 let pending_idx = pending.iter().position(|p| {
                                     p.range.start <= part_start && part_start < p.range.end
                                 });
                                 let Some(pi) = pending_idx else {
-                                    // Not-requested block — eMule drops it
-                                    // silently and keeps the session alive.
+                                    // Bloque no solicitado — eMule lo descarta
+                                    // silenciosamente y mantiene viva la sesión.
                                     tracing::debug!(
                                         "Peer {peer}: OP_SENDINGPART [{}, {}) matches no pending block — ignored",
                                         part_start,
@@ -893,8 +892,8 @@ pub(crate) async fn run_transfer_loop(
                                 };
                                 if part_end > pending[pi].range.end {
                                     // eMule: "exceeds requested boundaries" →
-                                    // RemoveBlockFromList (frees the range)
-                                    // and ignores the packet — no disconnect.
+                                    // RemoveBlockFromList (libera el rango)
+                                    // e ignora el paquete — sin desconexión.
                                     tracing::warn!(
                                         "Peer {peer}: OP_SENDINGPART [{}, {}) exceeds pending block [{}, {}) — block freed",
                                         part_start,
@@ -921,9 +920,9 @@ pub(crate) async fn run_transfer_loop(
                                         Some((pending[pi].part_idx, pending[pi].range));
                                 }
 
-                                // Refresh the in-flight reservation while the
-                                // peer keeps delivering — the block must not be
-                                // re-planned to another source mid-transfer.
+                                // Refrescar la reserva en vuelo mientras el par
+                                // siga entregando — el bloque no debe
+                                // replanificarse a otra fuente a mitad de la transferencia.
                                 {
                                     let mut g = inner.lock().await;
                                     let now_ms = std::time::SystemTime::now()
@@ -938,8 +937,8 @@ pub(crate) async fn run_transfer_loop(
                                 }
 
                                 let data_len = part_data.len() as u64;
-                                // Global download bandwidth scheduler: pace
-                                // received data through the shared token bucket.
+                                // Planificador global de ancho de banda de descarga: regular los
+                                // datos recibidos a través del cubo de fichas compartido.
                                 if let Some(rl) = rate_limiters {
                                     if rl
                                         .download_bucket
@@ -959,11 +958,11 @@ pub(crate) async fn run_transfer_loop(
                                     flush_download_credit(downloads, sui, &mut credit_pending_bytes).await;
                                 }
 
-                                // Les I/O de `inject_range_brief` (pwrite
-                                // `.part` + transaction SQLite) sont
-                                // synchrones : déportées sur le pool
-                                // bloquant Tokio pour ne pas figer
-                                // l'executor sous pression disque.
+                                // Las E/S de `inject_range_brief` (pwrite
+                                // `.part` + transacción SQLite) son
+                                // síncronas: delegadas al grupo de hilos
+                                // bloqueante de Tokio para no congelar
+                                // el ejecutor bajo presión de disco.
                                 let (is_complete, injected_dl) = {
                                     let downloads = Arc::clone(downloads);
                                     let file_hash = file_hash_str.to_string();
@@ -1084,9 +1083,9 @@ pub(crate) async fn run_transfer_loop(
                                 last_block_data = tokio::time::Instant::now();
                                 consecutive_stall_requeues = 0;
 
-                                // eMule attaches the zlib stream to the
-                                // Pending_Block_Struct — locate which pending
-                                // block this compressed chunk belongs to.
+                                // eMule asocia el flujo zlib a la
+                                // Pending_Block_Struct — localizar a qué bloque
+                                // pendiente pertenece este fragmento comprimido.
                                 let pending_idx = pending.iter().position(|p| {
                                     p.range.start <= block_start && block_start < p.range.end
                                 });
@@ -1100,9 +1099,9 @@ pub(crate) async fn run_transfer_loop(
                                 };
                                 let range_key = pending[pi].range.start;
                                 let range_end = pending[pi].range.end;
-                                // Take ownership of the block's zlib stream so
-                                // `pending` stays borrowable inside the loop;
-                                // reinserted below unless the block completed.
+                                // Tomar posesión del flujo zlib del bloque para que
+                                // `pending` permanezca prestable dentro del bucle;
+                                // reinsertado abajo a menos que el bloque haya terminado.
                                 let mut decomp = zstreams
                                     .remove(&range_key)
                                     .unwrap_or_else(|| Decompress::new(true));
@@ -1119,8 +1118,8 @@ pub(crate) async fn run_transfer_loop(
                                     let consumed = (decomp.total_in() - before_in) as usize;
                                     input_slice = &input_slice[consumed..];
 
-                                    // Pace received wire bytes through the
-                                    // global download token bucket.
+                                    // Regular los bytes recibidos del cable a través del
+                                    // cubo de fichas de descarga global.
                                     if consumed > 0 {
                                         if let Some(rl) = rate_limiters {
                                             if rl
@@ -1144,10 +1143,10 @@ pub(crate) async fn run_transfer_loop(
                                             flush_download_credit(downloads, sui, &mut credit_pending_bytes).await;
                                         }
                                         let write_at = pending[pi].recv_to;
-                                        // Même déport que le chemin non
-                                        // compressé : I/O synchrones sur le
-                                        // pool bloquant Tokio (`out` est
-                                        // copié — buffer zlib réutilisé).
+                                        // Mismo desvío que en la ruta no
+                                        // comprimida: E/S síncronas en el
+                                        // grupo bloqueante de Tokio (`out` se
+                                        // copia — búfer zlib reutilizado).
                                         let (is_complete, injected_dl) = {
                                             let downloads = Arc::clone(downloads);
                                             let file_hash = file_hash_str.to_string();
@@ -1306,9 +1305,9 @@ pub(crate) async fn run_transfer_loop(
                                 info!("Peer {} sent OP_END_OF_DOWNLOAD", log_peer_addr(target_addr));
                                 break;
                             } else if packet.protocol == PR_ED2K && packet.opcode == OP_OUTOFPARTS {
-                                // The uploader tells us it currently has no
-                                // requested parts left for us — end the session
-                                // gracefully so the swarm can rotate sources.
+                                // El subidor nos informa de que actualmente no tiene
+                                // partes solicitadas para nosotros — terminar la sesión
+                                // de forma ordenada para que el enjambre pueda rotar fuentes.
                                 info!("Peer {peer} sent OP_OUTOFPARTS, ending transfer session", peer = log_peer_addr(target_addr));
                                 break 'transfer_loop;
                             } else if super::status_query::handle_queue_rank_packet(&packet, address_str, target_addr, &decoder, inner, event_tx, sequence).await {
@@ -1316,8 +1315,8 @@ pub(crate) async fn run_transfer_loop(
                                 info!("Peer {peer} cancelled the transfer (OP_CANCELTRANSFER)", peer = log_peer_addr(target_addr));
                                 break 'transfer_loop;
                             } else if packet.protocol == PR_ED2K && packet.opcode == OP_CHANGE_CLIENT_ID {
-                                // eMule `ListenSocket.cpp:590` — nouvel
-                                // ID/serveur du pair (serveur connu).
+                                // `ListenSocket.cpp:590` de eMule — nuevo
+                                // ID/servidor del par (servidor conocido).
                                 super::change_client_id::apply_change_client_id(
                                     &packet.payload,
                                     address_str,
@@ -1335,9 +1334,9 @@ pub(crate) async fn run_transfer_loop(
                                 handle_sx_request(&packet, Some(dl_hash_bytes), target_addr, &decoder, &encoder, downloads, stream, sx_env, sx_caps, Some(peer_part_status.as_slice())).await;
                             } else if packet.protocol == PR_EMULE
                             {
-                                // Sous-opcodes SX dans OP_MULTIPACKET* — le
-                                // pair peut aussi nous demander des sources
-                                // sur la même socket (eMule ListenSocket).
+                                // Subopcodes SX en OP_MULTIPACKET* — el
+                                // par también puede pedirnos fuentes
+                                // en el mismo socket (ListenSocket de eMule).
                                 super::source_exchange::handle_sx_multipacket(
                                     &packet,
                                     dl_hash_bytes,
@@ -1353,9 +1352,9 @@ pub(crate) async fn run_transfer_loop(
                                 .await;
                             }
 
-                            // A pending block completed — drain it and top the
-                            // pipeline back up to `blockCount` (eMule
-                            // SendBlockRequests is re-run per received packet).
+                            // Un bloque pendiente se ha completado — vaciarlo y rellenar
+                            // la canalización hasta `blockCount` (`SendBlockRequests`
+                            // de eMule se vuelve a ejecutar por cada paquete recibido).
                             if let Some((fin_part, fin_range)) = finished_pending {
                                 pending.retain(|p| {
                                     !(p.part_idx == fin_part
@@ -1381,10 +1380,10 @@ pub(crate) async fn run_transfer_loop(
                                     (dl_svc.get_completed_ranges_by_hash(file_hash_str), still_active)
                                 };
 
-                                // The download was paused/removed/failed while
-                                // this block was in flight — stop requesting
-                                // new blocks (eMule pauses the partfile, not
-                                // just the scheduler).
+                                // La descarga fue pausada/eliminada/falló mientras
+                                // este bloque estaba en vuelo — dejar de pedir
+                                // nuevos bloques (eMule pausa el partfile, no
+                                // solo el planificador).
                                 if !dl_still_active {
                                     info!("Peer {peer}: download no longer active, ending transfer session", peer = log_peer_addr(target_addr));
                                     break 'transfer_loop;
@@ -1412,8 +1411,8 @@ pub(crate) async fn run_transfer_loop(
                                     file_size,
                                 )
                                 .await?;
-                                // A request send counts as transfer activity
-                                // (eMule refreshes m_dwLastBlockReceived there).
+                                // Un envío de petición cuenta como actividad de transferencia
+                                // (eMule refresca `m_dwLastBlockReceived` ahí).
                                 last_block_data = tokio::time::Instant::now();
 
                                 let cur_part = pending.front().map(|p| p.part_idx);
@@ -1445,7 +1444,7 @@ pub(crate) async fn run_transfer_loop(
         }
     }
 
-    // Reset rate for this peer session and update aggregate file rate
+    // Restablecer la tasa para esta sesión de par y actualizar la tasa agregada del archivo
     {
         let (total_remaining_bps, pending_ranges): (u64, Vec<(u64, u64)>) = {
             let mut g = inner.lock().await;
@@ -1469,19 +1468,19 @@ pub(crate) async fn run_transfer_loop(
         }
     }
 
-    // Persist any remaining credited bytes for this session.
+    // Persistir los bytes acreditados restantes para esta sesión.
     flush_download_credit(downloads, sui, &mut credit_pending_bytes).await;
 
     Ok(total_received)
 }
 
-/// eMule credit accounting batch threshold (8 MiB) — bounds how many SQLite
-/// `peer_credits` updates a fast session performs.
+/// Umbral de lote para la contabilidad de créditos de eMule (8 MiB) — acota cuántas actualizaciones
+/// de `peer_credits` en SQLite realiza una sesión rápida.
 const CREDIT_FLUSH_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Persists accumulated downloaded bytes under the peer's *verified* SUI
-/// pubkey identity (eMule credits the client key, never the transient IP).
-/// Unverified peers accrue nothing — `peer_credits` is keyed by pubkey hash.
+/// Persiste los bytes descargados acumulados bajo la identidad de clave pública SUI
+/// *verificada* del par (eMule acredita la clave de cliente, nunca la IP transitoria).
+/// Los pares no verificados no acumulan nada — `peer_credits` se indexa por hash de clave pública.
 async fn flush_download_credit(
     downloads: &Arc<Mutex<DownloadService>>,
     sui: &super::sui::OutboundSui,
@@ -1510,23 +1509,23 @@ async fn flush_download_credit(
 mod tests {
     use super::emule_pending_block_count;
 
-    /// eMule `SendBlockRequests` blockCount tiers (DownloadClient.cpp):
-    /// eMule clients below 9 KiB/s get the 1/2 low tiers; everyone else gets
-    /// the 3/6/9 tiers regardless of client family.
+    /// Niveles de `blockCount` de `SendBlockRequests` de eMule (DownloadClient.cpp):
+    /// los clientes eMule por debajo de 9 KiB/s obtienen los niveles bajos 1/2; el resto
+    /// obtiene los niveles 3/6/9 independientemente de la familia de clientes.
     #[test]
     fn test_emule_pending_block_count_tiers() {
-        // Initial/unmeasured rate defaults to 3 blocks for immediate pipelining
+        // Tasa inicial/no medida toma por defecto 3 bloques para canalización inmediata
         assert_eq!(emule_pending_block_count(0, true), 3);
-        // eMule client, low-rate tiers after rate is measured
+        // Cliente eMule, niveles de tasa baja tras medir la tasa
         assert_eq!(emule_pending_block_count(1, true), 1);
         assert_eq!(emule_pending_block_count(4 * 1024 - 1, true), 1);
         assert_eq!(emule_pending_block_count(4 * 1024, true), 2);
         assert_eq!(emule_pending_block_count(9 * 1024 - 1, true), 2);
-        // eMule client, upper tiers
+        // Cliente eMule, niveles superiores
         assert_eq!(emule_pending_block_count(9 * 1024, true), 3);
         assert_eq!(emule_pending_block_count(75 * 1024 + 1, true), 6);
         assert_eq!(emule_pending_block_count(150 * 1024 + 1, true), 9);
-        // Non-eMule client: skips the low tiers entirely
+        // Cliente no eMule: omite los niveles bajos por completo
         assert_eq!(emule_pending_block_count(0, false), 3);
         assert_eq!(emule_pending_block_count(2 * 1024, false), 3);
         assert_eq!(emule_pending_block_count(200 * 1024, false), 9);

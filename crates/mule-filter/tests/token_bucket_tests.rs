@@ -9,15 +9,15 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_token_bucket_burst_and_refill() {
-    // 10 tokens per sec, burst capacity 20
+    // 10 fichas por segundo, capacidad de ráfaga 20
     let bucket = TokenBucket::new(10, 20);
 
-    // Initial burst can acquire 20 tokens immediately
+    // La ráfaga inicial puede adquirir 20 fichas inmediatamente
     assert!(bucket.try_acquire(20));
-    // Now bucket is empty
+    // Ahora el cubo está vacío
     assert!(!bucket.try_acquire(1));
 
-    // Wait 200ms -> should refill ~2 tokens
+    // Esperar 200 ms -> debería recargar ~2 fichas
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert!(bucket.try_acquire(2));
     assert!(!bucket.try_acquire(2));
@@ -37,7 +37,7 @@ async fn test_token_bucket_cancellation() {
             .await
     });
 
-    // Simulate Kill Switch activation
+    // Simular la activación del interruptor de corte (Kill Switch)
     tokio::time::sleep(Duration::from_millis(50)).await;
     cancelled.store(true, Ordering::Relaxed);
 
@@ -57,6 +57,6 @@ fn test_session_pseudonymizer() {
     let s1 = pseudo.pseudonymize_server(addr3);
 
     assert_eq!(p1, "peer-01:39735");
-    assert_eq!(p2, "peer-01:49665"); // Same IP preserves ID, port preserved
+    assert_eq!(p2, "peer-01:49665"); // La misma IP preserva el ID, el puerto se preserva
     assert_eq!(s1, "server-01:49661");
 }

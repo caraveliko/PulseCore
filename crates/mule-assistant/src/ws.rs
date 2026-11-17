@@ -34,17 +34,17 @@ use tracing::{info, warn};
 use crate::error::AssistantError;
 use crate::session::Session;
 
-/// Version du serveur exposée dans `assistant.hello`.
+/// Versión del servidor expuesta en `assistant.hello`.
 const SERVER_NAME: &str = "mule-assistant";
 
-/// État partagé du serveur : session unique + jeton d'authentification.
+/// Estado compartido del servidor: sesión única + token de autenticación.
 struct WsState {
     session: Arc<Mutex<Session>>,
     expected_token: String,
 }
 
-/// État d'une connexion : authentification, tour en cours et
-/// confirmation en attente de réponse.
+/// Estado de una conexión: autenticación, turno en curso y
+/// confirmación en espera de respuesta.
 #[derive(Default)]
 struct ConnState {
     authenticated: bool,
@@ -52,9 +52,9 @@ struct ConnState {
     pending_confirm: Option<oneshot::Sender<bool>>,
 }
 
-/// Sert le endpoint WS `ws://<addr>/assistant` sur le listener fourni —
-/// l'adresse doit être loopback (posture d'isolation). Prendre le
-/// listener en paramètre permet le bind éphemère `127.0.0.1:0` en test.
+/// Sirve el punto de conexión WS `ws://<addr>/assistant` en el listener proporcionado:
+/// la dirección debe ser local (postura de aislamiento loopback). Tomar el
+/// listener por parámetro permite el enlace efímero `127.0.0.1:0` en pruebas.
 pub async fn serve_ws(
     listener: tokio::net::TcpListener,
     session: Session,
@@ -91,8 +91,8 @@ async fn ws_upgrade(
 async fn handle_socket(socket: WebSocket, state: Arc<WsState>) {
     let (mut ws_tx, mut ws_rx) = socket.split();
 
-    // Tout ce qui part vers le client transite par ce canal : la boucle
-    // de lecture ET la tâche de tour y écrivent.
+    // Todo lo que se envía al cliente transita por este canal: el bucle
+    // de lectura Y la tarea de turno escriben en él.
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Value>();
     let writer = tokio::spawn(async move {
         while let Some(v) = out_rx.recv().await {
@@ -134,14 +134,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<WsState>) {
         }
     }
 
-    // Connexion fermée : annule le tour en cours et le writer.
+    // Conexión cerrada: cancela el turno en curso y el escritor (writer).
     if let Some(t) = conn.lock().await.turn.take() {
         t.abort();
     }
     writer.abort();
 }
 
-/// `assistant.hello` : vérifie le jeton de session daemon.
+/// `assistant.hello`: verifica el token de sesión del daemon.
 async fn handle_hello(
     conn: &Arc<Mutex<ConnState>>,
     state: &Arc<WsState>,
@@ -167,7 +167,7 @@ async fn handle_hello(
     );
 }
 
-/// `assistant.chat` : lance un tour (un seul à la fois par connexion).
+/// `assistant.chat`: inicia un turno (solo uno a la vez por conexión).
 async fn handle_chat(
     conn: &Arc<Mutex<ConnState>>,
     state: &Arc<WsState>,
@@ -211,8 +211,8 @@ async fn handle_chat(
             loop {
                 tokio::select! {
                     res = &mut turn => {
-                        // Le Final part juste avant la complétion : drainer
-                        // les events encore en file avant de terminer.
+                        // El Final sale justo antes de completarse: drenar
+                        // los eventos aún en cola antes de terminar.
                         while let Ok(ev) = events_rx.try_recv() {
                             let _ = out_ev.send(json!({
                                 "method": "assistant.event",
@@ -253,7 +253,7 @@ async fn handle_chat(
     send_result(out, id, json!({ "accepted": true }));
 }
 
-/// `assistant.confirm` : résout la confirmation en attente.
+/// `assistant.confirm`: resuelve la confirmación en espera.
 async fn handle_confirm(
     conn: &Arc<Mutex<ConnState>>,
     out: &mpsc::UnboundedSender<Value>,
@@ -275,8 +275,8 @@ async fn handle_confirm(
     }
 }
 
-/// `assistant.cancel` : aborte le tour et bouche les `tool_calls`
-/// pendants — les APIs exigent un résultat par appel demandé.
+/// `assistant.cancel`: aborta el turno y sella los `tool_calls`
+/// pendientes: las API exigen un resultado por llamada solicitada.
 async fn handle_cancel(
     conn: &Arc<Mutex<ConnState>>,
     state: &Arc<WsState>,
@@ -298,12 +298,12 @@ async fn handle_cancel(
     }
 }
 
-/// Réponse `result` JSON-RPC.
+/// Respuesta `result` JSON-RPC.
 fn send_result(out: &mpsc::UnboundedSender<Value>, id: Value, result: Value) {
     let _ = out.send(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
 }
 
-/// Réponse `error` JSON-RPC (codes alignés sur les conventions -32xxx).
+/// Respuesta `error` JSON-RPC (códigos alineados con las convenciones -32xxx).
 fn send_error(out: &mpsc::UnboundedSender<Value>, id: Value, code: i64, message: &str) {
     warn!("erreur WS {code} : {message}");
     let _ = out.send(json!({

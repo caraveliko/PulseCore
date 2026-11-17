@@ -9,16 +9,16 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 
 use mule_protocol::kad::KadMessage;
 
-/// Transaction timeout in seconds.
+/// Tiempo de espera de transacción en segundos.
 pub const KAD_TRANSACTION_TIMEOUT_SECS: u64 = 3;
 
-/// Maximum number of concurrent in-flight transactions to prevent memory exhaustion.
+/// Número máximo de transacciones en curso concurrentes para evitar el agotamiento de memoria.
 pub const MAX_IN_FLIGHT_TRANSACTIONS: usize = 200;
 
-/// Maximum requests per second allowed per source IP (anti-amplification / rate limiting).
+/// Solicitudes máximas por segundo permitidas por IP de origen (anti-amplificación / límite de tasa).
 pub const MAX_KAD_REQUESTS_PER_SEC_PER_IP: u32 = 120;
 
-/// Simple per-IP sliding rate limiter.
+/// Limitador de tasa deslizante simple por IP.
 #[derive(Debug, Default)]
 pub struct IpRateLimiter {
     counts: HashMap<IpAddr, (u32, Instant)>,
@@ -51,7 +51,7 @@ impl IpRateLimiter {
     }
 }
 
-/// Expected response variant for a pending in-flight transaction.
+/// Variante de respuesta esperada para una transacción en curso pendiente.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KadExpectedResponse {
     Pong,
@@ -66,32 +66,32 @@ pub enum KadExpectedResponse {
     PublishNotesRes,
 }
 
-/// Pending in-flight transaction state.
+/// Estado de transacción en curso pendiente.
 pub struct InFlightTransaction {
     pub target: SocketAddr,
     pub expected_response: KadExpectedResponse,
     pub expected_target_hash: Option<[u8; 16]>,
     pub created_at: Instant,
-    /// Multi-packet responses (SEARCH_*_RES arrive as several ~50-entry
-    /// batches) need a channel that stays open after the first packet —
-    /// hence unbounded mpsc rather than oneshot.
+    /// Las respuestas multipaquete (SEARCH_*_RES llegan como varios lotes de
+    /// ~50 entradas) necesitan un canal que permanezca abierto tras el primer paquete —
+    /// por lo que se utiliza un mpsc sin límite en vez de oneshot.
     pub sender: mpsc::UnboundedSender<Result<KadMessage, String>>,
 }
 
-/// RAII guard for a registered in-flight transaction: removes the entry on
-/// drop. Callers may wrap a `send_*` future in an outer timeout or `select!`
-/// branch — cancellation then skips the timeout branch's manual `remove`,
-/// leaking the entry toward `MAX_IN_FLIGHT_TRANSACTIONS` until the map
-/// saturates and every subsequent send fails. `try_lock` keeps `Drop`
-/// synchronous; a contended map is healed by the stale-entry sweep in
-/// `insert_in_flight`. Removing an already-consumed tx_id is a no-op.
+/// Guarda RAII para una transacción en curso registrada: elimina la entrada al
+/// destruirse. Quienes llamen pueden envolver un futuro `send_*` en un tiempo de espera
+/// externo o rama `select!` — la cancelación omitiría entonces el `remove` manual
+/// de la rama de tiempo de espera, filtrando la entrada hacia `MAX_IN_FLIGHT_TRANSACTIONS`
+/// hasta saturar el mapa y hacer fallar cada envío posterior. `try_lock` mantiene sincrónico
+/// el `Drop`; un mapa con contención se sanea mediante el barrido de entradas obsoletas en
+/// `insert_in_flight`. Eliminar un `tx_id` ya consumido no produce efecto.
 pub struct InFlightTxGuard {
     map: InFlightMap,
     tx_id: u32,
 }
 
 impl InFlightTxGuard {
-    /// Creates a guard that removes `tx_id` from `map` on drop.
+    /// Crea una guarda que elimina `tx_id` de `map` al destruirse.
     pub fn new(map: InFlightMap, tx_id: u32) -> Self {
         Self { map, tx_id }
     }
@@ -105,7 +105,7 @@ impl Drop for InFlightTxGuard {
     }
 }
 
-/// Statistics snapshot of the UDP Kad service.
+/// Instantánea de estadísticas del servicio UDP Kad.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KadUdpSnapshot {
@@ -118,19 +118,19 @@ pub struct KadUdpSnapshot {
 
 pub type InFlightMap = Arc<Mutex<HashMap<u32, InFlightTransaction>>>;
 
-/// UDP firewall/reachability state for the local Kad port
-/// (mirrors eMule `CUDPFirewallTester`: `m_bFirewalledUDP` + verified flag).
+/// Estado de cortafuegos/accesibilidad UDP para el puerto Kad local
+/// (refleja `CUDPFirewallTester` de eMule: `m_bFirewalledUDP` + flag de verificación).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UdpFirewallStatus {
-    /// No conclusive test has run yet (eMule `!m_bIsFWVerifiedUDP`).
+    /// No se ha ejecutado ninguna prueba concluyente todavía (en eMule `!m_bIsFWVerifiedUDP`).
     #[default]
     Unverified,
-    /// A check is in progress.
+    /// Hay una comprobación en curso.
     Testing,
-    /// At least one `KADEMLIA2_FIREWALLUDP` packet was received → port open.
+    /// Se recibió al menos un paquete `KADEMLIA2_FIREWALLUDP` → puerto abierto.
     Open,
-    /// All candidates answered/failed without a positive packet → firewalled.
+    /// Todos los candidatos respondieron/fallaron sin un paquete positivo → tras cortafuegos (firewalled).
     Firewalled,
 }
 
@@ -145,78 +145,78 @@ impl UdpFirewallStatus {
     }
 }
 
-/// Result delivered to a pending firewall test when a
-/// `KADEMLIA2_FIREWALLUDP` datagram arrives from a candidate IP.
+/// Resultado entregado a una prueba de cortafuegos pendiente cuando llega
+/// un datagrama `KADEMLIA2_FIREWALLUDP` desde una IP candidata.
 #[derive(Debug, Clone, Copy)]
 pub struct FirewallUdpResult {
     pub error_code: u8,
-    /// UDP port the remote peer probed (its view of our intern/extern port).
+    /// Puerto UDP que el par remoto sondeó (su vista de nuestro puerto interno/externo).
     pub port_tested: u16,
 }
 
-/// `KADEMLIAFIREWALLCHECKS` — TCP firewall check requests emitted per
-/// recheck round (eMule `Opcodes.h:86`). One `KADEMLIA_FIREWALLED_RES`
-/// answer per request; the round ends once 4 contacts answered.
+/// `KADEMLIAFIREWALLCHECKS` — Solicitudes de comprobación de cortafuegos TCP emitidas por
+/// ronda de recomprobación (eMule `Opcodes.h:86`). Una respuesta `KADEMLIA_FIREWALLED_RES`
+/// por solicitud; la ronda finaliza una vez que 4 contactos responden.
 pub const TCP_FW_CHECKS_PER_ROUND: u32 = 4;
 
-/// Number of successful TCP connect-back ACKs (`OP_KAD_FWTCPCHECK_ACK` /
-/// legacy `KADEMLIA_FIREWALLED_ACK_RES`) needed within a round to conclude
-/// our TCP port is reachable (eMule `Prefs.cpp:166` — `m_uFirewalled < 2`).
+/// Número de confirmaciones (ACK) exitosas de conexión TCP de retorno (`OP_KAD_FWTCPCHECK_ACK` /
+/// legado `KADEMLIA_FIREWALLED_ACK_RES`) necesarias dentro de una ronda para concluir
+/// que nuestro puerto TCP es accesible (eMule `Prefs.cpp:166` — `m_uFirewalled < 2`).
 pub const TCP_FW_ACK_THRESHOLD: u32 = 2;
 
-/// TTL of a pending connect-back request (eMule `ClientList.cpp:855`,
+/// TTL de una solicitud de conexión de retorno pendiente (eMule `ClientList.cpp:855`,
 /// `SEC2MS(180)` — `listFirewallCheckRequests`).
 pub const TCP_FW_CHECK_IP_TTL: Duration = Duration::from_secs(180);
 
-/// Interval between two TCP firewall rechecks (eMule `Kademlia.cpp:121`,
+/// Intervalo entre dos recomprobaciones de cortafuegos TCP (eMule `Kademlia.cpp:121`,
 /// `m_tNextFirewallCheck = tNow + HR2S(1)`).
 pub const TCP_FW_RECHECK_INTERVAL: Duration = Duration::from_secs(3600);
 
-/// Tracks pending outbound UDP firewall checks and the last known state.
-/// Pending candidates are keyed by IPv4 so unsolicited or stray
-/// `KADEMLIA2_FIREWALLUDP` datagrams are ignored (eMule `bRequested` check).
+/// Rastrea las comprobaciones salientes pendientes de cortafuegos UDP y el último estado conocido.
+/// Los candidatos pendientes están indexados por IPv4 para ignorar datagramas
+/// `KADEMLIA2_FIREWALLUDP` no solicitados o dispersos (comprobación `bRequested` en eMule).
 ///
-/// The struct also carries the **TCP** verdict — eMule keeps it in `CPrefs`
+/// La estructura también contiene el veredicto **TCP** — eMule lo mantiene en `CPrefs`
 /// (`m_uFirewalled`/`m_uRecheckip`/`m_bLastFirewallState` +
-/// `CClientList::listFirewallCheckRequests`): while a recheck round is
-/// active, every inbound `HELLO_REQ`/`HELLO_RES` triggers a
-/// `FIREWALLED{2}_REQ` back to the sender; that contact TCP-connects to us
-/// and acknowledges with `OP_KAD_FWTCPCHECK_ACK` (Kad ≥ 7) or a UDP
-/// `KADEMLIA_FIREWALLED_ACK_RES` (< 7). Two connect-back ACKs in a round
-/// prove the port open; a completed round with fewer ACKs = firewalled.
+/// `CClientList::listFirewallCheckRequests`): mientras una ronda de recomprobación esté
+/// activa, cada `HELLO_REQ`/`HELLO_RES` entrante desencadena un `FIREWALLED{2}_REQ`
+/// de vuelta al remitente; ese contacto se conecta por TCP a nosotros y reconoce
+/// con `OP_KAD_FWTCPCHECK_ACK` (Kad ≥ 7) o un `KADEMLIA_FIREWALLED_ACK_RES` UDP (< 7).
+/// Dos ACK de conexión de retorno en una ronda demuestran que el puerto está abierto;
+/// una ronda completada con menos ACK = tras cortafuegos (firewalled).
 #[derive(Debug)]
 pub struct FirewallTestTracker {
     pub status: UdpFirewallStatus,
-    /// True once a check produced a conclusive result (open or firewalled).
+    /// Verdadero una vez que una comprobación produjo un resultado concluyente (abierto o tras cortafuegos).
     pub verified: bool,
-    /// Extern Kad UDP port learned from a probe that reached a port different
-    /// from the bound one (NAT-mapped). `use_extern` mirrors eMule's
-    /// `GetUseExternKadPort` preference.
+    /// Puerto Kad UDP externo aprendido a partir de un sondeo que alcanzó un puerto diferente
+    /// del vinculado (mapeado por NAT). `use_extern` refleja la preferencia
+    /// `GetUseExternKadPort` de eMule.
     pub extern_port: Option<u16>,
     pub use_extern: bool,
-    /// Our public IPv4 as observed by a peer (`KADEMLIA_FIREWALLED_RES`
-    /// echoes it back). Used as the advertised IP when publishing ourselves
-    /// as a source — the socket bind address may be `0.0.0.0` or NATed.
+    /// Nuestra IPv4 pública según fue observada por un par (`KADEMLIA_FIREWALLED_RES`
+    /// la devuelve en eco). Empleada como IP anunciada al publicarnos a nosotros mismos
+    /// como fuente — la dirección de vinculación del socket puede ser `0.0.0.0` o estar tras NAT.
     pub observed_ip: Option<Ipv4Addr>,
-    /// Last completed check time (for cooldowns / re-verification).
+    /// Momento de la última comprobación completada (para enfriamientos / reverificación).
     pub last_check: Option<Instant>,
-    /// Pending tests per candidate IP: `(verify_key, result_sender)`. The
-    /// verify key is the `sender_key` we sent in `OP_FWCHECKUDPREQ` — remote
-    /// peers encrypt their `FIREWALLUDP` reply with it.
+    /// Pruebas pendientes por IP candidata: `(verify_key, result_sender)`. La clave de
+    /// verificación es la `sender_key` que enviamos en `OP_FWCHECKUDPREQ` — los pares
+    /// remotos cifran su respuesta `FIREWALLUDP` con ella.
     pending: HashMap<IpAddr, Vec<(u32, oneshot::Sender<FirewallUdpResult>)>>,
-    /// Connect-back ACKs received during the current round
+    /// Confirmaciones (ACK) de conexión de retorno recibidas durante la ronda actual
     /// (eMule `m_uFirewalled`).
     pub tcp_acks: u32,
-    /// `FIREWALLED_RES` answers received during the current round
-    /// (eMule `m_uRecheckip`) — the round stays active below
+    /// Respuestas `FIREWALLED_RES` recibidas durante la ronda actual
+    /// (eMule `m_uRecheckip`) — la ronda permanece activa por debajo de
     /// [`TCP_FW_CHECKS_PER_ROUND`].
     pub tcp_answers: u32,
-    /// Snapshot of the verdict at round start (eMule `m_bLastFirewallState`,
-    /// initial `true` — firewalled until proven open).
+    /// Instantánea del veredicto al inicio de la ronda (eMule `m_bLastFirewallState`,
+    /// inicial `true` — tras cortafuegos hasta demostrarse abierto).
     pub tcp_last_state: bool,
-    /// When the next hourly recheck is due (eMule `m_tNextFirewallCheck`).
+    /// Momento en que vence la próxima recomprobación horaria (eMule `m_tNextFirewallCheck`).
     pub next_tcp_recheck: Instant,
-    /// IPs we asked to TCP-connect back to us, with emission time
+    /// IPs a las que pedimos conectarse por TCP de retorno hacia nosotros, con marca temporal
     /// (eMule `listFirewallCheckRequests` — `AddKadFirewallRequest`).
     pending_tcp_ips: Vec<(IpAddr, Instant)>,
 }
@@ -231,8 +231,8 @@ impl Default for FirewallTestTracker {
             observed_ip: None,
             last_check: None,
             pending: HashMap::new(),
-            // eMule boots with `m_uRecheckip = 0` → a round is active as soon
-            // as the first HELLO arrives (« first check done on connect »).
+            // eMule arranca con `m_uRecheckip = 0` → una ronda se activa tan pronto
+            // llega el primer HELLO («primera comprobación efectuada al conectar»).
             tcp_acks: 0,
             tcp_answers: 0,
             tcp_last_state: true,
@@ -243,8 +243,8 @@ impl Default for FirewallTestTracker {
 }
 
 impl FirewallTestTracker {
-    /// Registers a pending test for `candidate_ip`. Returns a receiver that
-    /// resolves on the first matching `KADEMLIA2_FIREWALLUDP` datagram.
+    /// Registra una prueba pendiente para `candidate_ip`. Devuelve un receptor que
+    /// se resuelve con el primer datagrama `KADEMLIA2_FIREWALLUDP` coincidente.
     pub fn register_candidate(
         &mut self,
         candidate_ip: IpAddr,
@@ -258,13 +258,13 @@ impl FirewallTestTracker {
         rx
     }
 
-    /// Removes all pending tests for an IP (timeout/cancel path).
+    /// Elimina todas las pruebas pendientes para una IP (ruta de tiempo de espera/cancelación).
     pub fn unregister_candidate(&mut self, candidate_ip: &IpAddr) {
         self.pending.remove(candidate_ip);
     }
 
-    /// UDP verify keys of pending tests for `ip` — used to try decrypting
-    /// obfuscated Kad datagrams from that peer.
+    /// Claves de verificación UDP de pruebas pendientes para `ip` — utilizadas para intentar
+    /// descifrar datagramas Kad ofuscados procedentes de ese par.
     pub fn pending_verify_keys(&self, ip: &IpAddr) -> Vec<u32> {
         self.pending
             .get(ip)
@@ -272,13 +272,13 @@ impl FirewallTestTracker {
             .unwrap_or_default()
     }
 
-    /// Routes an incoming FIREWALLUDP datagram to the matching pending test.
-    /// Returns false when the source IP was never asked (unsolicited packet).
+    /// Enruta un datagrama FIREWALLUDP entrante hacia la prueba pendiente coincidente.
+    /// Devuelve false cuando nunca se solicitó a la IP de origen (paquete no solicitado).
     pub fn notify_packet(&mut self, from_ip: IpAddr, result: FirewallUdpResult) -> bool {
         match self.pending.get_mut(&from_ip) {
             Some(v) if !v.is_empty() => {
-                // One successful datagram resolves the test; extra datagrams
-                // (intern+extern pair) are delivered to any remaining waiters.
+                // Un datagrama exitoso resuelve la prueba; los datagramas adicionales
+                // (par interno+externo) se entregan a los receptores restantes si los hubiera.
                 let (_, tx) = v.remove(0);
                 if v.is_empty() {
                     self.pending.remove(&from_ip);
@@ -289,22 +289,22 @@ impl FirewallTestTracker {
         }
     }
 
-    /// Whether any firewall check is currently waiting on datagrams.
+    /// Indica si alguna comprobación de cortafuegos está esperando datagramas actualmente.
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
     }
 
     /// eMule `GetRecheckIP` (`m_uRecheckip < KADEMLIAFIREWALLCHECKS`):
-    /// while true, every inbound HELLO_REQ/HELLO_RES triggers a
-    /// `FIREWALLED{2}_REQ` back to the sender.
+    /// mientras sea verdadero, cada HELLO_REQ/HELLO_RES entrante desencadena
+    /// un `FIREWALLED{2}_REQ` de vuelta al remitente.
     pub fn tcp_recheck_active(&self) -> bool {
         self.tcp_answers < TCP_FW_CHECKS_PER_ROUND
     }
 
-    /// eMule `GetFirewalled` (`Prefs.cpp:166`): fewer than
-    /// [`TCP_FW_ACK_THRESHOLD`] connect-back ACKs and the round is over →
-    /// firewalled; while the round is still running, report the snapshot
-    /// taken at its start (`m_bLastFirewallState`).
+    /// eMule `GetFirewalled` (`Prefs.cpp:166`): menos de
+    /// [`TCP_FW_ACK_THRESHOLD`] ACK de conexión de retorno y la ronda ha terminado →
+    /// tras cortafuegos (firewalled); mientras la ronda siga en curso, informa la instantánea
+    /// tomada a su inicio (`m_bLastFirewallState`).
     pub fn tcp_is_firewalled(&self) -> bool {
         if self.tcp_acks < TCP_FW_ACK_THRESHOLD {
             !self.tcp_recheck_active() || self.tcp_last_state
@@ -313,8 +313,8 @@ impl FirewallTestTracker {
         }
     }
 
-    /// eMule `SetRecheckIP`/`SetFirewalled` — arms a new round: zeroes the
-    /// answer counter and ACK count, snapshots the previous verdict.
+    /// eMule `SetRecheckIP`/`SetFirewalled` — arma una nueva ronda: pone a cero el
+    /// contador de respuestas y el recuento de ACK, tomando instantánea del veredicto previo.
     pub fn start_tcp_recheck(&mut self) {
         self.tcp_answers = 0;
         self.tcp_last_state = self.tcp_acks < TCP_FW_ACK_THRESHOLD;
@@ -323,8 +323,8 @@ impl FirewallTestTracker {
         self.pending_tcp_ips.clear();
     }
 
-    /// eMule `AddKadFirewallRequest` — registers `ip` as asked to connect
-    /// back (TTL [`TCP_FW_CHECK_IP_TTL`], pruned on each access).
+    /// eMule `AddKadFirewallRequest` — registra `ip` como solicitada para conectar de
+    /// retorno (TTL [`TCP_FW_CHECK_IP_TTL`], purgado en cada acceso).
     pub fn add_tcp_check_ip(&mut self, ip: IpAddr) {
         let now = Instant::now();
         self.pending_tcp_ips
@@ -332,8 +332,8 @@ impl FirewallTestTracker {
         self.pending_tcp_ips.push((ip, now));
     }
 
-    /// eMule `IsKadFirewallCheckIP` — true while a non-expired request for
-    /// `ip` is pending.
+    /// eMule `IsKadFirewallCheckIP` — verdadero mientras esté pendiente una solicitud
+    /// no caducada para `ip`.
     pub fn is_tcp_check_ip(&mut self, ip: IpAddr) -> bool {
         let now = Instant::now();
         self.pending_tcp_ips
@@ -341,21 +341,21 @@ impl FirewallTestTracker {
         self.pending_tcp_ips.iter().any(|(a, _)| *a == ip)
     }
 
-    /// One `KADEMLIA_FIREWALLED_RES` answer arrived from an asked IP —
-    /// records the observed public IP and ticks the round counter
+    /// Llegó una respuesta `KADEMLIA_FIREWALLED_RES` desde una IP solicitada —
+    /// registra la IP pública observada y avanza el contador de ronda
     /// (eMule `SetIPAddress` + `IncRecheckIP`).
     pub fn note_firewalled_res(&mut self, observed_ip: Ipv4Addr) {
         self.observed_ip = Some(observed_ip);
         self.tcp_answers = self.tcp_answers.saturating_add(1);
     }
 
-    /// One connect-back ACK arrived — `OP_KAD_FWTCPCHECK_ACK` (TCP, Kad ≥ 7)
-    /// or `KADEMLIA_FIREWALLED_ACK_RES` (UDP, legacy) — eMule `IncFirewalled`.
+    /// Llegó un ACK de conexión de retorno — `OP_KAD_FWTCPCHECK_ACK` (TCP, Kad ≥ 7)
+    /// o `KADEMLIA_FIREWALLED_ACK_RES` (UDP, legado) — eMule `IncFirewalled`.
     pub fn inc_tcp_acks(&mut self) {
         self.tcp_acks = self.tcp_acks.saturating_add(1);
     }
 
-    /// Effective UDP port other peers should use to reach us on Kad.
+    /// Puerto UDP efectivo que otros pares deberían emplear para alcanzarnos en Kad.
     pub fn effective_port(&self, intern_port: u16) -> u16 {
         if self.use_extern {
             self.extern_port.unwrap_or(intern_port)
@@ -365,53 +365,53 @@ impl FirewallTestTracker {
     }
 }
 
-/// Buddy link relay state (eMule `CClientList::m_pBuddy` — a single buddy
-/// at a time). The daemon can act as a *relay* for one LowID client:
-/// `KADEMLIA_FINDBUDDY_REQ` registers a pending entry, the requester's TCP
-/// connection (adopted by the inbound listener) becomes the active link, and
-/// `KADEMLIA_CALLBACK_REQ` / `OP_REASKCALLBACKUDP` datagrams are forwarded
-/// onto it as `OP_CALLBACK` / `OP_REASKCALLBACKTCP`.
+/// Estado de retransmisión de enlace de amigo (eMule `CClientList::m_pBuddy` — un único amigo
+/// a la vez). El daemon puede actuar como *repetidor* (relay) para un cliente LowID:
+/// `KADEMLIA_FINDBUDDY_REQ` registra una entrada pendiente, la conexión TCP del solicitante
+/// (adoptada por el escuchador entrante) se convierte en el enlace activo, y los datagramas
+/// `KADEMLIA_CALLBACK_REQ` / `OP_REASKCALLBACKUDP` se reenvían hacia él como
+/// `OP_CALLBACK` / `OP_REASKCALLBACKTCP`.
 #[derive(Debug, Default)]
 pub struct BuddyRegistry {
-    /// Accepted `FINDBUDDY_REQ` senders awaiting their TCP buddy link.
+    /// Remitentes de `FINDBUDDY_REQ` aceptados en espera de su enlace TCP de amigo.
     pending: HashMap<IpAddr, PendingBuddy>,
-    /// The live buddy link (at most one, mirroring eMule).
+    /// El enlace de amigo activo (a lo sumo uno, reflejando eMule).
     pub active: Option<ActiveBuddy>,
 }
 
-/// How long a `FINDBUDDY_REQ` acceptance stays valid awaiting the TCP link.
+/// Cuánto tiempo permanece válida una aceptación de `FINDBUDDY_REQ` esperando el enlace TCP.
 pub const BUDDY_PENDING_TTL: Duration = Duration::from_secs(120);
 
-/// A `FINDBUDDY_REQ` we accepted; awaiting the requester's TCP connection.
+/// Un `FINDBUDDY_REQ` que aceptamos; esperando la conexión TCP del solicitante.
 #[derive(Debug, Clone)]
 pub struct PendingBuddy {
-    /// Buddy ID the requester asked us to register under.
+    /// ID de amigo bajo el cual el solicitante pidió que lo registremos.
     pub buddy_id: [u8; 16],
-    /// Requester's Kad client ID.
+    /// ID de cliente Kad del solicitante.
     pub user_id: [u8; 16],
-    /// Requester's announced TCP port.
+    /// Puerto TCP anunciado por el solicitante.
     pub tcp_port: u16,
-    /// Expiry instant of this pending registration.
+    /// Instante de expiración de este registro pendiente.
     pub expires: Instant,
 }
 
-/// A live buddy TCP link; `tx` accepts fully framed eD2K wire packets
-/// (`proto + len:u32 + opcode + payload`) to write on the buddy socket.
+/// Un enlace TCP de amigo activo; `tx` acepta paquetes de red eD2K completamente
+/// entramados (`proto + len:u32 + opcode + payload`) para escribir en el socket del amigo.
 #[derive(Debug)]
 pub struct ActiveBuddy {
-    /// Buddy ID registered at `FINDBUDDY_REQ` time.
+    /// ID de amigo registrado en el momento de `FINDBUDDY_REQ`.
     pub buddy_id: [u8; 16],
-    /// Buddy client's Kad ID / user hash.
+    /// ID de Kad / hash de usuario del cliente amigo.
     pub user_id: [u8; 16],
-    /// Remote socket address of the buddy link.
+    /// Dirección de socket remota del enlace de amigo.
     pub remote_addr: SocketAddr,
-    /// Outbound packet sink for the buddy socket writer task.
+    /// Sumidero de paquetes salientes para la tarea escritora del socket de amigo.
     pub tx: tokio::sync::mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl BuddyRegistry {
-    /// Registers an accepted buddy candidate. Caller must have checked
-    /// eligibility (verified non-firewalled node, no active buddy).
+    /// Registra un candidato a amigo aceptado. Quien llame debe haber comprobado la
+    /// elegibilidad (nodo verificado no tras cortafuegos, sin amigo activo).
     pub fn register_pending(
         &mut self,
         ip: IpAddr,
@@ -431,14 +431,14 @@ impl BuddyRegistry {
         );
     }
 
-    /// Consumes the pending registration for `ip` when its TCP link arrives.
+    /// Consume el registro pendiente para `ip` cuando llega su enlace TCP.
     pub fn take_pending(&mut self, ip: &IpAddr) -> Option<PendingBuddy> {
         self.pending.retain(|_, p| p.expires > Instant::now());
         self.pending.remove(ip)
     }
 
-    /// Installs the active buddy link. Returns false when a buddy is
-    /// already connected (eMule accepts a single buddy).
+    /// Instala el enlace de amigo activo. Devuelve false si ya hay un amigo
+    /// conectado (eMule acepta un único amigo).
     pub fn set_active(&mut self, buddy: ActiveBuddy) -> bool {
         if self.active.is_some() {
             return false;
@@ -447,7 +447,7 @@ impl BuddyRegistry {
         true
     }
 
-    /// Clears the active buddy if it belongs to `addr`.
+    /// Limpia el amigo activo si pertenece a `addr`.
     pub fn clear_active(&mut self, addr: &SocketAddr) {
         if self
             .active
@@ -459,8 +459,8 @@ impl BuddyRegistry {
         }
     }
 
-    /// Sends a framed packet to the active buddy. Returns false when no
-    /// buddy link exists or its writer task is gone.
+    /// Envía un paquete entramado al amigo activo. Devuelve false si no existe
+    /// enlace de amigo o si su tarea escritora ya finalizó.
     pub fn send_to_buddy(&self, packet: Vec<u8>) -> bool {
         match &self.active {
             Some(b) => b.tx.send(packet).is_ok(),
@@ -575,15 +575,15 @@ mod tests {
 
     #[test]
     fn tcp_recheck_round_lifecycle() {
-        // eMule Prefs.cpp: `m_uRecheckip = 0` at boot → a round is active
-        // from the first HELLO; verdict stays at last known state while it
-        // runs (`m_bLastFirewallState`, initial true).
+        // eMule Prefs.cpp: `m_uRecheckip = 0` en el arranque → una ronda se activa
+        // desde el primer HELLO; el veredicto permanece en el último estado conocido
+        // mientras se ejecuta (`m_bLastFirewallState`, inicial true).
         let mut t = FirewallTestTracker::default();
         assert!(t.tcp_recheck_active());
         assert!(t.tcp_is_firewalled(), "boot state: firewalled until proven");
 
-        // 4 FIREWALLED_RES answers without a single ACK → round ends,
-        // verdict = firewalled.
+        // 4 respuestas FIREWALLED_RES sin un solo ACK → la ronda finaliza,
+        // veredicto = tras cortafuegos (firewalled).
         for _ in 0..TCP_FW_CHECKS_PER_ROUND {
             t.note_firewalled_res(Ipv4Addr::new(9, 9, 9, 9));
         }
@@ -594,18 +594,18 @@ mod tests {
     #[test]
     fn tcp_acks_flip_verdict_and_recheck_snapshots() {
         let mut t = FirewallTestTracker::default();
-        // Two connect-back ACKs → open, even mid-round.
+        // Dos ACK de conexión de retorno → abierto, incluso a mitad de ronda.
         t.inc_tcp_acks();
         t.inc_tcp_acks();
         assert!(!t.tcp_is_firewalled());
 
-        // New round snapshots "open" — verdict stays open while it runs.
+        // La nueva ronda toma instantánea de "abierto" — el veredicto permanece abierto mientras se ejecuta.
         t.start_tcp_recheck();
         assert!(t.tcp_recheck_active());
         assert!(!t.tcp_is_firewalled());
         assert_eq!(t.tcp_acks, 0);
 
-        // Round ends without enough ACKs → back to firewalled.
+        // La ronda finaliza sin suficientes ACK → vuelve a tras cortafuegos.
         for _ in 0..TCP_FW_CHECKS_PER_ROUND {
             t.note_firewalled_res(Ipv4Addr::new(9, 9, 9, 9));
         }
@@ -622,7 +622,7 @@ mod tests {
         let other = IpAddr::V4(Ipv4Addr::new(5, 6, 7, 8));
         assert!(!t.is_tcp_check_ip(other));
 
-        // An expired entry stops matching — the pair was asked >180 s ago.
+        // Una entrada caducada deja de coincidir — el par fue consultado hace >180 s.
         t.pending_tcp_ips.clear();
         t.pending_tcp_ips
             .push((ip, Instant::now() - TCP_FW_CHECK_IP_TTL - Duration::from_secs(1)));

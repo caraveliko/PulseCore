@@ -15,18 +15,18 @@ use std::io;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// Kind of external reference binary — drives the neutralized config format
-/// (`preferences.ini` for eMule, `amule.conf` for aMule) and the launch style.
+/// Tipo de binario de referencia externo — define el formato de configuración neutralizada
+/// (`preferences.ini` para eMule, `amule.conf` para aMule) y el estilo de lanzamiento.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum ReferenceKind {
-    /// eMule (Windows GUI) — config via `preferences.ini` + registry pin.
+    /// eMule (GUI de Windows) — configuración mediante `preferences.ini` + fijación en registro.
     Emule,
-    /// aMule (`amuled` headless daemon) — config via `amule.conf` + `-c <dir>`.
+    /// aMule (demonio headless `amuled`) — configuración mediante `amule.conf` + `-c <dir>`.
     Amule,
 }
 
-/// Represents an isolated execution environment for a reference eMule/aMule binary.
+/// Representa un entorno de ejecución aislado para un binario de referencia de eMule/aMule.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Tier3Environment {
@@ -39,7 +39,7 @@ pub struct Tier3Environment {
 }
 
 impl Tier3Environment {
-    /// Creates a new isolated environment with neutralized configuration.
+    /// Crea un nuevo entorno aislado con configuración neutralizada.
     pub fn new(tcp_port: u16, udp_port: u16) -> io::Result<Self> {
         Self::new_with_kind(ReferenceKind::Emule, tcp_port, udp_port)
     }
@@ -80,37 +80,37 @@ impl Tier3Environment {
         Ok(env)
     }
 
-    /// Path to the isolated root work directory.
+    /// Ruta al directorio de trabajo raíz aislado.
     pub fn work_path(&self) -> &Path {
         self.work_dir.path()
     }
 
-    /// Path to the configuration directory.
+    /// Ruta al directorio de configuración.
     pub fn config_dir(&self) -> &Path {
         &self.config_dir
     }
 
-    /// Path to the incoming downloads directory.
+    /// Ruta al directorio de descargas completadas (incoming).
     pub fn incoming_dir(&self) -> &Path {
         &self.incoming_dir
     }
 
-    /// Path to the temporary part files directory.
+    /// Ruta al directorio de archivos temporales de partes (.part).
     pub fn temp_dir(&self) -> &Path {
         &self.temp_dir
     }
 
-    /// The TCP port configured for the reference peer.
+    /// El puerto TCP configurado para el par de referencia.
     pub fn tcp_port(&self) -> u16 {
         self.tcp_port
     }
 
-    /// The UDP port configured for the reference peer.
+    /// El puerto UDP configurado para el par de referencia.
     pub fn udp_port(&self) -> u16 {
         self.udp_port
     }
 
-    /// Creates a deterministic fixture file in the incoming directory with repeating 0..=255 bytes.
+    /// Crea un archivo fixture determinista en el directorio incoming con bytes repetitivos 0..=255.
     pub fn create_deterministic_fixture(
         &self,
         filename: &str,
@@ -135,7 +135,7 @@ impl Tier3Environment {
         Ok(file_path)
     }
 
-    /// Writes a neutralized eMule `preferences.ini` file.
+    /// Escribe un archivo `preferences.ini` neutralizado para eMule.
     fn write_emule_preferences_ini(&self) -> io::Result<()> {
         let ini_content = format!(
             "[eMule]\r\n\
@@ -172,19 +172,19 @@ TempDir={temp}\r\n",
         Ok(())
     }
 
-    /// Writes a neutralized aMule `amule.conf` file.
+    /// Escribe un archivo `amule.conf` neutralizado para aMule.
     ///
-    /// aMule lit `amule.conf` à la racine du répertoire passé par `-c`. Toutes
-    /// les formes d'auto-connexion sont neutralisées ; les clés inconnues sont
-    /// simplement ignorées par wxConfig (défense en profondeur).
+    /// aMule lee `amule.conf` en la raíz del directorio pasado mediante `-c`. Todas
+    /// las formas de autoconexión se neutralizan; las claves desconocidas son
+    /// simplemente ignoradas por wxConfig (defensa en profundidad).
     fn write_amule_conf(&self) -> io::Result<()> {
-        // `amuled` refuse de fonctionner sans Connexions Externes — on active
-        // EC en le confinant strictement à la loopback via `ECAddress`, avec un
-        // port éphémère alloué par l'OS et un mot de passe de test (MD5 hex).
+        // `amuled` se niega a funcionar sin Conexiones Externas (EC) — activamos
+        // EC confinándolo estrictamente a loopback mediante `ECAddress`, con un
+        // puerto efímero asignado por el SO y una contraseña de prueba (MD5 hex).
         let ec_port = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .and_then(|l| l.local_addr().map(|a| a.port()))
             .unwrap_or(47120);
-        // MD5("tier3ref") — mot de passe EC factice, jamais réutilisé.
+        // MD5("tier3ref") — contraseña EC simulada, nunca reutilizada.
         const EC_PASSWORD_MD5: &str = "c876a623b75f060ad300fff1b90531b0";
         let conf_content = format!(
             "[eMule]\r\n\
@@ -242,18 +242,18 @@ UPnPTCPPort=50000\r\n",
         fs::write(self.config_dir.join("amule.conf"), &conf_content)?;
         fs::write(self.work_dir.path().join("amule.conf"), &conf_content)?;
 
-        // `shareddir.dat` : liste texte des répertoires partagés (une ligne par
-        // chemin) — requis pour qu'aMule indexe les fixtures de `incoming/`.
+        // `shareddir.dat`: lista de texto de los directorios compartidos (una línea por
+        // ruta) — requerido para que aMule indexe los fixtures de `incoming/`.
         let shareddir = format!("{}\r\n", self.incoming_dir.display());
         fs::write(self.config_dir.join("shareddir.dat"), &shareddir)?;
         fs::write(self.work_dir.path().join("shareddir.dat"), &shareddir)?;
         Ok(())
     }
 
-    /// Writes an empty `server.met` file to prevent server connection attempts.
+    /// Escribe un archivo `server.met` vacío para prevenir intentos de conexión a servidores.
     fn write_empty_server_met(&self) -> io::Result<()> {
         let server_met_path = self.config_dir.join("server.met");
-        // eMule server.met header: version byte 0xE0 + 4 bytes server count (0)
+        // Cabecera server.met de eMule: byte de versión 0xE0 + 4 bytes de recuento de servidores (0)
         let empty_met: [u8; 5] = [0xE0, 0x00, 0x00, 0x00, 0x00];
         fs::write(server_met_path, empty_met)
     }

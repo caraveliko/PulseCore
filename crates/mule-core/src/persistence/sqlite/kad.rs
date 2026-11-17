@@ -6,13 +6,13 @@ use rusqlite::{params, Connection};
 use crate::error::CoreError;
 use crate::kad::{KadContact, KadId, KadIndexedNote, KadIndexedSource, KadKeywordEntry};
 
-/// `SELECT COUNT(*)` sur une table interne (nom fixe, jamais d'entrée utilisateur).
+/// `SELECT COUNT(*)` sobre una tabla interna (nombre fijo, nunca una entrada del usuario).
 fn count_rows(conn: &Connection, table: &str) -> Result<usize, CoreError> {
     let count: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
     Ok(count.max(0) as usize)
 }
 
-/// `DELETE` des lignes expirées d'une table d'index Kad (nom fixe interne).
+/// `DELETE` de las filas expiradas de una tabla de índice Kad (nombre fijo interno).
 fn purge_expired(
     conn: &mut Connection,
     table: &str,
@@ -242,8 +242,8 @@ pub fn get_kad_indexed_sources(
     Ok(list)
 }
 
-/// Loads every live indexed source (storage-node rehydration at startup).
-/// Bounded by `limit` to stay under the in-memory store cap.
+/// Carga todas las fuentes indexadas activas (rehidratación del nodo de almacenamiento al inicio).
+/// Acotado por `limit` para permanecer bajo el tope del almacén en memoria.
 pub fn list_all_kad_indexed_sources(
     conn: &Connection,
     now_unix_ms: u64,
@@ -284,7 +284,7 @@ pub fn list_all_kad_indexed_sources(
     Ok(list)
 }
 
-/// Loads every live keyword entry (storage-node rehydration at startup).
+/// Carga todas las entradas de palabras clave activas (rehidratación del nodo de almacenamiento al inicio).
 pub fn list_all_kad_keyword_entries(
     conn: &Connection,
     now_unix_ms: u64,
@@ -419,11 +419,11 @@ pub fn count_kad_keyword_entries(conn: &Connection) -> Result<usize, CoreError> 
 }
 
 // ---------------------------------------------------------------------------
-// Kad notes index (file comments / ratings — storage-node role)
+// Índice de notas Kad (comentarios / valoraciones de archivos — rol de nodo de almacenamiento)
 // ---------------------------------------------------------------------------
 
-/// Upserts note entries keyed by (file_hash, source_id) — one note per
-/// publisher per file, like eMule `CEntry` with `m_bSource = false`.
+/// Inserta o actualiza entradas de notas indexadas por (file_hash, source_id) — una nota por
+/// publicador por archivo, al igual que en eMule `CEntry` con `m_bSource = false`.
 pub fn insert_kad_notes(
     conn: &mut Connection,
     notes: &[KadIndexedNote],
@@ -460,7 +460,7 @@ pub fn insert_kad_notes(
     Ok(inserted)
 }
 
-/// Loads every live note entry (storage-node rehydration at startup).
+/// Carga todas las entradas de notas activas (rehidratación del nodo de almacenamiento al inicio).
 pub fn list_all_kad_notes(
     conn: &Connection,
     now_unix_ms: u64,

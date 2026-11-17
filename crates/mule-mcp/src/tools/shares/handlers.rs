@@ -7,7 +7,7 @@ use crate::client::DaemonClient;
 use crate::protocol::ToolCallResult;
 use serde_json::{json, Value};
 
-/// Dispatches share/source/network tool invocations over JSON-RPC.
+/// Despacha invocaciones de herramientas de compartidos/fuentes/red sobre JSON-RPC.
 pub async fn execute(
     client: &DaemonClient,
     tool_name: &str,

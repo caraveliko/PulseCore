@@ -79,7 +79,7 @@ pub fn inspect_part_met(
     })
 }
 
-/// Returns the `.part.met` companion path for a given `.part` temp path
+/// Devuelve la ruta complementaria `.part.met` para una ruta temporal `.part` dada
 /// (`{id}.part` → `{id}.part.met`).
 pub fn part_met_path_for(temp_path: &Path) -> PathBuf {
     let mut name = temp_path.as_os_str().to_os_string();
@@ -87,10 +87,10 @@ pub fn part_met_path_for(temp_path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// Writes the `.part.met` companion file for an active download, mirroring
-/// eMule `CPartFile::SavePartFile`: version header, file hash + part hashset,
-/// filename/size/transferred/AICH tags, and missing ranges as gap tags.
-/// Best-effort persistence for crash-resume and eMule import compatibility.
+/// Escribe el archivo complementario `.part.met` para una descarga activa, reflejando
+/// `CPartFile::SavePartFile` de eMule: encabezado de versión, hash de archivo + conjunto de hashes de partes,
+/// etiquetas de nombre/tamaño/transferido/AICH y rangos faltantes como etiquetas de hueco.
+/// Persistencia de mejor esfuerzo para reanudación tras fallo y compatibilidad de importación con eMule.
 pub fn save_part_met(db: &Database, act: &ActiveDownload) -> Result<PathBuf, DaemonError> {
     let temp_path = &act.download.temp_path;
     let met_path = part_met_path_for(temp_path);
@@ -122,9 +122,9 @@ pub fn save_part_met(db: &Database, act: &ActiveDownload) -> Result<PathBuf, Dae
         transferred: act.ranges.covered_len(),
         aich_hash: act.download.aich_root,
         gaps,
-        // eMule `SavePartFile` écrit toujours `FT_DLPRIORITY`
-        // (`PR_AUTO`=5 quand `m_bAutoDownPriority`, sinon `m_iDownPriority`)
-        // — plus `FT_MAXSOURCES` quand la limite par fichier existe.
+        // `SavePartFile` de eMule siempre escribe `FT_DLPRIORITY`
+        // (`PR_AUTO`=5 cuando `m_bAutoDownPriority`, si no `m_iDownPriority`)
+        // — además de `FT_MAXSOURCES` cuando existe el límite por archivo.
         tags: {
             let pr: u64 = match act.download.priority.as_str() {
                 "auto" => 5,  // PR_AUTO
@@ -151,16 +151,16 @@ pub fn save_part_met(db: &Database, act: &ActiveDownload) -> Result<PathBuf, Dae
     Ok(met_path)
 }
 
-/// Removes the `.part.met` companion file for a temp path, if present.
-/// Called after successful finalization (eMule deletes it on completion).
+/// Elimina el archivo complementario `.part.met` para una ruta temporal, si está presente.
+/// Invocado tras una finalización exitosa (eMule lo elimina al completarse).
 pub fn delete_part_met(temp_path: &Path) {
     let _ = std::fs::remove_file(part_met_path_for(temp_path));
 }
 
-/// `adopt_source`: when true the source `.part` is renamed (moved) into the
-/// staged `{uuid}.part` path instead of copied — only safe when the source
-/// already lives inside `temp_dir` (startup orphan recovery), where a move
-/// is atomic and avoids duplicating gigabytes. External imports always copy.
+/// `adopt_source`: cuando es true, el `.part` de origen se renombra (mueve) a la
+/// ruta preparada `{uuid}.part` en lugar de copiarse — solo es seguro cuando el origen
+/// ya reside dentro de `temp_dir` (recuperación de huérfanos al inicio), donde un traslado
+/// es atómico y evita duplicar gigabytes. Las importaciones externas siempre se copian.
 #[allow(clippy::too_many_arguments)]
 pub fn import_part_met(
     db: &mut Database,
@@ -246,8 +246,8 @@ pub fn import_part_met(
     let target_path = target_dir.join(&inspection.file_name);
 
     if adopt_source {
-        // Orphan already inside our own temp dir: adopt in place via rename
-        // (atomic move), falling back to copy+delete on exotic filesystems.
+        // Huérfano ya dentro de nuestro propio directorio temporal: adoptar en el lugar mediante renombrado
+        // (traslado atómico), recurriendo a copia+borrado en sistemas de archivos exóticos.
         if std::fs::rename(&actual_part_path, &internal_temp_path).is_err() {
             std::fs::copy(&actual_part_path, &internal_temp_path)
                 .and_then(|_| std::fs::remove_file(&actual_part_path))
@@ -314,7 +314,7 @@ pub fn import_part_met(
         }
     }
 
-    // eMule per-file source limit tag (FT_MAXSOURCES / CPartFile::GetMaxSources).
+    // Etiqueta de límite de fuentes por archivo de eMule (FT_MAXSOURCES / CPartFile::GetMaxSources).
     let max_sources = met
         .tags
         .iter()
@@ -323,9 +323,9 @@ pub fn import_part_met(
         .and_then(|v| u32::try_from(v).ok())
         .filter(|&v| v > 0);
 
-    // eMule `FT_DLPRIORITY` : `PR_AUTO` (5) restaure le flag auto
-    // (`SetAutoDownPriority(true)`, priorité effective initiale HIGH) ;
-    // les valeurs hors low/normal/high retombent sur normal.
+    // `FT_DLPRIORITY` de eMule: `PR_AUTO` (5) restaura el indicador auto
+    // (`SetAutoDownPriority(true)`, prioridad efectiva inicial HIGH);
+    // los valores fuera de low/normal/high recaen en normal.
     let priority = met
         .tags
         .iter()

@@ -22,7 +22,7 @@ fn test_kad_keywords_indexing_and_ttl_purging() {
             file_size: 650_000_000,
             source_count: 25,
             discovered_at_unix_ms: now_ms as i64,
-            expires_at_unix_ms: (now_ms + 3_600_000) as i64, // expires in 1h
+            expires_at_unix_ms: (now_ms + 3_600_000) as i64, // expira en 1 h
         },
         KadKeywordEntry {
             keyword_hash: keyword_hash.clone(),
@@ -31,14 +31,14 @@ fn test_kad_keywords_indexing_and_ttl_purging() {
             file_size: 620_000_000,
             source_count: 10,
             discovered_at_unix_ms: now_ms as i64,
-            expires_at_unix_ms: (now_ms - 1000) as i64, // already expired
+            expires_at_unix_ms: (now_ms - 1000) as i64, // ya expirado
         },
     ];
 
     let count = db.insert_kad_keyword_entries(&entries).expect("insert");
     assert_eq!(count, 2);
 
-    // Get active entries (only unexpired should be returned)
+    // Obtener entradas activas (solo deben devolverse las no expiradas)
     let active = db
         .get_kad_keyword_entries(&keyword_hash, now_ms)
         .expect("get active");
@@ -46,11 +46,11 @@ fn test_kad_keywords_indexing_and_ttl_purging() {
     assert_eq!(active[0].file_name, "debian-12.0.0-amd64-netinst.iso");
     assert_eq!(active[0].source_count, 25);
 
-    // Purge expired
+    // Purgar expirados
     let purged = db.purge_expired_kad_keywords(now_ms).expect("purge");
     assert_eq!(purged, 1);
 
-    // Total count remaining in table is 1
+    // El recuento total restante en la tabla es 1
     let total = db.count_kad_keyword_entries().expect("count");
     assert_eq!(total, 1);
 }

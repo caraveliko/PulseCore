@@ -14,13 +14,13 @@ fn test_corrupted_sqlite_file_fails_explicitly_without_overwriting() {
     let garbage_data = b"Corrupted SQLite header and payload bytes \x00\xFF\xFE\xFD\xAA\x55";
     fs::write(&db_path, garbage_data).expect("write garbage data");
 
-    // Opening a corrupted DB file must return an explicit Sqlite error
+    // Abrir un archivo de BD corrupto debe devolver un error explícito de SQLite
     let res = Database::open(&db_path);
     assert!(res.is_err(), "Opening corrupted DB must fail");
 
     match res.unwrap_err() {
         CoreError::Database(err_msg) => {
-            // Error must be a SQLite error (not a panic or silent success)
+            // El error debe ser un error de SQLite (no un pánico ni un éxito silencioso)
             assert!(
                 err_msg.contains("file is not a database")
                     || err_msg.contains("corrupt")
@@ -32,7 +32,7 @@ fn test_corrupted_sqlite_file_fails_explicitly_without_overwriting() {
         other => panic!("Expected CoreError::Database, got {other:?}"),
     }
 
-    // CRITICAL: The corrupt file MUST NOT have been deleted or overwritten!
+    // CRÍTICO: ¡El archivo corrupto NO DEBE haber sido eliminado ni sobrescrito!
     assert!(
         db_path.exists(),
         "Corrupted DB file must still exist on disk"

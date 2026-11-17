@@ -34,139 +34,139 @@ use mule_protocol::ed2k::protocol::{PR_ED2K, PR_EMULE};
 use crate::services::downloads::DownloadService;
 use crate::services::upload_queue::UploadManager;
 
-/// Minimum interval between two `OP_REASKFILEPING` toward the same
-/// (peer, file) — eMule reasks queued sources roughly every 21 minutes.
+/// Intervalo mínimo entre dos `OP_REASKFILEPING` hacia el mismo
+/// (par, archivo) — eMule vuelve a consultar fuentes en cola aproximadamente cada 21 minutos.
 pub const UDP_REASK_INTERVAL: Duration = Duration::from_secs(21 * 60);
-/// A reask stays "pending" this long awaiting its ack.
+/// Una reconsulta permanece "pendiente" este tiempo aguardando su confirmación (ack).
 const PENDING_TTL: Duration = Duration::from_secs(120);
-/// eMule `UDPReaskForDownload` (`DownloadClient.cpp:1340`) — the failure
-/// guard engages only once more than this many UDP packets were sent to
-/// the peer (`m_nTotalUDPPackets > 3`).
+/// `UDPReaskForDownload` de eMule (`DownloadClient.cpp:1340`) — la protección
+/// contra fallos solo se activa una vez que se han enviado más de este número de paquetes UDP
+/// al par (`m_nTotalUDPPackets > 3`).
 const UDP_GUARD_MIN_ATTEMPTS: u32 = 3;
-/// eMule `m_nFailedUDPPackets / m_nTotalUDPPackets > .3f` — above this
-/// failure ratio (percent) UDP reasks to the peer are abandoned.
+/// `m_nFailedUDPPackets / m_nTotalUDPPackets > .3f` de eMule — por encima de esta
+/// proporción de fallos (porcentaje) se abandonan las reconsultas UDP al par.
 const UDP_GUARD_MAX_FAILED_PERCENT: u32 = 30;
-/// eMule `AllowCalbackRequest` (`ClientList.cpp:921`) — at most one
-/// accepted `OP_DIRECTCALLBACKREQ` per source IP in this window.
+/// `AllowCalbackRequest` de eMule (`ClientList.cpp:921`) — como máximo un
+/// `OP_DIRECTCALLBACKREQ` aceptado por IP de origen en esta ventana.
 const DIRECT_CALLBACK_MIN_INTERVAL: Duration = Duration::from_secs(180);
 
-/// Result of a remote UDP reask, recorded per peer IP.
+/// Resultado de una reconsulta UDP remota, registrado por IP de par.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UdpReaskResult {
-    /// Peer answered `OP_REASKACK` with this queue rank.
+    /// El par respondió `OP_REASKACK` con esta posición en cola.
     Rank(u16),
-    /// Peer answered `OP_QUEUEFULL`.
+    /// El par respondió `OP_QUEUEFULL`.
     QueueFull,
-    /// Peer answered `OP_FILENOTFOUND` — it no longer shares the file.
+    /// El par respondió `OP_FILENOTFOUND` — ya no comparte el archivo.
     FileNotFound,
 }
 
-/// Outbound keep-alive target produced by `PeerSessionManager`.
+/// Destino de mantenimiento de conexión saliente producido por `PeerSessionManager`.
 #[derive(Debug, Clone)]
 pub struct UdpReaskTarget {
-    /// UDP endpoint of the queued source (its announced eMule UDP port).
+    /// Endpoint UDP de la fuente en cola (su puerto UDP de eMule anunciado).
     pub addr: SocketAddr,
-    /// File hash of the queued session.
+    /// Hash de archivo de la sesión en cola.
     pub file_hash: [u8; 16],
-    /// When the underlying TCP session was established — used to apply
-    /// eMule's "last connection attempt older than ~20 min" condition
-    /// before spending a UDP reask.
+    /// Cuándo se estableció la sesión TCP subyacente — utilizado para aplicar
+    /// la condición de eMule de "último intento de conexión anterior a ~20 min"
+    /// antes de gastar una reconsulta UDP.
     pub connected_at_unix_ms: Option<i64>,
-    /// Deadline of the next TCP file re-ask on the queued session —
-    /// eMule `GetTimeUntilReask()`. The coordinator fires the UDP
-    /// re-ask only inside eMule's `(1 s, 2 min)` window before this
-    /// deadline (`PartFile.cpp:2291`).
+    /// Límite de tiempo para la siguiente reconsulta TCP de archivo en la sesión en cola —
+    /// `GetTimeUntilReask()` de eMule. El coordinador lanza la reconsulta
+    /// UDP únicamente dentro de la ventana de `(1 s, 2 min)` de eMule antes de este
+    /// límite (`PartFile.cpp:2291`).
     pub next_tcp_reask_unix_ms: Option<i64>,
 }
 
-/// Compteurs UDP par pair — eMule `m_nTotalUDPPackets` /
-/// `m_nFailedUDPPackets` (`updownclient.h:561-562`).
+/// Contadores UDP por par — `m_nTotalUDPPackets` /
+/// `m_nFailedUDPPackets` de eMule (`updownclient.h:561-562`).
 #[derive(Debug, Default, Clone)]
 struct UdpPeerStats {
-    /// Total `OP_REASKFILEPING` envoyés au pair.
+    /// Total de `OP_REASKFILEPING` enviados al par.
     total: u32,
-    /// Pings restés sans réponse jusqu'au reask suivant.
+    /// Pings que quedaron sin respuesta hasta la siguiente reconsulta.
     failed: u32,
 }
 
 #[derive(Default)]
 struct ClientUdpInner {
     socket: Option<Arc<UdpSocket>>,
-    /// Intervalle de reask : (peer IP, file hash) → sent at (throttle
-    /// `UDP_REASK_INTERVAL`, indépendant de l'attente d'ack).
+    /// Intervalo de reconsulta: (IP de par, hash de archivo) → enviado en (limitación
+    /// `UDP_REASK_INTERVAL`, independiente de la espera de ack).
     pending: HashMap<(IpAddr, [u8; 16]), Instant>,
-    /// Pings en attente d'une réponse (eMule `m_bUDPPending`) — expirés
-    /// après `PENDING_TTL` et alors comptés comme échecs.
+    /// Pings a la espera de una respuesta (`m_bUDPPending` de eMule) — expirados
+    /// tras `PENDING_TTL` y entonces contabilizados como fallos.
     awaiting_ack: HashMap<(IpAddr, [u8; 16]), Instant>,
-    /// Compteurs d'échec par IP (garde 30 % de `UDPReaskForDownload`).
+    /// Contadores de fallos por IP (protección del 30 % de `UDPReaskForDownload`).
     udp_stats: HashMap<IpAddr, UdpPeerStats>,
-    /// Last result per peer IP.
+    /// Último resultado por IP de par.
     results: HashMap<IpAddr, (UdpReaskResult, Instant)>,
-    /// UDP version announced by each queued inbound client (IP → version),
-    /// used to shape the `OP_REASKACK` payload (`sender->GetUDPVersion()`).
+    /// Versión UDP anunciada por cada cliente entrante en cola (IP → versión),
+    /// utilizada para dar formato a la carga útil `OP_REASKACK` (`sender->GetUDPVersion()`).
     client_udp_versions: HashMap<IpAddr, u8>,
-    /// Dernière demande de rappel direct acceptée par IP —
-    /// `listDirectCallbackRequests` eMule (fenêtre 180 s).
+    /// Última solicitud de devolución de llamada directa aceptada por IP —
+    /// `listDirectCallbackRequests` de eMule (ventana de 180 s).
     direct_callbacks: HashMap<IpAddr, Instant>,
 }
 
-/// Shared client UDP service (cloneable handle).
+/// Servicio UDP de cliente compartido (manejador clonable).
 #[derive(Clone, Default)]
 pub struct ClientUdpService {
     inner: Arc<Mutex<ClientUdpInner>>,
     downloads: Arc<std::sync::RwLock<Option<Arc<Mutex<DownloadService>>>>>,
     upload_manager: Arc<std::sync::RwLock<Option<UploadManager>>>,
     peer_session: Arc<std::sync::RwLock<Option<crate::services::peer_session::PeerSessionManager>>>,
-    /// Buddy relay registry — `OP_REASKCALLBACKUDP` datagrams for our buddy
-    /// client's ID are forwarded onto its TCP link as `OP_REASKCALLBACKTCP`.
+    /// Registro de retransmisión buddy — los datagramas `OP_REASKCALLBACKUDP` para el ID de
+    /// cliente de nuestro buddy se reenvían a su enlace TCP como `OP_REASKCALLBACKTCP`.
     buddy: Arc<std::sync::RwLock<Option<Arc<Mutex<crate::services::kad_udp::BuddyRegistry>>>>>,
-    /// Inbound listener used for `connect_back` when a peer asks a
-    /// Kad-firewalled us to dial out (`OP_DIRECTCALLBACKREQ` → eMule
-    /// `TryToConnect`).
+    /// Listener entrante usado para `connect_back` cuando un par nos solicita (estando
+    /// con cortafuegos en Kad) marcar hacia él (`OP_DIRECTCALLBACKREQ` → `TryToConnect`
+    /// de eMule).
     inbound:
         Arc<std::sync::RwLock<Option<crate::services::inbound_listener::InboundListenerService>>>,
-    /// Server session — provides our eD2K `client_id` for the connect-back
-    /// hello (eMule sends its real ID in `TryToConnect`).
+    /// Sesión de servidor — proporciona nuestro `client_id` de eD2K para el hello de
+    /// devolución de conexión (eMule envía su ID real en `TryToConnect`).
     server_session: Arc<std::sync::RwLock<Option<crate::services::ServerSessionManager>>>,
 }
 
 impl ClientUdpService {
-    /// Creates a new unbound service.
+    /// Crea un nuevo servicio no enlazado.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Injects the shared UDP socket once `KadUdpService` is bound.
+    /// Inyecta el socket UDP compartido una vez que `KadUdpService` está enlazado.
     pub async fn set_socket(&self, socket: Arc<UdpSocket>) {
         self.inner.lock().await.socket = Some(socket);
     }
 
-    /// Drops the shared socket reference upon stop/rebind.
+    /// Libera la referencia al socket compartido al detener o reenlazar.
     pub async fn clear_socket(&self) {
         self.inner.lock().await.socket = None;
     }
 
-    /// Injects the download service (shared file lookup).
+    /// Inyecta el servicio de descargas (búsqueda de archivos compartidos).
     pub fn set_downloads(&self, downloads: Arc<Mutex<DownloadService>>) {
         *self.downloads.write().unwrap() = Some(downloads);
     }
 
-    /// Injects the upload queue manager (rank lookup for inbound pings).
+    /// Inyecta el gestor de cola de subidas (búsqueda de rango para pings entrantes).
     pub fn set_upload_manager(&self, mgr: UploadManager) {
         *self.upload_manager.write().unwrap() = Some(mgr);
     }
 
-    /// Injects the peer session manager (rank application + reask bookkeeping).
+    /// Inyecta el gestor de sesiones de pares (aplicación de rango + contabilidad de reconsultas).
     pub fn set_peer_session(&self, mgr: crate::services::peer_session::PeerSessionManager) {
         *self.peer_session.write().unwrap() = Some(mgr);
     }
 
-    /// Injects the buddy relay registry shared with `KadUdpService`.
+    /// Inyecta el registro de retransmisión buddy compartido con `KadUdpService`.
     pub fn set_buddy_registry(&self, reg: Arc<Mutex<crate::services::kad_udp::BuddyRegistry>>) {
         *self.buddy.write().unwrap() = Some(reg);
     }
 
-    /// Injects the inbound listener used for direct-callback connect-back.
+    /// Inyecta el listener entrante utilizado para la devolución de conexión directa.
     pub fn set_inbound_listener(
         &self,
         svc: crate::services::inbound_listener::InboundListenerService,
@@ -174,13 +174,13 @@ impl ClientUdpService {
         *self.inbound.write().unwrap() = Some(svc);
     }
 
-    /// Injects the server session (eD2K `client_id` for connect-back).
+    /// Inyecta la sesión de servidor (`client_id` eD2K para devolución de conexión).
     pub fn set_server_session(&self, svc: crate::services::ServerSessionManager) {
         *self.server_session.write().unwrap() = Some(svc);
     }
 
-    /// Records the UDP version an inbound client announced in its hello,
-    /// so `OP_REASKACK` replies match `sender->GetUDPVersion()` semantics.
+    /// Registra la versión UDP que un cliente entrante anunció en su hello,
+    /// de modo que las respuestas `OP_REASKACK` coincidan con la semántica de `sender->GetUDPVersion()`.
     pub async fn note_client_udp_version(&self, ip: IpAddr, version: u8) {
         self.inner
             .lock()
@@ -189,9 +189,8 @@ impl ClientUdpService {
             .insert(ip, version);
     }
 
-    /// Sends `OP_REASKFILEPING` to `target` unless an equivalent reask was
-    /// sent within [`UDP_REASK_INTERVAL`]. Returns true when a packet went
-    /// out.
+    /// Envía `OP_REASKFILEPING` a `target` salvo que se haya enviado una reconsulta equivalente
+    /// dentro de [`UDP_REASK_INTERVAL`]. Devuelve true cuando un paquete salió.
     pub async fn send_reask_file_ping(
         &self,
         target: &UdpReaskTarget,
@@ -202,9 +201,9 @@ impl ClientUdpService {
         {
             let mut inner = self.inner.lock().await;
 
-            // Un ping sans réponse au-delà de `PENDING_TTL` est un échec —
-            // eMule incrémente `m_nFailedUDPPackets` quand le reask TCP
-            // suivant trouve `m_bUDPPending` encore vrai (`AskForDownload`).
+            // Un ping sin respuesta más allá de `PENDING_TTL` es un fallo —
+            // eMule incrementa `m_nFailedUDPPackets` cuando la reconsulta TCP
+            // siguiente encuentra `m_bUDPPending` todavía como verdadero (`AskForDownload`).
             let mut expired: Vec<IpAddr> = Vec::new();
             inner.awaiting_ack.retain(|(eip, _), at| {
                 if at.elapsed() >= PENDING_TTL {
@@ -218,9 +217,9 @@ impl ClientUdpService {
                 inner.udp_stats.entry(eip).or_default().failed += 1;
             }
 
-            // Garde eMule `UDPReaskForDownload` (`DownloadClient.cpp:1340`) :
-            // après >3 paquets, on cesse les reasks UDP quand plus de 30 %
-            // sont restés sans réponse.
+            // Protección de eMule `UDPReaskForDownload` (`DownloadClient.cpp:1340`):
+            // tras >3 paquetes, se cesan las reconsultas UDP cuando más del 30 %
+            // quedaron sin respuesta.
             if inner.udp_stats.get(&ip).is_some_and(|st| {
                 st.total > UDP_GUARD_MIN_ATTEMPTS
                     && st.failed * 100 > st.total * UDP_GUARD_MAX_FAILED_PERCENT
@@ -233,8 +232,8 @@ impl ClientUdpService {
                 return false;
             }
 
-            // eMule `if (!m_reqfile || m_bUDPPending) return;` — un seul
-            // reask UDP en vol par pair, quel que soit le fichier.
+            // `if (!m_reqfile || m_bUDPPending) return;` de eMule — una sola
+            // reconsulta UDP en vuelo por par, independientemente del archivo.
             if inner.awaiting_ack.keys().any(|(eip, _)| *eip == ip) {
                 return false;
             }
@@ -268,19 +267,19 @@ impl ClientUdpService {
         true
     }
 
-    /// eMule `TryToConnect` step 4 (`BaseClient.cpp:1403-1417`): sends
-    /// `OP_DIRECTCALLBACKREQ` to a TCP-firewalled/UDP-open source that
-    /// announced `SupportsDirectUDPCallback` (connect-options bit 3 in its
-    /// published Kad contact). The peer is expected to dial our TCP port
-    /// back; the inbound connection is adopted via the pending
-    /// `kadcb:`-callback registry.
+    /// Paso 4 de `TryToConnect` de eMule (`BaseClient.cpp:1403-1417`): envía
+    /// `OP_DIRECTCALLBACKREQ` a una fuente con cortafuegos TCP y UDP abierto que
+    /// anunció `SupportsDirectUDPCallback` (bit 3 de opciones de conexión en su
+    /// contacto Kad publicado). Se espera que el par marque de vuelta a nuestro puerto TCP;
+    /// la conexión entrante se adopta a través del registro de devolución de llamada
+    /// pendiente `kadcb:`.
     ///
-    /// `conn_opts` is our `GetMyConnectOptions(true, false)` byte — crypt
-    /// flags only, the direct-callback bit stays clear.
+    /// `conn_opts` es nuestro byte `GetMyConnectOptions(true, false)` — solo indicadores
+    /// de cifrado, el bit de devolución de llamada directa se mantiene a cero.
     ///
-    /// Returns `true` when the UDP socket is live and the datagram was
-    /// dispatched (fire-and-forget, like eMule `SendPacket` — the option
-    /// is then considered exercised for this connect attempt).
+    /// Devuelve `true` cuando el socket UDP está activo y el datagrama fue
+    /// despachado (disparo y olvido, como `SendPacket` de eMule — la opción
+    /// se considera entonces ejercida para este intento de conexión).
     pub async fn send_direct_callback_req(
         &self,
         target: SocketAddr,
@@ -306,11 +305,11 @@ impl ClientUdpService {
         true
     }
 
-    /// Sends an already-framed client-UDP datagram to `target`.
-    /// Used by the `OP_REASKCALLBACKTCP` relay (`ListenSocket.cpp:1391`) :
-    /// the re-ask answer (`REASKACK`/`FILENOTFOUND`/`QUEUEFULL`) goes back
-    /// to the *original requester* address carried in the packet, not to
-    /// the buddy that relayed it. Fire-and-forget like eMule `SendPacket`.
+    /// Envía un datagrama UDP de cliente ya entramado a `target`.
+    /// Utilizado por la retransmisión `OP_REASKCALLBACKTCP` (`ListenSocket.cpp:1391`):
+    /// la respuesta de reconsulta (`REASKACK`/`FILENOTFOUND`/`QUEUEFULL`) vuelve a
+    /// la dirección del *solicitante original* portada en el paquete, no al
+    /// buddy que la retransmitió. Disparo y olvido como `SendPacket` de eMule.
     pub async fn send_raw(&self, target: SocketAddr, datagram: &[u8]) -> bool {
         let socket = { self.inner.lock().await.socket.clone() };
         let Some(socket) = socket else {
@@ -319,7 +318,7 @@ impl ClientUdpService {
         socket.send_to(datagram, target).await.is_ok()
     }
 
-    /// Last recorded UDP reask result for a peer IP.
+    /// Último resultado de reconsulta UDP registrado para una IP de par.
     pub async fn last_result(&self, ip: IpAddr) -> Option<UdpReaskResult> {
         let inner = self.inner.lock().await;
         inner
@@ -329,18 +328,18 @@ impl ClientUdpService {
             .map(|(r, _)| r.clone())
     }
 
-    /// Returns true if the datagram protocol byte belongs to the client
-    /// UDP channel (`PR_EMULE` / `PR_ED2K`, i.e. not Kademlia).
+    /// Devuelve true si el byte de protocolo del datagrama pertenece al canal
+    /// UDP de cliente (`PR_EMULE` / `PR_ED2K`, es decir, no Kademlia).
     pub fn is_client_udp_protocol(proto: u8) -> bool {
         proto == PR_EMULE || proto == PR_ED2K
     }
 
-    /// Handles one inbound client UDP datagram (already policy-filtered by
-    /// the shared socket loop — ipfilter + port at `kad_udp.rs`).
+    /// Gestiona un datagrama UDP de cliente entrante (ya filtrado por políticas por
+    /// el bucle de socket compartido — ipfilter + puerto en `kad_udp.rs`).
     ///
-    /// eMule `ClientUDPSocket.cpp:76` drops packets from banned clients
-    /// (`clientlist->IsBannedClient`) — our corruption-ban list plays that
-    /// role: a banned source cannot reask-ping us either.
+    /// `ClientUDPSocket.cpp:76` de eMule descarta paquetes de clientes baneados
+    /// (`clientlist->IsBannedClient`) — nuestra lista de baneos por corrupción cumple esa
+    /// función: una fuente baneada tampoco puede enviarnos pings de reconsulta.
     pub async fn handle_datagram(&self, peer_addr: SocketAddr, data: &[u8]) {
         let banned = {
             let downloads = self.downloads.read().unwrap().clone();
@@ -398,10 +397,10 @@ impl ClientUdpService {
                     .await
             }
             ClientUdpMessage::PortTest { request } => {
-                // eMule répond au test `0x12` via sa socket TCP de test
-                // dédiée (`SendPortTestReply('1')`) — pas de réponse UDP.
-                // Nous n'implémentons pas l'outil de test de ports :
-                // accusé journalisé uniquement.
+                // eMule responde a la prueba `0x12` a través de su socket TCP de prueba
+                // dedicado (`SendPortTestReply('1')`) — sin respuesta UDP.
+                // No implementamos la herramienta de prueba de puertos:
+                // acuse registrado en log únicamente.
                 tracing::debug!(
                     "Client UDP: OP_PORTTEST 0x{request:02X} from {peer} (no reply — port test tool unsupported)",
                     peer = log_peer_addr(peer_addr)
@@ -416,10 +415,10 @@ impl ClientUdpService {
         }
     }
 
-    /// eMule `case OP_REASKFILEPING` — answer with the queue rank when the
-    /// sender waits in our upload queue for that file, `OP_FILENOTFOUND`
-    /// when the hash is not shared, `OP_QUEUEFULL` when saturated; unknown
-    /// senders are otherwise ignored (forcing a TCP connection).
+    /// `case OP_REASKFILEPING` de eMule — responder con el rango en cola cuando el
+    /// remitente espera en nuestra cola de subida para ese archivo, `OP_FILENOTFOUND`
+    /// cuando el hash no está compartido, `OP_QUEUEFULL` cuando está saturada; los remitentes
+    /// desconocidos son de lo contrario ignorados (forzando una conexión TCP).
     async fn handle_reask_file_ping(&self, peer_addr: SocketAddr, file_hash: [u8; 16]) {
         let hash_hex = hex::encode(file_hash);
 
@@ -435,11 +434,11 @@ impl ClientUdpService {
         };
 
         let mgr = self.upload_manager.read().unwrap().clone();
-        // eMule `GetWaitingClientByIP_UDP` + `md4equ(reqfilehash,
-        // sender->GetUploadFileID())` : le rang n'est révélé qu'au client
-        // effectivement en file **pour ce fichier** — un pair en file pour
-        // un autre fichier (ou plusieurs clients derrière la même IP sans
-        // correspondance de port UDP) ne reçoit aucune réponse.
+        // `GetWaitingClientByIP_UDP` + `md4equ(reqfilehash,
+        // sender->GetUploadFileID())` de eMule: el rango solo se revela al cliente
+        // efectivamente en cola **para este archivo** — un par en cola para
+        // otro archivo (o varios clientes tras la misma IP sin
+        // correspondencia de puerto UDP) no recibe ninguna respuesta.
         let lookup = match &mgr {
             Some(m) => {
                 m.waiting_rank_for_udp(&peer_addr.ip(), peer_addr.port(), &hash_hex)
@@ -454,7 +453,7 @@ impl ClientUdpService {
         } else {
             match lookup {
                 UdpRankLookup::Rank(rank) => {
-                    // eMule `sender->SetLastUpRequest()` sur ping accepté.
+                    // `sender->SetLastUpRequest()` de eMule en ping aceptado.
                     if let Some(m) = &mgr {
                         m.note_udp_reask(&peer_addr.ip()).await;
                     }
@@ -477,8 +476,8 @@ impl ClientUdpService {
                     if nearly_full {
                         client_udp::encode_queue_full()
                     } else {
-                        // eMule: "Don't answer him. Force him to establish
-                        // a TCP connection."
+                        // eMule: "No responderle. Forzarle a establecer
+                        // una conexión TCP."
                         return;
                     }
                 }
@@ -510,11 +509,11 @@ impl ClientUdpService {
         }
     }
 
-    /// eMule `case OP_REASKCALLBACKUDP` — when the datagram targets our
-    /// buddy client's ID, forward it on the buddy TCP link as
+    /// `case OP_REASKCALLBACKUDP` de eMule — cuando el datagrama va dirigido al ID de
+    /// nuestro cliente buddy, reenviarlo en el enlace TCP del buddy como
     /// `OP_REASKCALLBACKTCP`: `[requester_ip:4][requester_udp:2][file_hash:16]
-    /// [part_status..]` (eMule pokes ip/port at payload+10 then copies from
-    /// there — bytes 10..16 of the buddy ID are replaced).
+    /// [part_status..]` (eMule inserta ip/puerto en payload+10 y luego copia desde
+    /// allí — se reemplazan los bytes 10..16 del ID del buddy).
     async fn handle_reask_callback(
         &self,
         peer_addr: SocketAddr,
@@ -564,11 +563,11 @@ impl ClientUdpService {
         }
     }
 
-    /// eMule `case OP_DIRECTCALLBACKREQ` — a peer that cannot reach us
-    /// over TCP asks us (as a Kad-firewalled node) to dial out to it.
-    /// Honoured only while our Kad UDP firewall status is `Firewalled`
-    /// (`CKademlia::IsRunning() && IsFirewalled()`), rate-limited to one
-    /// accepted request per IP per `DIRECT_CALLBACK_MIN_INTERVAL`
+    /// `case OP_DIRECTCALLBACKREQ` de eMule — un par que no puede alcanzarnos
+    /// por TCP nos pide (como nodo con cortafuegos Kad) que conectemos hacia él.
+    /// Atendido únicamente mientras nuestro estado de cortafuegos UDP Kad sea `Firewalled`
+    /// (`CKademlia::IsRunning() && IsFirewalled()`), con límite de tasa a una
+    /// solicitud aceptada por IP por `DIRECT_CALLBACK_MIN_INTERVAL`
     /// (`AllowCalbackRequest`, 180 s).
     async fn handle_direct_callback_req(
         &self,
@@ -577,7 +576,7 @@ impl ClientUdpService {
         user_hash: [u8; 16],
         conn_opts: u8,
     ) {
-        // Rate limit — eMule drops repeat requesters inside the window.
+        // Límite de tasa — eMule descarta solicitudes repetidas dentro de la ventana.
         {
             let mut inner = self.inner.lock().await;
             let now = Instant::now();
@@ -593,16 +592,16 @@ impl ClientUdpService {
             }
         }
 
-        // Gate — eMule accepts only when `CKademlia::IsRunning() &&
+        // Compuerta — eMule solo acepta cuando `CKademlia::IsRunning() &&
         // CKademlia::IsFirewalled()` (`ClientUDPSocket.cpp:373`).
         // `CKademlia::IsFirewalled()` (Kademlia.cpp:324 →
-        // `CPrefs::GetFirewalled`) is the Kad-TCP verdict — contacts
-        // confirmed our TCP port unreachable — NOT the UDP firewall tester:
-        // the mechanism targets TCP-dead/UDP-alive (full-cone NAT) nodes,
-        // so the UDP state must not gate reception. eMule defaults to
-        // firewalled until two contacts report us open; we don't run the
-        // outbound Kad-TCP check, so `!is_high_id` (server-assigned LowID)
-        // is our TCP-side proxy.
+        // `CPrefs::GetFirewalled`) es el veredicto Kad-TCP — los contactos
+        // confirmaron que nuestro puerto TCP era inalcanzable — NO el comprobador de cortafuegos UDP:
+        // el mecanismo está destinado a nodos TCP inactivo / UDP activo (NAT full-cone),
+        // por lo que el estado UDP no debe condicionar la recepción. eMule asume con cortafuegos
+        // por defecto hasta que dos contactos nos reporten abiertos; nosotros no ejecutamos
+        // la comprobación saliente Kad-TCP, por lo que `!is_high_id` (LowID asignado por el servidor)
+        // es nuestro sustituto del lado TCP.
         let kad_running = { self.inner.lock().await.socket.is_some() };
         let server_session = { self.server_session.read().unwrap().clone() };
         let (our_id, is_high_id) = match server_session {
@@ -624,7 +623,7 @@ impl ClientUdpService {
             return;
         };
 
-        // eMule `AddTrackCallbackRequests` — tracked only once accepted.
+        // `AddTrackCallbackRequests` de eMule — registrado solo una vez aceptado.
         self.inner
             .lock()
             .await
@@ -638,9 +637,9 @@ impl ClientUdpService {
             target = log_peer_addr(target)
         );
         tokio::spawn(async move {
-            // server_ip/port: inconnus hors session serveur — `0` est le
-            // fallback utilisé par `sx_local_ids` quand on n'est pas
-            // connecté à un serveur.
+            // server_ip/port: desconocidos fuera de sesión de servidor — `0` es el
+            // respaldo utilizado por `sx_local_ids` cuando no se está
+            // conectado a un servidor.
             if let Err(e) = inbound
                 .connect_back(target, Some(user_hash), conn_opts, our_id, 0, 0)
                 .await
@@ -653,22 +652,22 @@ impl ClientUdpService {
         });
     }
 
-    /// Validates an ack against pending reasks and applies the rank to the
-    /// queued peer session (eMule `sender->UDPReaskACK(nRank)`).
+    /// Valida un ack contra las reconsultas pendientes y aplica el rango a la
+    /// sesión de par en cola (`sender->UDPReaskACK(nRank)` de eMule).
     async fn handle_reask_ack(
         &self,
         peer_addr: SocketAddr,
         result: UdpReaskResult,
         part_status: Option<client_udp::UdpPartStatus>,
     ) {
-        // Hash du fichier pour lequel le ping était en vol — eMule le
-        // retrouve via `sender->m_reqfile` ; un seul ping en vol par pair
-        // (`m_bUDPPending`), on retire donc toutes les entrées de l'IP et
-        // on garde le hash pour les traitements FNF / part-status.
+        // Hash del archivo para el cual el ping estaba en vuelo — eMule lo
+        // localiza mediante `sender->m_reqfile`; un solo ping en vuelo por par
+        // (`m_bUDPPending`), por lo que retiramos todas las entradas de la IP y
+        // conservamos el hash para los procesamientos de FNF / estado de partes.
         let (had_pending, pending_hash) = {
             let mut inner = self.inner.lock().await;
-            // Ack attendu = ping encore dans sa fenêtre `PENDING_TTL` —
-            // eMule `m_bUDPPending` (remis à faux par `UDPReaskACK`).
+            // Ack esperado = ping todavía en su ventana `PENDING_TTL` —
+            // `m_bUDPPending` de eMule (restablecido a falso por `UDPReaskACK`).
             let key_exists = inner
                 .awaiting_ack
                 .iter()
@@ -708,26 +707,26 @@ impl ClientUdpService {
         let ps = self.peer_session.read().unwrap().clone();
         match result {
             UdpReaskResult::Rank(rank) => {
-                // eMule `SetRemoteQueueFull(false)` + `UDPReaskACK(nRank)`.
+                // `SetRemoteQueueFull(false)` + `UDPReaskACK(nRank)` de eMule.
                 if let Some(ps) = ps {
                     ps.apply_udp_queue_rank(&peer_addr.ip(), rank as u32).await;
                 }
-                // UDP ver > 3 : `ProcessFileStatus` — le bitfield décrit
-                // les parts que le pair possède du fichier requis ; il
-                // alimente la rareté (`m_SrcPartFrequency`).
+                // UDP ver > 3: `ProcessFileStatus` — el mapa de bits describe
+                // las partes que el par posee del archivo solicitado; alimenta
+                // la rareza (`m_SrcPartFrequency`).
                 if let (Some(status), Some(hash)) = (part_status, pending_hash) {
                     self.apply_ack_part_status(peer_addr, hash, status).await;
                 }
             }
             UdpReaskResult::QueueFull => {
-                // eMule `SetRemoteQueueFull(true)` + `UDPReaskACK(0)`.
+                // `SetRemoteQueueFull(true)` + `UDPReaskACK(0)` de eMule.
                 if let Some(ps) = ps {
                     ps.apply_udp_queue_full(&peer_addr.ip()).await;
                 }
             }
             UdpReaskResult::FileNotFound => {
-                // eMule `UDPReaskFNF` : la source est « deadlistée » pour
-                // ce fichier et retirée des sources.
+                // `UDPReaskFNF` de eMule: la fuente es marcada en la lista muerta para
+                // este archivo y retirada de las fuentes.
                 if let Some(ps) = ps {
                     ps.apply_udp_file_not_found(&peer_addr.ip()).await;
                 }
@@ -738,9 +737,9 @@ impl ClientUdpService {
         }
     }
 
-    /// eMule `ProcessFileStatus(true, data_in, reqfile)` : applique le
-    /// bitfield de parts annoncé par le pair à sa disponibilité pour le
-    /// fichier requis (rareté `m_SrcPartFrequency` + statut persisté).
+    /// `ProcessFileStatus(true, data_in, reqfile)` de eMule: aplica el
+    /// mapa de bits de partes anunciado por el par a su disponibilidad para el
+    /// archivo solicitado (rareza `m_SrcPartFrequency` + estado persistido).
     async fn apply_ack_part_status(
         &self,
         peer_addr: SocketAddr,
@@ -768,8 +767,8 @@ impl ClientUdpService {
         let Some(dl_id) = dl.find_by_ed2k_hash(&hash_hex).map(|s| s.id) else {
             return;
         };
-        // La session TCP du pair (le port UDP du datagramme ≠ le port TCP
-        // de la connexion) : on retrouve sa `ActiveSource` par IP.
+        // La sesión TCP del par (el puerto UDP del datagrama ≠ el puerto TCP
+        // de la conexión): localizamos su `ActiveSource` por IP.
         if let Some(src_addr) = dl
             .get_sources(&dl_id)
             .and_then(|srcs| srcs.keys().find(|a| a.ip() == peer_addr.ip()).copied())
@@ -796,9 +795,9 @@ impl ClientUdpService {
         }
     }
 
-    /// eMule `UDPReaskFNF` — `m_DeadSourceList.AddDeadSource` : le pair a
-    /// répondu `OP_FILENOTFOUND` pour le fichier requis ; la source est
-    /// marquée morte (statut `Failed`, hors du srclist — deadlist eMule).
+    /// `UDPReaskFNF` de eMule — `m_DeadSourceList.AddDeadSource`: el par ha
+    /// respondido `OP_FILENOTFOUND` para el archivo solicitado; la fuente queda
+    /// marcada como muerta (estado `Failed`, fuera de la lista de fuentes — lista muerta de eMule).
     async fn mark_source_file_not_found(&self, peer_addr: SocketAddr, file_hash: [u8; 16]) {
         let Some(dl_arc) = self.downloads.read().unwrap().clone() else {
             return;
@@ -854,10 +853,10 @@ mod tests {
         svc
     }
 
-    /// Vieillit les entrées internes comme si le ping précédent n'avait
-    /// jamais reçu de réponse : `pending` au-delà de `UDP_REASK_INTERVAL`
-    /// (le throttle laisse repasser l'appel) et `awaiting_ack` au-delà de
-    /// `PENDING_TTL` (compté comme échec au prochain `send`).
+    /// Envejece las entradas internas como si el ping anterior no hubiera
+    /// recibido respuesta jamás: `pending` más allá de `UDP_REASK_INTERVAL`
+    /// (la limitación permite el reintento) y `awaiting_ack` más allá de
+    /// `PENDING_TTL` (contabilizado como fallo en el próximo `send`).
     async fn age_out(svc: &ClientUdpService) {
         let mut inner = svc.inner.lock().await;
         for at in inner.pending.values_mut() {
@@ -868,15 +867,15 @@ mod tests {
         }
     }
 
-    /// eMule `UDPReaskForDownload` : après >3 paquets et >30 % d'échecs,
-    /// le pair n'est plus sollicité en UDP (`DownloadClient.cpp:1340`).
+    /// `UDPReaskForDownload` de eMule: tras >3 paquetes y >30 % de fallos,
+    /// el par ya no es solicitado por UDP (`DownloadClient.cpp:1340`).
     #[tokio::test]
     async fn udp_failure_ratio_guard_stops_reasks() {
         let svc = bound_service().await;
         let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
         let t = target(ip, [0xAA; 16]);
 
-        // 4 pings tous restés sans réponse → 100 % d'échecs.
+        // 4 pings que permanecieron sin respuesta → 100 % de fallos.
         for _ in 0..4 {
             assert!(svc.send_reask_file_ping(&t, 0).await);
             age_out(&svc).await;
@@ -892,12 +891,12 @@ mod tests {
         assert_eq!(stats.total, 4);
         assert_eq!(stats.failed, 3); // le 4e échec est compté au send suivant
 
-        // 5e appel : le 4e ping expire → failed=4, total=4>3, ratio 100 %
-        // > 30 % → la garde bloque l'envoi.
+        // 5.º intento: el 4.º ping expira → failed=4, total=4>3, ratio 100 %
+        // > 30 % → la protección bloquea el envío.
         assert!(!svc.send_reask_file_ping(&t, 0).await);
     }
 
-    /// Ratio ≤ 30 % : les reasks UDP continuent (1 échec sur 4 = 25 %).
+    /// Proporción ≤ 30 %: las reconsultas UDP continúan (1 fallo de 4 = 25 %).
     #[tokio::test]
     async fn udp_reasks_continue_below_failure_threshold() {
         let svc = bound_service().await;
@@ -905,7 +904,7 @@ mod tests {
         let t = target(ip, [0xBB; 16]);
         let peer_addr = t.addr;
 
-        // 4 pings : 3 acks + 1 silence.
+        // 4 pings: 3 acks + 1 silencio.
         for round in 0..4 {
             assert!(svc.send_reask_file_ping(&t, 0).await);
             if round < 3 {
@@ -915,12 +914,12 @@ mod tests {
             age_out(&svc).await;
         }
 
-        // total=4, failed=1 → 25 % ≤ 30 % : le reask suivant est permis.
+        // total=4, failed=1 → 25 % ≤ 30 %: la siguiente reconsulta está permitida.
         assert!(svc.send_reask_file_ping(&t, 0).await);
     }
 
-    /// `m_bUDPPending` : tant qu'un ack peut encore arriver, aucun nouveau
-    /// ping ne part vers ce pair (même pour un autre fichier).
+    /// `m_bUDPPending`: mientras un ack pueda todavía llegar, ningún nuevo
+    /// ping sale hacia este par (incluso para otro archivo).
     #[tokio::test]
     async fn udp_pending_blocks_second_ping_same_peer() {
         let svc = bound_service().await;
@@ -932,7 +931,7 @@ mod tests {
         assert!(!svc.send_reask_file_ping(&t2, 0).await);
     }
 
-    /// Un ack non sollicité (aucun ping en attente) est ignoré.
+    /// Un ack no solicitado (ningún ping en espera) es ignorado.
     #[tokio::test]
     async fn udp_unsolicited_ack_ignored() {
         let svc = bound_service().await;

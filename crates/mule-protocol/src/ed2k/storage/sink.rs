@@ -13,9 +13,9 @@ use super::types::{Ed2kBlockWriter, Ed2kPartDownloadStatus, Ed2kPartResumeState}
 use crate::ed2k::packet::{Ed2kBlockRange, Ed2kSendingPart};
 use crate::ed2k::sequencer::{Ed2kDownloadSequencer, Ed2kSequencerError};
 
-/// Persistent physical storage sink for assembling downloaded eD2K chunks into a `.part` file.
+/// Sumidero de almacenamiento físico persistente para ensamblar fragmentos eD2K descargados en un archivo `.part`.
 ///
-/// Ensures crash consistency with an atomic companion `.resume.json` state journal.
+/// Garantiza la coherencia ante caídas mediante un diario de estado complementario atómico `.resume.json`.
 #[derive(Debug)]
 pub struct Ed2kPartFileSink {
     part_file_path: PathBuf,
@@ -27,7 +27,7 @@ pub struct Ed2kPartFileSink {
 }
 
 impl Ed2kPartFileSink {
-    /// Creates a new `.part` file and associated `.resume.json` journal.
+    /// Crea un nuevo archivo `.part` y el diario `.resume.json` asociado.
     pub fn create_new(
         part_file_path: PathBuf,
         file_hash: [u8; 16],
@@ -67,7 +67,7 @@ impl Ed2kPartFileSink {
         })
     }
 
-    /// Opens an existing `.part` file or resumes an existing download session.
+    /// Abre un archivo `.part` existente o reanuda una sesión de descarga existente.
     pub fn open_or_resume(
         part_file_path: PathBuf,
         file_hash: [u8; 16],
@@ -137,47 +137,47 @@ impl Ed2kPartFileSink {
         })
     }
 
-    /// Path to the on-disk `.part` file.
+    /// Ruta al archivo `.part` en disco.
     pub fn part_file_path(&self) -> &Path {
         &self.part_file_path
     }
 
-    /// 16-byte MD4 file hash.
+    /// Hash MD4 de archivo de 16 bytes.
     pub fn file_hash(&self) -> [u8; 16] {
         self.file_hash
     }
 
-    /// Total expected file size in bytes.
+    /// Tamaño total esperado del archivo en bytes.
     pub fn file_size(&self) -> u64 {
         self.file_size
     }
 
-    /// Path to the companion `.resume.json` state journal.
+    /// Ruta al diario de estado complementario `.resume.json`.
     pub fn resume_file_path(&self) -> &Path {
         &self.resume_file_path
     }
 
-    /// Reference to the active in-memory resume journal state.
+    /// Referencia al estado activo del diario de reanudación en memoria.
     pub fn resume_state(&self) -> &Ed2kPartResumeState {
         &self.resume_state
     }
 
-    /// Current download and promotion status.
+    /// Estado actual de descarga y promoción.
     pub fn status(&self) -> Ed2kPartDownloadStatus {
         self.resume_state.status
     }
 
-    /// Returns the list of completed half-open byte intervals `[start, end)`.
+    /// Devuelve la lista de intervalos de bytes semiabiertos completados `[start, end)`.
     pub fn completed_ranges(&self) -> &[(u64, u64)] {
         &self.resume_state.completed_ranges
     }
 
-    /// Returns the total cumulative bytes received and written to disk.
+    /// Devuelve el total acumulado de bytes recibidos y escritos en disco.
     pub fn total_bytes_received(&self) -> u64 {
         self.resume_state.total_bytes_received
     }
 
-    /// Checks if any byte in `[start, end)` overlaps with already completed intervals.
+    /// Comprueba si algún byte en `[start, end)` se solapa con intervalos ya completados.
     pub fn has_overlap(&self, start: u64, end: u64) -> bool {
         self.resume_state
             .completed_ranges
@@ -185,7 +185,7 @@ impl Ed2kPartFileSink {
             .any(|&(s, e)| s < end && start < e)
     }
 
-    /// Flushes file buffers and syncs both the data file and resume state to disk.
+    /// Vacía los búferes de archivo y sincroniza tanto el archivo de datos como el estado de reanudación en disco.
     pub fn flush_and_sync(&mut self) -> Result<(), Ed2kSequencerError> {
         if let Some(file) = self.file.as_mut() {
             file.flush()
@@ -197,7 +197,7 @@ impl Ed2kPartFileSink {
         Ok(())
     }
 
-    /// Returns true if the specified part index is completely received on disk.
+    /// Devuelve verdadero si el índice de parte especificado se ha recibido por completo en disco.
     pub fn is_part_complete(
         &self,
         part_index: u16,
@@ -207,13 +207,13 @@ impl Ed2kPartFileSink {
         Ok(self.has_range(p_start, p_end))
     }
 
-    /// Returns true if the entire file `[0, sequencer.file_size())` is completely received on disk.
+    /// Devuelve verdadero si el archivo completo `[0, sequencer.file_size())` se ha recibido por completo en disco.
     pub fn is_file_complete(&self, sequencer: &Ed2kDownloadSequencer) -> bool {
         self.has_range(0, sequencer.file_size())
     }
 
-    /// Computes the 16-byte MD4 checksum of the specified part by streaming bytes directly
-    /// from disk in 64 KiB chunks into the hasher.
+    /// Calcula la suma de comprobación MD4 de 16 bytes de la parte especificada transmitiendo bytes directamente
+    /// desde el disco en fragmentos de 64 KiB hacia el generador de hash.
     pub fn compute_part_md4(
         &mut self,
         part_index: u16,
@@ -251,7 +251,7 @@ impl Ed2kPartFileSink {
         Ok(digest)
     }
 
-    /// Computes the complete 16-byte eD2K root hash of the file by streaming parts from disk.
+    /// Calcula el hash raíz eD2K completo de 16 bytes del archivo transmitiendo partes desde el disco.
     pub fn compute_file_ed2k_hash(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,
@@ -278,8 +278,8 @@ impl Ed2kPartFileSink {
         }
     }
 
-    /// Verifies the complete file integrity against expected `self.file_hash`,
-    /// transitions the resume state to `VerifiedPendingPromotion`, and persists it to disk.
+    /// Verifica la integridad completa del archivo frente al `self.file_hash` esperado,
+    /// realiza la transición del estado de reanudación a `VerifiedPendingPromotion` y lo persiste en disco.
     pub fn mark_verified_pending_promotion(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,
@@ -297,7 +297,7 @@ impl Ed2kPartFileSink {
         Ok(computed_hash)
     }
 
-    /// Two-phase crash-resilient promotion: moves the validated `.part` file to `destination_dir/final_file_name`.
+    /// Promoción resiliente a caídas en dos fases: traslada el archivo `.part` validado a `destination_dir/final_file_name`.
     pub fn promote_to_destination(
         &mut self,
         destination_dir: &Path,
@@ -364,7 +364,7 @@ impl Ed2kPartFileSink {
         Ok(target_file_path)
     }
 
-    /// Validates and writes an incoming chunk into the `.part` file, updating and syncing the `.resume.json` journal.
+    /// Valida y escribe un fragmento entrante en el archivo `.part`, actualizando y sincronizando el diario `.resume.json`.
     pub fn write_block(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,
@@ -392,7 +392,7 @@ impl Ed2kPartFileSink {
         Ok(range)
     }
 
-    /// Checks if a byte range `[start, end)` has already been completely received and written to disk.
+    /// Comprueba si un rango de bytes `[start, end)` ya se ha recibido y escrito por completo en disco.
     pub fn has_range(&self, start: u64, end: u64) -> bool {
         Ed2kDownloadSequencer::is_range_in_list(start, end, &self.resume_state.completed_ranges)
     }

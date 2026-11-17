@@ -120,7 +120,7 @@ fn test_capacity_lifecycle_timeouts_and_rejections() {
     assert!(tracker.can_request());
     assert_eq!(tracker.len(), 7);
 
-    // 2. Legitimate rejection frees slot and returns request
+    // 2. Un rechazo legítimo libera la ranura y devuelve la petición
     let rejected_req = tracker
         .handle_rejection(&file_hash, 1000)
         .expect("valid rejection");

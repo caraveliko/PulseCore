@@ -19,17 +19,17 @@ fn now_ms() -> i64 {
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mkv", "mp4", "avi", "m4v", "mov", "wmv", "flv", "ts",
 ];
-/// Taille minimale d'un fichier vidéo autonome dans un dossier incoming supplémentaire (50 Mio).
+/// Tamaño mínimo de un archivo de vídeo independiente en una carpeta entrante adicional (50 MiB).
 const MIN_STANDALONE_VIDEO_BYTES: u64 = 50 * 1024 * 1024;
-/// Taille maximale considérée como extrait « sample / trailer » (85 Mio).
+/// Tamaño máximo considerado como extracto «sample / trailer» (85 MiB).
 const MAX_SAMPLE_VIDEO_BYTES: u64 = 85 * 1024 * 1024;
 
-/// Fix Latin-1 / UTF-8 Mojibake in filenames (e.g. "La cabaÃ±a" -> "La cabaña")
+/// Corrige el mojibake Latin-1 / UTF-8 en nombres de archivo (ej. "La cabaÃ±a" -> "La cabaña")
 pub fn fix_mojibake(s: &str) -> String {
     mule_format::fix_mojibake(s)
 }
 
-/// Extract year from string e.g. "La cabaña (2017)" or "Oddity.2024.1080p"
+/// Extrae el año de una cadena, ej. "La cabaña (2017)" o "Oddity.2024.1080p"
 pub fn extract_year(name: &str) -> Option<u32> {
     if let Some(open) = name.find('(') {
         let rest = &name[open + 1..];
@@ -63,7 +63,7 @@ pub fn extract_year(name: &str) -> Option<u32> {
     None
 }
 
-/// Clean movie title from filename, stripping year and common tags
+/// Limpia el título de la película a partir del nombre de archivo, eliminando el año y etiquetas comunes
 pub fn clean_movie_title(name: &str) -> String {
     let mut title = name.split('(').next().unwrap_or(name);
     if let Some(pos) = title.find('[') {
@@ -88,7 +88,7 @@ pub fn clean_movie_title(name: &str) -> String {
         .trim()
         .to_string();
 
-    // If title ends with a 4-digit year e.g. "Oddity 2024", strip the year
+    // Si el título termina con un año de 4 dígitos ej. "Oddity 2024", eliminar el año
     let words: Vec<&str> = cleaned.split_whitespace().collect();
     if let Some(last) = words.last() {
         if last.len() == 4 {
@@ -103,7 +103,7 @@ pub fn clean_movie_title(name: &str) -> String {
     cleaned.trim().to_string()
 }
 
-/// Sanitize filename characters forbidden in Linux / Unix filesystems or standard media players
+/// Sanea caracteres de nombre de archivo prohibidos en sistemas de archivos Linux / Unix o reproductores estándar
 pub fn sanitize_name(name: &str) -> String {
     name.replace(':', " -")
         .replace(['/', '\\'], "-")
@@ -113,7 +113,7 @@ pub fn sanitize_name(name: &str) -> String {
         .to_string()
 }
 
-/// Resolve existing series folder on disk if one already exists, otherwise construct canonical name
+/// Resuelve la carpeta de serie existente en disco si ya existe una; de lo contrario construye el nombre canónico
 pub fn resolve_series_folder_name(
     root_folder: &Path,
     series_title: &str,
@@ -158,7 +158,7 @@ pub fn resolve_series_folder_name(
     }
 }
 
-/// Detect quality tag from filename
+/// Detecta la etiqueta de calidad a partir del nombre de archivo
 pub fn detect_quality_tag(filename: &str) -> &'static str {
     let lower = filename.to_lowercase();
     if lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") {
@@ -172,8 +172,8 @@ pub fn detect_quality_tag(filename: &str) -> &'static str {
     }
 }
 
-/// Perform hardlink from source to target (or copy on EXDEV) and remove source from incoming
-/// so zero duplicate files or residues remain in incoming.
+/// Realiza un enlace duro desde el origen al destino (o copia en caso de EXDEV) y elimina el origen de incoming
+/// para que no queden archivos duplicados ni residuos en incoming.
 pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<()> {
     let src = source.to_path_buf();
     let tgt = target.to_path_buf();
@@ -184,7 +184,7 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<(
         if tgt.exists() {
             if let (Ok(src_meta), Ok(tgt_meta)) = (std::fs::metadata(&src), std::fs::metadata(&tgt)) {
                 if src_meta.len() == tgt_meta.len() {
-                    // Target already has the organized file; remove source from incoming
+                    // El destino ya contiene el archivo organizado; eliminar origen de incoming
                     if src.exists() {
                         let _ = std::fs::remove_file(&src);
                         info!(
@@ -218,7 +218,7 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<(
                 Ok(())
             }
             Err(e) if e.raw_os_error() == Some(18) => {
-                // EXDEV: Cross-device link, incoming and media library are on separate mounts/filesystems
+                // EXDEV: Enlace entre dispositivos cruzados, incoming y la mediateca están en montajes/sistemas de archivos separados
                 info!(
                     "[ORGANIZER] Cross-device boundary (EXDEV); falling back to optimized NAS/local transfer and removing source to leave zero residues on host: '{}' -> '{}'",
                     src.display(),
@@ -242,7 +242,7 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<(
     .unwrap_or_else(|e| Err(std::io::Error::other(e)))
 }
 
-/// Remove companion subtitle files (.srt, .sub, .vtt) associated with a superseded video file
+/// Elimina archivos de subtítulos complementarios (.srt, .sub, .vtt) asociados con un archivo de vídeo reemplazado
 pub fn remove_companion_subtitles_sync(video_path: &Path) {
     let Some(stem) = video_path.file_stem().and_then(|s| s.to_str()) else {
         return;
@@ -265,8 +265,8 @@ pub fn remove_companion_subtitles_sync(video_path: &Path) {
     }
 }
 
-/// Remove any superseded video files in `season_dir` that match the same `(season_num, ep_num)`
-/// as `dest_file` (or match `old_file_path`), along with their companion subtitles.
+/// Elimina cualquier archivo de vídeo reemplazado en `season_dir` que coincida con el mismo `(season_num, ep_num)`
+/// que `dest_file` (o coincida con `old_file_path`), junto con sus subtítulos complementarios.
 fn purge_superseded_episode_files(
     season_dir: &Path,
     season_num: u32,
@@ -315,8 +315,8 @@ fn purge_superseded_episode_files(
     }
 }
 
-/// Remove any superseded video files in `movie_dir` other than `dest_file` (and `old_file_path`),
-/// along with their companion subtitles.
+/// Elimina cualquier archivo de vídeo reemplazado en `movie_dir` distinto de `dest_file` (y `old_file_path`),
+/// junto con sus subtítulos complementarios.
 fn purge_superseded_movie_files(
     movie_dir: &Path,
     dest_file: &Path,
@@ -356,7 +356,7 @@ fn purge_superseded_movie_files(
     }
 }
 
-/// Returns true if `path` is already organized inside a subdirectory of `movies_dir` or `series_dir`.
+/// Devuelve true si `path` ya está organizado dentro de un subdirectorio de `movies_dir` o `series_dir`.
 pub fn is_already_in_organized_library(state: &AppState, path: &Path) -> bool {
     for lib_root in [&state.config.movies_dir, &state.config.series_dir] {
         if path.starts_with(lib_root) && path.parent() != Some(lib_root.as_path()) {
@@ -366,7 +366,7 @@ pub fn is_already_in_organized_library(state: &AppState, path: &Path) -> bool {
     false
 }
 
-/// Copies or hardlinks companion subtitle files (.srt, .sub, .vtt) if present alongside video
+/// Copia o crea enlaces duros para archivos de subtítulos complementarios (.srt, .sub, .vtt) si están presentes junto al vídeo
 async fn copy_companion_subtitles(source_video: &Path, dest_video: &Path) {
     let src_stem = match source_video.file_stem().and_then(|s| s.to_str()) {
         Some(s) => s,
@@ -396,7 +396,7 @@ async fn copy_companion_subtitles(source_video: &Path, dest_video: &Path) {
 pub struct MediaOrganizer;
 
 impl MediaOrganizer {
-    /// Notify local media servers (Jellyfin, Plex) to refresh their libraries
+    /// Notifica a los servidores de medios locales (Jellyfin, Plex) para refrescar sus bibliotecas
     pub fn notify_media_servers(state: &AppState) {
         if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
             return;
@@ -429,7 +429,7 @@ impl MediaOrganizer {
         });
     }
 
-    /// Organize a single completed file by its download ID
+    /// Organiza un único archivo completado mediante su ID de descarga
     pub async fn organize_download(
         state: &AppState,
         download_id: &str,
@@ -439,7 +439,7 @@ impl MediaOrganizer {
             return Ok(None);
         }
 
-        // Skip files that are already organized inside a movie or series subfolder
+        // Omitir archivos que ya están organizados dentro de una subcarpeta de película o serie
         if is_already_in_organized_library(state, completed_file_path) {
             return Ok(None);
         }
@@ -453,7 +453,7 @@ impl MediaOrganizer {
             return Ok(None);
         }
 
-        // Reject sample / trailer clips from being organized as full episodes or movies
+        // Rechazar clips de muestra / tráiler para evitar organizarlos como episodios o películas completos
         if let Some(fname) = completed_file_path.file_name().and_then(|n| n.to_str()) {
             let lower = fname.to_lowercase();
             let size = completed_file_path.metadata().map(|m| m.len()).unwrap_or(0);
@@ -474,7 +474,7 @@ impl MediaOrganizer {
         let now = now_ms();
         let quality = detect_quality_tag(&completed_file_path.to_string_lossy());
 
-        // 1. Check if download corresponds to a TV Episode
+        // 1. Comprobar si la descarga corresponde a un episodio de TV
         let ep_match = {
             let dl_svc = state.downloads.lock().await;
             dl_svc.db().find_episode_by_download_id(download_id).ok().flatten()
@@ -543,7 +543,7 @@ impl MediaOrganizer {
                         now,
                     );
 
-                    // If all monitored episodes are now completed, mark series as completed
+                    // Si todos los episodios monitorizados están ahora completados, marcar la serie como completada
                     let all_eps = dl_svc.db().get_episodes_for_media(&series.id).unwrap_or_default();
                     let remaining = all_eps.iter().filter(|e| e.monitored && e.status != "completed").count();
                     if remaining == 0 {
@@ -557,7 +557,7 @@ impl MediaOrganizer {
                     series.title, ep.season_number, ep.episode_number, dest_str
                 );
 
-                // Auto-fetch Spanish subtitles in background (Bazarr feature)
+                // Obtener subtítulos en español en segundo plano automáticamente (funcionalidad de Bazarr)
                 let sub_target = dest_file.clone();
                 let sub_title = series.title.clone();
                 let sub_year = series.year;
@@ -581,7 +581,7 @@ impl MediaOrganizer {
             }
         }
 
-        // 2. Check if download corresponds to a Movie
+        // 2. Comprobar si la descarga corresponde a una película
         let movie_match = {
             let dl_svc = state.downloads.lock().await;
             dl_svc.db().find_media_by_download_id(download_id).ok().flatten().filter(|m| m.media_type == "movie")
@@ -634,7 +634,7 @@ impl MediaOrganizer {
                 item.title, dest_str
             );
 
-            // Auto-fetch Spanish subtitles in background (Bazarr feature)
+            // Obtener subtítulos en español en segundo plano automáticamente (funcionalidad de Bazarr)
             let sub_target = dest_file.clone();
             let sub_title = item.title.clone();
             let sub_year = item.year;
@@ -655,7 +655,7 @@ impl MediaOrganizer {
             return Ok(Some(dest_file));
         }
 
-        // 3. Fallback: Automatic identification for manual eMule/Kad/Torrent downloads
+        // 3. Respaldo: Identificación automática para descargas manuales de eMule/Kad/Torrent
         let file_stem = completed_file_path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -668,7 +668,7 @@ impl MediaOrganizer {
         let clean_filename = fix_mojibake(raw_filename);
         let clean_stem = fix_mojibake(file_stem);
 
-        // A. Is it an episode of a known series?
+        // A. ¿Es un episodio de una serie conocida?
         if let Some((s_num, ep_num)) = crate::services::disk_scanner::extract_season_episode(None, &clean_filename) {
             let dl_svc = state.downloads.lock().await;
             let db = dl_svc.db();
@@ -771,7 +771,7 @@ impl MediaOrganizer {
             }
         }
 
-        // B. Is it a Movie?
+        // B. ¿Es una película?
         let parsed_year = extract_year(&clean_stem);
         let parsed_title = clean_movie_title(&clean_stem);
 
@@ -917,11 +917,11 @@ impl MediaOrganizer {
         Ok(None)
     }
 
-    /// Full sweep over active eMule downloads and BitTorrent torrents to organize any finished files
+    /// Barrido completo sobre descargas activas de eMule y torrents de BitTorrent para organizar archivos terminados
     pub async fn sweep_and_organize(state: &AppState) -> Value {
         let mut organized_files = Vec::new();
 
-        // 1. Check eMule downloads
+        // 1. Comprobar descargas de eMule
         let completed_ed2k: Vec<(String, PathBuf)> = {
             let dl_svc = state.downloads.lock().await;
             let list = dl_svc.list_download_details();
@@ -944,13 +944,13 @@ impl MediaOrganizer {
             }
         }
 
-        // 2. Check BitTorrent torrents
+        // 2. Comprobar torrents de BitTorrent
         if let Ok(torrent_engine) = state.torrent_engine().await {
             let torrents = torrent_engine.list();
             for tor in torrents {
                 if tor.status == "completed" {
                     let out_dir = PathBuf::from(&tor.output_dir);
-                    // Single file or directory
+                    // Archivo individual o directorio
                     let candidate = out_dir.join(&tor.name);
                     let mut torrent_organized_any = false;
                     if candidate.is_file() {
@@ -964,7 +964,7 @@ impl MediaOrganizer {
                             }));
                         }
                     } else if candidate.is_dir() {
-                        // Scan directory for video files
+                        // Escanear directorio en busca de archivos de vídeo
                         if let Ok(entries) = std::fs::read_dir(&candidate) {
                             for entry in entries.flatten() {
                                 let p = entry.path();
@@ -986,8 +986,8 @@ impl MediaOrganizer {
                         }
                     }
 
-                    // Once all video files in the completed torrent have been organized (or candidate no longer exists),
-                    // remove the torrent from the engine and delete any leftover incoming folder/files.
+                    // Una vez que todos los archivos de vídeo en el torrent completado han sido organizados (o el candidato ya no existe),
+                    // eliminar el torrent del motor y borrar cualquier archivo/carpeta restante en incoming.
                     if torrent_organized_any || !candidate.exists() {
                         let _ = torrent_engine.delete(tor.id, true).await;
                         if candidate.is_dir() {
@@ -1004,7 +1004,7 @@ impl MediaOrganizer {
             }
         }
 
-        // 3. Scan default_download_dir and configured extra incoming directories for standalone video files
+        // 3. Escanear default_download_dir y los directorios adicionales configurados en busca de archivos de vídeo independientes
         let mut incoming_dirs = vec![state.config.default_download_dir.clone()];
         for d in &state.config.extra_incoming_dirs {
             if !incoming_dirs.contains(d) {

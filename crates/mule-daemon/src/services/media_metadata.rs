@@ -9,13 +9,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-/// Nombre maximal de membres de l'équipe créative (réalisateurs/créateurs/scénaristes) retournés.
+/// Número máximo de miembros del equipo creativo (directores/creadores/guionistas) devueltos.
 const MAX_CREATIVE_CREDITS: usize = 6;
-/// Nombre maximal d'acteurs principaux retournés dans la fiche média.
+/// Número máximo de actores principales devueltos en la ficha multimedia.
 const MAX_CAST_CREDITS: usize = 16;
-/// Nombre maximal de personnes pour lesquelles un fallback photo Wikipedia est tenté par appel.
+/// Número máximo de personas para las cuales se intenta una foto de respaldo de Wikipedia por llamada.
 const MAX_PHOTO_FALLBACK_LOOKUPS: usize = 6;
-/// Délai maximal (en secondes) pour une requête de photo Wikipedia de secours.
+/// Tiempo máximo de espera (en segundos) para una petición de foto de Wikipedia de respaldo.
 const PHOTO_FALLBACK_TIMEOUT_SECS: u64 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,8 +111,8 @@ impl MediaMetadataService {
         }
     }
 
-    /// Extrait le titre et le synopsis traduits en espagnol (priorité `es-ES`, puis `es-MX` / `es`)
-    /// depuis le tableau `Translations` de l'API Radarr/TMDB lorsqu'ils sont disponibles.
+    /// Extrae el título y la sinopsis traducidos al español (prioridad `es-ES`, luego `es-MX` / `es`)
+    /// desde la tabla `Translations` de la API Radarr/TMDB cuando están disponibles.
     fn extract_spanish_translation(item: &serde_json::Value) -> (Option<String>, Option<String>) {
         let Some(translations) = item["Translations"].as_array() else {
             return (None, None);
@@ -141,7 +141,7 @@ impl MediaMetadataService {
         (None, None)
     }
 
-    /// Search movies via Radarr's open Cloudflare-cached metadata proxy
+    /// Busca películas a través del proxy de metadatos abierto y en caché de Cloudflare de Radarr
     pub async fn search_movies(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
         let encoded_q: String =
             url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
@@ -223,7 +223,7 @@ impl MediaMetadataService {
         Ok(results)
     }
 
-    /// Search TV series via Sonarr's Skyhook metadata service
+    /// Busca series de TV mediante el servicio de metadatos Skyhook de Sonarr
     pub async fn search_shows(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
         let encoded_q: String =
             url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
@@ -294,7 +294,7 @@ impl MediaMetadataService {
         Ok(results)
     }
 
-    /// Get full movie metadata and images by TMDB ID via Radarr API proxy
+    /// Obtiene metadatos e imágenes completas de películas por ID de TMDB a través del proxy de la API de Radarr
     pub async fn get_movie(&self, tmdb_id: u64) -> Result<SearchMediaResult, String> {
         let url = format!("https://api.radarr.video/v1/movie/{tmdb_id}");
         let resp = self
@@ -359,7 +359,7 @@ impl MediaMetadataService {
         })
     }
 
-    /// Get full TV series metadata and images by TVDB ID via Sonarr Skyhook
+    /// Obtiene metadatos e imágenes completas de series de TV por ID de TVDB a través de Skyhook de Sonarr
     pub async fn get_show(&self, tvdb_id: u64) -> Result<SearchMediaResult, String> {
         let url = format!("https://skyhook.sonarr.tv/v1/tvdb/shows/en/{tvdb_id}");
         let resp = self
@@ -417,7 +417,7 @@ impl MediaMetadataService {
         })
     }
 
-    /// Get details for a show including all episodes (season, episode, title, air_date)
+    /// Obtiene detalles de una serie incluyendo todos los episodios (temporada, episodio, título, fecha de emisión)
     pub async fn get_show_episodes(
         &self,
         tvdb_id: u64,
@@ -441,7 +441,7 @@ impl MediaMetadataService {
                 let season = ep["seasonNumber"].as_u64().unwrap_or(0) as u32;
                 let episode = ep["episodeNumber"].as_u64().unwrap_or(0) as u32;
                 if season == 0 {
-                    // Skip specials by default
+                    // Omitir especiales por defecto
                     continue;
                 }
                 let title = ep["title"].as_str().unwrap_or("").to_string();
@@ -452,8 +452,8 @@ impl MediaMetadataService {
         Ok(episodes)
     }
 
-    /// Récupère les détails enrichis (réalisateur, créateurs, casting avec photos, notes,
-    /// genres, studio/chaîne, bande-annonce et vignettes d'épisodes) avec mise en cache.
+    /// Obtiene detalles enriquecidos (director, creadores, reparto con fotos, valoraciones,
+    /// géneros, estudio/cadena, tráiler y miniaturas de episodios) con almacenamiento en caché.
     pub async fn get_extended_details(&self, item: &MediaItem) -> MediaExtendedDetails {
         if let Some(cached) = self.details_cache.read().await.get(&item.id).cloned() {
             return cached;
@@ -531,7 +531,7 @@ impl MediaMetadataService {
             .filter(|s| !s.is_empty())
             .map(String::from);
 
-        // Extraire les titres alternatifs et traductions officielles (notamment espagnol 'es-ES', 'es', etc.)
+        // Extraer títulos alternativos y traducciones oficiales (especialmente español 'es-ES', 'es', etc.)
         if let Some(translations) = val["Translations"].as_array() {
             for t in translations {
                 if let Some(t_title) = t["Title"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
@@ -599,7 +599,7 @@ impl MediaMetadataService {
 
         if let Some(crew) = val["Credits"]["Crew"].as_array() {
             let mut seen_names = Vec::new();
-            // Priorité aux réalisateurs, puis scénaristes et compositeurs
+            // Prioridad a directores, luego guionistas y compositores
             let role_priority = [
                 ("Director", "Director", "directing"),
                 ("Screenplay", "Guion", "writing"),
@@ -823,7 +823,7 @@ impl MediaMetadataService {
             }
         }
 
-        // Récupération des créateurs / showrunners via TVMaze
+        // Recuperación de creadores / showrunners a través de TVMaze
         let tvmaze_id = val["tvMazeId"].as_u64();
         self.populate_tvmaze_crew_and_cast(tvid, tvmaze_id, &mut details)
             .await;
@@ -929,7 +929,7 @@ impl MediaMetadataService {
         let wiki_slug = name.trim().replace(' ', "_");
         let encoded_slug: String =
             url::form_urlencoded::byte_serialize(wiki_slug.as_bytes()).collect();
-        // Remettre les underscores intacts pour l'API REST Wikipedia
+        // Restablecer los guiones bajos intactos para la API REST de Wikipedia
         let encoded_slug = encoded_slug.replace("%5F", "_");
         let url = format!("https://en.wikipedia.org/api/rest_v1/page/summary/{encoded_slug}");
 

@@ -11,38 +11,38 @@ use std::os::windows::fs::FileExt;
 
 use crate::error::CoreError;
 
-/// Storage allocation policy for temporary download files.
+/// Política de asignación de almacenamiento para archivos de descarga temporales.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AllocationPolicy {
-    /// Laisse le fichier croître à l'écriture (croissance dynamique —
-    /// le nom « sparse » décrit l'intention : sur NTFS les plages non
-    /// écrites ne consomment pas de clusters tant que le fichier n'est
-    /// pas étendu par `set_len`; aucun marquage `FSCTL_SET_SPARSE` n'est
-    /// réalisé).
+    /// Deja que el archivo crezca con la escritura (crecimiento dinámico —
+    /// el nombre «sparse» describe la intención: en NTFS los rangos no
+    /// escritos no consumen clústeres mientras el archivo no se
+    /// extienda mediante `set_len`; no se realiza ningún marcado
+    /// `FSCTL_SET_SPARSE`).
     #[default]
     SparseIfSupported,
     Preallocate,
     None,
 }
 
-/// Compteurs d'E/S positionnées d'un [`PartFile`] — instrumentation du
-/// pipeline disque (invariant cible : `pread_bytes ≈ 0` en phase de
-/// téléchargement, `pwrite_bytes == total_size`).
+/// Contadores de E/S posicionadas de un [`PartFile`] — instrumentación de la
+/// canalización de disco (invariante objetivo: `pread_bytes ≈ 0` en fase de
+/// descarga, `pwrite_bytes == total_size`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PartFileIoStats {
-    /// Nombre d'appels de lecture positionnée (`pread`/`seek_read`).
+    /// Número de llamadas de lectura posicionada (`pread`/`seek_read`).
     pub read_ops: u64,
-    /// Octets relus depuis le disque.
+    /// Bytes releídos desde el disco.
     pub read_bytes: u64,
-    /// Nombre d'appels d'écriture positionnée (`pwrite`/`seek_write`).
+    /// Número de llamadas de escritura posicionada (`pwrite`/`seek_write`).
     pub write_ops: u64,
-    /// Octets écrits.
+    /// Bytes escritos.
     pub write_bytes: u64,
-    /// Nombre de `sync_data` réels (fsync batché).
+    /// Número de llamadas reales a `sync_data` (fsync por lotes).
     pub sync_ops: u64,
 }
 
-/// Handle to a physical temporary download file (`.part`).
+/// Descriptor de un archivo físico de descarga temporal (`.part`).
 pub struct PartFile {
     file: File,
     path: PathBuf,
@@ -51,7 +51,7 @@ pub struct PartFile {
 }
 
 impl PartFile {
-    /// Opens or creates a `.part` file with the specified allocation policy.
+    /// Abre o crea un archivo `.part` con la política de asignación especificada.
     pub fn open_or_create<P: AsRef<Path>>(
         path: P,
         total_size: u64,
@@ -90,7 +90,7 @@ impl PartFile {
                 let _ = part.file.set_len(total_size);
             }
             AllocationPolicy::None => {
-                // Keep file size as-is or grow dynamically on write
+                // Mantener el tamaño del archivo tal cual o crecer dinámicamente al escribir
             }
         }
 
@@ -105,13 +105,13 @@ impl PartFile {
         self.total_size
     }
 
-    /// Compteurs d'E/S cumulés depuis l'ouverture du handle.
+    /// Contadores de E/S acumulados desde la apertura del descriptor.
     pub fn io_stats(&self) -> PartFileIoStats {
         self.io_stats
     }
 
-    /// Écriture positionnée (`pwrite`/`seek_write`, un seul appel système)
-    /// — pas de `seek` mutable sur le descripteur partagé.
+    /// Escritura posicionada (`pwrite`/`seek_write`, una sola llamada al sistema)
+    /// — sin `seek` mutable sobre el descriptor compartido.
     pub fn write_segment(&mut self, offset: u64, data: &[u8]) -> Result<(), CoreError> {
         if offset + data.len() as u64 > self.total_size {
             return Err(CoreError::InvalidRange {
@@ -127,16 +127,16 @@ impl PartFile {
         Ok(())
     }
 
-    /// Flushes unwritten buffers to physical disk.
+    /// Vuelca los búferes no escritos al disco físico.
     pub fn flush(&mut self) -> Result<(), CoreError> {
         self.file.sync_data()?;
         self.io_stats.sync_ops += 1;
         Ok(())
     }
 
-    /// Lecture positionnée (`pread`/`seek_read`) d'une plage (vérification
-    /// de hash, récupération AICH) — réservée aux chemins froids : la
-    /// vérification de part en ligne utilise le buffer stagé en RAM.
+    /// Lectura posicionada (`pread`/`seek_read`) de un rango (verificación
+    /// de hash, recuperación AICH) — reservada para rutas frías: la
+    /// verificación de partes en línea utiliza el búfer preparado en RAM.
     pub fn read_range(&mut self, offset: u64, len: usize) -> Result<Vec<u8>, CoreError> {
         let mut buf = vec![0u8; len];
         positioned_read(&self.file, offset, &mut buf)?;
@@ -146,9 +146,9 @@ impl PartFile {
     }
 }
 
-/// Écriture positionnée complète — les API `seek_write`/`write_at` sont
-/// autorisées à écrire moins que demandé : on boucle (équivalent
-/// `write_all`) sans déplacer le curseur du descripteur.
+/// Escritura posicionada completa — las API `seek_write`/`write_at` tienen
+/// permitido escribir menos de lo solicitado: se itera en bucle (equivalente a
+/// `write_all`) sin desplazar el cursor del descriptor.
 #[cfg(windows)]
 fn positioned_write(file: &File, offset: u64, data: &[u8]) -> Result<(), CoreError> {
     let mut written = 0usize;
@@ -175,9 +175,9 @@ fn positioned_write(file: &File, offset: u64, data: &[u8]) -> Result<(), CoreErr
     Ok(())
 }
 
-/// Lecture positionnée complète (`read_exact`) — échec explicite si le
-/// fichier ne contient pas assez de données (évite un buffer zero-paddé
-/// silencieux qui fausserait une vérification de hash).
+/// Lectura posicionada completa (`read_exact`) — fallo explícito si el
+/// archivo no contiene suficientes datos (evita un búfer rellenado con ceros
+/// silencioso que falsearía una verificación de hash).
 #[cfg(windows)]
 fn positioned_read(file: &File, offset: u64, buf: &mut [u8]) -> Result<(), CoreError> {
     let mut read = 0usize;

@@ -3,7 +3,7 @@
 
 //! Implementación del cifrado de flujo RC4 conforme a la ofuscación de protocolo de eMule (`RC4-drop1024`).
 
-/// Deterministic 256-byte state RC4 stream cipher.
+/// Cifrador de flujo RC4 determinista con estado de 256 bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rc4Cipher {
     state: [u8; 256],
@@ -12,10 +12,10 @@ pub struct Rc4Cipher {
 }
 
 impl Rc4Cipher {
-    /// Creates a new `Rc4Cipher` with standard KSA key setup.
+    /// Crea un nuevo `Rc4Cipher` con la configuración de clave KSA estándar.
     ///
-    /// If `skip_discard` is `false`, discards the first 1024 bytes of keystream (`RC4-drop1024`),
-    /// as specified in eMule's protocol obfuscation.
+    /// Si `skip_discard` es `false`, descarta los primeros 1024 bytes de flujo de claves (`RC4-drop1024`),
+    /// según lo especificado en la ofuscación de protocolo de eMule.
     pub fn new(key: &[u8], skip_discard: bool) -> Self {
         assert!(!key.is_empty(), "RC4 key cannot be empty");
         let mut state = [0u8; 256];
@@ -36,12 +36,12 @@ impl Rc4Cipher {
         cipher
     }
 
-    /// Creates a standard eMule obfuscation cipher with the first 1024 bytes discarded.
+    /// Crea un cifrador de ofuscación estándar de eMule con los primeros 1024 bytes descartados.
     pub fn new_drop1024(key: &[u8]) -> Self {
         Self::new(key, false)
     }
 
-    /// Discards `count` bytes of keystream without modifying any payload.
+    /// Descarta `count` bytes de flujo de claves sin modificar ninguna carga útil.
     pub fn drop_bytes(&mut self, count: usize) {
         for _ in 0..count {
             self.x = self.x.wrapping_add(1);
@@ -50,7 +50,7 @@ impl Rc4Cipher {
         }
     }
 
-    /// Encrypts or decrypts bytes in-place using the PRGA keystream.
+    /// Cifra o descifra bytes in situ utilizando el flujo de claves PRGA.
     pub fn process(&mut self, data: &mut [u8]) {
         for byte in data.iter_mut() {
             self.x = self.x.wrapping_add(1);
@@ -62,7 +62,7 @@ impl Rc4Cipher {
         }
     }
 
-    /// Returns the current internal indices `(x, y)` for debugging/state inspections.
+    /// Devuelve los índices internos actuales `(x, y)` para depuración o inspecciones de estado.
     #[inline]
     pub fn indices(&self) -> (u8, u8) {
         (self.x, self.y)
@@ -75,12 +75,12 @@ mod tests {
 
     #[test]
     fn test_rc4_rfc6229_vector() {
-        // RFC 6229 test vector: Key 0102030405
+        // Vector de prueba RFC 6229: Clave 0102030405
         let key = [0x01, 0x02, 0x03, 0x04, 0x05];
         let mut cipher = Rc4Cipher::new(&key, true); // no drop
         let mut plaintext = vec![0u8; 16];
         cipher.process(&mut plaintext);
-        // RFC 6229 first 16 bytes: B2 39 63 05 F0 3D C0 27 CC C3 52 4A 0A 11 18 A8
+        // Primeros 16 bytes de RFC 6229: B2 39 63 05 F0 3D C0 27 CC C3 52 4A 0A 11 18 A8
         assert_eq!(
             hex::encode(&plaintext).to_uppercase(),
             "B2396305F03DC027CCC3524A0A1118A8"

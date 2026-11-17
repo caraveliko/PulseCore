@@ -12,16 +12,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::ed2k::packet::{Ed2kBlockRange, Ed2kSendingPart};
 use crate::ed2k::sequencer::{Ed2kBlockSink, Ed2kDownloadSequencer, Ed2kSequencerError};
 
-/// Common trait for byte sinks capable of validating and recording downloaded eD2K chunks.
+/// Rasgo común para sumideros de bytes capaces de validar y registrar fragmentos eD2K descargados.
 pub trait Ed2kBlockWriter {
-    /// Validates and writes an incoming `Ed2kSendingPart` chunk into the sink.
+    /// Valida y escribe un fragmento `Ed2kSendingPart` entrante en el sumidero.
     fn write_block(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,
         part: &Ed2kSendingPart,
     ) -> Result<Ed2kBlockRange, Ed2kSequencerError>;
 
-    /// Returns true if the half-open byte range `[start, end)` is completely covered.
+    /// Devuelve verdadero si el rango de bytes semiabierto `[start, end)` está completamente cubierto.
     fn has_range(&self, start: u64, end: u64) -> bool;
 }
 
@@ -39,7 +39,7 @@ impl Ed2kBlockWriter for Ed2kBlockSink {
     }
 }
 
-/// Merges overlapping or adjacent half-open byte ranges `[start, end)`.
+/// Fusiona rangos de bytes semiabiertos `[start, end)` superpuestos o adyacentes.
 pub fn merge_intervals(mut ranges: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
     if ranges.is_empty() {
         return ranges;
@@ -60,38 +60,38 @@ pub fn merge_intervals(mut ranges: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
     merged
 }
 
-/// Lifecycle status of an eD2K download in local storage.
+/// Estado del ciclo de vida de una descarga eD2K en el almacenamiento local.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Ed2kPartDownloadStatus {
-    /// In progress: downloading blocks into `.part` file.
+    /// En curso: descargando bloques en el archivo `.part`.
     #[default]
     Downloading,
-    /// Download complete: all parts verified with eD2K root MD4, ready for local promotion.
+    /// Descarga completa: todas las partes verificadas con el MD4 raíz de eD2K, lista para promoción local.
     VerifiedPendingPromotion,
-    /// Successfully promoted to target download directory; `.part` renamed and journal removed.
+    /// Promocionado con éxito al directorio de descarga de destino; archivo `.part` renombrado y diario eliminado.
     Promoted,
 }
 
-/// Persistent journal state saved alongside a `.part` download file.
+/// Estado de diario persistente guardado junto a un archivo de descarga `.part`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Ed2kPartResumeState {
-    /// 16-byte MD4 eD2K file hash in lowercase hex format.
+    /// Hash de archivo eD2K MD4 de 16 bytes en formato hexadecimal en minúsculas.
     pub file_hash: String,
-    /// Total expected file size in bytes.
+    /// Tamaño total esperado del archivo en bytes.
     pub file_size: u64,
-    /// Canonical, merged list of half-open byte intervals `[start, end)` received and written to disk.
+    /// Lista canónica y fusionada de intervalos de bytes semiabiertos `[start, end)` recibidos y escritos en disco.
     pub completed_ranges: Vec<(u64, u64)>,
-    /// Total cumulative payload bytes received and verified.
+    /// Total acumulado de bytes de carga útil recibidos y verificados.
     pub total_bytes_received: u64,
-    /// Current download and promotion status.
+    /// Estado actual de descarga y promoción.
     #[serde(default)]
     pub status: Ed2kPartDownloadStatus,
-    /// UNIX timestamp of last journal update.
+    /// Marca de tiempo UNIX de la última actualización del diario.
     pub updated_at: u64,
 }
 
 impl Ed2kPartResumeState {
-    /// Creates a fresh resume state for a given file.
+    /// Crea un estado de reanudación nuevo para un archivo determinado.
     pub fn new(file_hash: [u8; 16], file_size: u64) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -108,7 +108,7 @@ impl Ed2kPartResumeState {
         }
     }
 
-    /// Loads and parses a resume state from the specified JSON file.
+    /// Carga y analiza un estado de reanudación desde el archivo JSON especificado.
     pub fn load_from_file(path: &Path) -> Result<Self, Ed2kSequencerError> {
         let data = fs::read(path).map_err(|e| {
             Ed2kSequencerError::Storage(format!(
@@ -125,7 +125,7 @@ impl Ed2kPartResumeState {
         Ok(state)
     }
 
-    /// Atomically persists the resume state to `path` via a temporary file.
+    /// Persiste atómicamente el estado de reanudación en `path` mediante un archivo temporal.
     pub fn save_to_file(&self, path: &Path) -> Result<(), Ed2kSequencerError> {
         let json_bytes = serde_json::to_vec_pretty(self).map_err(|e| {
             Ed2kSequencerError::Storage(format!("Failed to serialize resume state to JSON: {e}"))
@@ -177,7 +177,7 @@ impl Ed2kPartResumeState {
         Ok(())
     }
 
-    /// Records a newly written byte interval `[start, end)` and merges contiguous ranges.
+    /// Registra un intervalo de bytes recién escrito `[start, end)` y fusiona rangos contiguos.
     pub fn record_range(&mut self, start: u64, end: u64) {
         if start >= end {
             return;

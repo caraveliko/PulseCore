@@ -29,50 +29,50 @@ use crate::met::known_met::MET_HEADER;
 use crate::met::reader::CountingReader;
 use crate::met::tags::{MetTagValue, FT_FILENAME};
 
-/// `FF_KADID` (`Friend.h:43`) — the friend's Kad ID (hash16 tag).
+/// `FF_KADID` (`Friend.h:43`) — el Kad ID del amigo (etiqueta hash16).
 const FF_KADID: u8 = 0x02;
-/// `FF_NAME` (`Friend.h:42`) — same tag id as `FT_FILENAME` (0x01);
-/// the friend name written as a string tag.
+/// `FF_NAME` (`Friend.h:42`) — mismo identificador de etiqueta que `FT_FILENAME` (0x01);
+/// el nombre del amigo escrito como etiqueta de cadena.
 const FF_NAME: u8 = FT_FILENAME;
 
-/// Bounded record count — a friends list is small by construction;
-/// the cap only guards against corrupt count fields.
+/// Recuento acotado de registros — una lista de amigos es pequeña por construcción;
+/// el límite solo protege contra campos de recuento corruptos.
 const MAX_FRIENDS_RECORDS: usize = 100_000;
-/// Bounded tag count per record — eMule writes at most two.
+/// Recuento acotado de etiquetas por registro — eMule escribe como máximo dos.
 const MAX_FRIEND_TAGS: usize = 1_000;
 
-/// One friend record — `CFriend` fields as stored by eMule.
+/// Un registro de amigo — campos de `CFriend` tal como los almacena eMule.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmfriendsRecord {
-    /// `m_abyUserhash` — eD2K user hash; all-zero for friends known by
-    /// IP+port only (`CFriend::HasUserhash`).
+    /// `m_abyUserhash` — hash de usuario eD2K; todo ceros para amigos conocidos solo por
+    /// IP+puerto (`CFriend::HasUserhash`).
     pub user_hash: [u8; 16],
-    /// `m_dwLastUsedIP` — last IP seen for IP-only friends.
+    /// `m_dwLastUsedIP` — última IP vista para amigos solo por IP.
     pub last_used_ip: u32,
     /// `m_nLastUsedPort`.
     pub last_used_port: u16,
-    /// `m_tLastSeen` (unix seconds).
+    /// `m_tLastSeen` (segundos unix).
     pub last_seen: u32,
-    /// `m_tLastChatted` (unix seconds).
+    /// `m_tLastChatted` (segundos unix).
     pub last_chatted: u32,
-    /// `m_strName` (`FF_NAME` tag) — first string wins, like eMule's
-    /// `m_strName.IsEmpty()` guard.
+    /// `m_strName` (etiqueta `FF_NAME`) — la primera cadena gana, como en la guardia
+    /// `m_strName.IsEmpty()` de eMule.
     pub name: Option<String>,
-    /// `m_abyKadID` (`FF_KADID` tag).
+    /// `m_abyKadID` (etiqueta `FF_KADID`).
     pub kad_id: Option<[u8; 16]>,
 }
 
 impl EmfriendsRecord {
-    /// `CFriend::HasUserhash` — non-zero user hash.
+    /// `CFriend::HasUserhash` — hash de usuario distinto de cero.
     pub fn has_userhash(&self) -> bool {
         self.user_hash.iter().any(|&b| b != 0)
     }
 }
 
-/// Parsed `emfriends.met` content.
+/// Contenido analizado de `emfriends.met`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmfriendsMetFile {
-    /// Successfully decoded records.
+    /// Registros decodificados con éxito.
     pub records: Vec<EmfriendsRecord>,
 }
 
@@ -122,8 +122,8 @@ impl EmfriendsMetFile {
             for _ in 0..tag_count {
                 let tag = cr.read_tag()?;
                 match tag.name_id {
-                    // `m_strName.IsEmpty()` — eMule keeps the first
-                    // FF_NAME value only.
+                    // `m_strName.IsEmpty()` — eMule conserva únicamente el primer
+                    // valor de FF_NAME.
                     FF_NAME if name.is_none() => {
                         if let MetTagValue::String(s) = tag.value {
                             name = Some(s);

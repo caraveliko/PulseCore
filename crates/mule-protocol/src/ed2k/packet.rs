@@ -6,78 +6,78 @@
 use super::tags::{Ed2kTag, RawTag};
 use crate::framing::RawPacket;
 
-/// Passive observation structure for `OP_HELLO` (`0x01`).
+/// Estructura de observación pasiva para `OP_HELLO` (`0x01`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kHello {
-    /// 16-byte MD4 User Hash.
+    /// Hash de usuario MD4 de 16 bytes.
     pub user_hash: [u8; 16],
-    /// eD2K Client ID (IPv4 or LowID).
+    /// ID de cliente eD2K (IPv4 o LowID).
     pub client_id: u32,
-    /// Listening TCP port.
+    /// Puerto TCP de escucha.
     pub tcp_port: u16,
-    /// Decoded recognized metadata tags.
+    /// Etiquetas de metadatos reconocidas y decodificadas.
     pub tags: Vec<Ed2kTag>,
-    /// Unrecognized or raw tags preserved without data loss.
+    /// Etiquetas no reconocidas o sin procesar conservadas sin pérdida de datos.
     pub unknown_tags: Vec<RawTag>,
-    /// Connected server IPv4 address (or 0 if not connected).
+    /// Dirección IPv4 del servidor conectado (o 0 si no está conectado).
     pub server_ip: u32,
-    /// Connected server port (or 0 if not connected).
+    /// Puerto del servidor conectado (o 0 si no está conectado).
     pub server_port: u16,
 }
 
 impl Ed2kHello {
-    /// Finds a recognized tag by name display string.
+    /// Busca una etiqueta reconocida por su cadena de visualización de nombre.
     pub fn find_tag(&self, name: &str) -> Option<&Ed2kTag> {
         crate::ed2k::tags::find_tag_by_name(&self.tags, name)
     }
 }
 
-/// Passive observation structure for `OP_HELLO_ANSWER` (`0x4C`).
+/// Estructura de observación pasiva para `OP_HELLO_ANSWER` (`0x4C`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kHelloAnswer {
-    /// 16-byte MD4 User Hash of the remote peer.
+    /// Hash de usuario MD4 de 16 bytes del par remoto.
     pub user_hash: [u8; 16],
-    /// eD2K Client ID of the remote peer.
+    /// ID de cliente eD2K del par remoto.
     pub client_id: u32,
-    /// Listening TCP port of the remote peer.
+    /// Puerto TCP de escucha del par remoto.
     pub tcp_port: u16,
-    /// Decoded recognized metadata tags.
+    /// Etiquetas de metadatos reconocidas y decodificadas.
     pub tags: Vec<Ed2kTag>,
-    /// Unrecognized or raw tags preserved without data loss.
+    /// Etiquetas no reconocidas o sin procesar conservadas sin pérdida de datos.
     pub unknown_tags: Vec<RawTag>,
-    /// Remote peer's connected server IPv4 address.
+    /// Dirección IPv4 del servidor conectado del par remoto.
     pub server_ip: u32,
-    /// Remote peer's connected server port.
+    /// Puerto del servidor conectado del par remoto.
     pub server_port: u16,
 }
 
 impl Ed2kHelloAnswer {
-    /// Finds a recognized tag by name display string.
+    /// Busca una etiqueta reconocida por su cadena de visualización de nombre.
     pub fn find_tag(&self, name: &str) -> Option<&Ed2kTag> {
         crate::ed2k::tags::find_tag_by_name(&self.tags, name)
     }
 }
 
-/// Observation structure for eMule protocol extensions announcement `OP_EMULEINFO` (`0xC5 0x01`).
+/// Estructura de observación para el anuncio de extensiones de protocolo eMule `OP_EMULEINFO` (`0xC5 0x01`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kEmuleInfo {
-    /// Remote eMule client version code (e.g. 0x3C = 60).
+    /// Código de versión del cliente eMule remoto (p. ej. 0x3C = 60).
     pub client_version: u8,
-    /// eMule protocol version byte (typically 0x01).
+    /// Byte de versión del protocolo eMule (habitualmente 0x01).
     pub protocol_version: u8,
-    /// Decoded recognized metadata tags.
+    /// Etiquetas de metadatos reconocidas y decodificadas.
     pub tags: Vec<Ed2kTag>,
-    /// Unrecognized or raw tags preserved without data loss.
+    /// Etiquetas no reconocidas o sin procesar conservadas sin pérdida de datos.
     pub unknown_tags: Vec<RawTag>,
 }
 
 impl Ed2kEmuleInfo {
-    /// Finds a recognized tag by name display string.
+    /// Busca una etiqueta reconocida por su cadena de visualización de nombre.
     pub fn find_tag(&self, name: &str) -> Option<&Ed2kTag> {
         crate::ed2k::tags::find_tag_by_name(&self.tags, name)
     }
 
-    /// Returns true if compression capability tag was announced by remote peer.
+    /// Devuelve true si el par remoto anunció la etiqueta de capacidad de compresión.
     pub fn has_compression_capability(&self) -> bool {
         self.tags.iter().any(|t| match &t.name {
             super::tags::TagName::Id(0x20) | super::tags::TagName::Id(0x01) => true,
@@ -86,7 +86,7 @@ impl Ed2kEmuleInfo {
         })
     }
 
-    /// Returns true if source exchange capability tag was announced by remote peer.
+    /// Devuelve true si el par remoto anunció la etiqueta de capacidad de intercambio de fuentes (source exchange).
     pub fn has_source_exchange_capability(&self) -> bool {
         self.tags.iter().any(|t| match &t.name {
             super::tags::TagName::Id(super::tags::TAG_SPECIAL_EMULE_EXT_SOURCEEXCHANGE)
@@ -100,13 +100,13 @@ impl Ed2kEmuleInfo {
     }
 }
 
-/// Helper function to compute expected byte count for a given part count.
+/// Función auxiliar para calcular el número esperado de bytes para un número de partes dado.
 #[inline]
 pub fn expected_mask_bytes(part_count: u16) -> usize {
     usize::from(part_count).div_ceil(8)
 }
 
-/// Encapsulated, safely bounded part availability mask.
+/// Máscara de disponibilidad de partes encapsulada y acotada con seguridad.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PartAvailabilityMask {
     raw: bytes::Bytes,
@@ -114,7 +114,7 @@ pub struct PartAvailabilityMask {
 }
 
 impl PartAvailabilityMask {
-    /// Creates a mask from raw bytes, verifying exact length and zero trailing unused bits.
+    /// Crea una máscara a partir de bytes sin procesar, comprobando la longitud exacta y ceros en bits no utilizados finales.
     pub fn from_bytes(
         raw: bytes::Bytes,
         part_count: u16,
@@ -131,11 +131,11 @@ impl PartAvailabilityMask {
             });
         }
 
-        // Verify trailing bits if part_count % 8 != 0
+        // Comprobar bits sobrantes finales si part_count % 8 != 0
         let remainder = (part_count % 8) as usize;
         if remainder != 0 && !raw.is_empty() {
             let last_byte = raw[raw.len() - 1];
-            // Valid bits mask: bits 0..(remainder - 1)
+            // Máscara de bits válidos: bits 0..(remainder - 1)
             let valid_mask = (1u8 << remainder) - 1;
             let trailing_bits = last_byte & !valid_mask;
             if trailing_bits != 0 {
@@ -149,7 +149,7 @@ impl PartAvailabilityMask {
         Ok(Self { raw, part_count })
     }
 
-    /// Creates a new mask from a slice of available part indices.
+    /// Crea una nueva máscara a partir de un fragmento de índices de partes disponibles.
     pub fn from_parts(available_parts: &[u16], part_count: u16) -> Self {
         let expected = expected_mask_bytes(part_count);
         let mut buf = vec![0u8; expected];
@@ -166,7 +166,7 @@ impl PartAvailabilityMask {
         }
     }
 
-    /// Creates an empty mask (0 parts).
+    /// Crea una máscara vacía (0 partes).
     pub fn empty() -> Self {
         Self {
             raw: bytes::Bytes::new(),
@@ -174,12 +174,12 @@ impl PartAvailabilityMask {
         }
     }
 
-    /// Total number of parts covered by this mask.
+    /// Número total de partes que cubre esta máscara.
     pub fn part_count(&self) -> u16 {
         self.part_count
     }
 
-    /// Returns true if the remote peer has the specified part available.
+    /// Devuelve true si el par remoto tiene disponible la parte especificada.
     pub fn has_part(&self, part_index: u16) -> bool {
         if part_index >= self.part_count {
             return false;
@@ -193,45 +193,45 @@ impl PartAvailabilityMask {
         }
     }
 
-    /// Returns an iterator over all available part indices.
+    /// Devuelve un iterador sobre todos los índices de partes disponibles.
     pub fn available_parts(&self) -> impl Iterator<Item = u16> + '_ {
         (0..self.part_count).filter(move |&idx| self.has_part(idx))
     }
 
-    /// Returns the raw underlying bytes of the mask.
+    /// Devuelve los bytes sin procesar subyacentes de la máscara.
     pub fn raw_bytes(&self) -> &[u8] {
         &self.raw
     }
 
-    /// Returns the underlying `Bytes` buffer.
+    /// Devuelve el búfer `Bytes` subyacente.
     pub fn into_bytes(self) -> bytes::Bytes {
         self.raw
     }
 }
 
-/// Request for remote file parts availability bitmask (`0x49`).
+/// Petición de máscara de bits de disponibilidad de partes de fichero remoto (`0x49`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileStatusReq {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
 }
 
-/// Passive observation structure for `OP_FILESTATUS` (`0x50`).
+/// Estructura de observación pasiva para `OP_FILESTATUS` (`0x50`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileStatus {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Total number of parts in the file.
+    /// Número total de partes del fichero.
     pub part_count: u16,
-    /// Availability bitmask: ceil(part_count / 8) bytes.
+    /// Máscara de bits de disponibilidad: ceil(part_count / 8) bytes.
     pub availability_mask: PartAvailabilityMask,
 }
 
 impl Ed2kFileStatus {
-    /// In the eD2K wire protocol, official eMule/aMule reference clients write `part_count = 0`
-    /// when responding to `OP_SETREQFILEID` for a completed shared file (`CKnownFile`).
-    /// In this canonical case, no bitfield is transmitted, and `part_count = 0` signifies
-    /// that the peer is a complete source possessing 100% of the file parts.
+    /// En el protocolo de cable eD2K, los clientes de referencia oficiales eMule/aMule escriben `part_count = 0`
+    /// al responder a `OP_SETREQFILEID` para un fichero compartido completado (`CKnownFile`).
+    /// En este caso canónico, no se transmite ningún mapa de bits, y `part_count = 0` indica
+    /// que el par es una fuente completa que posee el 100 % de las partes del fichero.
     #[inline]
     pub fn is_complete(&self) -> bool {
         if self.part_count == 0 {
@@ -241,10 +241,10 @@ impl Ed2kFileStatus {
         }
     }
 
-    /// Returns true if the remote peer has the specified part available.
+    /// Devuelve true si el par remoto tiene disponible la parte especificada.
     ///
-    /// If `self.part_count == 0`, the remote peer is a complete source (`CKnownFile`),
-    /// and all parts of the file are available.
+    /// Si `self.part_count == 0`, el par remoto es una fuente completa (`CKnownFile`),
+    /// y todas las partes del fichero están disponibles.
     #[inline]
     pub fn has_part(&self, part_index: u16) -> bool {
         if self.part_count == 0 {
@@ -254,45 +254,45 @@ impl Ed2kFileStatus {
         }
     }
 
-    /// Compatibility accessor for raw byte slice of the availability bitfield.
+    /// Accesor de compatibilidad para el fragmento de bytes sin procesar del mapa de bits de disponibilidad.
     #[inline]
     pub fn raw_bytes(&self) -> &[u8] {
         self.availability_mask.raw_bytes()
     }
 }
 
-/// A contiguous byte range within a file for block requests.
+/// Un rango de bytes contiguo dentro de un fichero para peticiones de bloques.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ed2kBlockRange {
-    /// Start byte offset.
+    /// Desplazamiento de byte inicial.
     pub start: u32,
-    /// End byte offset (exclusive).
+    /// Desplazamiento de byte final (exclusivo).
     pub end: u32,
 }
 
 impl Ed2kBlockRange {
-    /// Creates a new `Ed2kBlockRange`.
+    /// Crea un nuevo `Ed2kBlockRange`.
     pub fn new(start: u32, end: u32) -> Self {
         Self { start, end }
     }
 
-    /// Length of the range in bytes.
+    /// Longitud del rango en bytes.
     #[inline]
     pub fn len(&self) -> u32 {
         self.end.saturating_sub(self.start)
     }
 
-    /// Returns true if start >= end.
+    /// Devuelve true si start >= end.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.start >= self.end
     }
 
-    /// Creates a block range directly from canonical eMule wire bounds `(start, end)`.
+    /// Crea un rango de bloques directamente a partir de los límites canónicos en cable de eMule `(start, end)`.
     ///
-    /// In eMule/aMule reference implementations (`DownloadClient.cpp`, `ListenSocket.cpp`),
-    /// the end offset on the wire is transmitted as **exclusive**: `endpos = block->EndOffset + 1`.
-    /// The byte count of the block is strictly `end - start`.
+    /// En las implementaciones de referencia de eMule/aMule (`DownloadClient.cpp`, `ListenSocket.cpp`),
+    /// el desplazamiento final en cable se transmite como **exclusivo**: `endpos = block->EndOffset + 1`.
+    /// El recuento de bytes del bloque es estrictamente `end - start`.
     pub fn from_wire_bounds(start: u32, end: u32) -> Result<Self, super::error::Ed2kErrorKind> {
         if start >= end {
             return Err(super::error::Ed2kErrorKind::InvalidBlockOffsets {
@@ -303,14 +303,14 @@ impl Ed2kBlockRange {
         Ok(Self { start, end })
     }
 
-    /// Returns the canonical wire bounds `(start, end)` directly matching eMule exclusive convention.
+    /// Devuelve los límites canónicos en cable `(start, end)` coincidentes directamente con la convención exclusiva de eMule.
     #[inline]
     pub fn to_wire_bounds(&self) -> (u32, u32) {
         (self.start, self.end)
     }
 
-    /// Converts a legacy donkey wire representation with an inclusive end offset `[start, end_inclusive]`
-    /// into a half-open `[start, end)` block range used by the core engine.
+    /// Convierte una representación en cable de donkey heredado con un desplazamiento final inclusivo `[start, end_inclusive]`
+    /// en un rango de bloques semiabierto `[start, end)` utilizado por el motor central.
     pub fn from_legacy_inclusive_wire_bounds(
         start: u32,
         end_inclusive: u32,
@@ -329,7 +329,7 @@ impl Ed2kBlockRange {
         Ok(Self { start, end })
     }
 
-    /// Alias for `from_legacy_inclusive_wire_bounds`.
+    /// Alias de `from_legacy_inclusive_wire_bounds`.
     #[inline]
     pub fn from_inclusive_wire_bounds(
         start: u32,
@@ -338,7 +338,7 @@ impl Ed2kBlockRange {
         Self::from_legacy_inclusive_wire_bounds(start, end_inclusive)
     }
 
-    /// Converts a half-open `[start, end)` range to a legacy inclusive wire representation `(start, end_inclusive)`.
+    /// Convierte un rango semiabierto `[start, end)` a la representación en cable inclusiva heredada `(start, end_inclusive)`.
     pub fn to_legacy_inclusive_wire_bounds(
         &self,
     ) -> Result<(u32, u32), super::error::Ed2kErrorKind> {
@@ -351,113 +351,113 @@ impl Ed2kBlockRange {
         Ok((self.start, self.end - 1))
     }
 
-    /// Alias for `to_legacy_inclusive_wire_bounds`.
+    /// Alias de `to_legacy_inclusive_wire_bounds`.
     #[inline]
     pub fn to_inclusive_wire_bounds(&self) -> Result<(u32, u32), super::error::Ed2kErrorKind> {
         self.to_legacy_inclusive_wire_bounds()
     }
 }
 
-/// A contiguous byte range with 64-bit offsets (`OP_REQUESTPARTS_I64` family).
+/// Un rango de bytes contiguo con desplazamientos de 64 bits (familia `OP_REQUESTPARTS_I64`).
 ///
-/// eMule `0xA3` wire layout: `<HASH 16><start[3] u64><end[3] u64>` (64 bytes).
+/// Disposición en cable de eMule `0xA3`: `<HASH 16><start[3] u64><end[3] u64>` (64 bytes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ed2kBlockRange64 {
-    /// Start byte offset.
+    /// Desplazamiento de byte inicial.
     pub start: u64,
-    /// End byte offset (exclusive).
+    /// Desplazamiento de byte final (exclusivo).
     pub end: u64,
 }
 
 impl Ed2kBlockRange64 {
-    /// Creates a new `Ed2kBlockRange64`.
+    /// Crea un nuevo `Ed2kBlockRange64`.
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
     }
 
-    /// Length of the range in bytes.
+    /// Longitud del rango en bytes.
     #[inline]
     pub fn len(&self) -> u64 {
         self.end.saturating_sub(self.start)
     }
 
-    /// Returns true if start >= end.
+    /// Devuelve true si start >= end.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.start >= self.end
     }
 
-    /// Returns the canonical wire bounds `(start, end)` (exclusive end).
+    /// Devuelve los límites canónicos en cable `(start, end)` (final exclusivo).
     #[inline]
     pub fn to_wire_bounds(&self) -> (u64, u64) {
         (self.start, self.end)
     }
 }
 
-/// 64-bit block request (`OP_REQUESTPARTS_I64`, `0xA3`) for files >4 GiB.
+/// Petición de bloques de 64 bits (`OP_REQUESTPARTS_I64`, `0xA3`) para ficheros >4 GiB.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kRequestPartsI64 {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Requested ranges (up to 3 in standard eMule wire format).
+    /// Rangos solicitados (hasta 3 en el formato de cable estándar de eMule).
     pub ranges: Vec<Ed2kBlockRange64>,
 }
 
-/// 64-bit data payload delivery (`OP_SENDINGPART_I64`, `0xA2`).
+/// Entrega de carga útil de datos de 64 bits (`OP_SENDINGPART_I64`, `0xA2`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kSendingPartI64 {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Block start byte offset.
+    /// Desplazamiento de byte de inicio del bloque.
     pub start_offset: u64,
-    /// Block end byte offset.
+    /// Desplazamiento de byte de fin del bloque.
     pub end_offset: u64,
-    /// Raw block data bytes.
+    /// Bytes sin procesar de los datos del bloque.
     pub data: bytes::Bytes,
 }
 
-/// 64-bit zlib-compressed block delivery (`OP_COMPRESSEDPART_I64`, `0xA1`).
+/// Entrega de bloque comprimido con zlib de 64 bits (`OP_COMPRESSEDPART_I64`, `0xA1`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kCompressedPartI64 {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Uncompressed stream start offset.
+    /// Desplazamiento inicial del flujo sin comprimir.
     pub start_offset: u64,
-    /// Compressed payload size.
+    /// Tamaño de la carga útil comprimida.
     pub compressed_size: u32,
-    /// Zlib-compressed block data.
+    /// Datos del bloque comprimidos con zlib.
     pub data: bytes::Bytes,
 }
 
-/// Legacy 32-bit zlib-compressed block delivery (`OP_COMPRESSEDPART`,
-/// `0x40`) — eMule `UploadDiskIOThread.cpp:456`, always `PR_EMULE`.
+/// Entrega de bloque comprimido con zlib de 32 bits heredado (`OP_COMPRESSEDPART`,
+/// `0x40`) — `UploadDiskIOThread.cpp:456` de eMule, siempre `PR_EMULE`.
 ///
-/// The `compressed_size` field carries the **total** size of the zlib
-/// stream on every chunk; a single compressed block may span several
-/// packets whose `data` fields are consecutive slices of one stream.
+/// El campo `compressed_size` transporta el tamaño **total** del flujo zlib
+/// en cada fragmento; un único bloque comprimido puede abarcar varios
+/// paquetes cuyos campos `data` son fragmentos consecutivos de un mismo flujo.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kCompressedPart {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Uncompressed stream start offset.
+    /// Desplazamiento inicial del flujo sin comprimir.
     pub start_offset: u32,
-    /// Total compressed stream size (repeated on each chunk).
+    /// Tamaño total del flujo comprimido (repetido en cada fragmento).
     pub compressed_size: u32,
-    /// Zlib-compressed stream slice.
+    /// Fragmento del flujo comprimido con zlib.
     pub data: bytes::Bytes,
 }
 
-/// Request for file part blocks (`0x4B`).
+/// Petición de bloques de partes de fichero (`0x4B`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kRequestParts {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Requested ranges (up to 3 in standard eMule wire format).
+    /// Rangos solicitados (hasta 3 en el formato de cable estándar de eMule).
     pub ranges: Vec<Ed2kBlockRange>,
 }
 
 impl Ed2kRequestParts {
-    /// Creates a single-range block request.
+    /// Crea una petición de bloque de rango único.
     pub fn single(file_hash: [u8; 16], start: u32, end: u32) -> Self {
         Self {
             file_hash,
@@ -465,27 +465,27 @@ impl Ed2kRequestParts {
         }
     }
 
-    /// Creates a multi-range block request.
+    /// Crea una petición de bloque de múltiples rangos.
     pub fn multi(file_hash: [u8; 16], ranges: Vec<Ed2kBlockRange>) -> Self {
         Self { file_hash, ranges }
     }
 }
 
-/// Data payload delivery of a requested block (`0x46`).
+/// Entrega de carga útil de datos de un bloque solicitado (`0x46`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kSendingPart {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Block start byte offset.
+    /// Desplazamiento de byte de inicio del bloque.
     pub start_offset: u32,
-    /// Block end byte offset.
+    /// Desplazamiento de byte de fin del bloque.
     pub end_offset: u32,
-    /// Raw block data bytes.
+    /// Bytes sin procesar de los datos del bloque.
     pub data: bytes::Bytes,
 }
 
 impl Ed2kSendingPart {
-    /// Creates a new `Ed2kSendingPart`.
+    /// Crea un nuevo `Ed2kSendingPart`.
     pub fn new(
         file_hash: [u8; 16],
         start_offset: u32,
@@ -500,266 +500,266 @@ impl Ed2kSendingPart {
         }
     }
 
-    /// Returns the byte length of data.
+    /// Devuelve la longitud en bytes de los datos.
     #[inline]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
-    /// Returns true if the block payload is empty.
+    /// Devuelve true si la carga útil del bloque está vacía.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 }
 
-/// Passive observation structure for `OP_FILEREQANSNOFILE` (`0x48`).
+/// Estructura de observación pasiva para `OP_FILEREQANSNOFILE` (`0x48`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileReqAnsNoFile {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
 }
 
-/// Request for the full per-part MD4 hashset of a file (`0x51`).
+/// Petición del conjunto completo de hashes MD4 por parte (hashset) de un fichero (`0x51`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kHashSetReq {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
 }
 
-/// Per-part MD4 hashset answer (`0x52`): `file_hash` + `u16 count` + `count * 16` bytes.
+/// Respuesta de conjunto de hashes MD4 por parte (`0x52`): `file_hash` + `u16 count` + `count * 16` bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kHashSetAnswer {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// MD4 hash of each 9,728,000-byte part, in part order.
+    /// Hash MD4 de cada parte de 9.728.000 bytes, en orden de partes.
     pub part_hashes: Vec<[u8; 16]>,
 }
 
-/// Request for the AICH master (root) hash of a file — `OP_AICHFILEHASHREQ`
-/// (eMule protocol `0x9E`): bare 16-byte file hash payload.
+/// Petición del hash maestro (raíz) AICH de un fichero — `OP_AICHFILEHASHREQ`
+/// (protocolo eMule `0x9E`): carga útil simple con el hash de fichero de 16 bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichFileHashReq {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
 }
 
-/// AICH master hash answer — `OP_AICHFILEHASHANS` (eMule protocol `0x9D`):
-/// `file_hash` + 20-byte SHA-1 AICH root hash.
+/// Respuesta de hash maestro AICH — `OP_AICHFILEHASHANS` (protocolo eMule `0x9D`):
+/// `file_hash` + hash raíz AICH SHA-1 de 20 bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichFileHashRes {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// 20-byte SHA-1 AICH master (root) hash.
+    /// Hash maestro (raíz) AICH SHA-1 de 20 bytes.
     pub aich_hash: [u8; 20],
 }
 
-/// Request for AICH part recovery data — `OP_AICHREQUEST` (eMule protocol `0x9B`): `file_hash` + `u16 part` + 20-byte master hash.
+/// Petición de datos de recuperación de partes AICH — `OP_AICHREQUEST` (protocolo eMule `0x9B`): `file_hash` + `u16 part` + hash maestro de 20 bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichRequest {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Requested part index (9,728,000-byte parts).
+    /// Índice de la parte solicitada (partes de 9.728.000 bytes).
     pub part: u16,
-    /// 20-byte SHA-1 AICH master hash the requester trusts.
+    /// Hash maestro AICH SHA-1 de 20 bytes en el que confía el solicitante.
     pub master_hash: [u8; 20],
 }
 
-/// AICH recovery data — `OP_AICHANSWER` (eMule protocol `0x9C`).
+/// Datos de recuperación AICH — `OP_AICHANSWER` (protocolo eMule `0x9C`).
 ///
-/// The wire payload is `file_hash` + `u16 part` + `master_hash` + recovery data.
-/// A failed answer carries only the bare 16-byte `file_hash`
+/// La carga útil en cable es `file_hash` + `u16 part` + `master_hash` + datos de recuperación.
+/// Una respuesta fallida solo transporta el `file_hash` simple de 16 bytes
 /// (`recovery == None`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichAnswer {
-    /// 16-byte MD4 File Hash.
+    /// Hash de fichero MD4 de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Recovery data, absent when the peer could not serve it.
+    /// Datos de recuperación, ausentes cuando el par no pudo servirlos.
     pub recovery: Option<Ed2kAichRecovery>,
 }
 
-/// Recovery hash entries of an `OP_AICHANSWER`, split by identifier width as
-/// on the wire: `u16 count` + `count * (u16 ident + hash[20])` for 16-bit
-/// identifiers, then `u16 count` + `count * (u32 ident + hash[20])` for 32-bit
-/// identifiers (large files). eMule populates only one of the two lists.
+/// Entradas de hashes de recuperación de un `OP_AICHANSWER`, divididas por ancho de identificador
+/// como en el cable: `u16 count` + `count * (u16 ident + hash[20])` para identificadores
+/// de 16 bits, luego `u16 count` + `count * (u32 ident + hash[20])` para identificadores
+/// de 32 bits (ficheros grandes). eMule puebla únicamente una de las dos listas.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichRecovery {
-    /// Part index this recovery data covers.
+    /// Índice de parte que cubren estos datos de recuperación.
     pub part: u16,
-    /// 20-byte SHA-1 AICH master hash echoed from the request.
+    /// Hash maestro AICH SHA-1 de 20 bytes reflejado desde la petición.
     pub master_hash: [u8; 20],
-    /// `(ident, hash)` entries with 16-bit identifiers.
+    /// Entradas `(ident, hash)` con identificadores de 16 bits.
     pub entries16: Vec<(u16, [u8; 20])>,
-    /// `(ident, hash)` entries with 32-bit identifiers.
+    /// Entradas `(ident, hash)` con identificadores de 32 bits.
     pub entries32: Vec<(u32, [u8; 20])>,
 }
 
-/// Public Key message for Secure User Identification (`0x85`).
+/// Mensaje de clave pública para identificación segura de usuario (`0x85`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kPublicKey {
-    /// Raw bytes of the RSA Public Key (typically DER or raw modulus/exponent).
+    /// Bytes sin procesar de la clave pública RSA (típicamente DER o módulo/exponente sin procesar).
     pub key_bytes: bytes::Bytes,
 }
 
-/// Cryptographic Signature message for Secure User Identification (`0x86`).
+/// Mensaje de firma criptográfica para identificación segura de usuario (`0x86`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kSignature {
-    /// Signature byte vector.
+    /// Vector de bytes de la firma.
     pub signature_bytes: bytes::Bytes,
 }
 
-/// Secure Identification State message (`0x87`).
+/// Mensaje de estado de identificación segura (`0x87`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kSecIdentState {
-    /// State flag (0 = not supported, 1 = supported/requested, 2 = authenticated).
+    /// Indicador de estado (0 = no admitido, 1 = admitido/solicitado, 2 = autenticado).
     pub state: u8,
-    /// Random 4-byte challenge value.
+    /// Valor de desafío aleatorio de 4 bytes.
     pub challenge: u32,
 }
 
-/// Peer chat message (`OP_MESSAGE`, `0x4E`): `<len u16><message bytes>`.
+/// Mensaje de chat entre pares (`OP_MESSAGE`, `0x4E`): `<len u16><bytes del mensaje>`.
 ///
-/// eMule bounds the message body (`MAX_MESSAGE_SIZE`); the wire length prefix
-/// must equal the payload remainder exactly (`ListenSocket.cpp` 0.72a).
+/// eMule acota el cuerpo del mensaje (`MAX_MESSAGE_SIZE`); el prefijo de longitud en cable
+/// debe coincidir exactamente con el resto de la carga útil (`ListenSocket.cpp` 0.72a).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kChatMessage {
-    /// Message text (lossy UTF-8 like eMule `ReadString`).
+    /// Texto del mensaje (UTF-8 con pérdidas, al igual que `ReadString` de eMule).
     pub text: String,
 }
 
-/// Legacy eDonkey queue rank report (`OP_QUEUERANK`, `0x5C`): `<rank u32>`.
+/// Informe de posición en cola de eDonkey heredado (`OP_QUEUERANK`, `0x5C`): `<rank u32>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kQueueRank {
-    /// Queue position reported by the remote peer (0 = not queued).
+    /// Posición en cola informada por el par remoto (0 = no encolado).
     pub rank: u32,
 }
 
-/// eMule queue ranking report (`OP_QUEUERANKING`, `0x60`, eMule protocol).
+/// Informe de posición en cola de eMule (`OP_QUEUERANKING`, `0x60`, protocolo eMule).
 ///
-/// eMule 0.72a requires an exact 12-byte payload and reads the rank as `u16`
-/// (`ProcessEmuleQueueRank`, `ListenSocket.cpp`); the remaining 10 bytes are
-/// reserved/padding and are preserved verbatim for deterministic round-trips.
+/// eMule 0.72a exige una carga útil exacta de 12 bytes y lee el rango como `u16`
+/// (`ProcessEmuleQueueRank`, `ListenSocket.cpp`); los 10 bytes restantes están
+/// reservados/relleno y se conservan tal cual para viajes de ida y vuelta deterministas.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kQueueRanking {
-    /// Queue position reported by the remote peer.
+    /// Posición en cola informada por el par remoto.
     pub rank: u16,
-    /// 10 reserved bytes following the rank on the wire.
+    /// 10 bytes reservados tras el rango en el cable.
     pub reserved: [u8; 10],
 }
 
-/// Upload slot change notification (`OP_CHANGE_SLOT`, `0x5B`): `<HASH 16>`.
+/// Notificación de cambio de slot de subida (`OP_CHANGE_SLOT`, `0x5B`): `<HASH 16>`.
 ///
-/// Tolerated and effectively ignored by eMule 0.72a, kept for compatibility.
+/// Tolerada y prácticamente ignorada por eMule 0.72a, conservada por compatibilidad.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kChangeSlot {
-    /// 16-byte MD4 file hash the slot change refers to.
+    /// Hash de fichero MD4 de 16 bytes al que hace referencia el cambio de slot.
     pub file_hash: [u8; 16],
 }
 
-/// File rating/comment (`OP_FILEDESC`, `0x61`, eMule protocol):
-/// `<rating u8><len u16><description bytes>`.
+/// Valoración/comentario de fichero (`OP_FILEDESC`, `0x61`, protocolo eMule):
+/// `<rating u8><len u16><bytes de descripción>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileDesc {
-    /// Rating value (0 = none/invalid, 1..=5 per eMule conventions).
+    /// Valor de puntuación (0 = ninguno/inválido, 1..=5 según convenciones de eMule).
     pub rating: u8,
-    /// Free-text description (lossy UTF-8).
+    /// Descripción en texto libre (UTF-8 con pérdidas).
     pub description: String,
 }
 
-/// TCP port test (`OP_PORTTEST`, `0xFE`): single status byte.
+/// Prueba de puerto TCP (`OP_PORTTEST`, `0xFE`): byte de estado individual.
 ///
-/// eMule 0.72a answers with `0x12` (`ListenSocket.cpp` case `OP_PORTTEST`).
+/// eMule 0.72a responde con `0x12` (`ListenSocket.cpp` caso `OP_PORTTEST`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kPortTest {
-    /// Status/value byte (`0x12` in eMule replies).
+    /// Byte de estado/valor (`0x12` en respuestas de eMule).
     pub value: u8,
 }
 
-/// Chat anti-spam CAPTCHA request (`OP_CHATCAPTCHAREQ`, `0xA5`, eMule protocol):
-/// `<tag_count u8><tags><BMP bitmap bytes>`.
+/// Petición de CAPTCHA antispam en el chat (`OP_CHATCAPTCHAREQ`, `0xA5`, protocolo eMule):
+/// `<tag_count u8><tags><bytes de mapa de bits BMP>`.
 ///
-/// eMule bounds the bitmap between 128 and 4096 bytes and accepts image
-/// dimensions within 10..150 px wide and 10..50 px high.
+/// eMule acota el mapa de bits entre 128 y 4096 bytes y acepta dimensiones
+/// de imagen dentro de 10..150 px de ancho y 10..50 px de alto.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kCaptchaRequest {
-    /// Decoded recognized tags preceding the bitmap.
+    /// Etiquetas reconocidas decodificadas que preceden al mapa de bits.
     pub tags: Vec<Ed2kTag>,
-    /// Unrecognized tags preserved without data loss.
+    /// Etiquetas no reconocidas conservadas sin pérdida de datos.
     pub unknown_tags: Vec<RawTag>,
-    /// Raw BMP bitmap bytes.
+    /// Bytes sin procesar del mapa de bits BMP.
     pub bitmap: bytes::Bytes,
 }
 
-/// Chat CAPTCHA result (`OP_CHATCAPTCHARES`, `0xA6`): `<status u8>`.
+/// Resultado de CAPTCHA de chat (`OP_CHATCAPTCHARES`, `0xA6`): `<status u8>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kCaptchaResponse {
-    /// `0` = solved, `1` = failed/needs retry (eMule semantics).
+    /// `0` = resuelto, `1` = fallido/requiere reintento (semántica de eMule).
     pub status: u8,
 }
 
-/// Request for file hashsets using `FileIdentifier` (`OP_HASHSETREQUEST2`,
-/// `0xB1`, eMule protocol): `<FileIdentifier><options u8>`.
+/// Petición de conjuntos de hashes de fichero mediante `FileIdentifier` (`OP_HASHSETREQUEST2`,
+/// `0xB1`, protocolo eMule): `<FileIdentifier><options u8>`.
 ///
-/// Options byte (`UploadClient.cpp` 0.72a): bit0 requests the MD4 part hashset,
-/// bit1 the AICH part hashset; at least one bit must be set.
+/// Byte de opciones (`UploadClient.cpp` 0.72a): el bit0 solicita el hashset MD4 por parte,
+/// el bit1 el hashset AICH por parte; al menos un bit debe estar activo.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kHashSetReq2 {
-    /// Composite file identifier (MD4 hash + size, optionally AICH root).
+    /// Identificador compuesto de fichero (hash MD4 + tamaño, opcionalmente raíz AICH).
     pub identifier: super::file_identifier::Ed2kFileIdentifier,
-    /// Request the per-part MD4 hashset (option bit `0x01`).
+    /// Solicita el conjunto de hashes MD4 por parte (bit de opción `0x01`).
     pub want_md4: bool,
-    /// Request the per-part AICH hashset (option bit `0x02`).
+    /// Solicita el conjunto de hashes AICH por parte (bit de opción `0x02`).
     pub want_aich: bool,
 }
 
-/// AICH per-part hashset carried inside `OP_HASHSETANSWER2`:
+/// Conjunto de hashes AICH por parte transportado dentro de `OP_HASHSETANSWER2`:
 /// `<master hash 20><u16 count><count * 20 bytes>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAichPartHashSet {
-    /// 20-byte SHA-1 AICH master (root) hash.
+    /// Hash maestro (raíz) AICH SHA-1 de 20 bytes.
     pub master_hash: [u8; 20],
-    /// AICH hash of each 9,728,000-byte part, in part order.
+    /// Hash AICH de cada parte de 9.728.000 bytes, en orden de partes.
     pub part_hashes: Vec<[u8; 20]>,
 }
 
-/// Hashset answer using `FileIdentifier` (`OP_HASHSETANSWER2`, `0xB2`):
+/// Respuesta de conjunto de hashes mediante `FileIdentifier` (`OP_HASHSETANSWER2`, `0xB2`):
 /// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`.
 ///
-/// Each requested hashset is serialized when present; the options byte echoes
-/// which sets follow (bit0 = MD4, bit1 = AICH).
+/// Cada conjunto de hashes solicitado se serializa cuando está presente; el byte de opciones refleja
+/// qué conjuntos le siguen (bit0 = MD4, bit1 = AICH).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kHashSetAnswer2 {
-    /// Composite file identifier echoed from the request.
+    /// Identificador compuesto de fichero reflejado desde la petición.
     pub identifier: super::file_identifier::Ed2kFileIdentifier,
-    /// Per-part MD4 hashset when requested/available.
+    /// Conjunto de hashes MD4 por parte cuando fue solicitado/disponible.
     pub md4_set: Option<Ed2kHashSetAnswer>,
-    /// Per-part AICH hashset when requested/available.
+    /// Conjunto de hashes AICH por parte cuando fue solicitado/disponible.
     pub aich_set: Option<Ed2kAichPartHashSet>,
 }
 
-/// Extended request information appended after `OP_REQFILENAME` inside a
-/// `MULTIPACKET` request (`DownloadClient.cpp` 0.72a `SendFileRequest`):
-/// `<u16 part_count><ceil(count/8) part status bytes>[<u16 complete sources>]`.
+/// Información de petición extendida añadida tras `OP_REQFILENAME` dentro de una
+/// petición `MULTIPACKET` (`SendFileRequest` en `DownloadClient.cpp` 0.72a):
+/// `<u16 part_count><ceil(count/8) bytes de estado de partes>[<u16 complete sources>]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kRequestExtInfo {
-    /// Number of eD2K parts the requester reports status for.
+    /// Número de partes eD2K para las que el solicitante informa el estado.
     pub part_count: u16,
-    /// Part availability bitfield, `ceil(part_count / 8)` bytes.
+    /// Mapa de bits de disponibilidad de partes, `ceil(part_count / 8)` bytes.
     pub part_status: bytes::Bytes,
-    /// Complete sources count (only when extended requests version > 1).
+    /// Conteo de fuentes completas (solo cuando la versión de peticiones extendidas > 1).
     pub complete_sources: Option<u16>,
 }
 
-/// File reference carried in a `MULTIPACKET` envelope.
+/// Referencia de fichero transportada en un envoltorio `MULTIPACKET`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ed2kMultiPacketFileRef {
-    /// Legacy `OP_MULTIPACKET`/`OP_MULTIPACKETANSWER`: bare 16-byte MD4 hash.
+    /// `OP_MULTIPACKET`/`OP_MULTIPACKETANSWER` heredado: hash MD4 simple de 16 bytes.
     Hash([u8; 16]),
-    /// `OP_MULTIPACKET_EXT`: hash + 64-bit file size.
+    /// `OP_MULTIPACKET_EXT`: hash + tamaño de fichero de 64 bits.
     HashAndSize {
-        /// 16-byte MD4 file hash.
+        /// Hash de fichero MD4 de 16 bytes.
         file_hash: [u8; 16],
-        /// File size in bytes.
+        /// Tamaño del fichero en bytes.
         file_size: u64,
     },
     /// `OP_MULTIPACKET_EXT2`/`OP_MULTIPACKETANSWER_EXT2`: `FileIdentifier`.
@@ -767,8 +767,8 @@ pub enum Ed2kMultiPacketFileRef {
 }
 
 impl Ed2kMultiPacketFileRef {
-    /// Returns the 16-byte MD4 file hash regardless of envelope variant.
-    /// For `Identifier` without MD4 (Kad-only context), returns zeros.
+    /// Devuelve el hash de fichero MD4 de 16 bytes con independencia de la variante de envoltorio.
+    /// Para `Identifier` sin MD4 (contexto exclusivo de Kad), devuelve ceros.
     pub fn file_hash(&self) -> [u8; 16] {
         match self {
             Self::Hash(h) => *h,
@@ -778,138 +778,138 @@ impl Ed2kMultiPacketFileRef {
     }
 }
 
-/// Sub-request inside a `MULTIPACKET` request body
-/// (`ListenSocket.cpp` 0.72a, case `OP_MULTIPACKET*`).
+/// Subpetición dentro del cuerpo de una petición `MULTIPACKET`
+/// (`ListenSocket.cpp` 0.72a, caso `OP_MULTIPACKET*`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ed2kMultiPacketSubRequest {
-    /// `OP_REQFILENAME` (`0x58`) + optional extended info.
+    /// `OP_REQFILENAME` (`0x58`) + información extendida opcional.
     FileName {
-        /// Extended info (part status + complete sources), when present.
+        /// Información extendida (estado de partes + fuentes completas), cuando está presente.
         ext_info: Option<Ed2kRequestExtInfo>,
     },
-    /// `OP_SETREQFILEID` (`0x4F`), no payload.
+    /// `OP_SETREQFILEID` (`0x4F`), sin carga útil.
     SetReqFileId,
-    /// `OP_REQUESTSOURCES` (`0x81`), no payload.
+    /// `OP_REQUESTSOURCES` (`0x81`), sin carga útil.
     RequestSources,
     /// `OP_REQUESTSOURCES2` (`0x83`): `<version u8><options u16>`.
     RequestSources2 {
-        /// Source exchange protocol version requested.
+        /// Versión solicitada del protocolo de intercambio de fuentes.
         version: u8,
-        /// Reserved options (eMule sends 0).
+        /// Opciones reservadas (eMule envía 0).
         options: u16,
     },
-    /// `OP_AICHFILEHASHREQ` (`0x9E`), no payload — deprecated upstream when
-    /// `FileIdentifier` is in use.
+    /// `OP_AICHFILEHASHREQ` (`0x9E`), sin carga útil — obsoleta en origen cuando
+    /// se utiliza `FileIdentifier`.
     AichFileHash,
 }
 
-/// Sub-answer inside a `MULTIPACKETANSWER` body. Unlike the standalone
-/// messages, sub-answers do **not** repeat the file hash — it lives in the
-/// envelope (`ListenSocket.cpp` 0.72a, case `OP_MULTIPACKETANSWER*`).
+/// Subrespuesta dentro del cuerpo de un `MULTIPACKETANSWER`. A diferencia de los mensajes
+/// independientes, las subrespuestas **no** repiten el hash del fichero — este reside en el
+/// envoltorio (`ListenSocket.cpp` 0.72a, caso `OP_MULTIPACKETANSWER*`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ed2kMultiPacketSubAnswer {
-    /// `OP_REQFILENAMEANSWER` (`0x59`): `<len u16><filename bytes>`.
+    /// `OP_REQFILENAMEANSWER` (`0x59`): `<len u16><bytes del nombre de fichero>`.
     FileName(String),
-    /// `OP_FILESTATUS` (`0x50`): `<u16 part_count><ceil(count/8) bitfield>`.
+    /// `OP_FILESTATUS` (`0x50`): `<u16 part_count><mapa de bits ceil(count/8)>`.
     FileStatus {
-        /// Number of eD2K parts described by the bitfield.
+        /// Número de partes eD2K descritas por el mapa de bits.
         part_count: u16,
-        /// Part availability bitfield bytes.
+        /// Bytes del mapa de bits de disponibilidad de partes.
         part_status: bytes::Bytes,
     },
-    /// `OP_AICHFILEHASHANS` (`0x9D`): bare 20-byte AICH root hash.
+    /// `OP_AICHFILEHASHANS` (`0x9D`): hash raíz AICH simple de 20 bytes.
     AichFileHash([u8; 20]),
 }
 
-/// Grouped file request (`OP_MULTIPACKET` `0x92`, `OP_MULTIPACKET_EXT` `0xA4`,
-/// `OP_MULTIPACKET_EXT2` `0xA9`, eMule protocol).
+/// Petición agrupada de ficheros (`OP_MULTIPACKET` `0x92`, `OP_MULTIPACKET_EXT` `0xA4`,
+/// `OP_MULTIPACKET_EXT2` `0xA9`, protocolo eMule).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kMultiPacketRequest {
-    /// File reference (hash, hash+size, or full `FileIdentifier`).
+    /// Referencia de fichero (hash, hash+tamaño o `FileIdentifier` completo).
     pub file: Ed2kMultiPacketFileRef,
-    /// Ordered sub-requests following the reference.
+    /// Subpeticiones ordenadas tras la referencia.
     pub sub_requests: Vec<Ed2kMultiPacketSubRequest>,
 }
 
-/// Grouped file request answer (`OP_MULTIPACKETANSWER` `0x93`,
-/// `OP_MULTIPACKETANSWER_EXT2` `0xB0`, eMule protocol).
+/// Respuesta a petición agrupada de ficheros (`OP_MULTIPACKETANSWER` `0x93`,
+/// `OP_MULTIPACKETANSWER_EXT2` `0xB0`, protocolo eMule).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kMultiPacketAnswer {
-    /// File reference (hash or `FileIdentifier` — EXT has no answer variant).
+    /// Referencia de fichero (hash o `FileIdentifier` — EXT no tiene variante de respuesta).
     pub file: Ed2kMultiPacketFileRef,
-    /// Ordered sub-answers following the reference.
+    /// Subrespuestas ordenadas tras la referencia.
     pub sub_answers: Vec<Ed2kMultiPacketSubAnswer>,
 }
 
-/// High-level passive eD2K observation message enum.
+/// Enumeración de mensajes de observación pasiva eD2K de alto nivel.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ed2kMessage {
-    /// Handshake initialization.
+    /// Inicialización del saludo.
     Hello(Ed2kHello),
-    /// Handshake response.
+    /// Respuesta al saludo.
     HelloAnswer(Ed2kHelloAnswer),
-    /// Extended eMule handshake capabilities exchange.
+    /// Intercambio de capacidades del saludo extendido de eMule.
     EmuleInfo(Ed2kEmuleInfo),
-    /// File parts availability request.
+    /// Petición de disponibilidad de partes de fichero.
     FileStatusReq(Ed2kFileStatusReq),
-    /// File part availability status response.
+    /// Respuesta de estado de disponibilidad de partes de fichero.
     FileStatus(Ed2kFileStatus),
-    /// Response indicating requested file is not shared or known.
+    /// Respuesta que indica que el fichero solicitado no está compartido o es desconocido.
     FileReqAnsNoFile(Ed2kFileReqAnsNoFile),
-    /// Request for block data.
+    /// Petición de datos de bloques.
     RequestParts(Ed2kRequestParts),
-    /// Request for block data with 64-bit offsets (`OP_REQUESTPARTS_I64`).
+    /// Petición de datos de bloques con desplazamientos de 64 bits (`OP_REQUESTPARTS_I64`).
     RequestPartsI64(Ed2kRequestPartsI64),
-    /// Delivery of block data.
+    /// Entrega de datos de bloques.
     SendingPart(Ed2kSendingPart),
-    /// Delivery of block data with 64-bit offsets (`OP_SENDINGPART_I64`).
+    /// Entrega de datos de bloques con desplazamientos de 64 bits (`OP_SENDINGPART_I64`).
     SendingPartI64(Ed2kSendingPartI64),
-    /// Delivery of zlib-compressed block data with 64-bit offset (`OP_COMPRESSEDPART_I64`).
+    /// Entrega de datos de bloques comprimidos con zlib con desplazamiento de 64 bits (`OP_COMPRESSEDPART_I64`).
     CompressedPartI64(Ed2kCompressedPartI64),
-    /// Delivery of zlib-compressed block data with 32-bit offset (`OP_COMPRESSEDPART`).
+    /// Entrega de datos de bloques comprimidos con zlib con desplazamiento de 32 bits (`OP_COMPRESSEDPART`).
     CompressedPart(Ed2kCompressedPart),
-    /// Request for the per-part hashset.
+    /// Petición del conjunto de hashes (hashset) por parte.
     HashSetReq(Ed2kHashSetReq),
-    /// Per-part hashset answer.
+    /// Respuesta con el conjunto de hashes (hashset) por parte.
     HashSetAnswer(Ed2kHashSetAnswer),
-    /// AICH master hash request (eMule `0x9E`).
+    /// Petición de hash maestro AICH (eMule `0x9E`).
     AichFileHashReq(Ed2kAichFileHashReq),
-    /// AICH master hash answer (eMule `0x9D`).
+    /// Respuesta de hash maestro AICH (eMule `0x9D`).
     AichFileHashRes(Ed2kAichFileHashRes),
-    /// AICH part recovery data request (eMule `0x9B`).
+    /// Petición de datos de recuperación de partes AICH (eMule `0x9B`).
     AichRequest(Ed2kAichRequest),
-    /// AICH part recovery data answer (eMule `0x9C`).
+    /// Respuesta de datos de recuperación de partes AICH (eMule `0x9C`).
     AichAnswer(Ed2kAichAnswer),
-    /// Secure User Identification Public Key.
+    /// Clave pública de identificación segura de usuario.
     PublicKey(Ed2kPublicKey),
-    /// Secure User Identification Signature.
+    /// Firma de identificación segura de usuario.
     Signature(Ed2kSignature),
-    /// Secure User Identification State/Challenge.
+    /// Estado/desafío de identificación segura de usuario.
     SecIdentState(Ed2kSecIdentState),
-    /// Peer chat message (`OP_MESSAGE`).
+    /// Mensaje de chat entre pares (`OP_MESSAGE`).
     Message(Ed2kChatMessage),
-    /// Legacy queue rank (`OP_QUEUERANK`).
+    /// Posición en cola heredada (`OP_QUEUERANK`).
     QueueRank(Ed2kQueueRank),
-    /// eMule queue ranking (`OP_QUEUERANKING`).
+    /// Posición en cola de eMule (`OP_QUEUERANKING`).
     QueueRanking(Ed2kQueueRanking),
-    /// Upload slot change (`OP_CHANGE_SLOT`).
+    /// Cambio de slot de subida (`OP_CHANGE_SLOT`).
     ChangeSlot(Ed2kChangeSlot),
-    /// File rating/comment (`OP_FILEDESC`).
+    /// Valoración/comentario de fichero (`OP_FILEDESC`).
     FileDesc(Ed2kFileDesc),
-    /// TCP port test (`OP_PORTTEST`).
+    /// Prueba de puerto TCP (`OP_PORTTEST`).
     PortTest(Ed2kPortTest),
-    /// Chat CAPTCHA request (`OP_CHATCAPTCHAREQ`).
+    /// Petición de CAPTCHA de chat (`OP_CHATCAPTCHAREQ`).
     CaptchaRequest(Ed2kCaptchaRequest),
-    /// Chat CAPTCHA response (`OP_CHATCAPTCHARES`).
+    /// Respuesta de CAPTCHA de chat (`OP_CHATCAPTCHARES`).
     CaptchaResponse(Ed2kCaptchaResponse),
-    /// `FileIdentifier`-based hashset request (`OP_HASHSETREQUEST2`).
+    /// Petición de conjunto de hashes basada en `FileIdentifier` (`OP_HASHSETREQUEST2`).
     HashSetReq2(Ed2kHashSetReq2),
-    /// `FileIdentifier`-based hashset answer (`OP_HASHSETANSWER2`).
+    /// Respuesta de conjunto de hashes basada en `FileIdentifier` (`OP_HASHSETANSWER2`).
     HashSetAnswer2(Ed2kHashSetAnswer2),
-    /// Grouped file request (`OP_MULTIPACKET*` family).
+    /// Petición agrupada de ficheros (familia `OP_MULTIPACKET*`).
     MultiPacketRequest(Ed2kMultiPacketRequest),
-    /// Grouped file request answer (`OP_MULTIPACKETANSWER*` family).
+    /// Respuesta a petición agrupada de ficheros (familia `OP_MULTIPACKETANSWER*`).
     MultiPacketAnswer(Ed2kMultiPacketAnswer),
-    /// Unparsed raw packet (used when opcode does not have a dedicated decoder yet).
+    /// Paquete sin procesar (utilizado cuando el código de operación aún no dispone de un decodificador dedicado).
     Raw(RawPacket),
 }

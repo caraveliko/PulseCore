@@ -220,7 +220,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         ",
     )?;
 
-    // Migrations
+    // Migraciones
     let mut stmt = conn.prepare("PRAGMA table_info(downloads)")?;
     let mut rows = stmt.query([])?;
     let mut has_category_id = false;
@@ -235,7 +235,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         conn.execute_batch("ALTER TABLE downloads ADD COLUMN category_id TEXT;")?;
     }
 
-    // Migration: per-download eMule-style priority column.
+    // Migración: columna de prioridad al estilo eMule por descarga.
     let mut stmt_dl2 = conn.prepare("PRAGMA table_info(downloads)")?;
     let mut rows_dl2 = stmt_dl2.query([])?;
     let mut has_priority = false;
@@ -254,7 +254,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         )?;
     }
 
-    // Migration: per-file source limit (eMule `.part.met` FT_MAXSOURCES).
+    // Migración: límite de fuentes por archivo (`FT_MAXSOURCES` de `.part.met` de eMule).
     let mut stmt_dl3 = conn.prepare("PRAGMA table_info(downloads)")?;
     let mut rows_dl3 = stmt_dl3.query([])?;
     let mut has_max_sources = false;
@@ -457,7 +457,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         ",
     )?;
 
-    // Migration: file_path in media_library
+    // Migración: file_path en media_library
     let mut stmt_ml = conn.prepare("PRAGMA table_info(media_library)")?;
     let mut rows_ml = stmt_ml.query([])?;
     let mut has_ml_file_path = false;
@@ -474,7 +474,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN file_path TEXT;");
     }
 
-    // Reset orphan connected peer sources on startup (clean up unclean shutdown or reboot state)
+    // Restablece las fuentes de pares huérfanas en estado conectado al inicio (limpieza tras cierre abrupto o reinicio)
     let _ = conn.execute_batch(
         "UPDATE peer_sources SET status = 'allowed' WHERE status = 'connected';",
     );

@@ -38,8 +38,8 @@ impl CompactRange {
     }
 }
 
-/// An IPv4 address represented as an inclusive range `[start, end]`.
-/// IP values are stored as big-endian `u32` (network order).
+/// Una dirección IPv4 representada como un rango inclusivo `[start, end]`.
+/// Los valores IP se almacenan como `u32` en big-endian (orden de red).
 ///
 /// La descripción utiliza `Arc<str>` para compartir cadenas idénticas entre
 /// miles de reglas y evitar alocaciones repetidas en el heap.
@@ -84,8 +84,8 @@ impl FilterRange {
     }
 }
 
-/// Merges sorted intervals where possible.
-/// If two ranges overlap or are adjacent, they are coalesced into a single compact range.
+/// Fusiona intervalos ordenados donde sea posible.
+/// Si dos rangos se solapan o son adyacentes, se unen en un único rango compacto.
 pub fn coalesce_compact_ranges(mut ranges: Vec<CompactRange>) -> (Vec<CompactRange>, usize) {
     if ranges.len() <= 1 {
         return (ranges, 0);
@@ -118,14 +118,14 @@ pub fn coalesce_compact_ranges(mut ranges: Vec<CompactRange>) -> (Vec<CompactRan
     (merged, merged_count)
 }
 
-/// Merges sorted intervals where possible.
-/// If two ranges overlap or are adjacent AND have the same level, they are merged.
+/// Fusiona intervalos ordenados donde sea posible.
+/// Si dos rangos se solapan o son adyacentes Y tienen el mismo nivel, se fusionan.
 pub fn coalesce_ranges(mut ranges: Vec<FilterRange>) -> (Vec<FilterRange>, usize) {
     if ranges.len() <= 1 {
         return (ranges, 0);
     }
 
-    // Sort by start ascending, then end ascending
+    // Ordenar por inicio ascendente, luego por fin ascendente
     ranges.sort_unstable_by(|a, b| a.start.cmp(&b.start).then_with(|| a.end.cmp(&b.end)));
 
     let mut merged: Vec<FilterRange> = Vec::with_capacity(ranges.len());
@@ -133,7 +133,7 @@ pub fn coalesce_ranges(mut ranges: Vec<FilterRange>) -> (Vec<FilterRange>, usize
 
     for r in ranges {
         if let Some(last) = merged.last_mut() {
-            // Check if current range overlaps or is immediately adjacent (last.end + 1 == r.start)
+            // Comprobar si el rango actual se solapa o es inmediatamente adyacente (last.end + 1 == r.start)
             let is_adjacent = last.end < u32::MAX && (last.end + 1 >= r.start);
             let is_overlapping = r.start <= last.end;
 

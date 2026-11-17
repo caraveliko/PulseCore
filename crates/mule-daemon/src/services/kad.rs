@@ -27,43 +27,43 @@ use crate::services::kad_udp::KadUdpService;
 pub use types::{KadContactEntryDto, KadStatusSnapshot, NodesDatInspectReport};
 
 pub struct KadService {
-    /// Identité Kad locale — mutable à chaud : `identityRotationHours`
-    /// régénère le KadID sans redémarrer le service (partagé avec
+    /// Identidad Kad local — mutable en caliente: `identityRotationHours`
+    /// regenera el KadID sin reiniciar el servicio (compartido con
     /// `KadUdpService`).
     local_id: Arc<std::sync::RwLock<KadId>>,
-    /// Shared with `KadUdpService` (inbound packets feed the table and serve
-    /// REQ/BOOTSTRAP answers) — `Arc` because the UDP listener is a task.
+    /// Compartido con `KadUdpService` (los paquetes entrantes alimentan la tabla y sirven
+    /// respuestas REQ/BOOTSTRAP) — `Arc` porque el listener UDP es una tarea.
     routing_table: Arc<Mutex<KBucketTable>>,
-    /// Our public IPv4 as learned from the eD2K server HighID
-    /// (`set_public_ipv4`) — advertised in `PUBLISH_SOURCE` contacts. The
-    /// socket bind address may be `0.0.0.0` or hidden behind NAT.
+    /// Nuestra IPv4 pública aprendida del HighID del servidor eD2K
+    /// (`set_public_ipv4`) — anunciada en contactos `PUBLISH_SOURCE`. La
+    /// dirección de enlace del socket puede ser `0.0.0.0` u ocultarse tras NAT.
     public_ipv4: std::sync::RwLock<Option<Ipv4Addr>>,
     downloads: Arc<Mutex<DownloadService>>,
     policy_mgr: NetworkPolicyManager,
     ip_filter: Arc<IpFilter>,
     udp: Arc<KadUdpService>,
     in_flight_searches: Arc<Mutex<std::collections::HashSet<String>>>,
-    /// Local eD2K TCP port advertised when publishing ourselves as a source.
+    /// Puerto TCP eD2K local anunciado al publicarnos como fuente.
     ed2k_tcp_port: std::sync::atomic::AtomicU16,
-    /// Local eD2K user hash used in firewall-test connection hellos.
+    /// Hash de usuario eD2K local usado en los hellos de conexión para la prueba de cortafuegos.
     fw_user_hash: std::sync::RwLock<[u8; 16]>,
-    /// Horodatage du dernier `BOOTSTRAP_REQ` émis — partagé entre les
-    /// envois immédiats (handshakes eD2K) et le drain de la file de
-    /// candidats, comme `CKademlia::m_tBootstrap` d'eMule.
+    /// Marca de tiempo del último `BOOTSTRAP_REQ` emitido — compartida entre los
+    /// envíos inmediatos (handshakes eD2K) y el drenaje de la cola de
+    /// candidatos, como `CKademlia::m_tBootstrap` de eMule.
     last_bootstrap: std::sync::Mutex<Option<std::time::Instant>>,
-    /// File de candidats bootstrap — équivalent de
-    /// `CKademlia::s_liBootstrapList` (eMule 0.72a, Kademlia.cpp:287) :
-    /// les pairs eD2K annonçant un port UDP Kad s'y enregistrent, puis la
-    /// boucle de drain les essaie un par un tant que la table de routage
-    /// reste pauvre (~2 s entre essais quand elle est vide, 15 s sinon).
-    /// Chaque candidat n'est tenté qu'une fois (`RemoveHead`) ; de
-    /// nouveaux handshakes ré-alimentent la file. Cap à 50 comme eMule.
+    /// Cola de candidatos bootstrap — equivalente de
+    /// `CKademlia::s_liBootstrapList` (eMule 0.72a, Kademlia.cpp:287):
+    /// los pares eD2K que anuncian un puerto UDP Kad se registran aquí, y luego el
+    /// bucle de drenaje los prueba uno a uno mientras la tabla de enrutamiento
+    /// continúe siendo escasa (~2 s entre intentos cuando está vacía, 15 s si no).
+    /// Cada candidato solo se intenta una vez (`RemoveHead`); nuevos
+    /// handshakes reabastecen la cola. Límite de 50 como en eMule.
     bootstrap_candidates: Mutex<std::collections::VecDeque<(SocketAddr, u8)>>,
-    /// Canal d'événements broadcast + compteur de séquence partagé —
-    /// injecté par `set_event_channel` pour émettre `kad.statusChanged`
-    /// quand la table de routage évolue hors des actions RPC (paquets
-    /// entrants, lookups, bootstrap, maintenance). No-op tant que le
-    /// canal n'est pas câblé.
+    /// Canal de eventos broadcast + contador de secuencia compartido —
+    /// inyectado por `set_event_channel` para emitir `kad.statusChanged`
+    /// cuando la tabla de enrutamiento evoluciona fuera de las acciones RPC (paquetes
+    /// entrantes, búsquedas, bootstrap, mantenimiento). No-op mientras el
+    /// canal no esté conectado.
     event_channel: std::sync::RwLock<
         Option<(
             tokio::sync::broadcast::Sender<String>,
@@ -72,13 +72,13 @@ pub struct KadService {
     >,
 }
 
-/// Interval between Kad **source** republication rounds — eMule
-/// `KADEMLIAREPUBLISHTIMES` (`Opcodes.h:78`, 5 h).
+/// Intervalo entre rondas de republicación de **fuentes** Kad —
+/// `KADEMLIAREPUBLISHTIMES` de eMule (`Opcodes.h:78`, 5 h).
 const KAD_SOURCE_REPUBLISH_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(5 * 60 * 60);
-/// Interval between Kad **keyword** republication rounds — eMule
-/// `KADEMLIAREPUBLISHTIMEK` (`Opcodes.h:80`, 24 h). eMule runs source and
-/// keyword publication on independent timers (`m_tNextSrcPublishTime` /
+/// Intervalo entre rondas de republicación de **palabras clave** Kad —
+/// `KADEMLIAREPUBLISHTIMEK` de eMule (`Opcodes.h:80`, 24 h). eMule ejecuta la republicación de
+/// fuentes y de palabras clave en temporizadores independientes (`m_tNextSrcPublishTime` /
 /// `m_tNextKeyPublishTime`, `Kademlia.cpp`).
 const KAD_KEYWORD_REPUBLISH_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(24 * 60 * 60);
@@ -114,15 +114,15 @@ impl KadService {
         }
     }
 
-    /// Sets the local eD2K TCP port used in published source contacts.
+    /// Establece el puerto TCP eD2K local utilizado en los contactos de fuentes publicados.
     pub fn set_ed2k_tcp_port(&self, port: u16) {
         self.ed2k_tcp_port
             .store(port, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Injecte le canal d'événements du daemon — active l'émission de
-    /// `kad.statusChanged` lors des mutations autonomes de la table de
-    /// routage (contacts appris en tâche de fond, évictions, rotation).
+    /// Inyecta el canal de eventos del daemon — activa la emisión de
+    /// `kad.statusChanged` durante mutaciones autónomas de la tabla de
+    /// enrutamiento (contactos aprendidos en segundo plano, expulsiones, rotación).
     pub fn set_event_channel(
         &self,
         event_tx: tokio::sync::broadcast::Sender<String>,
@@ -131,8 +131,8 @@ impl KadService {
         *self.event_channel.write().unwrap() = Some((event_tx, sequence));
     }
 
-    /// Émet un nudge `kad.statusChanged` si le canal est câblé —
-    /// no-op sinon (tests unitaires, phase de boot avant injection).
+    /// Emite un aviso `kad.statusChanged` si el canal está conectado —
+    /// no-op en caso contrario (pruebas unitarias, fase de arranque antes de inyección).
     fn emit_status_changed(&self) {
         if let Some((tx, seq)) = self.event_channel.read().unwrap().as_ref() {
             crate::services::DaemonEvent::KadStatusChanged {
@@ -142,9 +142,9 @@ impl KadService {
         }
     }
 
-    /// Records our public IPv4 (learned from the eD2K server-assigned HighID,
-    /// or a Kad `FIREWALLED_RES` echo). `None` when LowID/unknown — source
-    /// publishing then falls back to the socket bind address.
+    /// Registra nuestra IPv4 pública (aprendida del HighID asignado por el servidor eD2K,
+    /// o de un eco `FIREWALLED_RES` de Kad). `None` si es LowID/desconocida — la publicación
+    /// de fuentes recurre entonces a la dirección de enlace del socket.
     pub fn set_public_ipv4(&self, ip: Option<Ipv4Addr>) {
         *self.public_ipv4.write().unwrap() = ip;
     }
@@ -153,10 +153,10 @@ impl KadService {
         *self.local_id.read().unwrap()
     }
 
-    /// Régénère l'identité Kad locale (`identityRotationHours`) : nouveau
-    /// KadID aléatoire propagé au service UDP, et table de routage reconstruite
-    /// (les distances XOR dépendent de l'ID local — les anciennes entrées
-    /// seraient mal triées).
+    /// Regenera la identidad Kad local (`identityRotationHours`): nuevo
+    /// KadID aleatorio propagado al servicio UDP, y tabla de enrutamiento reconstruida
+    /// (las distancias XOR dependen del ID local — las entradas antiguas
+    /// quedarían mal ordenadas).
     pub async fn rotate_local_id(&self) -> KadId {
         let new_id = KadId::random();
         *self.local_id.write().unwrap() = new_id;
@@ -169,8 +169,8 @@ impl KadService {
         &self.udp
     }
 
-    /// Returns the routing-table contact for `kad_id`, if known.
-    /// Used to resolve a published buddy ID to a UDP endpoint.
+    /// Devuelve el contacto de la tabla de enrutamiento para `kad_id`, si se conoce.
+    /// Utilizado para resolver un ID de buddy publicado a un endpoint UDP.
     pub async fn find_contact(
         &self,
         kad_id: &mule_core::kad::KadId,
@@ -194,10 +194,10 @@ impl KadService {
     }
 
     pub async fn get_status(&self) -> KadStatusSnapshot {
-        // The routing_table guard must NOT be held across the other awaits
-        // below: get_snapshot locks in_flight and the UDP recv handlers lock
-        // in_flight → routing_table (learn_contact) — holding both here
-        // creates a lock-ordering cycle that froze the whole Kad pipeline.
+        // El guard de routing_table NO debe retenerse a través de los otros awaits
+        // inferiores: get_snapshot bloquea in_flight y los manejadores recv UDP bloquean
+        // in_flight → routing_table (learn_contact) — retener ambos aquí
+        // crea un ciclo de orden de bloqueo que congelaba toda la canalización de Kad.
         let (total_contacts, total_replacements, active_buckets) = {
             let table = self.routing_table.lock().await;
             (
@@ -260,7 +260,7 @@ impl KadService {
 
         let (_pong, latency) = self.udp.ping(addr).await?;
 
-        // On successful pong, promote / verify contact in KBucketTable and SQLite
+        // Tras un pong exitoso, promocionar / verificar contacto en KBucketTable y SQLite
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -284,13 +284,13 @@ impl KadService {
                 last_seen_unix_ms: now_ms,
             };
 
-            // Update in-memory routing table
+            // Actualizar tabla de enrutamiento en memoria
             {
                 let mut table = self.routing_table.lock().await;
                 table.insert_or_update(contact.clone());
             }
 
-            // Update SQLite
+            // Actualizar SQLite
             {
                 let mut dl = self.downloads.lock().await;
                 let _ = dl.db_mut().batch_upsert_kad_contacts(&[contact]);
@@ -300,7 +300,7 @@ impl KadService {
         Ok(latency.as_millis() as u64)
     }
 
-    /// Bootstraps Kad DHT from a target node (IP and UDP port).
+    /// Realiza el bootstrap de Kad DHT desde un nodo destino (IP y puerto UDP).
     pub async fn bootstrap_from_node(&self, ip_str: &str, udp_port: u16) -> Result<usize, String> {
         let ip: IpAddr = ip_str
             .parse()
@@ -325,11 +325,11 @@ impl KadService {
             }
         }
 
-        // eMule Process_KADEMLIA2_BOOTSTRAP_RES:
+        // `Process_KADEMLIA2_BOOTSTRAP_RES` de eMule:
         //   bool bAssumeVerified = GetRoutingZone()->GetNumContacts() == 0;
-        // Bootstrap contacts are presumed verified ONLY when the table is
-        // empty; afterwards they must prove IP ownership by answering our
-        // requests or completing HELLO_RES_ACK. (Computed before insertion.)
+        // Los contactos de bootstrap se presumen verificados ÚNICAMENTE cuando la tabla está
+        // vacía; después deben demostrar la posesión de la IP respondiendo a nuestras
+        // peticiones o completando HELLO_RES_ACK. (Calculado antes de la inserción.)
         let assume_verified = {
             let table = self.routing_table.lock().await;
             table.total_contacts() == 0
@@ -346,7 +346,7 @@ impl KadService {
             assume_verified
         );
 
-        // Insert into routing table
+        // Insertar en la tabla de enrutamiento
         {
             let mut table = self.routing_table.lock().await;
             for c in &valid_contacts {
@@ -354,28 +354,28 @@ impl KadService {
             }
         }
 
-        // Persist to SQLite
+        // Persistir en SQLite
         if !valid_contacts.is_empty() {
             let mut dl = self.downloads.lock().await;
             let _ = dl.db_mut().batch_upsert_kad_contacts(&valid_contacts);
-            // La table vient de s'enrichir hors RPC — nudge immédiat pour
-            // que le badge Kad de l'UI reflète la connexion sans attendre
-            // le prochain tick de maintenance (30 s).
+            // La tabla acaba de enriquecerse fuera de RPC — aviso inmediato para
+            // que la insignia Kad de la interfaz refleje la conexión sin esperar
+            // al siguiente tick de mantenimiento (30 s).
             self.emit_status_changed();
         }
 
         Ok(valid_contacts.len())
     }
 
-    /// Nombre de candidats bootstrap en attente dans la file de drain
-    /// (diagnostics et tests — `s_liBootstrapList.GetCount()` d'eMule).
+    /// Número de candidatos bootstrap en espera en la cola de drenaje
+    /// (diagnósticos y pruebas — `s_liBootstrapList.GetCount()` de eMule).
     pub async fn pending_bootstrap_candidates(&self) -> usize {
         self.bootstrap_candidates.lock().await.len()
     }
 
-    /// Ajoute un candidat bootstrap à la file de drain — dédupliqué par
-    /// adresse, borné à 50 entrées comme `s_liBootstrapList` (le plus
-    /// ancien sort quand la file est pleine).
+    /// Añade un candidato bootstrap a la cola de drenaje — deduplicado por
+    /// dirección, acotado a 50 entradas como `s_liBootstrapList` (el más
+    /// antiguo sale cuando la cola está llena).
     pub async fn add_bootstrap_candidate(&self, addr: SocketAddr, kad_version: u8) {
         let mut pool = self.bootstrap_candidates.lock().await;
         if pool.iter().any(|(a, _)| *a == addr) {
@@ -387,11 +387,11 @@ impl KadService {
         pool.push_back((addr, kad_version));
     }
 
-    /// Charge `<data_dir>/nodes.dat` en candidats bootstrap — équivalent
-    /// d'eMule qui lit le fichier d'amorçage dans `s_liBootstrapList` au
-    /// démarrage. Les contacts prouvent leur vivacité en répondant au
-    /// `BOOTSTRAP_REQ` du drain : aucun zombie n'entre dans la table.
-    /// No-op si le fichier est absent ou invalide.
+    /// Carga `<data_dir>/nodes.dat` en candidatos bootstrap — equivalente
+    /// a eMule que lee el archivo de arranque en `s_liBootstrapList` al
+    /// iniciar. Los contactos demuestran su vivacidad respondiendo al
+    /// `BOOTSTRAP_REQ` del drenaje: ningún zombi entra en la tabla.
+    /// No-op si el archivo está ausente o no es válido.
     pub async fn load_nodes_dat_candidates(&self, path: &std::path::Path) {
         let Ok(bytes) = tokio::fs::read(path).await else {
             return;
@@ -419,14 +419,14 @@ impl KadService {
         }
     }
 
-    /// Enregistre un pair eD2K annonçant un port UDP Kad comme candidat
-    /// bootstrap puis tente un envoi immédiat — eMule
-    /// `CKademlia::Bootstrap(ip, port)` : gate `!IsConnected()` + throttle
-    /// global de 10 s. Si l'envoi échoue, le candidat reste dans
-    /// `bootstrap_candidates` et la boucle de drain le retente (avant, un
-    /// simple timeout laissait Kad mort avec une table vide).
-    /// `kad_version < 2` (`KADEMLIA_VERSION2_47a`) est ignoré : ces pairs
-    /// ne parlent pas les paquets KADEMLIA2.
+    /// Registra un par eD2K que anuncia un puerto UDP Kad como candidato
+    /// bootstrap y luego intenta un envío inmediato —
+    /// `CKademlia::Bootstrap(ip, port)` de eMule: compuerta `!IsConnected()` + limitador
+    /// global de 10 s. Si el envío falla, el candidato permanece en
+    /// `bootstrap_candidates` y el bucle de drenaje lo reintenta (antes, un
+    /// simple tiempo de espera dejaba Kad inactivo con una tabla vacía).
+    /// `kad_version < 2` (`KADEMLIA_VERSION2_47a`) se ignora: estos pares
+    /// no hablan paquetes KADEMLIA2.
     pub async fn maybe_bootstrap_from_peer(
         &self,
         ip: Ipv4Addr,
@@ -435,8 +435,8 @@ impl KadService {
         kad_version: u8,
     ) {
         const PEER_BOOTSTRAP_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
-        // A LowID peer is firewalled: its advertised Kad UDP port is not
-        // reachable, so a bootstrap request can only time out.
+        // Un par con LowID está tras cortafuegos: su puerto UDP Kad anunciado no es
+        // accesible, por lo que una petición bootstrap solo expiraría.
         if low_id || kad_version < 2 {
             return;
         }
@@ -467,7 +467,7 @@ impl KadService {
             .await;
     }
 
-    /// Bootstraps active contacts by sending bootstrap requests to seed contacts in parallel.
+    /// Realiza el bootstrap de contactos activos enviando peticiones bootstrap a contactos semilla en paralelo.
     pub async fn bootstrap_active_contacts(&self, sample_size: usize) -> usize {
         let sample = {
             let table = self.routing_table.lock().await;
@@ -512,10 +512,10 @@ impl KadService {
                             }
                         };
                         if policy_allowed && self.ip_filter.check_ip(IpAddr::V4(c.ip)).is_none() {
-                            // Contacts learned from a bootstrap response stay
-                            // unverified until they answer one of our requests
-                            // (eMule only assumes verified on an empty table,
-                            // which cannot happen here — we sampled seeds).
+                            // Los contactos aprendidos de una respuesta bootstrap permanecen
+                            // no verificados hasta que responden a una de nuestras peticiones
+                            // (eMule solo los asume verificados en una tabla vacía,
+                            // lo cual no puede ocurrir aquí — muestreamos semillas).
                             all_valid.push(c);
                         }
                     }
@@ -532,14 +532,14 @@ impl KadService {
 
         let total_received = all_valid.len();
         if !all_valid.is_empty() {
-            // Update routing table
+            // Actualizar tabla de enrutamiento
             {
                 let mut table = self.routing_table.lock().await;
                 for c in &all_valid {
                     table.insert_or_update(c.clone());
                 }
             }
-            // Persist to SQLite
+            // Persistir en SQLite
             {
                 let mut dl = self.downloads.lock().await;
                 let _ = dl.db_mut().batch_upsert_kad_contacts(&all_valid);
@@ -554,20 +554,20 @@ impl KadService {
         total_received
     }
 
-    /// Spawns a background maintenance loop for Kad DHT.
-    /// Periodically expands the routing table if verified contacts count is below 400
-    /// by bootstrapping across seed contacts and discovering nodes in distant buckets.
+    /// Genera un bucle de mantenimiento en segundo plano para Kad DHT.
+    /// Expande periódicamente la tabla de enrutamiento si el recuento de contactos verificados es inferior a 400
+    /// mediante bootstrap a través de contactos semilla y descubriendo nodos en cubos distantes.
     pub fn start_background_maintenance(
         self: &Arc<Self>,
         cancel_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
-        // Drain de la file de candidats bootstrap — eMule
-        // `CKademlia::Process` (Kademlia.cpp:287) vide `s_liBootstrapList`
-        // à raison d'un `BOOTSTRAP_REQ` toutes les 2 s tant que la table
-        // est vide, toutes les 15 s quand elle a des contacts mais reste
-        // pauvre. Partage `last_bootstrap` avec les envois immédiats pour
-        // ne pas envoyer deux requêtes en rafale. Sans cette boucle, un
-        // timeout sur le premier candidat laissait Kad mort à 0 contact.
+        // Drenaje de la cola de candidatos bootstrap —
+        // `CKademlia::Process` de eMule (Kademlia.cpp:287) vacía `s_liBootstrapList`
+        // a razón de un `BOOTSTRAP_REQ` cada 2 s mientras la tabla
+        // esté vacía, cada 15 s cuando contenga contactos pero siga
+        // siendo escasa. Comparte `last_bootstrap` con los envíos inmediatos para
+        // no enviar dos peticiones en ráfaga. Sin este bucle, un
+        // tiempo de espera en el primer candidato dejaba a Kad inactivo con 0 contactos.
         let drain_kad = Arc::clone(self);
         let drain_cancel = cancel_token.clone();
         tokio::spawn(async move {
@@ -579,10 +579,10 @@ impl KadService {
                         if !drain_kad.udp.get_snapshot().await.is_active {
                             continue;
                         }
-                        // Gate `!IsConnected()` d'eMule : `HasHadContact` —
-                        // on draine tant qu'aucun contact n'a jamais
-                        // répondu (vérifié), même si la table contient
-                        // des contacts non vérifiés (zombies importés).
+                        // Compuerta `!IsConnected()` de eMule: `HasHadContact` —
+                        // se drena mientras ningún contacto haya respondido
+                        // jamás (verificado), incluso si la tabla contiene
+                        // contactos no verificados (zombis importados).
                         let (contacts, has_verified) = {
                             let table = drain_kad.routing_table.lock().await;
                             let has_v = !table
@@ -630,12 +630,12 @@ impl KadService {
         let kad = Arc::clone(self);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-            // First tick completes immediately, skip it to let startup bootstrap finish
+            // El primer tick se completa de inmediato; omitirlo para dejar finalizar el bootstrap de inicio
             interval.tick().await;
             let mut last_source_publish: Option<std::time::Instant> = None;
             let mut last_keyword_publish: Option<std::time::Instant> = None;
-            // Compteur de contacts déjà notifié — on n'émet
-            // `kad.statusChanged` que quand la valeur observable change.
+            // Contador de contactos ya notificado — solo se emite
+            // `kad.statusChanged` cuando el valor observable cambia.
             let mut last_contacts: Option<usize> = None;
 
             loop {
@@ -660,13 +660,13 @@ impl KadService {
                             total_contacts
                         );
 
-                        // La table évolue aussi hors RPC (learn_contact,
-                        // lookups, bootstrap) — on nudge l'UI à chaque
-                        // changement pour que le badge sidebar reste frais.
-                        // Pas d'émission à la première observation : le
-                        // client refetch déjà le status à la connexion, et
-                        // un event intempestif ~30 s après le démarrage
-                        // s'intercalerait dans les réponses RPC en vol.
+                        // La tabla también evoluciona fuera de RPC (learn_contact,
+                        // búsquedas, bootstrap) — avisamos a la interfaz en cada
+                        // cambio para que la insignia de la barra lateral se mantenga actualizada.
+                        // Sin emisión en la primera observación: el
+                        // cliente ya vuelve a solicitar el estado al conectarse, y
+                        // un evento intempestivo ~30 s tras el inicio
+                        // se intercalaría en las respuestas RPC en vuelo.
                         if let Some(prev) = last_contacts {
                             if prev != total_contacts {
                                 kad.emit_status_changed();
@@ -682,15 +682,15 @@ impl KadService {
                             let added = kad.bootstrap_active_contacts(15).await;
                             tracing::debug!("Kad background maintenance bootstrap cycle added {} contacts", added);
 
-                            // Perform a random find_node lookup to explore and populate distant buckets
+                            // Realizar una búsqueda find_node aleatoria para explorar y poblar cubos distantes
                             let random_target = KadId::random();
                             let _ = kad.find_node(&random_target).await;
                         }
 
-                        // UDP firewall reachability check (eMule runs it when
-                        // Kad becomes connected and re-checks while unverified).
-                        // Spawned so the maintenance loop is not blocked by
-                        // the up-to-6min test budget.
+                        // Comprobación de accesibilidad del cortafuegos UDP (eMule la ejecuta cuando
+                        // Kad pasa a conectado y vuelve a comprobar mientras no esté verificado).
+                        // Se lanza en una tarea independiente para no bloquear el bucle de mantenimiento
+                        // con el presupuesto de prueba de hasta 6 minutos.
                         let needs_fw_check = {
                             let tracker = kad.udp.firewall_tracker();
                             let fw = tracker.lock().await;
@@ -704,11 +704,11 @@ impl KadService {
                             });
                         }
 
-                        // eMule `CKademlia::Process` → `RecheckFirewalled`
-                        // (`m_tNextFirewallCheck`, hourly) : ré-arme le round
-                        // TCP (`SetRecheckIP` — les HELLO entrants repartent
-                        // à émettre FIREWALLED{2}_REQ) et relance aussi le
-                        // test UDP (`ReCheckFirewallUDP`).
+                        // `CKademlia::Process` → `RecheckFirewalled` de eMule
+                        // (`m_tNextFirewallCheck`, cada hora): rearma la ronda
+                        // TCP (`SetRecheckIP` — los HELLO entrantes vuelven
+                        // a emitir FIREWALLED{2}_REQ) y relanza también la
+                        // prueba UDP (`ReCheckFirewallUDP`).
                         let tcp_recheck_due = {
                             let tracker = kad.udp.firewall_tracker();
                             let mut fw = tracker.lock().await;
@@ -727,11 +727,11 @@ impl KadService {
                             });
                         }
 
-                        // Periodic republication of shared files — eMule runs
-                        // independent source (5 h) and keyword (24 h) timers
+                        // Republicación periódica de archivos compartidos — eMule ejecuta
+                        // temporizadores independientes para fuentes (5 h) y palabras clave (24 h)
                         // (`Kademlia.cpp` `m_tNextSrcPublishTime` /
-                        // `m_tNextKeyPublishTime`). A first publish of each
-                        // kind also runs as soon as the table has contacts.
+                        // `m_tNextKeyPublishTime`). Una primera publicación de cada
+                        // tipo también se ejecuta en cuanto la tabla contiene contactos.
                         let source_due = last_source_publish
                             .map(|t| t.elapsed() >= KAD_SOURCE_REPUBLISH_INTERVAL)
                             .unwrap_or(true);
@@ -750,9 +750,9 @@ impl KadService {
                                 let mut published = 0usize;
                                 for f in shared.iter().filter(|f| f.enabled).take(200) {
                                     let hash = f.file_hash.trim().to_string();
-                                    // eMule `CKnownFile::PublishSrc`: part files
-                                    // are published as sources too — peers can
-                                    // fetch the parts we already completed.
+                                    // `CKnownFile::PublishSrc` de eMule: los archivos de partes
+                                    // también se publican como fuentes — los pares pueden
+                                    // descargar las partes que ya hemos completado.
                                     if source_due {
                                         if let Ok(n) = kad
                                             .publish_source(&hash, f.file_size, tcp_port)
@@ -761,9 +761,9 @@ impl KadService {
                                             published += n;
                                         }
                                     }
-                                    // eMule keyword publish skips part files
-                                    // ("someone else should have the full file
-                                    // to publish these keywords").
+                                    // La publicación de palabras clave de eMule omite los archivos de partes
+                                    // ("alguien más debería tener el archivo completo
+                                    // para publicar estas palabras clave").
                                     if keyword_due && !f.is_partial {
                                         let _ = kad
                                             .publish_keyword(
@@ -796,11 +796,11 @@ impl KadService {
         })
     }
 
-    /// Performs an iterative Find Node lookup for a target Kad ID.
+    /// Realiza una búsqueda iterativa de nodos (Find Node) para un ID Kad objetivo.
     ///
-    /// Shares `lookup::converge_closest_contacts` (parallel ALPHA queries,
-    /// per-request timeouts, early `SEARCHTOLERANCE` stop) — eMule's search
-    /// state machine equivalent.
+    /// Comparte `lookup::converge_closest_contacts` (consultas ALPHA en paralelo,
+    /// tiempos de espera por petición, parada temprana por `SEARCHTOLERANCE`) — equivalente
+    /// a la máquina de estados de búsqueda de eMule.
     pub async fn find_node(
         &self,
         target_kad_id: &KadId,
@@ -830,13 +830,13 @@ impl KadService {
         let imported_contacts =
             nodes_dat::parse_valid_nodes_contacts(raw_bytes, &self.policy_mgr, &self.ip_filter)?;
 
-        // Persist to SQLite
+        // Persistir en SQLite
         {
             let mut dl = self.downloads.lock().await;
             let _ = dl.db_mut().batch_upsert_kad_contacts(&imported_contacts);
         }
 
-        // Insert into in-memory routing table
+        // Insertar en la tabla de enrutamiento en memoria
         let mut table = self.routing_table.lock().await;
         for c in &imported_contacts {
             table.insert_or_update(c.clone());
@@ -868,14 +868,14 @@ impl KadService {
             .map_err(|e| format!("Database error clearing kad contacts: {e}"))
     }
 
-    /// Nombre de recherches de sources actuellement en vol — équivalent de
-    /// `CKademlia::GetTotalFile()` (borne eMule `KADEMLIATOTALFILE`).
+    /// Número de búsquedas de fuentes actualmente en vuelo — equivalente de
+    /// `CKademlia::GetTotalFile()` (límite eMule `KADEMLIATOTALFILE`).
     pub async fn in_flight_file_searches(&self) -> usize {
         self.in_flight_searches.lock().await.len()
     }
 
-    /// Iterative search for sources of a target file hash in Kad DHT.
-    /// Discovered sources are filtered, converted to PeerSource (origin Kad) and automatically injected into DownloadService if present.
+    /// Búsqueda iterativa de fuentes de un hash de archivo objetivo en Kad DHT.
+    /// Las fuentes descubiertas se filtran, se convierten a PeerSource (origen Kad) y se inyectan automáticamente en DownloadService si está presente.
     pub async fn search_sources(
         &self,
         file_hash_hex: &str,
@@ -894,13 +894,13 @@ impl KadService {
         .await
     }
 
-    /// Publishes this node as a source for a given file hash to the closest Kad contacts.
+    /// Publica este nodo como fuente para un hash de archivo determinado en los contactos Kad más cercanos.
     ///
-    /// The targets are converged with an iterative `find_node` lookup first:
-    /// eMule nodes silently drop `PUBLISH_SOURCE_REQ` when the file hash is
-    /// outside `SEARCHTOLERANCE` of their KadID, and only answer
-    /// `PUBLISH_RES` when the entry was actually stored — publishing blind
-    /// from the local table therefore almost always times out.
+    /// Los objetivos se convergen primero con una búsqueda iterativa `find_node`:
+    /// los nodos eMule descartan silenciosamente `PUBLISH_SOURCE_REQ` cuando el hash del archivo queda
+    /// fuera de `SEARCHTOLERANCE` de su KadID, y solo responden
+    /// `PUBLISH_RES` cuando la entrada fue realmente almacenada — publicar a ciegas
+    /// desde la tabla local casi siempre agota el tiempo de espera.
     pub async fn publish_source(
         &self,
         file_hash_hex: &str,
@@ -934,11 +934,11 @@ impl KadService {
             return Ok(0);
         }
 
-        // Advertise our *public* IPv4 (eD2K HighID / FIREWALLED_RES echo) —
-        // indexers reject source contacts whose IP differs from the sender's
-        // (see our own PublishSourceReq check), so the socket bind address
-        // (0.0.0.0 or NATed) is unusable. Same for the UDP port: advertise the
-        // extern port once the firewall check proved it reachable.
+        // Anunciar nuestra IPv4 *pública* (HighID eD2K / eco FIREWALLED_RES) —
+        // los indexadores rechazan contactos de fuentes cuya IP difiera de la del remitente
+        // (véase nuestra propia comprobación en PublishSourceReq), por lo que la dirección
+        // de enlace del socket (0.0.0.0 o tras NAT) es inutilizable. Lo mismo para el puerto UDP:
+        // anunciar el puerto externo una vez que la prueba de cortafuegos demuestre su accesibilidad.
         let intern_udp = self.udp.local_udp_port().await.unwrap_or(0);
         let (fw_observed_ip, advertised_udp_port, udp_verified_open) = {
             let tracker = self.udp.firewall_tracker();
@@ -969,11 +969,11 @@ impl KadService {
         };
 
         // `GetMyConnectOptions(true, true)` (OtherFunctions.cpp:4037,
-        // Search.cpp:692) : bits 0-2 = crypt layer (byte déjà calculé au
-        // démarrage pour `FINDBUDDY_RES`), bit 3 = `DirectUDPCallback`
-        // annoncé quand TCP est inatteignable (pas de HighID eD2K) mais
-        // l'UDP Kad est testé ouvert — le pair peut alors nous envoyer
-        // `OP_DIRECTCALLBACKREQ` pour que nous composions vers lui.
+        // Search.cpp:692): bits 0-2 = capa criptográfica (byte ya calculado al
+        // inicio para `FINDBUDDY_RES`), bit 3 = `DirectUDPCallback`
+        // anunciado cuando TCP es inaccesible (sin HighID eD2K) pero
+        // el UDP Kad se ha probado abierto — el par puede entonces enviarnos
+        // `OP_DIRECTCALLBACKREQ` para que conectemos hacia él.
         let connect_options: u8 = (self.udp.buddy_connect_options() & 0x07)
             | (((!has_high_id) && udp_verified_open) as u8) << 3;
 
@@ -1016,7 +1016,7 @@ impl KadService {
         Ok(success_count)
     }
 
-    /// Searches Kad DHT for keyword entries matching a search term.
+    /// Busca en Kad DHT entradas de palabras clave que coincidan con un término de búsqueda.
     pub async fn search_keywords(
         &self,
         term: &str,
@@ -1035,9 +1035,9 @@ impl KadService {
         .await
     }
 
-    /// Publishes keyword entries for a file to the closest Kad contacts.
-    /// `aich_root` is attached as `TAG_KADAICHHASHPUB` only to v9+ targets
-    /// (eMule `PreparePacketForTags`).
+    /// Publica entradas de palabras clave para un archivo en los contactos Kad más cercanos.
+    /// `aich_root` se adjunta como `TAG_KADAICHHASHPUB` solo a objetivos v9+
+    /// (`PreparePacketForTags` de eMule).
     pub async fn publish_keyword(
         &self,
         file_hash_hex: &str,
@@ -1058,10 +1058,10 @@ impl KadService {
         .await
     }
 
-    /// Searches Kad DHT for file notes (comments/ratings): sends
-    /// `KADEMLIA2_SEARCH_NOTES_REQ` (0x35) to the contacts closest to the
-    /// file hash and aggregates the returned `CEntry` tag lists, deduped by
-    /// publisher `source_id`. Returned as display-safe JSON.
+    /// Busca en Kad DHT notas de archivos (comentarios/valoraciones): envía
+    /// `KADEMLIA2_SEARCH_NOTES_REQ` (0x35) a los contactos más cercanos al
+    /// hash del archivo y agrega las listas de etiquetas `CEntry` devueltas, deduplicadas por
+    /// el `source_id` del publicador. Devuelto como JSON seguro para visualización.
     pub async fn search_notes(
         &self,
         file_hash_hex: &str,
@@ -1070,9 +1070,9 @@ impl KadService {
         let target_kad_id = KadId::from_hash_hex(file_hash_hex)
             .ok_or_else(|| format!("Invalid target file hash hex: {file_hash_hex}"))?;
 
-        // Converge first (like search_sources/publish): eMule indexers only
-        // answer within SEARCHTOLERANCE of the key — the local table alone
-        // would mostly hit out-of-tolerance nodes that drop the request.
+        // Converger primero (como en search_sources/publish): los indexadores eMule solo
+        // responden dentro de SEARCHTOLERANCE de la clave — la tabla local sola
+        // golpearía principalmente nodos fuera de tolerancia que descartan la petición.
         let candidates = lookup::converge_closest_contacts(
             &target_kad_id,
             self.routing_table.as_ref(),
@@ -1127,9 +1127,9 @@ impl KadService {
         Ok(out)
     }
 
-    /// Publishes a local file note (comment + optional rating) to the Kad
-    /// contacts closest to the file hash (`KADEMLIA2_PUBLISH_NOTES_REQ`,
-    /// 0x45). Returns the number of indexers that accepted.
+    /// Publica una nota de archivo local (comentario + valoración opcional) en los contactos Kad
+    /// más cercanos al hash del archivo (`KADEMLIA2_PUBLISH_NOTES_REQ`,
+    /// 0x45). Devuelve el número de indexadores que aceptaron.
     pub async fn publish_note(
         &self,
         file_hash_hex: &str,
@@ -1170,8 +1170,8 @@ impl KadService {
             });
         }
 
-        // Converge first — indexers silently drop publishes for keys outside
-        // SEARCHTOLERANCE of their KadID.
+        // Converger primero — los indexadores descartan silenciosamente las publicaciones para claves fuera
+        // de SEARCHTOLERANCE de su KadID.
         let candidates = lookup::converge_closest_contacts(
             &target_kad_id,
             self.routing_table.as_ref(),

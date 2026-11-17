@@ -14,32 +14,32 @@
 
 use mule_core::model::{PeerSource, PeerSourceOrigin};
 
-/// Callback reachability context for one scheduling tick.
+/// Contexto de alcanzabilidad de devolución de llamada para un ciclo de planificación.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CallbackCtx {
-    /// eD2K server session is connected (`client_id != 0` assigned).
+    /// La sesión de servidor eD2K está conectada (`client_id != 0` asignado).
     pub server_connected: bool,
-    /// The server assigned us a HighID — inbound TCP reaches us
-    /// (eMule `IsLowID() == false`).
+    /// El servidor nos asignó un HighID — TCP entrante nos alcanza
+    /// (`IsLowID() == false` de eMule).
     pub server_high_id: bool,
-    /// Connected server IPv4 (LE u32) — `cur_server->GetIP()`.
+    /// IPv4 del servidor conectado (LE u32) — `cur_server->GetIP()`.
     pub our_server_ip: u32,
-    /// Connected server TCP port — `cur_server->GetPort()`.
+    /// Puerto TCP del servidor conectado — `cur_server->GetPort()`.
     pub our_server_port: u16,
-    /// Kad UDP is running *and* verified reachable
-    /// (`CKademlia::IsConnected() && !IsFirewalled()`): the peer can then
-    /// connect back to our TCP port even when our eD2K ID is LowID.
+    /// UDP de Kad está en ejecución *y* verificado como alcanzable
+    /// (`CKademlia::IsConnected() && !IsFirewalled()`): el par puede entonces
+    /// conectarse de vuelta a nuestro puerto TCP incluso cuando nuestro ID eD2K es LowID.
     pub kad_open: bool,
 }
 
-/// eMule `CServerConnect::IsLocalServer` — the source lives on our
-/// connected server, so `OP_CALLBACKREQUEST` targets the right LowID
-/// namespace.
+/// `CServerConnect::IsLocalServer` de eMule — la fuente reside en nuestro
+/// servidor conectado, por lo que `OP_CALLBACKREQUEST` apunta al espacio de
+/// nombres LowID correcto.
 ///
-/// `server_ip == 0` on the source means the server context is unknown:
-/// only server-origin sources count as local then (they were returned by
-/// our own server's `OP_FOUNDSOURCES`). `server_port == 0` = port unknown
-/// (UDP `OP_GLOBFOUNDSOURCES` responders) → IP-only match.
+/// `server_ip == 0` en la fuente indica que el contexto del servidor se desconoce:
+/// solo las fuentes con origen servidor cuentan como locales en ese caso (fueron devueltas por
+/// el `OP_FOUNDSOURCES` de nuestro propio servidor). `server_port == 0` = puerto desconocido
+/// (respondedores UDP `OP_GLOBFOUNDSOURCES`) → coincidencia solo por IP.
 pub(crate) fn is_local_server(src: &PeerSource, ctx: &CallbackCtx) -> bool {
     if !ctx.server_connected {
         return false;
@@ -51,13 +51,13 @@ pub(crate) fn is_local_server(src: &PeerSource, ctx: &CallbackCtx) -> bool {
         && (src.server_port == 0 || src.server_port == ctx.our_server_port)
 }
 
-/// eMule `CemuleApp::CanDoCallback` — can the LowID source be asked to
-/// connect back to us?
+/// `CemuleApp::CanDoCallback` de eMule — ¿se le puede pedir a la fuente LowID que
+/// devuelva la conexión hacia nosotros?
 ///
-/// - No usable Kad → only a HighID eD2K connection makes us reachable.
-/// - Kad connected and not firewalled → callbacks are possible; but when
-///   *we* are LowID on the same server as the source, the callback would
-///   relay onto ourselves — eMule refuses (protocol violation, ban risk).
+/// - Sin Kad utilizable → solo una conexión eD2K HighID nos hace alcanzables.
+/// - Kad conectado y sin cortafuegos → las devoluciones de llamada son posibles; pero cuando
+///   *nosotros* somos LowID en el mismo servidor que la fuente, la devolución de llamada
+///   se retransmitiría hacia nosotros mismos — eMule lo rechaza (violación de protocolo, riesgo de baneo).
 pub(crate) fn can_do_callback(src: &PeerSource, ctx: &CallbackCtx) -> bool {
     if !ctx.kad_open {
         return ctx.server_high_id;
@@ -70,10 +70,10 @@ pub(crate) fn can_do_callback(src: &PeerSource, ctx: &CallbackCtx) -> bool {
     }
 }
 
-/// Whether a `lowid:` source has a viable server-callback path — eMule
-/// `TryToConnect`'s `IsLocalServer` option (`BaseClient.cpp:1429`). The
-/// remaining eMule options (direct UDP callback, Kad buddy) are not
-/// carried by `lowid:` sources (`kadcb:` sources carry the buddy instead).
+/// Indica si una fuente `lowid:` tiene una ruta viable de callback de servidor — opción
+/// `IsLocalServer` de `TryToConnect` de eMule (`BaseClient.cpp:1429`). Las
+/// opciones restantes de eMule (devolución directa por UDP, compañero Kad) no las
+/// portan las fuentes `lowid:` (las fuentes `kadcb:` portan el compañero en su lugar).
 pub(crate) fn has_server_callback_option(src: &PeerSource, ctx: &CallbackCtx) -> bool {
     is_local_server(src, ctx)
 }
@@ -122,23 +122,23 @@ mod tests {
     #[test]
     fn local_server_matching() {
         let c = ctx(true, true, false);
-        // Server-origin sources without explicit server fields are local.
+        // Las fuentes de origen servidor sin campos de servidor explícitos son locales.
         assert!(is_local_server(
             &lowid_src(0, 0, PeerSourceOrigin::Server),
             &c
         ));
-        // SX sources: exact endpoint match or IP-only (port unknown).
+        // Fuentes SX: coincidencia exacta de extremo o solo por IP (puerto desconocido).
         let sx = PeerSourceOrigin::SourceExchange;
         assert!(is_local_server(&lowid_src(OUR_IP, 49661, sx), &c));
         assert!(is_local_server(&lowid_src(OUR_IP, 0, sx), &c));
         assert!(!is_local_server(&lowid_src(OUR_IP, 49662, sx), &c));
         assert!(!is_local_server(&lowid_src(0x0A0B0C0D, 0, sx), &c));
-        // Not connected → nothing is local.
+        // No conectado → nada es local.
         assert!(!is_local_server(
             &lowid_src(0, 0, PeerSourceOrigin::Server),
             &ctx(false, false, false)
         ));
-        // SX without server fields is NOT local.
+        // SX sin campos de servidor NO es local.
         assert!(!is_local_server(&lowid_src(0, 0, sx), &c));
     }
 
@@ -148,22 +148,22 @@ mod tests {
         let local = lowid_src(OUR_IP, 49661, sx);
         let foreign = lowid_src(0x0A0B0C0D, 49661, sx);
 
-        // HighID → callback possible for any LowID.
+        // HighID → devolución de llamada posible para cualquier LowID.
         let high = ctx(true, true, false);
         assert!(can_do_callback(&local, &high));
         assert!(can_do_callback(&foreign, &high));
 
-        // LowID + no Kad → nobody can reach us.
+        // LowID + sin Kad → nadie puede alcanzarnos.
         let low_nokad = ctx(true, false, false);
         assert!(!can_do_callback(&local, &low_nokad));
         assert!(!can_do_callback(&foreign, &low_nokad));
 
-        // LowID + Kad open → foreign lowids only (same-server is banned).
+        // LowID + Kad abierto → solo lowids foráneas (mismo servidor está baneado).
         let low_kad = ctx(true, false, true);
         assert!(!can_do_callback(&local, &low_kad));
         assert!(can_do_callback(&foreign, &low_kad));
 
-        // No server + Kad open → everything is foreign → allowed.
+        // Sin servidor + Kad abierto → todo es foráneo → permitido.
         let kad_only = ctx(false, false, true);
         assert!(can_do_callback(&local, &kad_only));
         assert!(can_do_callback(&foreign, &kad_only));

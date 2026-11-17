@@ -15,34 +15,34 @@
 
 use clap::ValueEnum;
 
-/// Niveau de risque d'un outil MCP.
+/// Nivel de riesgo de una herramienta MCP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolRisk {
-    /// Lecture seule : aucune mutation d'état côté daemon.
+    /// Solo lectura: ninguna mutación de estado en el daemon.
     Read,
-    /// Mutation d'état réversible ou à effet borné (connexion, pause,
-    /// import, publication…).
+    /// Mutación de estado reversible o con efecto acotado (conexión, pausa,
+    /// importación, publicación…).
     Mutate,
-    /// Action destructive ou critique : perte de données, arrêt du daemon,
-    /// coupure réseau, perte d'identité/credits.
+    /// Acción destructiva o crítica: pérdida de datos, parada del daemon,
+    /// corte de red, pérdida de identidad/créditos.
     Destructive,
 }
 
-/// Profil de filtrage exposé via `--tool-profile`.
+/// Perfil de filtrado expuesto mediante `--tool-profile`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum ToolProfile {
-    /// Outils de lecture uniquement — exposition sans mutation.
+    /// Herramientas de solo lectura — exposición sin mutación.
     Read,
-    /// Lecture + mutations, sans les actions destructives.
+    /// Lectura + mutaciones, sin acciones destructivas.
     Safe,
-    /// Tous les outils — comportement historique, profil par défaut.
+    /// Todas las herramientas — comportamiento histórico, perfil por defecto.
     #[default]
     Full,
 }
 
 impl ToolProfile {
-    /// Vrai si le profil autorise l'exécution/la présentation d'un outil
-    /// de niveau `risk`.
+    /// Verdadero si el perfil autoriza la ejecución/presentación de una herramienta
+    /// de nivel `risk`.
     pub fn allows(self, risk: ToolRisk) -> bool {
         match self {
             ToolProfile::Read => risk == ToolRisk::Read,
@@ -51,7 +51,7 @@ impl ToolProfile {
         }
     }
 
-    /// Libellé stable utilisé dans les messages d'erreur et les logs.
+    /// Etiqueta estable utilizada en los mensajes de error y registros.
     pub fn as_str(self) -> &'static str {
         match self {
             ToolProfile::Read => "read",
@@ -61,7 +61,7 @@ impl ToolProfile {
     }
 }
 
-/// Outils de lecture seule — aucun effet de bord côté daemon.
+/// Herramientas de solo lectura — sin efectos secundarios en el daemon.
 const READ_TOOLS: &[&str] = &[
     // system
     "emule_status",
@@ -87,7 +87,7 @@ const READ_TOOLS: &[&str] = &[
     "emule_kad_search_sources",
     "emule_kad_search_notes",
     "emule_kad_inspect_nodes_dat",
-    // shares / uploads / identité / historique
+    // compartidos / subidas / identidad / historial
     "emule_list_sources",
     "emule_swarm_status",
     "emule_list_shares",
@@ -107,8 +107,8 @@ const READ_TOOLS: &[&str] = &[
     "emule_list_categories",
 ];
 
-/// Outils destructifs ou critiques : perte irréversible, arrêt, coupure
-/// réseau globale, perte d'identité (les credits eD2K sont liés au hash).
+/// Herramientas destructivas o críticas: pérdida irreversible, parada, corte
+/// de red global, pérdida de identidad (los créditos eD2K están ligados al hash).
 const DESTRUCTIVE_TOOLS: &[&str] = &[
     "emule_shutdown",
     "emule_network_disconnect_all",
@@ -125,7 +125,7 @@ const DESTRUCTIVE_TOOLS: &[&str] = &[
     "emule_delete_category",
 ];
 
-/// Outils de mutation d'état réversible ou bornée.
+/// Herramientas de mutación de estado reversible o acotada.
 const MUTATE_TOOLS: &[&str] = &[
     // system
     "emule_update_settings",
@@ -176,9 +176,9 @@ const MUTATE_TOOLS: &[&str] = &[
     "emule_reorder_categories",
 ];
 
-/// Classification d'un outil par nom. `None` = outil non répertorié :
-/// traité comme « refusé » hors profil `Full` (défaut sûr), et détecté
-/// par le test d'exhaustivité.
+/// Clasificación de una herramienta por nombre. `None` = herramienta no catalogada:
+/// tratada como «rechazada» fuera del perfil `Full` (defecto seguro), y detectada
+/// por la prueba de exhaustividad.
 pub fn classify(tool_name: &str) -> Option<ToolRisk> {
     if READ_TOOLS.contains(&tool_name) {
         return Some(ToolRisk::Read);

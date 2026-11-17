@@ -6,9 +6,9 @@ use serde_json::{json, Value};
 use crate::error::JsonRpcError;
 use crate::state::AppState;
 
-/// Nudge `shares.changed` — les clients refetchent `shares.list` (le badge
-/// sidebar inclus) après chaque mutation, y compris celles initiées hors
-/// UI (MCP, CLI).
+/// Notificación `shares.changed` — los clientes vuelven a consultar `shares.list` (incluida
+/// la insignia de la barra lateral) tras cada mutación, incluidas las iniciadas fuera
+/// de la UI (MCP, CLI).
 fn emit_shares_changed(state: &AppState) {
     state.emit_event(|sequence| crate::services::DaemonEvent::Custom {
         method: "shares.changed".to_string(),
@@ -21,10 +21,10 @@ pub async fn handle_shares_list(state: &AppState) -> Result<Value, JsonRpcError>
         let dl_svc = state.downloads.lock().await;
         dl_svc.list_all_shared_files()?
     };
-    // Statistiques d'upload par fichier (jointure sur le hash en
-    // minuscules) : débit mesuré instantané agrégé sur les slots actifs +
-    // total cumulé persisté (eMule colonnes « Upload speed » /
-    // « Transferred » de la liste des fichiers partagés).
+    // Estadísticas de subida por archivo (unión sobre el hash en
+    // minúsculas): tasa medida instantánea agregada en las ranuras activas +
+    // total acumulado persistido (columnas «Upload speed» /
+    // «Transferred» de eMule en la lista de archivos compartidos).
     let um = state.inbound_listener.upload_manager();
     let rates = um.per_file_rates_bps().await;
     let totals = um.per_file_uploaded_bytes();
@@ -61,7 +61,7 @@ pub async fn handle_shares_add(
     let mut shared = mule_core::model::SharedFile::new(file_hash, file_name, file_size, file_path);
     {
         let mut dl_svc = state.downloads.lock().await;
-        // eMule `UAPPref` : un nouveau partage démarre en priorité « auto ».
+        // eMule `UAPPref`: un nuevo recurso compartido inicia con prioridad «auto».
         if dl_svc.auto_up_priority_enabled() {
             shared.up_priority = "auto".to_string();
         }
@@ -96,9 +96,9 @@ pub async fn handle_shares_remove(
     Ok(json!({ "removed": removed }))
 }
 
-/// `shares.rename` — renomme un fichier partagé complet (`{fileHash,
-/// newName}`) : fichier disque + entrée `shared_files` (et le download
-/// complété associé s'il existe).
+/// `shares.rename` — renombra un archivo compartido completo (`{fileHash,
+/// newName}`): archivo en disco + entrada en `shared_files` (y la descarga
+/// completada asociada si existe).
 pub async fn handle_shares_rename(
     state: &AppState,
     params: Option<Value>,
@@ -122,10 +122,10 @@ pub async fn handle_shares_rename(
     Ok(json!({ "renamed": true }))
 }
 
-/// `shares.rescan` — re-scans the configured download (Incoming) directory,
-/// registers newly found files as shared and drops shares whose file was
-/// deleted from disk, like eMule's manual reload of the shared-files list.
-/// Honors the `share_download_dir` opt-out.
+/// `shares.rescan` — vuelve a escanear el directorio de descargas configurado (Incoming),
+/// registra los archivos nuevos encontrados como compartidos y elimina los compartidos cuyo archivo
+/// haya sido borrado del disco, al igual que la recarga manual de la lista de archivos compartidos de eMule.
+/// Respeta la exclusión voluntaria de `share_download_dir`.
 pub async fn handle_shares_rescan(state: &AppState) -> Result<Value, JsonRpcError> {
     let dir = {
         let dl = state.downloads.lock().await;
@@ -146,18 +146,18 @@ pub async fn handle_shares_rescan(state: &AppState) -> Result<Value, JsonRpcErro
     }))
 }
 
-/// `shares.importKnownMet` — migration helper importing eMule's
-/// `known.met` index (`CKnownFileList::LoadKnownFiles`).
+/// `shares.importKnownMet` — asistente de migración que importa el índice
+/// `known.met` de eMule (`CKnownFileList::LoadKnownFiles`).
 ///
-/// `{metPath, directory?, verify?}`: for every shareable file found
-/// under `directory` (default = configured download dir), the record
-/// matching on `(fileName, fileSize)` is applied — the file is shared
-/// under eMule's hash without re-hashing (`verify=false`, the migration
-/// fast path) or after a real re-hash comparison (`verify=true`).
-/// Already-shared files matching by hash are *enriched* only
-/// (`aich_root`, uploaded-bytes stats) — user settings are preserved.
-/// Part hashes, AICH root, upload priority and transferred stats are
-/// imported like eMule's `LoadTagsFromFile`.
+/// `{metPath, directory?, verify?}`: para cada archivo compartible encontrado
+/// bajo `directory` (por defecto = directorio de descargas configurado), se aplica
+/// el registro que coincide en `(fileName, fileSize)` — el archivo se comparte
+/// bajo el hash de eMule sin recalcular el hash (`verify=false`, la ruta rápida
+/// de migración) o tras una comparación real recalculando el hash (`verify=true`).
+/// Los archivos ya compartidos que coinciden por hash solo se *enriquecen*
+/// (`aich_root`, estadísticas de bytes subidos) — los ajustes de usuario se conservan.
+/// Los hashes de partes, la raíz AICH, la prioridad de subida y las estadísticas de transferencia
+/// se importan al igual que `LoadTagsFromFile` de eMule.
 pub async fn handle_shares_import_known_met(
     state: &AppState,
     params: Option<Value>,
@@ -207,9 +207,9 @@ pub async fn handle_shares_set_enabled(
     let mut file_opt = dl_svc.get_shared_file(file_hash)?;
     match file_opt {
         Some(ref mut sf) if sf.is_partial => {
-            // Persisting a transient partial share would freeze its `.part`
-            // path in `shared_files` and serve it later as a complete file.
-            // eMule does not allow unsharing an in-progress part file.
+            // Persistir un recurso compartido parcial transitorio congelaría su ruta
+            // `.part` en `shared_files` y lo serviría más tarde como un archivo completo.
+            // eMule no permite dejar de compartir un archivo de parte en curso.
             Err(JsonRpcError::business(
                 "Cannot enable/disable a partial share (download in progress)",
             ))
@@ -225,12 +225,12 @@ pub async fn handle_shares_set_enabled(
     }
 }
 
-/// `shares.setUploadPriority` — eMule upload priority for a shared file:
+/// `shares.setUploadPriority` — prioridad de subida de eMule para un archivo compartido:
 /// "verylow" | "low" | "normal" | "high" | "veryhigh" | "powershare" |
-/// "auto". "auto" est eMule `m_bAutoUpPriority` : la priorité effective
-/// est recalculée selon le nombre de clients qui uploadent le fichier
-/// (`UpdateAutoUpPriority` : >20 → low, >1 → normal, sinon → high).
-/// Weighted into the upload queue score (`GetFilePrioAsNumber` semantics).
+/// "auto". "auto" es `m_bAutoUpPriority` de eMule: la prioridad efectiva
+/// se recalcula según el número de clientes que descargan el archivo
+/// (`UpdateAutoUpPriority`: >20 → low, >1 → normal, en caso contrario → high).
+/// Ponderado en la puntuación de la cola de subida (semántica `GetFilePrioAsNumber`).
 pub async fn handle_shares_set_upload_priority(
     state: &AppState,
     params: Option<Value>,
@@ -255,8 +255,8 @@ pub async fn handle_shares_set_upload_priority(
             "Cannot set upload priority on a partial share (download in progress)",
         )),
         Some(ref mut sf) => {
-            // Resolve-then-upsert like setEnabled: also works on completed
-            // downloads that were never persisted in `shared_files`.
+            // Resolver y luego insertar/actualizar como setEnabled: también funciona en descargas
+            // completadas que nunca fueron persistidas en `shared_files`.
             sf.up_priority = priority.clone();
             dl_svc.add_shared_file(sf)?;
             drop(dl_svc);
@@ -267,10 +267,10 @@ pub async fn handle_shares_set_upload_priority(
     }
 }
 
-/// `shares.setCategory` — associe (ou retire avec `categoryId: null`) une
-/// catégorie à un fichier partagé. Fonctionne aussi sur les partages
-/// synthétisés depuis un download (partiel ou complété) : la catégorie du
-/// download fait alors foi et est mise à jour.
+/// `shares.setCategory` — asocia (o retira con `categoryId: null`) una
+/// categoría a un archivo compartido. También funciona en compartidos
+/// sintetizados desde una descarga (parcial o completada): la categoría de la
+/// descarga es la que manda y se actualiza.
 pub async fn handle_shares_set_category(
     state: &AppState,
     params: Option<Value>,
@@ -393,17 +393,17 @@ pub async fn handle_identity_rotate(state: &AppState) -> Result<Value, JsonRpcEr
     Ok(crate::rpc::handlers::json_value(&status))
 }
 
-/// `identity.importEmuleIdentity` — imports an eMule identity so the
-/// credits peers granted to it carry over (`CPreferences::Init` +
-/// `CEncryption` cryptkey):
-/// - `cryptkeyPath` — eMule `cryptkey.dat` (Base64 RSA-384 private key).
-/// - `preferencesDatPath` — eMule `preferences.dat`; only the
-///   `Preferences_Ext_Struct` user hash prefix is read
+/// `identity.importEmuleIdentity` — importa una identidad de eMule para que los
+/// créditos otorgados por los pares se mantengan (`CPreferences::Init` +
+/// clave criptográfica `CEncryption`):
+/// - `cryptkeyPath` — `cryptkey.dat` de eMule (clave privada RSA-384 en Base64).
+/// - `preferencesDatPath` — `preferences.dat` de eMule; solo se lee el prefijo
+///   del hash de usuario `Preferences_Ext_Struct`
 ///   (`Preferences.h:78-86`).
-/// - `replace` — required when the destination files already exist;
-///   overwriting an identity discards the credits tied to it.
+/// - `replace` — requerido cuando los archivos de destino ya existen;
+///   sobrescribir una identidad descarta los créditos asociados a ella.
 ///
-/// The new identity is propagated live (hello userhash, SUI key, KadID).
+/// La nueva identidad se propaga en vivo (userhash de saludo, clave SUI, KadID).
 pub async fn handle_identity_import_emule(
     state: &AppState,
     params: Option<Value>,
@@ -485,13 +485,13 @@ pub async fn handle_credits_stats(state: &AppState) -> Result<Value, JsonRpcErro
     }))
 }
 
-/// `credits.importClientsMet` — `CClientCreditsList::LoadList` : imports
-/// an eMule `clients.met` credit file. Entries carry the peer's RSA
-/// pubkey (`abySecureIdent`) — credits are keyed by `MD4(pubkey)` in our
-/// model, claimable under secure identification; entries without a
-/// stored pubkey or older than 150 days are reported as skipped, like
-/// eMule (`ClientCredits.cpp:207-213`).
-/// Params: `metPath` (required).
+/// `credits.importClientsMet` — `CClientCreditsList::LoadList`: importa
+/// un archivo de créditos `clients.met` de eMule. Las entradas contienen la clave
+/// pública RSA del par (`abySecureIdent`) — los créditos se indexan por `MD4(pubkey)` en nuestro
+/// modelo, reclamables bajo identificación segura; las entradas sin una
+/// clave pública guardada o con más de 150 días de antigüedad se omiten, al igual
+/// que en eMule (`ClientCredits.cpp:207-213`).
+/// Parámetros: `metPath` (requerido).
 pub async fn handle_credits_import_clients_met(
     state: &AppState,
     params: Option<Value>,

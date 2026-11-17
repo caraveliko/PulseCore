@@ -14,7 +14,7 @@ use super::super::protocol::{PR_ED2K, PR_EMULE};
 use super::tags::{encode_raw_tag, encode_tag};
 use crate::framing::RawPacket;
 
-/// Encodes an `Ed2kHello` message into a `RawPacket`.
+/// Codifica un mensaje `Ed2kHello` en un `RawPacket`.
 pub fn encode_hello(
     limits: &Ed2kLimits,
     profile: Ed2kCompatibilityProfile,
@@ -35,7 +35,7 @@ pub fn encode_hello(
 
     let mut payload = Vec::with_capacity(64);
     if profile != Ed2kCompatibilityProfile::LegacyEdonkey {
-        payload.push(0x10); // Standard eD2K OP_HELLO user hash length prefix (16 bytes)
+        payload.push(0x10); // Prefijo de longitud de hash de usuario estándar en OP_HELLO de eD2K (16 bytes)
     }
     payload.extend_from_slice(&hello.user_hash);
     payload.extend_from_slice(&hello.client_id.to_le_bytes());
@@ -49,7 +49,7 @@ pub fn encode_hello(
         encode_raw_tag(limits, opcode, raw, &mut payload)?;
     }
 
-    // Standard eD2K handshake always includes server IP (4 bytes LE) and port (2 bytes LE)
+    // El saludo estándar de eD2K siempre incluye IP del servidor (4 bytes LE) y puerto (2 bytes LE)
     payload.extend_from_slice(&hello.server_ip.to_le_bytes());
     payload.extend_from_slice(&hello.server_port.to_le_bytes());
 
@@ -69,7 +69,7 @@ pub fn encode_hello(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kHelloAnswer` message into a `RawPacket`.
+/// Codifica un mensaje `Ed2kHelloAnswer` en un `RawPacket`.
 pub fn encode_hello_answer(
     limits: &Ed2kLimits,
     answer: &Ed2kHelloAnswer,
@@ -119,7 +119,7 @@ pub fn encode_hello_answer(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `OP_EMULE_INFO` (`0xC5 0x01`) payload.
+/// Codifica una carga útil `OP_EMULE_INFO` (`0xC5 0x01`).
 pub fn encode_emule_info(
     limits: &Ed2kLimits,
     info: &Ed2kEmuleInfo,
@@ -127,10 +127,10 @@ pub fn encode_emule_info(
     encode_emule_info_with_opcode(limits, info, OP_EMULE_INFO)
 }
 
-/// Encodes an `OP_EMULE_INFO_ANSWER` (`0xC5 0x02`) payload.
+/// Codifica una carga útil `OP_EMULE_INFO_ANSWER` (`0xC5 0x02`).
 ///
-/// eMule `CUpDownClient::SendMuleInfoPacket(true)` sends the identical tag
-/// payload as `OP_EMULE_INFO` under the answer opcode.
+/// `CUpDownClient::SendMuleInfoPacket(true)` de eMule envía la carga útil de etiquetas
+/// idéntica a `OP_EMULE_INFO` bajo el código de operación de respuesta.
 pub fn encode_emule_info_answer(
     limits: &Ed2kLimits,
     info: &Ed2kEmuleInfo,

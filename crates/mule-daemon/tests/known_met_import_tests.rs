@@ -13,7 +13,7 @@ use mule_test_support::met_fixtures::*;
 use tempfile::tempdir;
 use tokio::sync::Mutex;
 
-/// Serializes a `known.met` record for `payload` (real eD2K hashes).
+/// Serializa un registro `known.met` para `payload` (hashes eD2K reales).
 fn record_bytes(payload: &[u8], name: &str, extra: &mut dyn FnMut(&mut Vec<u8>)) -> Vec<u8> {
     let hashed = hash_reader(&mut Cursor::new(payload)).unwrap();
     let mut rec = Vec::new();
@@ -27,7 +27,7 @@ fn record_bytes(payload: &[u8], name: &str, extra: &mut dyn FnMut(&mut Vec<u8>))
     push_string_tag(&mut tags, FT_FILENAME, name);
     push_u64_tag(&mut tags, FT_FILESIZE, hashed.total_bytes);
     extra(&mut tags);
-    // Count tags by re-parsing the serialized buffer.
+    // Contar etiquetas reanalizando el búfer serializado.
     let mut cr = mule_format::met::reader::CountingReader::new(Cursor::new(&tags));
     let mut n = 0u32;
     while cr.read_tag().is_ok() {
@@ -53,7 +53,7 @@ async fn test_known_met_import_registers_share_without_rehash() {
     let incoming = tempdir().unwrap();
     let payload = vec![0x42u8; 5_000];
     std::fs::write(incoming.path().join("movie.bin"), &payload).unwrap();
-    // A decoy file with no matching record.
+    // Un archivo señuelo sin registro coincidente.
     std::fs::write(incoming.path().join("other.bin"), vec![0x99u8; 100]).unwrap();
 
     let aich = aich_root_for(&payload);
@@ -106,7 +106,7 @@ async fn test_known_met_import_verify_rejects_mismatch() {
     ));
 
     let incoming = tempdir().unwrap();
-    // File content differs from what the record hashed — same name+size.
+    // El contenido del archivo difiere de lo que calculó el hash del registro — mismo nombre y tamaño.
     let real_payload = vec![0x11u8; 5_000];
     let stale_payload = vec![0x22u8; 5_000];
     std::fs::write(incoming.path().join("changed.bin"), &real_payload).unwrap();
@@ -119,7 +119,7 @@ async fn test_known_met_import_verify_rejects_mismatch() {
     let met_path = tmp.path().join("known.met");
     std::fs::write(&met_path, &met_buf).unwrap();
 
-    // verify=false trusts the (stale) record.
+    // verify=false confía en el registro (obsoleto).
     let report = import_known_met(
         &svc,
         met_path.clone(),
@@ -130,7 +130,7 @@ async fn test_known_met_import_verify_rejects_mismatch() {
     .unwrap();
     assert_eq!(report.imported, 1);
 
-    // Reset: drop the imported share, then verify=true must reject it.
+    // Reinicio: descartar el compartido importado; a continuación, verify=true debe rechazarlo.
     let stale_hex = {
         let hashed = hash_reader(&mut Cursor::new(&stale_payload)).unwrap();
         hashed.root_hash.to_hex().to_lowercase()
@@ -160,8 +160,8 @@ async fn test_known_met_import_enriches_existing_share() {
     let payload = vec![0x33u8; 4_000];
     std::fs::write(incoming.path().join("song.mp3"), &payload).unwrap();
 
-    // Pre-register the share with a user-set priority — import must not
-    // reset it (enrich-only path).
+    // Pre-registrar el compartido con una prioridad definida por el usuario — la importación no debe
+    // restablecerla (ruta exclusiva de enriquecimiento).
     let hashed = hash_reader(&mut Cursor::new(&payload)).unwrap();
     let hash_hex = hashed.root_hash.to_hex().to_lowercase();
     {

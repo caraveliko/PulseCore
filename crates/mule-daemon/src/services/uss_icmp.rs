@@ -17,24 +17,24 @@
 
 use std::net::Ipv4Addr;
 
-/// Max traceroute depth (eMule probes up to 30 hops).
+/// Profundidad máxima de traceroute (eMule sondea hasta 30 saltos).
 const MAX_HOPS: u8 = 30;
-/// Per-hop echo timeout.
+/// Tiempo de espera de eco por salto.
 const HOP_TIMEOUT_MS: u32 = 800;
-/// Abort a route after this many consecutive unanswered hops.
+/// Aborta una ruta tras este número de saltos consecutivos sin respuesta.
 const MAX_CONSECUTIVE_LOSS: u8 = 3;
 #[allow(dead_code)]
-/// ICMP payload size.
+/// Tamaño de la carga útil ICMP.
 const PAYLOAD_LEN: usize = 32;
 
-/// One ICMP echo reply. `reached` distinguishes the destination itself
-/// (`IP_SUCCESS`) from a transit router (`IP_TTL_EXPIRED_TRANSIT`).
+/// Una respuesta de eco ICMP. `reached` distingue el destino en sí
+/// (`IP_SUCCESS`) de un router de tránsito (`IP_TTL_EXPIRED_TRANSIT`).
 #[derive(Debug, Clone)]
 pub struct EchoReply {
-    /// Responding host (transit router for TTL-expired replies).
+    /// Host que responde (router de tránsito para respuestas con TTL expirado).
     pub responder: Ipv4Addr,
     pub rtt_ms: u32,
-    /// true when the reply came from the destination itself.
+    /// true cuando la respuesta provino del destino en sí.
     pub reached: bool,
 }
 
@@ -46,8 +46,8 @@ mod imp {
         IP_SUCCESS,
     };
 
-    /// Blocking ICMP echo — `ttl` = IP TTL (255 for a direct ping,
-    /// 1..MAX_HOPS for traceroute). Returns `None` on timeout/failure.
+    /// Eco ICMP bloqueante — `ttl` = TTL IP (255 para ping directo,
+    /// 1..MAX_HOPS para traceroute). Devuelve `None` en caso de tiempo de espera/fallo.
     pub fn echo(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Option<EchoReply> {
         unsafe {
             let Ok(handle) = IcmpCreateFile() else {
@@ -59,8 +59,8 @@ mod imp {
                 Ttl: ttl,
                 ..Default::default()
             };
-            // `destinationaddress` is the IPv4 address in network byte
-            // order — `from_le_bytes` on the octets yields exactly that.
+            // `destinationaddress` es la dirección IPv4 en orden de bytes
+            // de red — `from_le_bytes` en los octetos produce exactamente eso.
             let replies = IcmpSendEcho(
                 handle,
                 u32::from_le_bytes(dest.octets()),
@@ -94,12 +94,12 @@ mod imp {
     }
 }
 
-/// Whether ICMP probing is available on this platform (Windows only).
+/// Si el sondeo ICMP está disponible en esta plataforma (solo Windows).
 pub fn icmp_available() -> bool {
     cfg!(windows)
 }
 
-/// ICMP ping — returns the round-trip time in ms, `None` on timeout.
+/// Ping ICMP — devuelve el tiempo de ida y vuelta en ms, `None` en tiempo de espera.
 pub async fn ping(dest: Ipv4Addr, timeout_ms: u32) -> Option<u32> {
     tokio::task::spawn_blocking(move || imp::echo(dest, 255, timeout_ms))
         .await
@@ -109,8 +109,8 @@ pub async fn ping(dest: Ipv4Addr, timeout_ms: u32) -> Option<u32> {
         .map(|r| r.rtt_ms)
 }
 
-/// ICMP traceroute to `dest` — ordered hop list (closest … destination).
-/// Hops that don't answer are skipped; `None` when nothing replies at all.
+/// Traceroute ICMP a `dest` — lista ordenada de saltos (más cercano … destino).
+/// Los saltos que no responden se omiten; `None` cuando nada responde.
 pub async fn trace_route(dest: Ipv4Addr) -> Option<Vec<Ipv4Addr>> {
     tokio::task::spawn_blocking(move || {
         let mut hops = Vec::new();
@@ -143,9 +143,9 @@ pub async fn trace_route(dest: Ipv4Addr) -> Option<Vec<Ipv4Addr>> {
     .flatten()
 }
 
-/// eMule `CLastCommonRouteFinder`: the deepest hop present in *every*
-/// route — the ISP-side aggregation point. Requires ≥ 2 routes: with a
-/// single route the result would degenerate to the destination itself.
+/// `CLastCommonRouteFinder` de eMule: el salto más profundo presente en *cada*
+/// ruta — el punto de agregación del ISP. Requiere ≥ 2 rutas: con una
+/// única ruta el resultado degeneraría en el propio destino.
 pub fn last_common_host(routes: &[Vec<Ipv4Addr>]) -> Option<Ipv4Addr> {
     if routes.len() < 2 {
         return None;
@@ -181,8 +181,8 @@ mod tests {
                 v4("8.8.8.8"),
             ],
         ];
-        // Deepest hop present in every route wins (ISP aggregation point),
-        // not the shallow home gateway that is also common.
+        // Prevalece el salto más profundo presente en cada ruta (punto de agregación del ISP),
+        // no la pasarela superficial doméstica que también es común.
         assert_eq!(last_common_host(&routes), Some(v4("80.10.1.1")));
     }
 
@@ -198,7 +198,7 @@ mod tests {
             vec![v4("10.0.0.1"), v4("80.10.1.1")],
             vec![v4("10.0.0.1"), v4("90.20.2.2")],
         ];
-        // 10.0.0.1 IS common to both (shallow gateway).
+        // 10.0.0.1 ES común a ambas (pasarela superficial).
         assert_eq!(last_common_host(&routes), Some(v4("10.0.0.1")));
 
         let fully_diverged = vec![vec![v4("80.10.1.1")], vec![v4("90.20.2.2")]];

@@ -28,26 +28,26 @@ use crate::error::DaemonError;
 use super::db_err;
 use super::history_categories::setting_enabled;
 
-/// eMule `IsRememberingCancelledFiles` → `remember_cancelled` setting.
+/// Ajuste `IsRememberingCancelledFiles` de eMule → `remember_cancelled`.
 const REMEMBER_CANCELLED_KEY: &str = "remember_cancelled";
 
-/// Outcome of `import_cancelled_met`.
+/// Resultado de `import_cancelled_met`.
 #[derive(Debug, Default, Serialize)]
 pub struct CancelledImportReport {
-    /// `cancelled.met` records read (`m_mapCancelledFiles` size after load).
+    /// Registros de `cancelled.met` leídos (tamaño de `m_mapCancelledFiles` tras la carga).
     pub records: usize,
-    /// Masked entries stored under the file's own seed (`0x0F` entries).
+    /// Entradas enmascaradas almacenadas bajo la propia semilla del archivo (entradas `0x0F`).
     pub masked_imported: usize,
-    /// Legacy real hashes masked under our seed (`0x0E` entries).
+    /// Hashes reales heredados enmascarados bajo nuestra semilla (entradas `0x0E`).
     pub legacy_masked: usize,
-    /// `true` when the file used the deprecated `0x0E` layout.
+    /// `true` cuando el archivo utilizaba el formato obsoleto `0x0E`.
     pub legacy_format: bool,
-    /// Total masked hashes stored (post-import set size).
+    /// Total de hashes enmascarados almacenados (tamaño del conjunto tras la importación).
     pub total: usize,
 }
 
-/// `AddCancelledFileID` — records `hash` as cancelled under our seed.
-/// No-op when `remember_cancelled` is off (eMule's gate).
+/// `AddCancelledFileID` — registra `hash` como cancelado bajo nuestra semilla.
+/// Operación no operativa cuando `remember_cancelled` está desactivado (puerta de eMule).
 pub fn record_cancelled_file(db: &mut Database, hash: &[u8; 16]) -> Result<(), DaemonError> {
     if !setting_enabled(db, REMEMBER_CANCELLED_KEY) {
         return Ok(());
@@ -60,9 +60,9 @@ pub fn record_cancelled_file(db: &mut Database, hash: &[u8; 16]) -> Result<(), D
         .map_err(db_err("recording cancelled hash"))
 }
 
-/// `IsCancelledFileByID` — `true` when `hash` is in the cancelled set.
-/// Checks every known seed (imported files keep their own). Always `false`
-/// when `remember_cancelled` is off, like eMule.
+/// `IsCancelledFileByID` — `true` cuando `hash` está en el conjunto de cancelados.
+/// Comprueba cada semilla conocida (los archivos importados conservan la suya). Siempre `false`
+/// cuando `remember_cancelled` está desactivado, igual que en eMule.
 pub fn is_cancelled_file(db: &Database, hash: &[u8; 16]) -> Result<bool, DaemonError> {
     if !setting_enabled(db, REMEMBER_CANCELLED_KEY) {
         return Ok(false);
@@ -79,9 +79,9 @@ pub fn is_cancelled_file(db: &Database, hash: &[u8; 16]) -> Result<bool, DaemonE
     Ok(false)
 }
 
-/// `CKnownFileList::LoadCancelled` — imports a `cancelled.met` file.
-/// `0x0F` entries are stored under the file's seed; `0x0E` real hashes are
-/// masked under our seed (eMule's load-time conversion).
+/// `CKnownFileList::LoadCancelled` — importa un archivo `cancelled.met`.
+/// Las entradas `0x0F` se almacenan bajo la semilla del archivo; los hashes reales `0x0E` se
+/// enmascaran bajo nuestra semilla (conversión en tiempo de carga de eMule).
 pub fn import_cancelled_met(
     db: &mut Database,
     path: &Path,
@@ -93,8 +93,8 @@ pub fn import_cancelled_met(
         legacy_format: file.legacy_format,
         ..Default::default()
     };
-    // `0` is impossible in a valid file — only reached for the legacy
-    // layout where no `Masked` entry can exist anyway.
+    // `0` es imposible en un archivo válido — solo se alcanza en el diseño
+    // heredado donde no puede existir ninguna entrada `Masked` de todos modos.
     let file_seed = file.seed.unwrap_or(0);
     for entry in &file.entries {
         match entry {
@@ -118,7 +118,7 @@ pub fn import_cancelled_met(
     Ok(report)
 }
 
-/// Parses a hex eD2K hash into `[u8; 16]` (`None` on malformed input).
+/// Analiza un hash eD2K en hexadecimal en `[u8; 16]` (`None` ante entrada malformada).
 pub fn parse_hash16(ed2k_hash: &str) -> Option<[u8; 16]> {
     let bytes = hex::decode(ed2k_hash).ok()?;
     <[u8; 16]>::try_from(bytes.as_slice()).ok()

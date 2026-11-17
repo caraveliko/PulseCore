@@ -10,7 +10,7 @@ fn test_kad_sources_indexing_and_ttl_purging() {
     let mut db = Database::open_in_memory().expect("open in-memory db");
     let file_hash = [0xABu8; 16];
 
-    // 1. Initial count is 0
+    // 1. El recuento inicial es 0
     assert_eq!(db.count_kad_indexed_sources().unwrap(), 0);
 
     let src1 = KadIndexedSource {
@@ -37,23 +37,23 @@ fn test_kad_sources_indexing_and_ttl_purging() {
         updated_at_unix_ms: 2_000,
     };
 
-    // 2. Insert batch
+    // 2. Insertar lote
     let inserted = db
         .insert_kad_indexed_sources(&[src1.clone(), src2.clone()])
         .unwrap();
     assert_eq!(inserted, 2);
     assert_eq!(db.count_kad_indexed_sources().unwrap(), 2);
 
-    // 3. Query at now = 5_000 -> both active
+    // 3. Consultar en now = 5_000 -> ambos activos
     let found = db.get_kad_indexed_sources(&file_hash, 50, 5_000).unwrap();
     assert_eq!(found.len(), 2);
 
-    // 4. Query at now = 15_000 -> src1 expired
+    // 4. Consultar en now = 15_000 -> src1 ha expirado
     let found_partial = db.get_kad_indexed_sources(&file_hash, 50, 15_000).unwrap();
     assert_eq!(found_partial.len(), 1);
     assert_eq!(found_partial[0].source_kad_id, src2.source_kad_id);
 
-    // 5. Purge expired at 15_000
+    // 5. Purgar expirados en 15_000
     let purged = db.purge_expired_kad_sources(15_000).unwrap();
     assert_eq!(purged, 1);
     assert_eq!(db.count_kad_indexed_sources().unwrap(), 1);

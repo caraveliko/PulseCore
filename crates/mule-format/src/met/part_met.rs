@@ -18,7 +18,7 @@ pub const PARTFILE_VERSION_LARGEFILE: u8 = 0xe2;
 pub const MAX_PART_COUNT: usize = 65_536;
 pub const MAX_TAG_COUNT: usize = 10_000;
 
-/// Parsed eMule `.part.met` file tracking a partial download.
+/// Archivo `.part.met` analizado de eMule que rastrea una descarga parcial.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartMetFile {
     pub version: u8,
@@ -34,13 +34,13 @@ pub struct PartMetFile {
 }
 
 impl PartMetFile {
-    /// Reads and validates a `.part.met` file from disk.
+    /// Lee y valida un archivo `.part.met` desde el disco.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, MetError> {
         let mut file = crate::met::reader::open_met_file(path)?;
         Self::read_from(&mut file)
     }
 
-    /// Deserializes a `.part.met` structure from any reader with byte-level offset tracking.
+    /// Deserializa una estructura `.part.met` desde cualquier lector con seguimiento de desplazamiento a nivel de bytes.
     pub fn read_from<R: Read>(reader: &mut R) -> Result<Self, MetError> {
         let mut cr = CountingReader::new(reader);
 
@@ -105,10 +105,10 @@ impl PartMetFile {
         for _ in 0..tag_count {
             let tag = cr.read_tag()?;
 
-            // eMule writes gap boundaries as *named* integer tags whose name
-            // starts with the FT_GAPSTART/FT_GAPEND byte followed by a decimal
-            // index (PartFile.cpp SavePartFile / load path). Resolve the
-            // effective FT_* id for those named tags.
+            // eMule escribe los límites de los huecos (gaps) como etiquetas enteras *con nombre* cuyo nombre
+            // comienza con el byte FT_GAPSTART/FT_GAPEND seguido de un índice decimal
+            // (ruta de PartFile.cpp SavePartFile / carga). Resuelve el
+            // id FT_* efectivo para esas etiquetas con nombre.
             let effective_id = if tag.name_id != 0 {
                 tag.name_id
             } else {
@@ -184,7 +184,7 @@ impl PartMetFile {
         })
     }
 
-    /// Returns the total expected number of 9,728,000-byte parts for this file.
+    /// Devuelve el número total esperado de partes de 9 728 000 bytes para este archivo.
     pub fn part_count(&self) -> usize {
         match self.file_size {
             Some(0) | None => 0,
@@ -195,10 +195,10 @@ impl PartMetFile {
         }
     }
 
-    /// Computes the completed (acquired) byte ranges by inverting the missing gaps.
+    /// Calcula los rangos de bytes completados (adquiridos) invirtiendo los huecos (gaps) faltantes.
     ///
-    /// Validates that all gaps satisfy `0 <= start <= end <= total_size`.
-    /// Returns sorted, disjoint half-open byte intervals `[start, end)`.
+    /// Valida que todos los huecos cumplan `0 <= start <= end <= total_size`.
+    /// Devuelve intervalos de bytes semiabiertos ordenados y disjuntos `[start, end)`.
     pub fn compute_completed_ranges(&self) -> Result<Vec<(u64, u64)>, MetError> {
         let total_size = match self.file_size {
             Some(sz) => sz,
@@ -209,10 +209,10 @@ impl PartMetFile {
             return Ok(Vec::new());
         }
 
-        // If no gaps recorded:
-        // When eMule has not started or downloaded anything, it either writes a gap for the full file
-        // or has transferred == 0. If transferred == 0 and gaps is empty, nothing has been acquired.
-        // If transferred > 0 and gaps is empty, the entire file is complete.
+        // Si no hay huecos registrados:
+        // Cuando eMule no ha comenzado o descargado nada, o bien escribe un hueco para todo el archivo
+        // o tiene transferred == 0. Si transferred == 0 y gaps está vacío, no se ha adquirido nada.
+        // Si transferred > 0 y gaps está vacío, el archivo completo está descargado.
         if self.gaps.is_empty() {
             if self.transferred == 0 {
                 return Ok(Vec::new());
@@ -221,7 +221,7 @@ impl PartMetFile {
             }
         }
 
-        // Validate gaps
+        // Validar huecos
         let mut normalized_gaps = Vec::with_capacity(self.gaps.len());
         for &(start, end) in &self.gaps {
             if start > end || end > total_size {
@@ -238,7 +238,7 @@ impl PartMetFile {
             }
         }
 
-        // Sort and merge overlapping/contiguous gaps
+        // Ordenar y fusionar huecos superpuestos/contiguos
         normalized_gaps.sort_by_key(|g| g.0);
         let mut merged_gaps: Vec<(u64, u64)> = Vec::new();
         for (s, e) in normalized_gaps {
@@ -251,7 +251,7 @@ impl PartMetFile {
             merged_gaps.push((s, e));
         }
 
-        // Invert gaps on [0, total_size)
+        // Invertir huecos en [0, total_size)
         let mut completed = Vec::new();
         let mut cursor = 0u64;
 
@@ -269,14 +269,14 @@ impl PartMetFile {
         Ok(completed)
     }
 
-    /// Serializes this `.part.met` to `writer` in eMule `CPartFile::SavePartFile`
-    /// wire format.
+    /// Serializa este `.part.met` en `writer` en el formato de cable
+    /// de `CPartFile::SavePartFile` de eMule.
     ///
-    /// Layout: `u8 version`, `u32 mod_date`, `hash16`, `u16 part_count`,
-    /// part hashes, `u32 tag_count`, then tags (filename, size, transferred,
-    /// AICH hash, and named gap tags `\x09<idx>` / `\x0A<idx>`).
-    /// 64-bit integer tags are only emitted for large files (> 4 GiB),
-    /// matching `PARTFILE_VERSION_LARGEFILE` semantics.
+    /// Disposición: `u8 version`, `u32 mod_date`, `hash16`, `u16 part_count`,
+    /// hashes de partes, `u32 tag_count`, luego etiquetas (nombre de archivo, tamaño, transferido,
+    /// hash AICH y etiquetas de hueco con nombre `\x09<idx>` / `\x0A<idx>`).
+    /// Las etiquetas enteras de 64 bits solo se emiten para archivos grandes (> 4 GiB),
+    /// coincidiendo con la semántica de `PARTFILE_VERSION_LARGEFILE`.
     pub fn write_to<W: Write>(&self, w: &mut W) -> Result<(), MetError> {
         let large_file = self.file_size.unwrap_or(0) > u32::MAX as u64;
         let version = if large_file {
@@ -296,7 +296,7 @@ impl PartMetFile {
             w.write_all(ph).map_err(|e| met_io_err(0, e))?;
         }
 
-        // Build the tag list: filename, size, transferred, AICH, gaps.
+        // Construir la lista de etiquetas: nombre de archivo, tamaño, transferido, AICH, huecos.
         let mut tags: Vec<Tag> = Vec::new();
         if let Some(name) = &self.file_name {
             tags.push(Tag::new_id(FT_FILENAME, MetTagValue::String(name.clone())));
@@ -316,14 +316,14 @@ impl PartMetFile {
                 MetTagValue::String(aich.to_base32()),
             ));
         }
-        // Extra caller-supplied tags (str/int only, mirroring eMule m_taglist).
+        // Etiquetas adicionales suministradas por el llamador (solo str/int, reflejando m_taglist de eMule).
         for t in &self.tags {
             if matches!(t.value, MetTagValue::String(_) | MetTagValue::Uint64(_)) {
                 tags.push(t.clone());
             }
         }
-        // Gaps are written as named tags "<FT_GAPSTART><idx>" / "<FT_GAPEND><idx>"
-        // (eMule SavePartFile writes `gap.end + 1` — real exclusive limit).
+        // Los huecos se escriben como etiquetas con nombre "<FT_GAPSTART><idx>" / "<FT_GAPEND><idx>"
+        // (SavePartFile de eMule escribe `gap.end + 1` — límite exclusivo real).
         for (i, (start, end)) in self.gaps.iter().enumerate() {
             let mut sname = vec![FT_GAPSTART];
             sname.extend_from_slice(i.to_string().as_bytes());
@@ -349,9 +349,9 @@ impl PartMetFile {
         Ok(())
     }
 
-    /// Atomically writes this `.part.met` to `path`: data goes to
-    /// `path.tmp` first and is then renamed over the target
-    /// (mirrors eMule `SavePartFile` tmp+move semantics).
+    /// Escribe atómicamente este `.part.met` en `path`: los datos van a
+    /// `path.tmp` primero y luego se renombran sobre el destino
+    /// (refleja la semántica tmp+move de `SavePartFile` de eMule).
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), MetError> {
         let path = path.as_ref();
         let mut tmp_name = path.as_os_str().to_os_string();
@@ -390,11 +390,11 @@ fn met_io_err(offset: u64, e: std::io::Error) -> MetError {
     }
 }
 
-/// Writes a single tag in eMule `.met` binary form:
-/// `u8 type`, then `u16 name_len=1 + u8 name_id` for id-named tags or
-/// `u16 name_len + name bytes` for named tags, then the typed value.
-/// Integer tags are emitted as `TAGTYPE_UINT32`, or `TAGTYPE_UINT64` when
-/// `large_file` is set (eMule `IsLargeFile()` convention).
+/// Escribe una sola etiqueta en la forma binaria `.met` de eMule:
+/// `u8 type`, luego `u16 name_len=1 + u8 name_id` para etiquetas con nombre por id o
+/// `u16 name_len + name bytes` para etiquetas con nombre, luego el valor tipado.
+/// Las etiquetas enteras se emiten como `TAGTYPE_UINT32`, o `TAGTYPE_UINT64` cuando
+/// `large_file` está activo (convención `IsLargeFile()` de eMule).
 fn write_tag<W: Write>(w: &mut W, tag: &Tag, large_file: bool) -> Result<(), MetError> {
     let tag_type: u8 = match &tag.value {
         MetTagValue::String(_) => TAGTYPE_STRING,

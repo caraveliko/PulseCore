@@ -11,7 +11,7 @@ use super::types::{inspect_mapping_entry, MappingOwnership};
 
 const MAX_MAPPING_ENTRIES_TO_INSPECT: u32 = 100;
 
-/// Inspects the gateway's generic port mapping table to assess ownership of an existing rule.
+/// Inspecciona la tabla genérica de mapeo de puertos de la puerta de enlace para evaluar la pertenencia de una regla existente.
 pub fn check_existing_mapping(
     gateway: &Gateway,
     protocol: PortMappingProtocol,
@@ -48,7 +48,7 @@ pub fn check_existing_mapping(
     MappingOwnership::NotFound
 }
 
-/// Attempts to map a port safely and idempotently.
+/// Intenta mapear un puerto de forma segura e idempotente.
 pub fn add_port_safe(
     gateway: &Gateway,
     protocol: PortMappingProtocol,

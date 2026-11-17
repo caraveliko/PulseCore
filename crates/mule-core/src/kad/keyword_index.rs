@@ -6,27 +6,27 @@
 use super::KadId;
 use md4::{Digest, Md4};
 
-/// An indexed keyword-file association in Kad DHT.
+/// Una asociación de palabra clave-archivo indexada en la DHT de Kad.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KadKeywordEntry {
-    /// 32-char lowercase hex of the keyword's MD4 hash.
+    /// Hexadecimal en minúsculas de 32 caracteres del hash MD4 de la palabra clave.
     pub keyword_hash: String,
-    /// 32-char lowercase hex of the file's MD4 hash.
+    /// Hexadecimal en minúsculas de 32 caracteres del hash MD4 del archivo.
     pub file_hash: String,
-    /// File name.
+    /// Nombre del archivo.
     pub file_name: String,
-    /// File size in bytes.
+    /// Tamaño del archivo en bytes.
     pub file_size: u64,
-    /// Number of sources advertising this file.
+    /// Número de fuentes que anuncian este archivo.
     pub source_count: u32,
-    /// Timestamp when discovered.
+    /// Marca de tiempo cuando fue descubierto.
     pub discovered_at_unix_ms: i64,
-    /// Expiration timestamp (TTL).
+    /// Marca de tiempo de caducidad (TTL).
     pub expires_at_unix_ms: i64,
 }
 
-/// Normalizes a keyword string (lowercased, trimmed) and computes its 128-bit MD4 KadId.
+/// Normaliza una cadena de palabra clave (minúsculas, recortada) y calcula su KadId MD4 de 128 bits.
 pub fn hash_kad_keyword(keyword: &str) -> (String, KadId) {
     let normalized = keyword.trim().to_lowercase();
     let mut hasher = Md4::new();
@@ -35,12 +35,12 @@ pub fn hash_kad_keyword(keyword: &str) -> (String, KadId) {
     (normalized, KadId::from_hash_be(&digest))
 }
 
-/// Extracts search keywords (length >= 3) from a file name and returns pairs of (word, KadId).
+/// Extrae palabras clave de búsqueda (longitud >= 3) de un nombre de archivo y devuelve pares de (palabra, KadId).
 pub fn extract_kad_keywords(file_name: &str) -> Vec<(String, KadId)> {
     let mut results = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    // Split on typical word delimiters
+    // Dividir según delimitadores de palabras típicos
     let words = file_name.split(|c: char| {
         c.is_whitespace()
             || matches!(
@@ -105,7 +105,7 @@ mod tests {
         assert!(words.contains(&"server"));
         assert!(words.contains(&"amd64"));
         assert!(words.contains(&"iso"));
-        // Numbers like "22" or "04" (< 3 chars) are excluded
+        // Los números como "22" o "04" (< 3 caracteres) quedan excluidos
         assert!(!words.contains(&"22"));
     }
 

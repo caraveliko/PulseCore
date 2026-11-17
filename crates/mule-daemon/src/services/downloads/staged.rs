@@ -9,20 +9,20 @@
 use mule_core::RangeSet;
 use std::collections::HashMap;
 
-/// Borne mémoire : nombre maximum de parts stagées simultanément par
-/// download (≈ 4 × 9,3 Mio). Au-delà, la vérification retombe sur la
-/// relecture disque (`PartFile::read_range`).
+/// Límite de memoria: número máximo de partes preparadas simultáneamente por
+/// descarga (≈ 4 × 9,3 MiB). Más allá, la verificación recae en la
+/// relectura de disco (`PartFile::read_range`).
 pub(crate) const MAX_STAGED_PARTS: usize = 4;
 
-/// Buffer d'assemblage d'une part en cours de réception.
+/// Búfer de ensamblado de una parte en curso de recepción.
 ///
-/// `pub` requis par le champ publique `ActiveDownload::staged_parts` ;
-/// toutes les opérations restent `pub(crate)`.
+/// `pub` requerido por el campo público `ActiveDownload::staged_parts`;
+/// todas las operaciones permanecen como `pub(crate)`.
 pub struct StagedPart {
-    /// Octets de la part reçus cette session, indexés par offset local.
-    /// Dimensionné à la taille réelle de la part (dernière part incluse).
+    /// Bytes de la parte recibidos en esta sesión, indexados por desplazamiento local.
+    /// Dimensionado al tamaño real de la parte (última parte incluida).
     data: Vec<u8>,
-    /// Couverture des octets effectivement stagés (offsets locaux).
+    /// Cobertura de los bytes efectivamente preparados (desplazamientos locales).
     covered: RangeSet,
 }
 
@@ -34,24 +34,24 @@ impl StagedPart {
         }
     }
 
-    /// Copie des octets `[local_start, local_start+bytes)` dans le buffer.
+    /// Copia bytes `[local_start, local_start+bytes)` en el búfer.
     fn stage(&mut self, local_start: u64, bytes: &[u8]) {
         let s = local_start as usize;
         self.data[s..s + bytes.len()].copy_from_slice(bytes);
         let _ = self.covered.insert(local_start..local_start + bytes.len() as u64);
     }
 
-    /// Tous les octets `[0, part_len)` ont été stagés cette session → la
-    /// part est hashable entièrement en RAM.
+    /// Todos los bytes `[0, part_len)` se han preparado en esta sesión → la
+    /// parte es procesable por hash enteramente en RAM.
     fn is_fully_staged(&self, part_len: u64) -> bool {
         self.covered.covered_len() == part_len
     }
 }
 
-/// Copie les octets d'une range injectée dans les buffers des parts
-/// touchées. Les parts déjà complètes ne sont pas stagées (leur donnée
-/// est ignorée en amont), et au-delà de [`MAX_STAGED_PARTS`] les nouvelles
-/// parts ne sont pas stagées — la vérification relira le disque.
+/// Copia los bytes de un rango inyectado en los búferes de las partes
+/// afectadas. Las partes ya completas no se preparan (sus datos
+/// se ignoran previamente), y más allá de [`MAX_STAGED_PARTS`] las nuevas
+/// partes no se preparan — la verificación releerá el disco.
 pub(crate) fn stage_range(
     staged: &mut HashMap<u32, StagedPart>,
     total_size: u64,
@@ -82,9 +82,9 @@ pub(crate) fn stage_range(
     }
 }
 
-/// Hash MD4 de la part depuis son buffer stagé — `None` quand la part
-/// n'est pas entièrement stagée (download repris à mi-part, borne
-/// mémoire atteinte) et que l'appelant doit relire le disque.
+/// Hash MD4 de la parte desde su búfer preparado — `None` cuando la parte
+/// no está enteramente preparada (descarga reanudada a media parte, límite
+/// de memoria alcanzado) y el llamador debe releer el disco.
 pub(crate) fn verify_staged(
     staged: &mut HashMap<u32, StagedPart>,
     part_idx: u32,
@@ -114,7 +114,7 @@ mod tests {
     fn stage_and_verify_full_part() {
         let mut staged = HashMap::new();
         let data: Vec<u8> = (0..TOTAL).map(|i| i as u8).collect();
-        // Deux blocs pour la part 0, un bloc à cheval sur les parts 1-2.
+        // Dos bloques para la parte 0, un bloque a caballo entre las partes 1-2.
         stage_range(&mut staged, TOTAL, PART, 0, &data[..60]);
         stage_range(&mut staged, TOTAL, PART, 60, &data[60..]);
         assert_eq!(staged.len(), 3);
@@ -152,12 +152,12 @@ mod tests {
     fn staged_parts_bounded_by_max() {
         let mut staged = HashMap::new();
         let block = vec![1u8; 10];
-        // Remplit MAX_STAGED_PARTS parts distinctes.
+        // Llena MAX_STAGED_PARTS partes distintas.
         for p in 0..MAX_STAGED_PARTS as u64 {
             stage_range(&mut staged, u64::MAX / 2, PART, p * PART, &block);
         }
         assert_eq!(staged.len(), MAX_STAGED_PARTS);
-        // Une (MAX+1)-ième part n'est pas stagée.
+        // Una (MAX+1)-ésima parte no se prepara.
         stage_range(
             &mut staged,
             u64::MAX / 2,
@@ -166,7 +166,7 @@ mod tests {
             &block,
         );
         assert_eq!(staged.len(), MAX_STAGED_PARTS);
-        // Mais une part déjà présente continue d'absorber des blocs.
+        // Pero una parte ya presente continúa absorbiendo bloques.
         stage_range(&mut staged, u64::MAX / 2, PART, 10, &block);
         assert_eq!(staged.len(), MAX_STAGED_PARTS);
     }
@@ -175,7 +175,7 @@ mod tests {
     fn range_spanning_part_boundary_splits() {
         let mut staged = HashMap::new();
         let data = vec![3u8; 30];
-        // 85..115 couvre la fin de la part 0 et le début de la part 1.
+        // 85..115 cubre el final de la parte 0 y el inicio de la parte 1.
         stage_range(&mut staged, TOTAL, PART, 85, &data);
         let p0 = staged.get(&0).expect("part 0 stagée");
         let p1 = staged.get(&1).expect("part 1 stagée");

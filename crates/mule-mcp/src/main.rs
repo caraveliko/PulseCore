@@ -22,24 +22,24 @@ use mule_mcp::{
 #[command(name = "mule-mcp")]
 #[command(about = "Model Context Protocol (MCP) server for eMuleRust")]
 struct Cli {
-    /// Explicit WebSocket RPC URL of the eMuleRust daemon (e.g. ws://127.0.0.1:4660/rpc)
+    /// URL RPC WebSocket explícita del daemon eMuleRust (p. ej. ws://127.0.0.1:4660/rpc)
     #[arg(long)]
     url: Option<String>,
 
-    /// Session authentication token for the daemon
+    /// Token de autenticación de sesión para el daemon
     #[arg(long)]
     token: Option<String>,
 
-    /// Path to eMuleRust workdir where session.json and auth.token reside
+    /// Ruta al directorio de trabajo de eMuleRust donde residen session.json y auth.token
     #[arg(long)]
     workdir: Option<PathBuf>,
 
-    /// Path to eMuleRust.exe executable or application bundle root
+    /// Ruta al ejecutable eMuleRust.exe o a la raíz del paquete de aplicación
     #[arg(long)]
     app: Option<PathBuf>,
 
-    /// Filtering profile applied to exposed tools: read (read-only),
-    /// safe (no destructive action), full (all tools — default)
+    /// Perfil de filtrado aplicado a las herramientas expuestas: read (solo lectura),
+    /// safe (sin acciones destructivas), full (todas las herramientas — por defecto)
     #[arg(long, value_enum, default_value_t = ToolProfile::Full)]
     tool_profile: ToolProfile,
 }
@@ -52,7 +52,7 @@ struct McpState {
 impl McpState {
     async fn get_or_reconnect_client(&mut self) -> Result<DaemonClient, String> {
         if let Some(ref c) = self.client {
-            // Test if connection is still alive via a quick status check
+            // Probar si la conexión sigue activa mediante una comprobación rápida de estado
             if c.call("system.status", json!({})).await.is_ok() {
                 return Ok(c.clone());
             }
@@ -77,10 +77,10 @@ impl McpState {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // IMPORTANT: stderr only for human logs — stdout must stay clean for
-    // the MCP JSON-RPC protocol. A JSONL file layer (same daily rotation
-    // as the daemon, <workdir>/logs/mcp.<date>.log) keeps durable traces
-    // without polluting stdio; it's skipped if the workdir is unwritable.
+    // IMPORTANTE: solo stderr para registros legibles — stdout debe permanecer limpio para
+    // el protocolo MCP JSON-RPC. Una capa de archivo JSONL (misma rotación diaria
+    // que el daemon, <workdir>/logs/mcp.<fecha>.log) conserva trazas duraderas
+    // sin contaminar stdio; se omite si el directorio de trabajo no es escribible.
     let workdir = cli.workdir.clone().unwrap_or_else(|| {
         mule_daemon::WorkDirectoryResolver::resolve(None, None).workdir
     });
@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting eMuleRust MCP Server v{SERVER_VERSION}...");
 
-    // Attempt non-fatal initial connection to daemon
+    // Intentar conexión inicial no fatal con el daemon
     let initial_client = match DaemonClient::connect(
         cli.url.clone(),
         cli.token.clone(),
@@ -174,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        // If it's a notification without an id, check if it's notifications/initialized
+        // Si es una notificación sin ID, comprobar si es notifications/initialized
         let method = match msg.method.as_deref() {
             Some(m) => m,
             None => continue,
@@ -183,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let req_id = match msg.id {
             Some(id) => id,
             None => {
-                // Notification (no response needed)
+                // Notificación (no requiere respuesta)
                 if method == "notifications/initialized" {
                     info!("MCP client initialized notification received");
                 }

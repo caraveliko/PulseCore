@@ -32,12 +32,12 @@ pub struct ActiveSession {
     pub abort_handle: Option<tokio::task::AbortHandle>,
     pub permit: Option<SocketPermit>,
     pub outgoing_tx: Option<mpsc::Sender<RawPacket>>,
-    /// Server address → (obf_tcp_port, obf_udp_port) learned from
-    /// `OP_SERVERIDENT` tags `ST_TCPPORTOBFUSCATION`/`ST_UDPPORTOBFUSCATION`.
-    /// Persists across reconnects (mirrors eMule's server.met storage).
+    /// Dirección del servidor → (obf_tcp_port, obf_udp_port) obtenido de
+    /// las etiquetas `ST_TCPPORTOBFUSCATION`/`ST_UDPPORTOBFUSCATION` de `OP_SERVERIDENT`.
+    /// Persiste entre reconexiones (refleja el almacenamiento en server.met de eMule).
     pub obf_ports: std::collections::HashMap<String, (u16, u16)>,
-    /// Addresses where an obfuscated handshake already failed this process
-    /// (eMule `SetTriedCrypt`) — subsequent connects go plaintext.
+    /// Direcciones donde el apretón de manos ofuscado ya falló en este proceso
+    /// (`SetTriedCrypt` de eMule) — las conexiones posteriores van en texto claro.
     pub obf_failed: std::collections::HashSet<String>,
 }
 
@@ -82,15 +82,15 @@ pub fn spawn_connection_task(
     tokio::spawn(async move {
         let start_connect = std::time::Instant::now();
 
-        // eMule CServerSocket::ConnectTo: if the server advertised an
-        // obfuscation port (ST_TCPPORTOBFUSCATION in a previous SERVERIDENT)
-        // and we prefer the crypt layer, connect to that port with the
-        // DH768+RC4 handshake; on failure mark tried and retry plaintext.
+        // eMule CServerSocket::ConnectTo: si el servidor anunció un puerto de
+        // ofuscación (ST_TCPPORTOBFUSCATION en un SERVERIDENT previo) y preferimos
+        // la capa criptográfica, conectamos a ese puerto con el apretón de manos
+        // DH768+RC4; en caso de fallo se marca como probado y se reintenta en texto claro.
         let address_str = target_addr.to_string();
         // eMule: bEncrypt = cryptPreferred && (SupportsObfuscationTCP() || !TriedCrypt())
-        // — obfuscation is attempted at least once per server even without an
-        // advertised port; on the first failure the server is marked tried and
-        // subsequent connects go plaintext.
+        // — la ofuscación se intenta al menos una vez por servidor incluso sin un
+        // puerto anunciado; al primer fallo el servidor se marca como probado y las
+        // conexiones posteriores van en texto claro.
         let try_obf = {
             let g = inner_clone.lock().await;
             prefer_obfuscation && !g.obf_failed.contains(&address_str)
@@ -128,7 +128,7 @@ pub fn spawn_connection_task(
             connect_timeout_ms
         );
 
-        // 1. TCP Connect with connect_timeout
+        // 1. Conexión TCP con connect_timeout
         let stream_res = tokio::select! {
             _ = cancel_token.cancelled() => {
                 warn!("Server connection to {} cancelled by policy kill switch during connect", log_server_addr(dial_addr));
@@ -224,12 +224,12 @@ pub fn spawn_connection_task(
 
         let ping_ms = start_connect.elapsed().as_millis() as u32;
 
-        // 2. Send OP_LOGINREQUEST
+        // 2. Envío de OP_LOGINREQUEST
         let limits = Ed2kLimits::for_server();
-        // eMule `ServerConnect.cpp:184-191` : quand l'obfuscation est
-        // préférée, le login annonce `SUPPORTCRYPT | REQUESTCRYPT` dans
-        // `CT_SERVER_FLAGS` (le port dédié `ST_TCPPORTOBFUSCATION` reste
-        // le mécanisme principal côté Rust).
+        // eMule `ServerConnect.cpp:184-191`: cuando se prefiere la ofuscación,
+        // el inicio de sesión anuncia `SUPPORTCRYPT | REQUESTCRYPT` en
+        // `CT_SERVER_FLAGS` (el puerto dedicado `ST_TCPPORTOBFUSCATION` sigue
+        // siendo el mecanismo principal en el lado Rust).
         let login_req = ServerLoginRequest::new(user_hash, client_port, &nickname, 0x3c)
             .with_server_flags(if prefer_obfuscation {
                 mule_protocol::ed2k::tags::SRVCAP_SUPPORTCRYPT
@@ -288,7 +288,7 @@ pub fn spawn_connection_task(
             log_server_addr(target_addr)
         );
 
-        // 3. Read loop with handshake timeout & PacketCodec
+        // 3. Bucle de lectura con tiempo de espera de apretón de manos y PacketCodec
         let mut read_buf = BytesMut::with_capacity(8192);
         let codec = PacketCodec::new();
         let mut temp_buf = [0u8; 4096];
@@ -296,13 +296,13 @@ pub fn spawn_connection_task(
             tokio::time::Instant::now() + Duration::from_millis(handshake_timeout_ms);
         let mut is_connecting = true;
         let mut publish_login: Option<mule_protocol::ed2k::ServerIdChange> = None;
-        // eMule `CServer::GetSoftFiles` (`ST_SOFTFILES` tag 0x88 from
-        // OP_SERVERIDENT) — caps how many files we may offer; eMule clamps
-        // it to ≤200 (`CSharedFileList::SendListToServer`).
+        // eMule `CServer::GetSoftFiles` (etiqueta `ST_SOFTFILES` 0x88 de
+        // OP_SERVERIDENT) — limita cuántos archivos podemos ofrecer; eMule
+        // lo acota a ≤200 (`CSharedFileList::SendListToServer`).
         let mut soft_files_limit: Option<u32> = None;
-        // Credentials from the last OP_IDCHANGE, kept for periodic
-        // OP_OFFERFILES re-publication (eMule keeps the shared file list
-        // fresh on the server and uses an empty offer packet as keep-alive).
+        // Credenciales del último OP_IDCHANGE, conservadas para la republicación
+        // periódica de OP_OFFERFILES (eMule mantiene actualizada la lista de archivos
+        // compartidos en el servidor y utiliza un paquete de oferta vacío como keep-alive).
         let mut last_idc: Option<mule_protocol::ed2k::ServerIdChange> = None;
         let republish_period = Duration::from_secs(30 * 60);
         let mut republish_timer = tokio::time::interval_at(
@@ -352,9 +352,9 @@ pub fn spawn_connection_task(
                                                         raw_packet.opcode,
                                                         raw_packet.payload.len()
                                                     );
-                                                    // eMule OP_PACKEDPROT (0xD4): payload is zlib-compressed;
-                                                    // unpack with eMule's 250 KB server cap, then dispatch on
-                                                    // opcode as a normal PR_ED2K packet.
+                                                    // eMule OP_PACKEDPROT (0xD4): la carga útil está comprimida con zlib;
+                                                    // descomprimir con el límite de 250 KB de servidor de eMule y luego
+                                                    // despachar según el opcode como un paquete PR_ED2K normal.
                                                     let (resp_protocol, resp_payload);
                                                     if raw_packet.protocol == PR_EMULE_COMPRESSED {
                                                         match unpack_packed_packet(&raw_packet.payload) {
@@ -393,9 +393,9 @@ pub fn spawn_connection_task(
                                                                     is_connecting = false;
                                                                     g.snapshot.client_id = Some(idc.client_id);
                                                                     g.snapshot.is_high_id = idc.is_high_id();
-                                                                    // A HighID encodes our public IPv4 (eD2K convention:
-                                                                    // id = a<<24|b<<16|c<<8|d) — Kad uses it as the
-                                                                    // advertised address in PUBLISH_SOURCE contacts.
+                                                                    // Una HighID codifica nuestra IPv4 pública (convención eD2K:
+                                                                    // id = a<<24|b<<16|c<<8|d) — Kad la utiliza como dirección
+                                                                    // anunciada en los contactos PUBLISH_SOURCE.
                                                                     if let Some(kad) = &kad_clone {
                                                                         kad.set_public_ipv4(if idc.is_high_id() {
                                                                             Some(std::net::Ipv4Addr::from(idc.client_id))
@@ -472,8 +472,8 @@ pub fn spawn_connection_task(
                                                                                 continue;
                                                                             }
 
-                                                                            // LowID source: keep it — reachable only via
-                                                                            // server callback (OP_CALLBACKREQUEST).
+                                                                            // Fuente LowID: conservarla — accesible solo mediante
+                                                                            // devolución de llamada del servidor (OP_CALLBACKREQUEST).
                                                                             let addr_str = if src.ip < 16_777_216 {
                                                                                 low_id_ignored += 1;
                                                                                 format!("lowid:{}", src.ip)
@@ -493,10 +493,9 @@ pub fn spawn_connection_task(
                                                                                 continue;
                                                                             }
 
-                                                                            // Sources answered by the connected
-                                                                            // server live on it (eMule records
-                                                                            // the answering server's
-                                                                            // `nServerIP`/`nServerPort`).
+                                                                            // Las fuentes respondidas por el servidor conectado
+                                                                            // residen en él (eMule registra el `nServerIP`/`nServerPort`
+                                                                            // del servidor que responde).
                                                                             let (srv_ip, srv_port) = match target_addr.ip() {
                                                                                 std::net::IpAddr::V4(v4) => {
                                                                                     (u32::from_le_bytes(v4.octets()), target_addr.port())
@@ -562,8 +561,8 @@ pub fn spawn_connection_task(
                                                                                 continue;
                                                                             }
 
-                                                                            // LowID source: keep it — reachable only via
-                                                                            // server callback (OP_CALLBACKREQUEST).
+                                                                            // Fuente LowID: conservarla — accesible solo mediante
+                                                                            // devolución de llamada del servidor (OP_CALLBACKREQUEST).
                                                                             let addr_str = if src.ip < 16_777_216 {
                                                                                 low_id_ignored += 1;
                                                                                 format!("lowid:{}", src.ip)
@@ -583,9 +582,8 @@ pub fn spawn_connection_task(
                                                                                 continue;
                                                                             }
 
-                                                                            // Sources answered by the connected
-                                                                            // server live on it (eMule
-                                                                            // `nServerIP`/`nServerPort`).
+                                                                            // Las fuentes respondidas por el servidor conectado
+                                                                            // residen en él (eMule registra `nServerIP`/`nServerPort`).
                                                                             let (srv_ip, srv_port) = match target_addr.ip() {
                                                                                 std::net::IpAddr::V4(v4) => {
                                                                                     (u32::from_le_bytes(v4.octets()), target_addr.port())
@@ -632,10 +630,10 @@ pub fn spawn_connection_task(
                                                                     }
                                                                 }
                                                                 ServerResponse::CallbackRequested(cb) => {
-                                                                    // A client asked the server to relay a callback
-                                                                    // to us (we are the LowID target). eMule
-                                                                    // `TryToConnect`s back to the requester; the
-                                                                    // connect-back runs as an upload-serving session.
+                                                                    // Un cliente solicitó al servidor que nos retransmitiera
+                                                                    // una devolución de llamada (somos el destino LowID). eMule
+                                                                    // hace `TryToConnect` de vuelta al solicitante; la conexión
+                                                                    // de retorno se ejecuta como sesión de servicio de subida.
                                                                     let ip_addr = std::net::Ipv4Addr::from(cb.ip.to_le_bytes());
                                                                     info!(
                                                                         "OP_CALLBACKREQUESTED: peer {}:{} wants us to connect back (crypt_opts={:?}, user_hash={})",
@@ -681,9 +679,9 @@ pub fn spawn_connection_task(
                                                                     }
                                                                 }
                                                                 ServerResponse::ServerList { servers } => {
-                            // OP_SERVERLIST: merge advertised servers into the local DB
-                            // with low preference (eMule adds them as regular server.met
-                            // entries; IP-filtered addresses are skipped).
+                            // OP_SERVERLIST: fusionar los servidores anunciados en la BD local
+                            // con baja preferencia (eMule los añade como entradas normales de
+                            // server.met; se omiten las direcciones filtradas por IP).
                             let now_ms = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap_or_default()
@@ -726,9 +724,9 @@ pub fn spawn_connection_task(
                             }
                         }
                         ServerResponse::CallbackFail { client_id } => {
-                                                                    // eMule servers send OP_CALLBACK_FAIL
-                                                                    // with an empty payload — the target
-                                                                    // client_id is not echoed back.
+                                                                    // Los servidores eMule envían OP_CALLBACK_FAIL
+                                                                    // con carga útil vacía — el client_id de destino
+                                                                    // no se devuelve en eco.
                                                                     match client_id {
                                                                         Some(id) => warn!(
                                                                             "OP_CALLBACK_FAIL: server could not relay callback to LowID client {id}"
@@ -740,8 +738,8 @@ pub fn spawn_connection_task(
                                                                 }
                                                                 ServerResponse::Rejected => {
                                                                     // eMule `ServerSocket.cpp:572` —
-                                                                    // OP_REJECT is only logged; the
-                                                                    // server closes the socket itself.
+                                                                    // OP_REJECT solo se registra; el servidor
+                                                                    // cierra el socket él mismo.
                                                                     warn!("Server rejected last command (OP_REJECT)");
                                                                 }
                                                                 ServerResponse::Other { opcode, .. } => {
@@ -755,8 +753,8 @@ pub fn spawn_connection_task(
                                                             drop(g);
 
                                                             // eMule `CSharedFileList::SendListToServer`:
-                                                            // once the server assigned our ID, publish
-                                                            // the shared file list via OP_OFFERFILES.
+                                                            // una vez que el servidor nos asigna ID, publicar
+                                                            // la lista de archivos compartidos mediante OP_OFFERFILES.
                                                             if let Some(idc) = publish_login.take() {
                                                                 last_idc = Some(idc.clone());
                                                                 publish_shared_files(
@@ -777,7 +775,7 @@ pub fn spawn_connection_task(
                                                         }
                                                     }
                                                 }
-                                                Ok(None) => break, // Need more bytes
+                                                Ok(None) => break, // Se necesitan más bytes
                                                 Err(e) => {
                                                     error!("Framing error from server {}: {}", log_server_addr(target_addr), e);
                                                     let mut g = inner_clone.lock().await;
@@ -817,7 +815,7 @@ pub fn spawn_connection_task(
                         }
         }
 
-        // Teardown
+        // Desmontaje
         let mut g = inner_clone.lock().await;
         g.snapshot = ServerSessionSnapshot::default();
         g.permit = None;
@@ -827,8 +825,8 @@ pub fn spawn_connection_task(
     })
 }
 
-/// Publishes the shared file list to the connected server via `OP_OFFERFILES`
-/// (eMule `CSharedFileList::SendListToServer`, capped at 200 files).
+/// Publica la lista de archivos compartidos al servidor conectado mediante `OP_OFFERFILES`
+/// (eMule `CSharedFileList::SendListToServer`, limitada a 200 archivos).
 async fn publish_shared_files(
     stream: &mut crate::services::obfuscation_stream::ObfuscatedStream<TcpStream>,
     target_addr: SocketAddr,
@@ -839,8 +837,8 @@ async fn publish_shared_files(
     downloads: &Option<Arc<Mutex<DownloadService>>>,
     soft_files_limit: Option<u32>,
 ) {
-    /// eMule hard cap on offered files when the server does not advertise a
-    /// lower `ST_SOFTFILES` limit (`CSharedFileList::SendListToServer`).
+    /// Límite estricto de eMule sobre los archivos ofrecidos cuando el servidor no anuncia
+    /// un límite `ST_SOFTFILES` menor (`CSharedFileList::SendListToServer`).
     const MAX_OFFER_FILES: usize = 200;
 
     let Some(dl_service) = downloads else { return };
@@ -848,8 +846,8 @@ async fn publish_shared_files(
         let dl_svc = dl_service.lock().await;
         dl_svc.list_all_shared_files().unwrap_or_default()
     };
-    // eMule `SendListToServer`: files are offered sorted by upload priority
-    // (highest first), capped at the server soft limit (≤200).
+    // eMule `SendListToServer`: los archivos se ofrecen ordenados por prioridad de subida
+    // (los más altos primero), limitados por el tope flexible del servidor (≤200).
     shared.sort_by_key(|sf| {
         std::cmp::Reverse(crate::services::upload_queue::file_prio_num(
             &sf.up_priority,
@@ -884,16 +882,16 @@ async fn publish_shared_files(
         }
     }
 
-    // Empty OP_OFFERFILES doubles as the server keep-alive packet
-    // (eMule `KeepConnectionAlive` semantics).
+    // Un OP_OFFERFILES vacío actúa a la vez como paquete keep-alive hacia el servidor
+    // (semántica de `KeepConnectionAlive` de eMule).
     let count = files.len();
     let offer = mule_protocol::ed2k::OfferFiles { files };
     match offer.encode(limits) {
         Ok(pkt) => {
-            // eMule `Packet::PackPacket` : quand le serveur annonce
-            // `SRV_TCPFLG_COMPRESSION`, l'offre est zlib-compressée au
-            // niveau max et envoyée sous `PR_EMULE_COMPRESSED (0xD4)` —
-            // seulement si le résultat est plus petit.
+            // eMule `Packet::PackPacket`: cuando el servidor anuncia
+            // `SRV_TCPFLG_COMPRESSION`, la oferta se comprime con zlib al
+            // nivel máximo y se envía bajo `PR_EMULE_COMPRESSED (0xD4)` —
+            // únicamente si el resultado es más pequeño.
             let (protocol, payload): (u8, Vec<u8>) = {
                 let compressed = if tcp_flags & mule_protocol::ed2k::SRV_TCPFLG_COMPRESSION != 0 {
                     pack_packet_payload(&pkt.payload)
@@ -931,9 +929,9 @@ async fn publish_shared_files(
     }
 }
 
-/// eMule `Packet::PackPacket` : zlib-déflate le payload au niveau maximal
-/// (`Z_BEST_COMPRESSION`) ; renvoie `Some(buf)` seulement si le résultat est
-/// strictement plus petit que l'original (sinon le paquet part non compressé).
+/// eMule `Packet::PackPacket`: comprime con zlib la carga útil al nivel máximo
+/// (`Z_BEST_COMPRESSION`); devuelve `Some(buf)` únicamente si el resultado es
+/// estrictamente más pequeño que el original (de lo contrario el paquete se envía sin comprimir).
 fn pack_packet_payload(payload: &[u8]) -> Option<Vec<u8>> {
     use std::io::Write;
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
@@ -946,9 +944,9 @@ fn pack_packet_payload(payload: &[u8]) -> Option<Vec<u8>> {
         .filter(|buf| buf.len() < payload.len())
 }
 
-/// eMule `Packet::UnPackPacket` for server packets: zlib-inflate the packed
-/// payload with a hard 250 KB decompressed-size cap (eMule passes 250000).
-/// Returns `None` on truncated/oversized/corrupt data.
+/// eMule `Packet::UnPackPacket` para paquetes de servidor: descomprime con zlib la carga útil
+/// empaquetada con un límite estricto de tamaño descomprimido de 250 KB (eMule pasa 250000).
+/// Devuelve `None` en datos truncados, con tamaño excesivo o corruptos.
 fn unpack_packed_packet(payload: &[u8]) -> Option<Vec<u8>> {
     use std::io::Read;
     const MAX_DECOMPRESSED: u64 = 250_000;
@@ -991,10 +989,10 @@ mod tests {
 
     #[test]
     fn unpack_packed_packet_enforces_250kb_cap() {
-        // ~300 KB of zeros compress to a few hundred bytes — a bomb shape.
+        // ~300 KB de ceros se comprimen a unos pocos cientos de bytes — patrón de bomba de descompresión.
         let big = vec![0u8; 300_000];
         assert!(unpack_packed_packet(&zlib(&big)).is_none());
-        // Just under the cap still passes.
+        // Justo por debajo del límite sigue pasando.
         let ok = vec![0u8; 250_000];
         assert_eq!(unpack_packed_packet(&zlib(&ok)).unwrap().len(), 250_000);
     }

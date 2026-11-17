@@ -16,23 +16,23 @@ use crate::services::peer_session::PeerSessionManager;
 use crate::services::server_session::ServerSessionManager;
 use crate::services::DaemonEvent;
 
-/// Cadence de rafraîchissement de l'instantané `sharedfiles` utilisé par
-/// l'UploadManager pour purger les requêtes orphelines — en ticks de 1 s
-/// (eMule lit la liste en direct à chaque promotion ; ici un snapshot à
-/// ~15 s suffit, les partages changent rarement).
+/// Cadencia de refresco de la instantánea de `sharedfiles` utilizada por
+/// el UploadManager para purgar las solicitudes huérfanas — en pulsos (ticks) de 1 s
+/// (eMule lee la lista en directo en cada promoción; aquí una instantánea de
+/// ~15 s es suficiente, los archivos compartidos rara vez cambian).
 const SHARED_HASH_REFRESH_TICKS: u64 = 15;
 /// Clave de ajuste persistido para el hash de la contraseña opcional de la WebUI.
 pub const SETTING_WEBUI_PASSWORD_HASH: &str = "webui_password_hash";
 /// Prefijo de sal estático para derivar el hash de la contraseña de la WebUI.
 const WEBUI_PASSWORD_SALT_PREFIX: &str = "pulse-core-webui-v1:";
 
-/// Contrôle à chaud du `EnvFilter` global (clé `logLevel` de
-/// `settings.set`). Le binaire installe le `reload::Handle` au démarrage ;
-/// les handlers RPC n'ont ensuite qu'à appeler [`LogControl::set`].
+/// Control en caliente del `EnvFilter` global (clave `logLevel` de
+/// `settings.set`). El binario instala el `reload::Handle` en el arranque;
+/// los manejadores RPC solo tienen que llamar después a [`LogControl::set`].
 ///
-/// Le niveau n'est volontairement **pas persisté** : un `trace` survivant
-/// à un redémarrage remplirait les fichiers de log (données sensibles +
-/// volumineux). `RUST_LOG` reste la voie pour un niveau persistant.
+/// El nivel deliberadamente **no se persiste**: un nivel `trace` persistido
+/// tras un reinicio saturaría los archivos de registro (datos sensibles y
+/// gran volumen). `RUST_LOG` sigue siendo la vía para un nivel permanente.
 #[derive(Clone)]
 pub struct LogControl {
     handle: Arc<
@@ -62,8 +62,8 @@ impl LogControl {
         }
     }
 
-    /// Appelé une fois par l'entrypoint : le `reload::Handle` vit dans
-    /// `main` (lié au subscriber réel) et ne peut pas être construit ici.
+    /// Invocado una vez por el punto de entrada: el `reload::Handle` reside en
+    /// `main` (asociado al suscriptor real) y no puede construirse aquí.
     pub fn install(
         &self,
         handle: tracing_subscriber::reload::Handle<
@@ -76,8 +76,8 @@ impl LogControl {
         }
     }
 
-    /// Applique une nouvelle spec `EnvFilter` (« debug », « info »,
-    /// « info,mule_daemon::kad=trace »…).
+    /// Aplica una nueva especificación de `EnvFilter` («debug», «info»,
+    /// «info,mule_daemon::kad=trace»…).
     pub fn set(&self, spec: &str) -> Result<(), String> {
         let filter = spec
             .parse::<tracing_subscriber::EnvFilter>()
@@ -97,8 +97,8 @@ impl LogControl {
         Ok(())
     }
 
-    /// Spec de filtre actuellement en vigueur (ou la valeur initiale si
-    /// le handle n'est pas encore installé).
+    /// Especificación de filtro actualmente vigente (o el valor inicial si
+    /// el manejador todavía no está instalado).
     pub fn current(&self) -> String {
         self.current
             .lock()
@@ -114,24 +114,24 @@ pub struct AppState {
     pub network_policy: NetworkPolicyManager,
     pub server_session: ServerSessionManager,
     pub peer_session: PeerSessionManager,
-    /// Source Exchange partagé : policy réseau, identité locale et journaux
-    /// de throttle eMule (`SetLastSrcReqTime` / `GetLastAskedForSources` /
-    /// `m_ClientSrcAnswered`) — injecté dans `peer_session` et
+    /// Source Exchange compartido: directiva de red, identidad local y registros
+    /// de limitación (throttle) de eMule (`SetLastSrcReqTime` / `GetLastAskedForSources` /
+    /// `m_ClientSrcAnswered`) — inyectado en `peer_session` e
     /// `inbound_listener`.
     pub sx_env: crate::services::peer_session::source_exchange::SxEnv,
     pub inbound_listener: crate::services::inbound_listener::InboundListenerService,
     pub identity: Arc<Mutex<crate::services::IdentityService>>,
-    /// Shared SUI anomaly counters (identity.status `sui` object).
+    /// Contadores compartidos de anomalías SUI (objeto `sui` de identity.status).
     pub sui_stats: Arc<crate::services::identity::SuiStats>,
     pub kad: Arc<crate::services::KadService>,
-    /// Client-to-client UDP service sharing the Kad UDP socket
+    /// Servicio UDP de cliente a cliente que comparte el socket UDP de Kad
     /// (`OP_REASKFILEPING`/`OP_REASKACK`/`OP_QUEUEFULL`/`OP_FILENOTFOUND`).
     pub client_udp: crate::services::ClientUdpService,
-    /// Server UDP service (`OP_GLOBGETSOURCES2`/`OP_GLOBFOUNDSOURCES`),
-    /// separate socket like eMule's `UDPSocket`.
+    /// Servicio UDP de servidor (`OP_GLOBGETSOURCES2`/`OP_GLOBFOUNDSOURCES`),
+    /// socket separado equivalente al `UDPSocket` de eMule.
     pub server_udp: crate::services::server_udp::ServerUdpService,
-    /// USS (Upload Speed Sense) — dynamic upload limiter driven by
-    /// measured latency to the connected server or a configured host.
+    /// USS (Upload Speed Sense) — limitador dinámico de subida guiado por
+    /// la latencia medida hacia el servidor conectado o un host configurado.
     pub uss: crate::services::UssService,
     pub upnp: Arc<crate::services::UpnpService>,
     pub sequence: Arc<AtomicU64>,
@@ -140,39 +140,39 @@ pub struct AppState {
     pub session_id: Uuid,
     pub abort_handles: Arc<Mutex<Vec<tokio::task::AbortHandle>>>,
     pub shutdown_notify: Arc<tokio::sync::Notify>,
-    /// Effective ports (persisted settings override `DaemonConfig`):
-    /// eD2K TCP listener and Kad UDP. Mirrors eMule Preferences → Connexion.
+    /// Puertos efectivos (los ajustes persistidos sobrescriben a `DaemonConfig`):
+    /// oyente TCP de eD2K y Kad UDP. Refleja Preferencias de eMule → Conexión.
     ed2k_port_eff: Arc<std::sync::atomic::AtomicU16>,
     kad_port_eff: Arc<std::sync::atomic::AtomicU16>,
-    /// Whether UDP (Kad + server UDP + client UDP) is enabled at all —
-    /// eMule « UDP désactivé » checkbox.
+    /// Indica si UDP (Kad + UDP de servidor + UDP de cliente) está habilitado —
+    /// casilla «UDP desactivado» de eMule.
     udp_enabled: Arc<AtomicBool>,
-    /// Gate du quota journalier d'upload (`dailyUploadQuotaGb`, eMuleRust) :
-    /// `false` bloque les nouvelles demandes de slot. Piloté par
+    /// Compuerta de la cuota diaria de subida (`dailyUploadQuotaGb`, eMuleRust):
+    /// `false` bloquea las nuevas solicitudes de ranura. Controlado por
     /// `spawn_quota_watcher`.
     upload_quota_gate: Arc<AtomicBool>,
-    /// Totaux cumulés depuis l'installation (persistés en settings DB,
-    /// incrémentés du delta de session à chaque `statsTick`, remis à zéro
-    /// par `stats.resetLifetimeTotals`).
+    /// Totales acumulados desde la instalación (persistidos en los ajustes de BD,
+    /// incrementados con el delta de sesión en cada `statsTick`, restablecidos a cero
+    /// mediante `stats.resetLifetimeTotals`).
     pub lifetime_downloaded_bytes: Arc<AtomicU64>,
     pub lifetime_uploaded_bytes: Arc<AtomicU64>,
     #[cfg(feature = "lab-tools")]
     pub active_lab_peer: Arc<Mutex<Option<(std::net::SocketAddr, tokio::task::AbortHandle)>>>,
-    /// Contrôle du niveau de log à chaud (`settings.set` clé `logLevel`).
-    /// `None` dans les tests/harness qui n'installent pas de subscriber.
+    /// Control del nivel de registro en caliente (clave `logLevel` de `settings.set`).
+    /// `None` en pruebas/harness que no instalan un suscriptor.
     pub log_control: Option<LogControl>,
     pub torrent: Arc<tokio::sync::OnceCell<Arc<mule_torrent::TorrentEngine>>>,
-    /// Pseudonymiseur de session (`mule-filter`) : les adresses de pairs
-    /// externes loggées via [`AppState::log_peer_addr`] deviennent
-    /// `peer-NN:port` — jamais d'IP publique brute dans les fichiers
-    /// persistants (loopback en clair, inoffensif pour la lab).
+    /// Seudonimizador de sesión (`mule-filter`): las direcciones de pares
+    /// externos registradas mediante [`AppState::log_peer_addr`] pasan a ser
+    /// `peer-NN:port` — nunca una IP pública en bruto en los archivos
+    /// persistentes (loopback en claro, inofensivo para el laboratorio).
     pub pseudonymizer: Arc<mule_filter::SessionPseudonymizer>,
-    /// Limiteur FIFO strict de copie vers le NAS/destination (1 transfert simultané).
-    /// Empêche la contention I/O et la saturation CPU du Synology DS212j.
+    /// Limitador FIFO estricto de copia hacia el NAS/destino (1 transferencia simultánea).
+    /// Evita la contienda de E/S y la saturación de CPU del Synology DS212j.
     pub nas_transfer_semaphore: Arc<tokio::sync::Semaphore>,
-    /// Identifiant du téléchargement qui possède actuellement le slot de copie au NAS.
+    /// Identificador de la descarga que posee actualmente la ranura de copia al NAS.
     pub active_nas_transfer_id: Arc<tokio::sync::Mutex<Option<Uuid>>>,
-    /// Metadata client for unified media manager (Radarr/Sonarr/TMDB replacement).
+    /// Cliente de metadatos para el gestor multimedia unificado (reemplazo de Radarr/Sonarr/TMDB).
     pub media_metadata: Arc<crate::services::MediaMetadataService>,
     /// Hash en memoria de la contraseña opcional de la WebUI para peticiones en red local.
     pub webui_password_hash: Arc<std::sync::RwLock<Option<String>>>,
@@ -202,7 +202,7 @@ impl AppState {
             budgets.max_active_peer_connections =
                 max_global.min(mule_network_policy::MAX_PEER_CONNECTIONS_CAP);
         }
-        // Persisted Connexion overrides (eMule Preferences) applied at boot.
+        // Sobrescrituras persistidas de Conexión (Preferencias de eMule) aplicadas en el arranque.
         let get_usize = |key: &str| {
             downloads
                 .get_setting(key)
@@ -234,19 +234,19 @@ impl AppState {
             .map(|v| v.clamp(1, 65535) as u16)
             .unwrap_or(config.kad_port);
         let udp_enabled = bool_setting("udp_enabled").unwrap_or(true);
-        // Mode paranoid (eMuleRust) : slots d'upload réservés aux pairs
-        // obfusqués avec signature SUI vérifiée.
+        // Modo paranoico (eMuleRust): ranuras de subida reservadas a pares
+        // ofuscados con firma SUI verificada.
         let paranoid_mode = bool_setting("paranoid_mode").unwrap_or(false);
         let max_upload_queue = get_usize("max_upload_queue");
         let min_upload_kbs = get_usize("min_upload_kbs");
         let upnp_enabled_boot = bool_setting("upnp_enabled").unwrap_or(config.upnp_enabled);
 
         let network_policy = NetworkPolicyManager::new(config.network_profile, budgets);
-        // Valeurs clampées à réécrire dans le store — différées car les
-        // closures ci-dessus empruntent `downloads` immuablement.
+        // Valores acotados para reescribir en el almacén — diferidos porque los
+        // cierres anteriores toman prestado `downloads` de forma inmutable.
         let mut clamped_limits: Vec<(&'static str, u64)> = Vec::new();
-        // Persisted rate limits (eMule MaxUpload/MaxDownload, stored via
-        // `limits.set`) applied at boot.
+        // Límites de tasa persistidos (MaxUpload/MaxDownload de eMule, guardados mediante
+        // `limits.set`) aplicados en el arranque.
         {
             let get_u64 = |key: &str| {
                 downloads
@@ -277,10 +277,10 @@ impl AppState {
                 rl.kad_packets_per_sec = v as u32;
                 has_override = true;
             }
-            // eMule LoadPreferences : une limite persistée ne peut pas
-            // excéder la capacité de ligne déclarée — download ≤ capacité
-            // × 9/10, upload ≤ capacité × 4/5 (0 = illimité, jamais
-            // clampé). Même règle que `handle_limits_set`.
+            // LoadPreferences de eMule: un límite persistido no puede
+            // superar la capacidad de línea declarada — download ≤ capacidad
+            // × 9/10, upload ≤ capacidad × 4/5 (0 = ilimitado, nunca
+            // restringido). Misma regla que en `handle_limits_set`.
             let cap_dl = get_u64("capacity_download_kbs").unwrap_or(0);
             let cap_ul = get_u64("capacity_upload_kbs").unwrap_or(0);
             if rl.download_bytes_per_sec > 0 && cap_dl > 0 {
@@ -299,9 +299,9 @@ impl AppState {
                     rl.upload_bytes_per_sec = clamped;
                 }
             }
-            // eMule `GetMaxDownloadInBytesPerSec` : ratio upload/download
-            // — le bucket reçoit l'effectif ; le setting persisté garde la
-            // valeur *configurée* (le ratio n'est jamais réécrit).
+            // `GetMaxDownloadInBytesPerSec` de eMule: proporción upload/download
+            // — el depósito recibe el valor efectivo; el ajuste persistido mantiene el
+            // valor *configurado* (la proporción nunca se reescribe).
             let eff_dl = mule_network_policy::emule_ud_ratio(
                 rl.download_bytes_per_sec,
                 rl.upload_bytes_per_sec,
@@ -314,8 +314,8 @@ impl AppState {
                 network_policy.rate_limiters().apply_config(&rl);
             }
         }
-        // Persisted IP filter (eMule keeps ipfilter.dat loaded across
-        // restarts): reload the file and restore the enabled flag.
+        // Filtro IP persistido (eMule mantiene ipfilter.dat cargado entre
+        // reinicios): recarga el archivo y restaura la bandera de activación.
         {
             if let Some(path) = downloads
                 .get_setting("ipfilter_path")
@@ -336,16 +336,16 @@ impl AppState {
                     }
                 }
             }
-            // Restaure le flag dans les deux sens : sans la branche `false`,
-            // un filtre désactivé avant arrêt repassait silencieusement à
-            // `true` (défaut `IpFilter::new`) au boot.
+            // Restaura la bandera en ambos sentidos: sin la rama `false`,
+            // un filtro desactivado antes de apagar pasaba silenciosamente a
+            // `true` (valor predeterminado de `IpFilter::new`) en el arranque.
             network_policy
                 .ip_filter()
                 .set_enabled(bool_setting("ipfilter_enabled").unwrap_or(true));
         }
-        // Réécriture des limites clampées au boot : la persistance reflète
-        // la valeur effectivement appliquée (cohérence avec `limits.set`,
-        // qui persiste la valeur clampée).
+        // Reescritura de los límites restringidos en el arranque: la persistencia refleja
+        // el valor efectivamente aplicado (coherencia con `limits.set`,
+        // que persiste el valor restringido).
         for (key, v) in clamped_limits {
             if let Err(e) = downloads.set_setting(key, &v.to_string()) {
                 tracing::warn!("[LIMITS] Échec persistance {key} clampé: {e}");
@@ -355,9 +355,9 @@ impl AppState {
         let server_session = ServerSessionManager::new(event_tx.clone(), Arc::clone(&sequence));
         let peer_session = PeerSessionManager::new(event_tx.clone(), Arc::clone(&sequence))
             .with_limits(max_per_dl, max_global);
-        // Totaux « depuis l'installation » persistés en settings — lus une
-        // fois au boot puis incrémentés des deltas de session par la
-        // boucle statsTick (remis à zéro via `stats.resetLifetimeTotals`).
+        // Totales «desde la instalación» persistidos en los ajustes — leídos una
+        // vez en el arranque y luego incrementados con los deltas de sesión por el
+        // bucle statsTick (restablecidos a cero mediante `stats.resetLifetimeTotals`).
         let u64_setting = |key: &str| {
             downloads
                 .get_setting(key)
@@ -381,8 +381,8 @@ impl AppState {
         server_session.set_downloads(Arc::clone(&dl_arc));
         let identity_service = crate::services::IdentityService::load_or_generate(&config.data_dir);
         let user_hash = identity_service.user_hash();
-        // Environnement Source Exchange partagé entre toutes les sessions
-        // (eMule garde ces compteurs dans CUpDownClient/CPartFile).
+        // Entorno de Source Exchange compartido entre todas las sesiones
+        // (eMule mantiene estos contadores en CUpDownClient/CPartFile).
         let sx_env = crate::services::peer_session::source_exchange::SxEnv::new(
             network_policy.clone(),
             user_hash,
@@ -413,12 +413,12 @@ impl AppState {
             .set_quota_gate(Arc::clone(&upload_quota_gate));
         inbound_listener.set_peer_session(peer_session.clone());
         inbound_listener.set_server_session(server_session.clone());
-        // Sens inverse : OP_CALLBACKREQUESTED relayé par le serveur (un
-        // pair HighID veut nous joindre alors que nous sommes LowID)
-        // déclenche un connect-back sortant servi par l'inbound listener.
+        // Sentido inverso: OP_CALLBACKREQUESTED retransmitido por el servidor (un
+        // par HighID quiere conectarse a nosotros mientras somos LowID)
+        // desencadena una conexión entrante de retorno atendida por el oyente entrante.
         server_session.set_inbound_listener(inbound_listener.clone());
-        // eMule IsServerCryptLayerConnection : tentative d'obfuscation du
-        // handshake serveur selon les préférences effectives (persistées).
+        // IsServerCryptLayerConnection de eMule: intento de ofuscación del
+        // enlace inicial (handshake) del servidor según las preferencias efectivas (persistidas).
         server_session.set_obfuscation_preference(
             obf_enabled || obf_required,
             config.obfuscation_padding_max,
@@ -432,20 +432,20 @@ impl AppState {
         ));
         kad.set_ed2k_tcp_port(ed2k_port_eff);
         kad.set_fw_check_identity(user_hash);
-        // KADEMLIA_FIREWALLED2_REQ embarque le user hash eD2K (eMule
-        // `GetClientHash`), distinct du KadID aléatoire.
+        // KADEMLIA_FIREWALLED2_REQ incluye el hash de usuario eD2K (`GetClientHash`
+        // de eMule), distinto del KadID aleatorio.
         kad.udp().set_fw_user_hash(user_hash);
-        // Nudges `kad.statusChanged` quand la table de routage évolue en
-        // tâche de fond — le badge UI se met à jour sans ouvrir la section.
+        // Avisa `kad.statusChanged` cuando la tabla de enrutamiento evoluciona en
+        // segundo plano — el distintivo de la interfaz se actualiza sin abrir la sección.
         kad.set_event_channel(event_tx.clone(), Arc::clone(&sequence));
-        // Buddy relay role: TCP port the buddy client connects to, and the
-        // GetMyConnectOptions-style flags byte sent in KADEMLIA_FINDBUDDY_RES
-        // (bit0/1 = obfuscation supported+requested, bit2 = required).
+        // Rol de retransmisión buddy: puerto TCP al que se conecta el cliente amigo, y el
+        // byte de opciones al estilo GetMyConnectOptions enviado en KADEMLIA_FINDBUDDY_RES
+        // (bit0/1 = ofuscación soportada+solicitada, bit2 = requerida).
         let connect_opts: u8 =
             if obf_enabled { 0x03 } else { 0 } | if obf_required { 0x04 } else { 0 };
         kad.udp().set_buddy_tcp_info(ed2k_port_eff, connect_opts);
-        // The eD2K server-assigned HighID feeds Kad with our public IPv4
-        // (PUBLISH_SOURCE advertised address).
+        // El HighID asignado por el servidor eD2K proporciona a Kad nuestra IPv4 pública
+        // (dirección anunciada en PUBLISH_SOURCE).
         server_session.set_kad(Arc::clone(&kad));
         inbound_listener.set_kad_udp(Arc::clone(kad.udp()));
         inbound_listener.set_kad(Arc::clone(&kad));
@@ -455,9 +455,9 @@ impl AppState {
         client_udp.set_upload_manager(inbound_listener.upload_manager().clone());
         client_udp.set_peer_session(peer_session.clone());
         client_udp.set_buddy_registry(kad.udp().buddy_registry());
-        // OP_DIRECTCALLBACKREQ : connect-back via le listener, gate sur
-        // l'état firewall TCP (eMule `CKademlia::IsRunning() &&
-        // IsFirewalled()` — proxy `!is_high_id`).
+        // OP_DIRECTCALLBACKREQ: conexión de retorno mediante el oyente, condicionada
+        // al estado del cortafuegos TCP (`CKademlia::IsRunning() &&
+        // IsFirewalled()` de eMule — proxy `!is_high_id`).
         client_udp.set_inbound_listener(inbound_listener.clone());
         client_udp.set_server_session(server_session.clone());
         inbound_listener.set_client_udp(client_udp.clone());
@@ -482,19 +482,19 @@ impl AppState {
         inbound_listener
             .upload_manager()
             .set_event_channel(event_tx.clone(), Arc::clone(&sequence));
-        // `MaxSpeed` eMule pour `AcceptNewClient` — lit le débit effectif du
-        // bucket upload : limite manuelle (`limits.set`) ou valeur mesurée
-        // pilotée par USS quand il est actif.
+        // `MaxSpeed` de eMule para `AcceptNewClient` — lee la tasa efectiva del
+        // depósito de subida: límite manual (`limits.set`) o valor medido
+        // gobernado por USS cuando está activo.
         {
             let rl = network_policy.rate_limiters();
             inbound_listener
                 .upload_manager()
                 .set_upload_speed_probe(move || rl.upload_bucket.rate_per_sec());
         }
-        // Tick de la file d'upload — `CUploadQueue::Process()` eMule : purge
-        // des entrées mortes, rotation des sessions pleines, promotion des
-        // meilleurs clients. Tourne indépendamment des abonnés WS (la file
-        // doit fonctionner en mode headless).
+        // Pulso de la cola de subida — `CUploadQueue::Process()` de eMule: purga
+        // de entradas muertas, rotación de sesiones llenas, promoción de los
+        // mejores clientes. Se ejecuta con independencia de los abonados WS (la cola
+        // debe funcionar en modo desatendido / headless).
         {
             let upload_mgr = inbound_listener.upload_manager().clone();
             let dl_arc = Arc::clone(&dl_arc);
@@ -505,9 +505,9 @@ impl AppState {
                 loop {
                     interval.tick().await;
                     upload_mgr.process_tick().await;
-                    // Instantané `sharedfiles` pour la purge « fichier plus
-                    // partagé » de `FindBestClientInQueue` — rafraîchi à
-                    // cadence réduite (les partages changent rarement).
+                    // Instantánea de `sharedfiles` para la purga de «archivo ya no
+                    // compartido» de `FindBestClientInQueue` — actualizada con
+                    // cadencia reducida (los archivos compartidos rara vez cambian).
                     tick_count += 1;
                     if tick_count.is_multiple_of(SHARED_HASH_REFRESH_TICKS) {
                         let hashes = dl_arc.lock().await.list_shared_hashes();
@@ -516,8 +516,8 @@ impl AppState {
                 }
             });
         }
-        // Friend slots: load persisted friends into the upload manager
-        // (eMule friends.met → dedicated slots for `uh:<userhash>` keys).
+        // Ranuras de amigos: carga los amigos persistidos en el gestor de subidas
+        // (friends.met de eMule → ranuras dedicadas para claves `uh:<userhash>`).
         {
             if let Ok(dl) = dl_arc.try_lock() {
                 let friends = dl.list_friends().unwrap_or_default();
@@ -527,8 +527,8 @@ impl AppState {
                         .map(|f| format!("uh:{}", f.user_hash))
                         .collect(),
                 );
-                // Totaux uploadés par fichier persistés (`share_upload_stats`)
-                // — l'UploadManager les incrémente ensuite en mémoire.
+                // Totales subidos por archivo persistidos (`share_upload_stats`)
+                // — el UploadManager los incrementa a continuación en memoria.
                 let totals = dl.list_share_uploaded_bytes().unwrap_or_default();
                 inbound_listener
                     .upload_manager()
@@ -543,8 +543,8 @@ impl AppState {
             kad_udp.set_downloads(kad_udp_dl).await;
         });
 
-        // Periodic aggregate stats tick (event.statsTick, topic `stats`).
-        // Skipped entirely while no WebSocket client is subscribed.
+        // Pulso periódico de estadísticas agregadas (event.statsTick, tema `stats`).
+        // Se omite por completo mientras no haya clientes WebSocket suscritos.
         {
             let stats_downloads = Arc::clone(&dl_arc);
             let stats_uploads = inbound_listener.upload_manager().clone();
@@ -560,8 +560,8 @@ impl AppState {
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 let mut last_session_dl = 0u64;
                 let mut last_session_ul = 0u64;
-                // Totaux par fichier déjà persistés — le delta écrit à
-                // chaque tick ne couvre que les octets envoyés depuis.
+                // Totales por archivo ya persistidos — el delta escrito en
+                // cada pulso solo cubre los bytes enviados desde entonces.
                 let mut last_file_totals = stats_uploads.per_file_uploaded_bytes();
                 loop {
                     interval.tick().await;
@@ -571,11 +571,11 @@ impl AppState {
                     let session_uploaded_bytes = stats_uploads.total_uploaded_bytes();
                     let (downloads, session_downloaded_bytes) = {
                         let mut dl = stats_downloads.lock().await;
-                        // Cumul « depuis l'installation » : on ajoute le delta
-                        // de session écoulé depuis le dernier tick (seuls les
-                        // deltas positifs comptent — les évictions de parts
-                        // corrompues ne retirent rien au total) puis on
-                        // persiste, sinon un crash perdrait le delta courant.
+                        // Acumulado «desde la instalación»: sumamos el delta
+                        // de sesión transcurrido desde el último pulso (solo cuentan
+                        // los deltas positivos — el descarte de partes
+                        // corruptas no resta nada al total) y luego se
+                        // persiste; de lo contrario, una caída perdería el delta actual.
                         let session_dl = dl.session_downloaded_bytes();
                         let d_dl = session_dl.saturating_sub(last_session_dl);
                         let d_ul = session_uploaded_bytes.saturating_sub(last_session_ul);
@@ -587,9 +587,9 @@ impl AppState {
                         }
                         last_session_dl = session_dl;
                         last_session_ul = session_uploaded_bytes;
-                        // Persiste les deltas d'upload par fichier dans
-                        // `share_upload_stats` (même cadence que les cumuls
-                        // lifetime — un crash ne perd qu'un tick).
+                        // Persiste los deltas de subida por archivo en
+                        // `share_upload_stats` (misma cadencia que los acumulados
+                        // históricos — una caída solo pierde un pulso).
                         let file_totals = stats_uploads.per_file_uploaded_bytes();
                         for (hash, total) in &file_totals {
                             let prev = last_file_totals.get(hash.as_str()).copied().unwrap_or(0);
@@ -635,11 +635,11 @@ impl AppState {
                         },
                     }
                     .send(&stats_tx);
-                    // Poussée périodique des snapshots d'upload sur la même
-                    // cadence : rafraîchit les débits mesurés par fenêtre et
-                    // les fait décroître vers 0 quand un client cesse de
-                    // demander des blocs (sinon l'UI resterait figée sur la
-                    // dernière valeur entre deux `update_progress`).
+                    // Envío periódico de instantáneas de subida con la misma
+                    // cadencia: refresca las tasas medidas por ventana y
+                    // las hace decrecer hacia 0 cuando un cliente deja de
+                    // pedir bloques (de lo contrario, la interfaz quedaría fija en el
+                    // último valor entre dos llamadas a `update_progress`).
                     if stats_uploads.active_len() > 0 || stats_uploads.waiting_len().await > 0 {
                         stats_uploads.emit_uploads_updated().await;
                     }
@@ -694,15 +694,15 @@ impl AppState {
         }
     }
 
-    /// Identifiant du téléchargement qui détient activement le slot de copie au NAS.
+    /// Identificador de la descarga que ostenta activamente la ranura de copia al NAS.
     pub async fn current_nas_transfer(&self) -> Option<Uuid> {
         *self.active_nas_transfer_id.lock().await
     }
 
-    /// Registers a background task handle so it can be cleanly aborted on shutdown.
-    /// Effective obfuscation (protocol encryption) policy: persisted
-    /// `obfuscation_enabled`/`obfuscation_required` settings override the
-    /// startup `DaemonConfig` values (eMule Preferences → Security).
+    /// Registra un manejador de tarea en segundo plano para que pueda abortarse limpiamente al apagar.
+    /// Directiva efectiva de ofuscación (cifrado del protocolo): los ajustes persistidos
+    /// `obfuscation_enabled`/`obfuscation_required` sobrescriben los valores
+    /// iniciales de `DaemonConfig` (Preferencias de eMule → Seguridad).
     pub async fn effective_obfuscation(&self) -> (bool, bool) {
         let dl = self.downloads.lock().await;
         let get = |key: &str, default: bool| {
@@ -717,17 +717,17 @@ impl AppState {
         (enabled, required)
     }
 
-    /// Effective eD2K TCP port (persisted `ed2k_port` or startup config).
+    /// Puerto TCP efectivo de eD2K (`ed2k_port` persistido o configuración de inicio).
     pub fn ed2k_port(&self) -> u16 {
         self.ed2k_port_eff.load(Ordering::Relaxed)
     }
 
-    /// Effective Kad UDP port (persisted `kad_port` or startup config).
+    /// Puerto UDP efectivo de Kad (`kad_port` persistido o configuración de inicio).
     pub fn kad_port(&self) -> u16 {
         self.kad_port_eff.load(Ordering::Relaxed)
     }
 
-    /// Returns the lazy-initialized BitTorrent engine.
+    /// Devuelve el motor BitTorrent inicializado de forma diferida (lazy).
     pub async fn torrent_engine(&self) -> Result<Arc<mule_torrent::TorrentEngine>, String> {
         if self.network_policy.state() == mule_network_policy::NetworkState::Disabled {
             return Err("BitTorrent engine disabled by network policy kill switch".to_string());
@@ -747,12 +747,12 @@ impl AppState {
             .cloned()
     }
 
-    /// Whether UDP services (Kad UDP, server UDP, client UDP) are enabled.
+    /// Indica si los servicios UDP (Kad UDP, UDP de servidor, UDP de cliente) están habilitados.
     pub fn udp_enabled(&self) -> bool {
         self.udp_enabled.load(Ordering::Relaxed)
     }
 
-    /// Updates the effective ports / UDP flag (called by `settings.set`).
+    /// Actualiza los puertos efectivos o la bandera de UDP (invocado por `settings.set`).
     pub fn set_effective_ports(&self, ed2k: u16, kad: u16) {
         self.ed2k_port_eff.store(ed2k, Ordering::Relaxed);
         self.kad_port_eff.store(kad, Ordering::Relaxed);
@@ -798,8 +798,8 @@ impl AppState {
         }
     }
 
-    /// Effective nickname announced in eD2K hellos / server login
-    /// (eMule `nick` pref). Default: "eMuleRust".
+    /// Alias (nickname) efectivo anunciado en los hellos de eD2K o en el inicio de sesión del servidor
+    /// (preferencia `nick` de eMule). Predeterminado: "eMuleRust".
     pub async fn current_nickname(&self) -> String {
         self.downloads
             .lock()
@@ -817,7 +817,7 @@ impl AppState {
         handles.push(handle);
     }
 
-    /// Aborts all active background tasks associated with this daemon state.
+    /// Cancela todas las tareas activas en segundo plano asociadas a este estado del daemon.
     pub async fn abort_all_tasks(&self) {
         let mut handles = self.abort_handles.lock().await;
         for handle in handles.drain(..) {
@@ -832,10 +832,10 @@ impl AppState {
         }
     }
 
-    /// Emits a sequenced download update event to all active WebSocket subscribers.
+    /// Emite un evento secuenciado de actualización de descarga a todos los suscriptores activos de WebSocket.
     pub fn broadcast_download_update(&self, mut snapshot: DownloadSnapshot) {
-        // Attach the swarm's in-flight block ranges (eMule "pending" yellow
-        // segments) — the downloads service can't see peer sessions itself.
+        // Adjunta los rangos de bloques en vuelo del enjambre (segmentos amarillos "pendientes"
+        // de eMule) — el servicio de descargas no puede ver las sesiones de pares por sí mismo.
         snapshot.pending_ranges = self.peer_session.try_pending_ranges(&snapshot.ed2k_hash);
         if snapshot.status == "completing" {
             if let Ok(guard) = self.active_nas_transfer_id.try_lock() {
@@ -848,17 +848,17 @@ impl AppState {
         });
     }
 
-    /// Emits any sequenced daemon event. The single entry point for
-    /// handlers/services that don't own the sequence counter.
+    /// Emite cualquier evento secuenciado del daemon. Punto de entrada único para
+    /// manejadores o servicios que no son propietarios del contador de secuencia.
     pub fn emit_event(&self, make: impl FnOnce(u64) -> DaemonEvent) {
         let seq = self.sequence.fetch_add(1, Ordering::SeqCst);
         make(seq).send(&self.event_tx);
     }
 
-    /// Adresse « sûre » pour les logs : loopback en clair (inoffensif,
-    /// pratique en lab), adresses externes pseudonymisées
-    /// (`peer-NN:port`). Les fichiers de log persistants ne doivent
-    /// jamais contenir d'IP publique brute.
+    /// Dirección «segura» para los registros: loopback en claro (inofensivo,
+    /// práctico en laboratorio), direcciones externas seudonimizadas
+    /// (`peer-NN:port`). Los archivos de registro persistentes nunca deben
+    /// contener IPs públicas en bruto.
     pub fn log_peer_addr(&self, addr: SocketAddr) -> String {
         if addr.ip().is_loopback() {
             addr.to_string()
@@ -867,8 +867,8 @@ impl AppState {
         }
     }
 
-    /// Spec `EnvFilter` actuellement en vigueur (`settings.get` →
-    /// `logLevel`). Défaut `info` si le contrôle n'est pas installé.
+    /// Especificación `EnvFilter` actualmente vigente (`settings.get` →
+    /// `logLevel`). Predeterminada `info` si el control no está instalado.
     pub fn current_log_level(&self) -> String {
         self.log_control
             .as_ref()
@@ -876,7 +876,7 @@ impl AppState {
             .unwrap_or_else(|| "info".to_string())
     }
 
-    /// Reads a persisted boolean setting (defaults to `default` when absent).
+    /// Lee un ajuste booleano persistido (recurre a `default` cuando está ausente).
     pub async fn setting_bool(&self, key: &str, default: bool) -> bool {
         self.downloads
             .lock()
@@ -888,16 +888,16 @@ impl AppState {
             .unwrap_or(default)
     }
 
-    /// Auto-connect / auto-reconnect watcher (eMule `Autoconnect`,
-    /// `Reconnect`, `AutoDeadServer`). Every 15 s: if no server session is
-    /// active and a target is available, reconnects through the normal RPC
-    /// path (network policy, kill switch and disabled-server checks apply).
-    /// `server_autoremove_dead` deletes a target after `DeadServerRetry`
-    /// consecutive failures (eMule 0.72a default = 1). Call once after
-    /// construction.
+    /// Observador de autoconexión / reconexión automática (`Autoconnect`,
+    /// `Reconnect`, `AutoDeadServer` de eMule). Cada 15 s: si no hay ninguna sesión de servidor
+    /// activa y se dispone de un objetivo, se reconecta a través de la ruta
+    /// habitual de RPC (se aplican la directiva de red, el interruptor de corte y las comprobaciones de servidores deshabilitados).
+    /// `server_autoremove_dead` elimina un objetivo tras `DeadServerRetry`
+    /// fallos consecutivos (valor predeterminado de eMule 0.72a = 1). Invocado una vez tras
+    /// la construcción.
     pub fn spawn_server_watcher(&self) {
-        // `AppState` fields are all shared `Arc`s — a clone still points at
-        // the same services/session managers as the RPC state.
+        // Los campos de `AppState` son todos `Arc` compartidos — una copia sigue apuntando a
+        // los mismos servicios/gestores de sesión que el estado RPC.
         let state = Arc::new(self.clone());
         let handle = tokio::spawn(async move {
             let mut failures: u32 = 0;
@@ -907,10 +907,10 @@ impl AppState {
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 ticker.tick().await;
-                // eMule `AutoUpdateServerList`: refresh the server list once
-                // per session from a configured local `.met` file
-                // (`server_autoupdate_path` setting — no remote fetch; the
-                // daemon deliberately has no outbound HTTP client).
+                // `AutoUpdateServerList` de eMule: actualiza la lista de servidores una
+                // vez por sesión desde un archivo local `.met` configurado
+                // (ajuste `server_autoupdate_path` — sin descarga remota; el
+                // daemon deliberadamente no dispone de cliente HTTP saliente).
                 if !serverlist_updated {
                     serverlist_updated = true;
                     if state.setting_bool("server_autoupdate_list", false).await {
@@ -941,7 +941,7 @@ impl AppState {
                     failures = 0;
                     continue;
                 }
-                // Kill switch: stay silent until the network is re-enabled.
+                // Interruptor de corte (kill switch): permanecer en silencio hasta que la red se vuelva a habilitar.
                 if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
                     continue;
                 }
@@ -988,7 +988,7 @@ impl AppState {
                     Err(e) => {
                         failures += 1;
                         tracing::debug!("[SERVER_RECONNECT] attempt {failures} failed: {e}");
-                        // eMule `DeadServerRetry` default = 1.
+                        // Valor predeterminado de eMule `DeadServerRetry` = 1.
                         if failures >= 1 && state.setting_bool("server_autoremove_dead", true).await
                         {
                             let removed = {
@@ -1014,14 +1014,14 @@ impl AppState {
             .ok();
     }
 
-    /// Régénère l'identité cryptographique locale (clé RSA SUI, user_hash
-    /// eD2K, KadID) et la propage à chaud à tous les consommateurs :
-    /// listener entrant (hellos + challenges SUI), identité firewall Kad,
-    /// table de routage Kad. Les sessions déjà établies conservent leur
-    /// identité d'origine ; les nouvelles utilisent la nouvelle.
-    /// Appelée par `identity.rotate` et par la rotation périodique
-    /// `identityRotationHours`. Les crédits associés à l'ancienne clé ne
-    /// s'appliquent plus (comportement voulu — nouvelle identité).
+    /// Regenera la identidad criptográfica local (clave RSA SUI, user_hash
+    /// eD2K, KadID) y la propaga en caliente a todos los consumidores:
+    /// oyente entrante (hellos + desafíos SUI), identidad de cortafuegos Kad,
+    /// tabla de enrutamiento Kad. Las sesiones ya establecidas conservan su
+    /// identidad de origen; las nuevas emplean la nueva.
+    /// Invocada por `identity.rotate` y por la rotación periódica
+    /// `identityRotationHours`. Los créditos asociados a la clave anterior dejan de
+    /// aplicarse (comportamiento intencionado — nueva identidad).
     pub async fn rotate_identity(
         &self,
     ) -> Result<crate::services::identity::IdentityStatus, String> {
@@ -1043,10 +1043,10 @@ impl AppState {
         Ok(self.identity.lock().await.status())
     }
 
-    /// Installe `new_id` et la propage à chaud aux consommateurs
-    /// d'identité : listener entrant (hellos + challenges SUI), identité
-    /// firewall Kad, table de routage Kad (KadID dérivé du user_hash).
-    /// Les sessions déjà établies conservent leur identité d'origine.
+    /// Instala `new_id` y la propaga en caliente a los consumidores
+    /// de identidad: oyente entrante (hellos + desafíos SUI), identidad
+    /// de cortafuegos Kad, tabla de enrutamiento Kad (KadID derivado del user_hash).
+    /// Las sesiones ya establecidas conservan su identidad de origen.
     pub(crate) async fn propagate_identity(&self, new_id: crate::services::IdentityService, reason: &str) {
         let user_hash = new_id.user_hash();
         let pubkey = new_id.has_key().then(|| new_id.public_key_bytes().to_vec());
@@ -1066,9 +1066,9 @@ impl AppState {
         );
     }
 
-    /// Importe une identité eMule (`cryptkey.dat` + `preferences.dat`)
-    /// puis la propage à chaud comme `rotate_identity` — les crédits
-    /// associés à l'identité eMule deviennent immédiatement valides.
+    /// Importa una identidad de eMule (`cryptkey.dat` + `preferences.dat`)
+    /// y luego la propaga en caliente como `rotate_identity` — los créditos
+    /// asociados a la identidad de eMule pasan a ser válidos inmediatamente.
     pub async fn import_emule_identity(
         &self,
         cryptkey_src: Option<&std::path::Path>,
@@ -1084,15 +1084,15 @@ impl AppState {
         .map_err(|e| e.to_string())?;
         let new_id = crate::services::IdentityService::load_or_generate(&self.config.data_dir);
         self.propagate_identity(new_id, "Import").await;
-        // Le hash actif après rechargement (importé ou dérivé de la clé).
+        // El hash activo tras la recarga (importado o derivado de la clave).
         report.userhash = Some(hex::encode(self.identity.lock().await.user_hash()));
         Ok(report)
     }
 
-    /// Rotation périodique de l'identité (`identityRotationHours`, défaut 0 =
-    /// désactivé). Vérifie toutes les 60 s si l'intervalle est écoulé depuis
-    /// `identity_last_rotation_unix` (persisté — survit aux redémarrages).
-    /// Call once after construction.
+    /// Rotación periódica de la identidad (`identityRotationHours`, predeterminado 0 =
+    /// desactivado). Comprueba cada 60 s si ha transcurrido el intervalo desde
+    /// `identity_last_rotation_unix` (persistido — sobrevive a reinicios).
+    /// Invocar una vez tras la construcción.
     pub fn spawn_identity_rotator(&self) {
         let state = Arc::new(self.clone());
         let handle = tokio::spawn(async move {
@@ -1124,8 +1124,8 @@ impl AppState {
                     .unwrap_or_default()
                     .as_secs() as i64;
                 if last <= 0 {
-                    // Première activation : le démarrage compte comme point
-                    // de référence (évite une rotation immédiate au boot).
+                    // Primera activación: el arranque cuenta como punto
+                    // de referencia (evita una rotación inmediata en el inicio).
                     let _ = state
                         .downloads
                         .lock()
@@ -1152,12 +1152,12 @@ impl AppState {
             .ok();
     }
 
-    /// Quota journalier d'upload (`dailyUploadQuotaGb`, défaut 0 = illimité).
-    /// Toutes les 30 s : cumule le compteur `UploadManager` dans le compteur
-    /// persisté `upload_quota_used_bytes`, remis à zéro à chaque nouveau jour
-    /// UTC (`upload_quota_day` = numéro de jour Unix). Quota atteint → le gate
-    /// coupe les nouvelles demandes de slot ; quota levé/remis → gate rouvert.
-    /// Call once after construction.
+    /// Cuota diaria de subida (`dailyUploadQuotaGb`, predeterminado 0 = ilimitado).
+    /// Cada 30 s: acumula el contador de `UploadManager` en el contador
+    /// persistido `upload_quota_used_bytes`, restablecido a cero en cada nuevo día
+    /// UTC (`upload_quota_day` = número de día Unix). Cuota alcanzada → la compuerta
+    /// corta las nuevas solicitudes de ranura; cuota ampliada/restablecida → compuerta reabierta.
+    /// Invocar una vez tras la construcción.
     pub fn spawn_quota_watcher(&self) {
         let state = Arc::new(self.clone());
         let gate = Arc::clone(&self.upload_quota_gate);

@@ -33,7 +33,7 @@ fn test_aich_exact_block_size() {
 
 #[test]
 fn test_aich_full_part_53_blocks_structure_and_proof() {
-    // 52 blocks of 184 320 + 1 block of 143 360 = 9 728 000
+    // 52 bloques de 184 320 + 1 bloque de 143 360 = 9 728 000
     assert_eq!(
         52 * AICH_BLOCK_SIZE + LAST_BLOCK_SIZE_FULL_PART,
         ED2K_PART_SIZE
@@ -54,13 +54,13 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
     }
     tree.recalculate_hash().unwrap();
 
-    // 1. Verify valid proof for leaf #0
+    // 1. Verificar prueba válida para hoja #0
     let proof0 = tree.generate_leaf_proof(0, BLOCKS_PER_PART as u32).unwrap();
     assert_eq!(proof0.leaf_index, 0);
     assert_eq!(proof0.leaf_count, 53);
     assert!(verify_aich_proof(root.0, &data[..AICH_BLOCK_SIZE], &proof0).is_ok());
 
-    // 2. Verify valid proof for last leaf #52 (143 360 bytes)
+    // 2. Verificar prueba válida para la última hoja #52 (143 360 bytes)
     let last_offset = 52 * AICH_BLOCK_SIZE;
     let proof52 = tree
         .generate_leaf_proof(52, BLOCKS_PER_PART as u32)
@@ -68,7 +68,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
     assert_eq!(proof52.leaf_index, 52);
     assert!(verify_aich_proof(root.0, &data[last_offset..], &proof52).is_ok());
 
-    // 3. Structural test: out of bounds leaf index
+    // 3. Prueba estructural: índice de hoja fuera de límites
     let mut invalid_proof = proof0.clone();
     invalid_proof.leaf_index = 53;
     assert_eq!(
@@ -79,7 +79,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         }
     );
 
-    // 4. Structural test: truncated proof (missing sibling)
+    // 4. Prueba estructural: prueba truncada (falta hermano)
     let mut truncated_proof = proof0.clone();
     truncated_proof.siblings.pop();
     assert!(matches!(
@@ -87,7 +87,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         AichProofError::InvalidDepth { .. }
     ));
 
-    // 5. Structural test: extra sibling
+    // 5. Prueba estructural: hermano adicional
     let mut extra_proof = proof0.clone();
     extra_proof.siblings.push(AichSibling {
         hash: [0u8; 20],
@@ -98,7 +98,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         AichProofError::InvalidDepth { .. }
     ));
 
-    // 6. Structural test: inverted sibling position
+    // 6. Prueba estructural: posición de hermano invertida
     let mut inverted_proof = proof0.clone();
     let old_pos = inverted_proof.siblings[0].position;
     inverted_proof.siblings[0].position = match old_pos {
@@ -110,7 +110,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         AichProofError::InvalidSiblingPosition { .. }
     ));
 
-    // 7. Cryptographic test: corrupted sibling hash
+    // 7. Prueba criptográfica: hash de hermano corrupto
     let mut bad_hash_proof = proof0.clone();
     bad_hash_proof.siblings[0].hash[0] ^= 0xff;
     assert!(matches!(
@@ -118,7 +118,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         AichProofError::RootMismatch { .. }
     ));
 
-    // 8. Cryptographic test: corrupted leaf data
+    // 8. Prueba criptográfica: datos de hoja corruptos
     let mut corrupted_data = data[..AICH_BLOCK_SIZE].to_vec();
     corrupted_data[0] ^= 0xff;
     assert!(matches!(
@@ -126,7 +126,7 @@ fn test_aich_full_part_53_blocks_structure_and_proof() {
         AichProofError::RootMismatch { .. }
     ));
 
-    // 9. Size test: leaf data larger than 180 KiB
+    // 9. Prueba de tamaño: datos de hoja mayores que 180 KiB
     let oversized = vec![0x11; AICH_BLOCK_SIZE + 1];
     assert!(matches!(
         verify_aich_proof(root.0, &oversized, &proof0).unwrap_err(),

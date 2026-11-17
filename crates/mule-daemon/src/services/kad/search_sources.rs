@@ -128,10 +128,10 @@ pub async fn search_sources_iterative(
 
     let results = futures_util::future::join_all(futs).await;
     {
-        // Les timeouts SearchSources ne comptent PAS comme échec du contact :
-        // eMule ne répond rien quand le nœud n'indexe pas le fichier
-        // (SendValidSourceResult silencieux) — le nœud peut être sain.
-        // Seule une réponse confirme la vivacité (mark_seen).
+        // Los tiempos de espera de SearchSources NO cuentan como fallo del contacto:
+        // eMule no responde nada cuando el nodo no indexa el archivo
+        // (SendValidSourceResult silencioso) — el nodo puede estar sano.
+        // Solo una respuesta confirma la vivacidad (mark_seen).
         let mut table = routing_table.lock().await;
         for (contact, (_, res)) in search_targets.iter().zip(results.iter()) {
             if res.is_ok() {
@@ -171,13 +171,13 @@ pub async fn search_sources_iterative(
                         continue;
                     }
 
-                    // LowID Kad source (tcp_port == 0): reachable through a
-                    // buddy callback (KADEMLIA_CALLBACK_REQ) or directly via
-                    // OP_DIRECTCALLBACKREQ when its connect-options carry the
-                    // direct-callback bit (eMule source type 6,
-                    // `DownloadQueue.cpp:1596`). Keep it when either path
-                    // exists; the peer's own IP is used to adopt the incoming
-                    // callback connection.
+                    // Fuente Kad con LowID (tcp_port == 0): accesible a través de una
+                    // devolución de llamada mediante buddy (KADEMLIA_CALLBACK_REQ) o directamente vía
+                    // OP_DIRECTCALLBACKREQ cuando sus opciones de conexión portan el
+                    // bit de devolución de llamada directa (tipo de fuente eMule 6,
+                    // `DownloadQueue.cpp:1596`). Conservarla cuando exista cualquiera
+                    // de las dos rutas; la propia IP del par se utiliza para adoptar la
+                    // conexión de devolución de llamada entrante.
                     let (peer_addr_str, buddy_hex) = if w.tcp_port == 0 {
                         let direct_cb = w.encryption & client_udp::CONNECT_OPT_DIRECT_CALLBACK != 0;
                         match w.buddy_id {
@@ -190,8 +190,8 @@ pub async fn search_sources_iterative(
                     };
                     let ip_u32 = u32::from_le_bytes(w.ip);
 
-                    // eMule déduplique les sources par adresse IP:port : la même
-                    // source peut être rapportée par plusieurs contacts Kad.
+                    // eMule deduplica las fuentes por dirección IP:puerto: la misma
+                    // fuente puede ser reportada por múltiples contactos Kad.
                     if discovered_sources
                         .iter()
                         .any(|s: &PeerSource| s.address == peer_addr_str)
@@ -216,11 +216,11 @@ pub async fn search_sources_iterative(
                         buddy_id: buddy_hex,
                         software: None,
                         availability: None,
-                        // Kad results carry no server context (buddy path).
+                        // Los resultados Kad no portan contexto de servidor (ruta buddy).
                         server_ip: 0,
                         server_port: 0,
-                        // eMule `SetKadPort` — needed to reach a
-                        // TCP-firewalled/UDP-open source via
+                        // `SetKadPort` de eMule — necesario para alcanzar una
+                        // fuente con cortafuegos TCP / UDP abierto vía
                         // `OP_DIRECTCALLBACKREQ`.
                         udp_port: w.udp_port,
                     });

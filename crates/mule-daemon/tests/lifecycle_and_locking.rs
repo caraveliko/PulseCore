@@ -11,11 +11,11 @@ fn test_exclusive_directory_lock() {
     let dir = tempdir().unwrap();
     let path = dir.path();
 
-    // 1. First lock acquisition succeeds
+    // 1. La primera adquisición del bloqueo tiene éxito
     let lock1 = DirectoryLock::acquire(path).expect("First lock should succeed");
     assert!(lock1.path().exists());
 
-    // 2. Second lock acquisition on same directory must fail with AlreadyRunning
+    // 2. La segunda adquisición del bloqueo en el mismo directorio debe fallar con AlreadyRunning
     let lock2_res = DirectoryLock::acquire(path);
     match lock2_res {
         Err(DaemonError::AlreadyRunning(p)) => {
@@ -24,7 +24,7 @@ fn test_exclusive_directory_lock() {
         other => panic!("Expected AlreadyRunning error, got {other:?}"),
     }
 
-    // 3. Dropping the first lock allows acquiring a new one
+    // 3. Liberar el primer bloqueo permite adquirir uno nuevo
     drop(lock1);
 
     let lock3 = DirectoryLock::acquire(path).expect("Subsequent lock after drop should succeed");
@@ -36,22 +36,22 @@ fn test_atomic_session_file_and_token() {
     let dir = tempdir().unwrap();
     let path = dir.path();
 
-    // Token management
+    // Gestión del token
     assert_eq!(DaemonSession::read_token(path), None);
 
-    // Invalid tokens (short, 32 chars, or invalid characters) must be rejected
+    // Los tokens no válidos (cortos, de 32 caracteres o con caracteres no válidos) deben ser rechazados
     assert!(DaemonSession::write_token(path, "short").is_err());
-    assert!(DaemonSession::write_token(path, "0123456789abcdef0123456789abcdef").is_err()); // 32 chars
-    assert!(DaemonSession::write_token(path, &"z".repeat(64)).is_err()); // Non-hex characters
+    assert!(DaemonSession::write_token(path, "0123456789abcdef0123456789abcdef").is_err()); // 32 caracteres
+    assert!(DaemonSession::write_token(path, &"z".repeat(64)).is_err()); // Caracteres no hexadecimales
     assert!(DaemonSession::write_token(path, &format!("{} with space", "a".repeat(53))).is_err());
 
-    // Valid 64-hex token succeeds
+    // Un token hexadecimal válido de 64 caracteres tiene éxito
     let valid_token = DaemonSession::generate_token();
     assert_eq!(valid_token.len(), 64);
     DaemonSession::write_token(path, &valid_token).unwrap();
     assert_eq!(DaemonSession::read_token(path), Some(valid_token));
 
-    // Session file management
+    // Gestión del archivo de sesión
     let instance_id = Uuid::new_v4();
     let session = DaemonSession::new(1, instance_id, "ws://127.0.0.1:4660/rpc");
     session
@@ -65,7 +65,7 @@ fn test_atomic_session_file_and_token() {
     assert_eq!(loaded.pid, std::process::id());
     assert!(loaded.started_at_unix_ms > 0);
 
-    // Consecutive atomic writes (simulating restart / replacement) succeed
+    // Las escrituras atómicas consecutivas (simulando un reinicio / reemplazo) tienen éxito
     let session2 = DaemonSession::new(1, Uuid::new_v4(), "ws://127.0.0.1:4661/rpc");
     session2
         .write_atomic(path)
@@ -73,7 +73,7 @@ fn test_atomic_session_file_and_token() {
     let loaded2 = DaemonSession::read(path).unwrap();
     assert_eq!(loaded2.endpoint, "ws://127.0.0.1:4661/rpc");
 
-    // Cleanup
+    // Limpieza
     DaemonSession::remove(path);
     assert!(!path.join("session.json").exists());
 }
@@ -83,13 +83,13 @@ fn test_stale_or_corrupt_session_file_handled() {
     let dir = tempdir().unwrap();
     let path = dir.path();
 
-    // Write junk into session.json
+    // Escribir datos no válidos en session.json
     std::fs::write(path.join("session.json"), b"{ invalid json ...").unwrap();
 
     let read_res = DaemonSession::read(path);
     assert!(read_res.is_err());
 
-    // Overwriting atomically fixes it cleanly
+    // La sobrescritura atómica lo corrige limpiamente
     let session = DaemonSession::new(1, Uuid::new_v4(), "ws://127.0.0.1:5000/rpc");
     session
         .write_atomic(path)
@@ -101,16 +101,16 @@ fn test_stale_or_corrupt_session_file_handled() {
 
 #[tokio::test]
 async fn test_ephemeral_port_fallback_behavior() {
-    // Occupy a specific port
+    // Ocupar un puerto específico
     let occupier = TcpListener::bind("127.0.0.1:0").unwrap();
     let busy_port = occupier.local_addr().unwrap().port();
 
-    // Attempting to bind another listener on busy_port fails with AddrInUse
+    // El intento de vincular otro oyente en busy_port falla con AddrInUse
     let bind_res = tokio::net::TcpListener::bind(format!("127.0.0.1:{busy_port}")).await;
     assert!(bind_res.is_err());
     assert_eq!(bind_res.unwrap_err().kind(), std::io::ErrorKind::AddrInUse);
 
-    // Fallback on 127.0.0.1:0 succeeds
+    // La alternativa (fallback) en 127.0.0.1:0 tiene éxito
     let fallback = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     assert_ne!(fallback.local_addr().unwrap().port(), busy_port);
 }
@@ -134,7 +134,7 @@ async fn test_daemon_parent_watchdog_auto_shutdown() {
     let dir = tempdir().unwrap();
     let path = dir.path().to_path_buf();
 
-    // 1. Spawn a short-lived dummy process that exits after 600ms
+    // 1. Generar un proceso simulado de corta duración que termina tras 600 ms
     let mut dummy_parent = if cfg!(windows) {
         std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", "Start-Sleep -Milliseconds 600"])
@@ -149,10 +149,10 @@ async fn test_daemon_parent_watchdog_auto_shutdown() {
 
     let parent_pid = dummy_parent.id();
 
-    // 2. Find mule-daemon executable
+    // 2. Localizar el ejecutable mule-daemon
     let daemon_bin = env!("CARGO_BIN_EXE_mule-daemon");
 
-    // 3. Launch mule-daemon with --parent-pid
+    // 3. Lanzar mule-daemon con --parent-pid
     let mut daemon_proc = std::process::Command::new(daemon_bin)
         .args([
             "--workdir",
@@ -165,10 +165,10 @@ async fn test_daemon_parent_watchdog_auto_shutdown() {
         .spawn()
         .expect("Failed to spawn mule-daemon");
 
-    // Wait for dummy parent to finish
+    // Esperar a que el proceso padre simulado finalice
     let _ = dummy_parent.wait();
 
-    // 4. Daemon should auto-terminate after parent exit
+    // 4. El daemon debe terminar automáticamente tras la salida del padre
     let start = std::time::Instant::now();
     let mut exited = false;
     while start.elapsed() < std::time::Duration::from_secs(12) {
@@ -187,7 +187,7 @@ async fn test_daemon_parent_watchdog_auto_shutdown() {
     }
     let _ = daemon_proc.wait();
 
-    // 5. Verify session file was cleaned up on exit
+    // 5. Verificar que el archivo de sesión se haya limpiado al salir
     assert!(
         !path.join("session.json").exists(),
         "session.json should be removed on exit"

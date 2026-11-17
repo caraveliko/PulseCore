@@ -28,60 +28,60 @@ use mule_network_policy::{validate_connect_address, NetworkPolicyManager};
 use crate::services::downloads::DownloadService;
 use crate::services::obfuscation_stream::ObfuscatedStream;
 
-/// eMule `SOURCECLIENTREASKS` (`Opcodes.h:69`) — 40 min entre deux requêtes
-/// SX vers le même client.
+/// `SOURCECLIENTREASKS` de eMule (`Opcodes.h:69`) — 40 min entre dos peticiones
+/// SX hacia el mismo cliente.
 pub const SOURCECLIENTREASKS: Duration = Duration::from_secs(40 * 60);
 
-/// eMule `SOURCECLIENTREASKF` (`Opcodes.h:70`) — 5 min entre deux réponses
-/// SX reçues pour le même fichier (fenêtre « sources fraîches »).
+/// `SOURCECLIENTREASKF` de eMule (`Opcodes.h:70`) — 5 min entre dos respuestas
+/// SX recibidas para el mismo archivo (ventana de «fuentes frescas»).
 pub const SOURCECLIENTREASKF: Duration = Duration::from_secs(5 * 60);
 
-/// eMule `MINCOMMONPENALTY` (`Opcodes.h:90`) — pénalité ×4 sur les timers
-/// pour les fichiers non rares.
+/// `MINCOMMONPENALTY` de eMule (`Opcodes.h:90`) — penalización ×4 en los temporizadores
+/// para archivos no raros.
 pub const MINCOMMONPENALTY: u32 = 4;
 
-/// eMule `RARE_FILE` (`Opcodes.h:115`) — un fichier avec ≤ 50 sources est
-/// « rare » et bénéficie de timers plus courts.
+/// `RARE_FILE` de eMule (`Opcodes.h:115`) — un archivo con ≤ 50 fuentes es
+/// «raro» y se beneficia de temporizadores más cortos.
 pub const RARE_FILE: usize = 50;
 
-/// eMule `CONNECTION_LATENCY` (`Opcodes.h:120`) — marge de latence ajoutée
-/// aux comparaisons de temps (22,05 s).
+/// `CONNECTION_LATENCY` de eMule (`Opcodes.h:120`) — margen de latencia añadido
+/// a las comparaciones de tiempo (22,05 s).
 pub const CONNECTION_LATENCY: Duration = Duration::from_millis(22050);
 
-/// Capacité filaire SX d'eMule : `CreateSrcInfoPacket` coupe après
-/// `if (nCount > 500) break;` — 501 entrées maximum par réponse.
+/// Capacidad de cable SX de eMule: `CreateSrcInfoPacket` corta tras
+/// `if (nCount > 500) break;` — 501 entradas como máximo por respuesta.
 const SX_RESPONSE_MAX_SOURCES: usize = 501;
 
-/// Cap de sources connues par fichier quand `.part.met` ne fixe pas
-/// `FT_MAXSOURCES` — eMule `GetMaxSourcePerFileDefault() = 400`
+/// Límite de fuentes conocidas por archivo cuando `.part.met` no fija
+/// `FT_MAXSOURCES` — `GetMaxSourcePerFileDefault() = 400` de eMule
 /// (`Preferences.cpp:1976`).
 const DEFAULT_MAX_SOURCES_PER_FILE: usize = 400;
 
-/// État partagé du Source Exchange : policy réseau, identité locale et
-/// journaux de throttle. Un seul exemplaire créé dans `AppState`, injecté
-/// dans le `PeerSessionManager` et l'`InboundListenerService` — équivalent
-/// des compteurs eMule répartis entre `CUpDownClient` et `CPartFile`.
+/// Estado compartido de Source Exchange: política de red, identidad local y
+/// registros de limitación de tasa. Una única instancia creada en `AppState`,
+/// inyectada en `PeerSessionManager` e `InboundListenerService` — equivalente
+/// a los contadores de eMule repartidos entre `CUpDownClient` y `CPartFile`.
 #[derive(Clone)]
 pub struct SxEnv {
-    /// Policy réseau (classification IP + ipfilter) — équivalent
-    /// `IsGoodIP` + `theApp.ipfilter->IsFiltered` d'eMule, en plus strict.
+    /// Política de red (clasificación IP + ipfilter) — equivalente a
+    /// `IsGoodIP` + `theApp.ipfilter->IsFiltered` de eMule, más estricta.
     pub network_policy: NetworkPolicyManager,
-    /// Dernière réponse SX envoyée à chaque pair — eMule
-    /// `CUpDownClient::m_dwLastSourceRequest` (côté serveur SX).
+    /// Última respuesta SX enviada a cada par — `CUpDownClient::m_dwLastSourceRequest`
+    /// de eMule (lado servidor SX).
     pub answer_log: Arc<std::sync::Mutex<HashMap<IpAddr, Instant>>>,
-    /// Dernière requête SX émise vers chaque pair — eMule
-    /// `CUpDownClient::GetLastAskedForSources()` (côté client SX).
+    /// Última petición SX emitida hacia cada par — `CUpDownClient::GetLastAskedForSources()`
+    /// de eMule (lado cliente SX).
     pub request_log: Arc<std::sync::Mutex<HashMap<IpAddr, Instant>>>,
-    /// Dernière réponse SX reçue par fichier — eMule
-    /// `CPartFile::m_ClientSrcAnswered` (`GetLastAnsweredTime`).
+    /// Última respuesta SX recibida por archivo — `CPartFile::m_ClientSrcAnswered`
+    /// (`GetLastAnsweredTime`) de eMule.
     pub file_answer_log: Arc<std::sync::Mutex<HashMap<[u8; 16], Instant>>>,
-    /// Notre user hash MD4 — les sources qui le portent sont nous-mêmes
-    /// (eMule droppe `userhash == own` à l'ajout, `DownloadQueue.cpp:479`).
+    /// Nuestro user hash MD4 — las fuentes que lo llevan somos nosotros mismos
+    /// (eMule descarta `userhash == own` al añadir, `DownloadQueue.cpp:479`).
     pub own_user_hash: [u8; 16],
 }
 
 impl SxEnv {
-    /// Crée un environnement SX vide.
+    /// Crea un entorno SX vacío.
     pub fn new(network_policy: NetworkPolicyManager, own_user_hash: [u8; 16]) -> Self {
         Self {
             network_policy,
@@ -93,76 +93,76 @@ impl SxEnv {
     }
 }
 
-/// Identité locale eD2K pour les checks `CanAddSource` d'eMule
-/// (`PartFile.cpp:2380-2403`) : détecter les sources qui désignent
-/// nous-mêmes ou une cible injoignable.
+/// Identidad local eD2K para las comprobaciones `CanAddSource` de eMule
+/// (`PartFile.cpp:2380-2403`): detectar fuentes que nos señalan a nosotros
+/// mismos o a un destino inalcanzable.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SxLocalIds {
-    /// `client_id` attribué par le serveur eD2K courant (0 = déconnecté).
+    /// `client_id` asignado por el servidor eD2K actual (0 = desconectado).
     pub client_id: u32,
-    /// IPv4 du serveur courant (format hybrid little-endian), 0 si inconnu.
+    /// IPv4 del servidor actual (formato hybrid little-endian), 0 si se desconoce.
     pub server_ip: u32,
-    /// Port du serveur courant.
+    /// Puerto del servidor actual.
     pub server_port: u16,
     /// Notre port TCP d'écoute eD2K.
     pub tcp_port: u16,
-    /// `true` quand notre `client_id` est un HighID (non `IsLowID`).
+    /// `true` cuando nuestro `client_id` es un HighID (no `IsLowID`).
     pub is_high_id: bool,
-    /// `CKademlia::IsConnected() && !IsFirewalled()` — avec `is_high_id`,
-    /// forme `!theApp.IsFirewalled()` : l'union détermine si une LowID
-    /// peut nous rappeler.
+    /// `CKademlia::IsConnected() && !IsFirewalled()` — junto con `is_high_id`,
+    /// forma `!theApp.IsFirewalled()`: la unión determina si una LowID
+    /// puede devolvernos la llamada.
     pub kad_open: bool,
 }
 
-/// Capacités SX annoncées par le pair distant + état de complétude.
+/// Capacidades SX anunciadas por el par remoto + estado de compleción.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PeerSxCaps {
-    /// Version SX1 annoncée par le pair (`m_bySourceExchange1Ver`,
-    /// CT_EMULE_MISCOPTIONS1 bits 12-15 ou tag `ET_SOURCEEXCHANGE`).
-    /// `0` = le pair n'a pas annoncé SX1.
+    /// Versión SX1 anunciada por el par (`m_bySourceExchange1Ver`,
+    /// bits 12-15 de CT_EMULE_MISCOPTIONS1 o etiqueta `ET_SOURCEEXCHANGE`).
+    /// `0` = el par no anunció SX1.
     pub sx1_version: u8,
-    /// SX2 annoncé (`SupportsSourceExchange2`, MISCOPTIONS2 bit 10).
+    /// SX2 anunciado (`SupportsSourceExchange2`, bit 10 de MISCOPTIONS2).
     pub sx2: bool,
-    /// `m_bCompleteSource` : le pair détient le fichier complet — eMule ne
-    /// demande pas de sources à une source complète.
+    /// `m_bCompleteSource`: el par posee el archivo completo — eMule no
+    /// pide fuentes a una fuente completa.
     pub complete_source: bool,
-    /// Enveloppe multipacket négociée (`SendFileRequest`,
+    /// Envoltorio multipaquete negociado (`SendFileRequest`,
     /// `DownloadClient.cpp:266-280`).
     pub multipacket: MultiPacketLevel,
-    /// `SupportsFileIdentifiers()` (MISCOPTIONS2 bit 13) — pilote le choix
-    /// entre `OP_HASHSETREQUEST` et `OP_HASHSETREQUEST2`
+    /// `SupportsFileIdentifiers()` (bit 13 de MISCOPTIONS2) — controla la elección
+    /// entre `OP_HASHSETREQUEST` y `OP_HASHSETREQUEST2`
     /// (`SendHashSetRequest`, `DownloadClient.cpp:2200`).
     pub file_identifiers: bool,
 }
 
-/// Niveau d'enveloppe multipacket annoncé par le pair — eMule
-/// `SupportMultiPacket` (MISCOPTIONS1 bit1), `SupportExtMultiPacket`
-/// (MISCOPTIONS2 bit5), `SupportsFileIdentifiers` (MISCOPTIONS2 bit13).
-/// eMule choisit la plus haute variante supportée dans `SendFileRequest`.
+/// Nivel de envoltorio multipaquete anunciado por el par — `SupportMultiPacket`
+/// de eMule (bit 1 de MISCOPTIONS1), `SupportExtMultiPacket` (bit 5 de MISCOPTIONS2),
+/// `SupportsFileIdentifiers` (bit 13 de MISCOPTIONS2).
+/// eMule elige la variante admitida más alta en `SendFileRequest`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MultiPacketLevel {
-    /// Pas de multipacket — requêtes émises en paquets séparés.
+    /// Sin multipaquete — peticiones emitidas en paquetes separados.
     #[default]
     None,
-    /// `OP_MULTIPACKET` (`0x92`) — enveloppe hash seul.
+    /// `OP_MULTIPACKET` (`0x92`) — envoltorio solo con hash.
     Basic,
-    /// `OP_MULTIPACKET_EXT` (`0xA4`) — hash + taille u64.
+    /// `OP_MULTIPACKET_EXT` (`0xA4`) — hash + tamaño u64.
     Ext,
     /// `OP_MULTIPACKET_EXT2` (`0xA9`) — `FileIdentifier`
-    /// (hash + taille + racine AICH).
+    /// (hash + tamaño + raíz AICH).
     Ext2,
 }
 
-/// eMule `CUpDownClient::IsSourceRequestAllowed` (`DownloadClient.cpp:212-255`)
-/// — version mono-fichier : nos sessions sont liées à un seul fichier
-/// (`partfile == m_reqfile`, `sourceExchangeCheck = false`), les clauses
-/// A4AF disparaissent donc.
+/// `CUpDownClient::IsSourceRequestAllowed` de eMule (`DownloadClient.cpp:212-255`)
+/// — versión monoarchivo: nuestras sesiones están vinculadas a un único archivo
+/// (`partfile == m_reqfile`, `sourceExchangeCheck = false`), por lo que las cláusulas
+/// A4AF desaparecen.
 ///
-/// - `source_count` : `GetSourceCount()` — nombre total de sources connues.
-/// - `valid_source_count` : `GetValidSourcesCount()` — sources dans un état
-///   viable (non filtrées/rejetées).
-/// - `max_source_soft` : `GetMaxSourcePerFileSoft()` — cap souple du fichier
-///   (`max_sources * 9/10`, défaut 360).
+/// - `source_count`: `GetSourceCount()` — número total de fuentes conocidas.
+/// - `valid_source_count`: `GetValidSourcesCount()` — fuentes en un estado
+///   viable (no filtradas/rechazadas).
+/// - `max_source_soft`: `GetMaxSourcePerFileSoft()` — límite flexible del archivo
+///   (`max_sources * 9/10`, por defecto 360).
 pub fn is_source_request_allowed(
     env: &SxEnv,
     peer_ip: IpAddr,
@@ -199,26 +199,26 @@ pub fn is_source_request_allowed(
         .map(|t| t.elapsed().saturating_add(CONNECTION_LATENCY))
         .unwrap_or(Duration::MAX);
 
-    // Source non complète, fichier très rare (≤ RARE_FILE/5).
+    // Fuente no completa, archivo muy raro (≤ RARE_FILE/5).
     (!caps.complete_source
         && (never_asked || client_elapsed > SOURCECLIENTREASKS)
         && source_count <= RARE_FILE / 5)
-        // Source non complète, fichier rare (≤ RARE_FILE, ou
-        // ≤ RARE_FILE/2 + sources valides quand on a déjà des valides).
+        // Fuente no completa, archivo raro (≤ RARE_FILE, o
+        // ≤ RARE_FILE/2 + fuentes válidas cuando ya tenemos válidas).
         || (!caps.complete_source
             && (never_asked || client_elapsed > SOURCECLIENTREASKS)
             && (source_count <= RARE_FILE
                 || source_count <= RARE_FILE / 2 + valid_source_count)
             && file_elapsed > SOURCECLIENTREASKF)
-        // Fichier non rare : client > 160 min et fichier > 20 min.
+        // Archivo no raro: cliente > 160 min y archivo > 20 min.
         || ((never_asked || client_elapsed > SOURCECLIENTREASKS * MINCOMMONPENALTY)
             && file_elapsed > SOURCECLIENTREASKF * MINCOMMONPENALTY)
 }
 
-/// eMule `SetLastAskedForSources()` + `CPartFile::SetLastAnsweredTimeTimeout()`
-/// (`PartFile.h:267`) — enregistre l'émission d'une requête SX et recule le
-/// timer fichier pour ne pas bloquer le re-ask suivant (`m_ClientSrcAnswered
-/// = now + 2*CONNECTION_LATENCY - SOURCECLIENTREASKS`).
+/// `SetLastAskedForSources()` + `CPartFile::SetLastAnsweredTimeTimeout()` de eMule
+/// (`PartFile.h:267`) — registra la emisión de una petición SX y retrasa el
+/// temporizador del archivo para no bloquear la siguiente repetición de petición
+/// (`m_ClientSrcAnswered = now + 2*CONNECTION_LATENCY - SOURCECLIENTREASKS`).
 pub fn mark_sx_request_sent(env: &SxEnv, peer_ip: IpAddr, file_hash: [u8; 16]) {
     env.request_log
         .lock()
@@ -234,8 +234,8 @@ pub fn mark_sx_request_sent(env: &SxEnv, peer_ip: IpAddr, file_hash: [u8; 16]) {
         .insert(file_hash, pseudo);
 }
 
-/// eMule `CPartFile::SetLastAnsweredTime()` — enregistre la réception d'une
-/// réponse SX valide pour ce fichier (utilisé par `IsSourceRequestAllowed`).
+/// `CPartFile::SetLastAnsweredTime()` de eMule — registra la recepción de una
+/// respuesta SX válida para este archivo (utilizado por `IsSourceRequestAllowed`).
 pub fn mark_sx_answer_received(env: &SxEnv, file_hash: [u8; 16]) {
     env.file_answer_log
         .lock()
@@ -243,8 +243,8 @@ pub fn mark_sx_answer_received(env: &SxEnv, file_hash: [u8; 16]) {
         .insert(file_hash, Instant::now());
 }
 
-/// Version SX1 annoncée dans un `OP_EMULEINFO` — valeur du tag
-/// `ET_SOURCEEXCHANGE` (eMule `ProcessMuleInfoPacket` lit la valeur comme
+/// Versión SX1 anunciada en un `OP_EMULEINFO` — valor de la etiqueta
+/// `ET_SOURCEEXCHANGE` (`ProcessMuleInfoPacket` de eMule lee el valor como
 /// `m_bySourceExchange1Ver`).
 pub fn emule_info_sx_version(info: &mule_protocol::ed2k::Ed2kEmuleInfo) -> u8 {
     use mule_protocol::ed2k::tags::{TagName, TagValue, TAG_SPECIAL_EMULE_EXT_SOURCEEXCHANGE};
@@ -267,10 +267,10 @@ pub fn emule_info_sx_version(info: &mule_protocol::ed2k::Ed2kEmuleInfo) -> u8 {
         .unwrap_or(0)
 }
 
-/// eMule `SendFileRequest` (`DownloadClient.cpp:266-280`) — choisit
-/// l'enveloppe multipacket la plus riche annoncée par le pair :
-/// `SupportsFileIdentifiers()` → EXT2, sinon `SupportExtMultiPacket()` →
-/// EXT, sinon `SupportMultiPacket()` → BASIC.
+/// `SendFileRequest` de eMule (`DownloadClient.cpp:266-280`) — elige
+/// el envoltorio multipaquete más rico anunciado por el par:
+/// `SupportsFileIdentifiers()` → EXT2, si no `SupportExtMultiPacket()` →
+/// EXT, si no `SupportMultiPacket()` → BASIC.
 pub fn multipacket_level(info: &mule_protocol::ed2k::Ed2kPeerInfo) -> MultiPacketLevel {
     if info.supports_file_identifiers() {
         MultiPacketLevel::Ext2
@@ -283,9 +283,9 @@ pub fn multipacket_level(info: &mule_protocol::ed2k::Ed2kPeerInfo) -> MultiPacke
     }
 }
 
-/// Construit les capacités SX d'un pair depuis son `Ed2kPeerInfo` (HELLO)
-/// et son `OP_EMULEINFO` éventuel — eMule `GetSourceExchange1Version()`
-/// (misc1 bits 12-15) avec repli sur la valeur du tag `ET_SOURCEEXCHANGE`.
+/// Construye las capacidades SX de un par a partir de su `Ed2kPeerInfo` (HELLO)
+/// y su eventual `OP_EMULEINFO` — `GetSourceExchange1Version()` de eMule
+/// (bits 12-15 de misc1) con repliegue sobre el valor de la etiqueta `ET_SOURCEEXCHANGE`.
 pub fn peer_sx_caps(
     info: &mule_protocol::ed2k::Ed2kPeerInfo,
     emule_info: Option<&mule_protocol::ed2k::Ed2kEmuleInfo>,
@@ -301,8 +301,8 @@ pub fn peer_sx_caps(
     }
 }
 
-/// Nombre de sources « valides » au sens eMule `GetValidSourcesCount()` —
-/// sources dans un état exploitable (pas filtrées, rejetées ou en échec).
+/// Número de fuentes «válidas» en el sentido de `GetValidSourcesCount()` de eMule —
+/// fuentes en un estado aprovechable (no filtradas, rechazadas o en fallo).
 fn valid_source_count(sources: &[mule_core::model::PeerSource]) -> usize {
     sources
         .iter()
@@ -317,10 +317,10 @@ fn valid_source_count(sources: &[mule_core::model::PeerSource]) -> usize {
         .count()
 }
 
-/// Cap souple eMule `GetMaxSourcePerFileSoft()` — `max_sources * 9/10`
-/// (`PartFile.h:281`). Sans override par fichier (FT_MAXSOURCES), le
-/// réglage global `max_peers_per_download` fait foi — comme eMule qui
-/// retombe sur `thePrefs.maxsourceperfile`.
+/// Límite flexible `GetMaxSourcePerFileSoft()` de eMule — `max_sources * 9/10`
+/// (`PartFile.h:281`). Sin anulación por archivo (FT_MAXSOURCES), el
+/// ajuste global `max_peers_per_download` prevalece — igual que eMule que
+/// recurre a `thePrefs.maxsourceperfile`.
 fn max_source_soft(
     snap: Option<&crate::services::downloads::types::DownloadSnapshot>,
     dl_svc: &crate::services::downloads::DownloadService,
@@ -336,10 +336,10 @@ fn max_source_soft(
         .unwrap_or(global * 9 / 10)
 }
 
-/// Évalue `IsSourceRequestAllowed` et renvoie la requête SX à émettre,
-/// sans l'envoyer — factorisation de `maybe_send_sx_request` pour le
-/// chemin multipacket (`SendFileRequest` eMule regroupe la requête SX
-/// dans l'enveloppe `OP_MULTIPACKET*` quand le pair la supporte).
+/// Evalúa `IsSourceRequestAllowed` y devuelve la petición SX a emitir,
+/// sin enviarla — factorización de `maybe_send_sx_request` para la
+/// ruta multipaquete (`SendFileRequest` de eMule agrupa la petición SX
+/// en el envoltorio `OP_MULTIPACKET*` cuando el par lo admite).
 pub(crate) async fn planned_sx_request(
     target_addr: SocketAddr,
     file_hash_str: &str,
@@ -375,10 +375,10 @@ pub(crate) async fn planned_sx_request(
     })
 }
 
-/// Évalue `IsSourceRequestAllowed` puis émet `OP_REQUESTSOURCES(2)` vers le
-/// pair — eMule envoie la requête SX à chaque `SendFileRequest` permis
-/// (~reask cycle) ; `mark_sx_request_sent` n'est appelé qu'en cas d'écriture
-/// réussie (`SetLastAskedForSources` + `SetLastAnsweredTimeTimeout`).
+/// Evalúa `IsSourceRequestAllowed` y luego emite `OP_REQUESTSOURCES(2)` hacia el
+/// par — eMule envía la petición SX en cada `SendFileRequest` permitido
+/// (~ciclo de re-ask); `mark_sx_request_sent` solo se llama en caso de escritura
+/// exitosa (`SetLastAskedForSources` + `SetLastAnsweredTimeTimeout`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn maybe_send_sx_request(
     stream: &mut ObfuscatedStream<TcpStream>,
@@ -413,9 +413,9 @@ pub(crate) async fn maybe_send_sx_request(
             match stream.write_all(&out).await {
                 Ok(()) => {
                     mark_sx_request_sent(env, target_addr.ip(), dl_hash_bytes);
-                    // eMule `DebugSourceExchange` (verbose opt-in) — la
-                    // réponse porte le bilan utile (yield), la requête
-                    // seule est du bruit (~1/source/40 min par fichier).
+                    // `DebugSourceExchange` de eMule (verbose opcional) — la
+                    // respuesta lleva el balance útil (rendimiento), la petición
+                    // aislada es solo ruido (~1/fuente/40 min por archivo).
                     tracing::debug!(
                         "[SOURCE_EXCHANGE] Sent {} (version {}) to peer {peer} for file {file_hash_str}",
                         if caps.sx2 { "OP_REQUESTSOURCES2" } else { "OP_REQUESTSOURCES" },
@@ -439,9 +439,9 @@ pub(crate) async fn maybe_send_sx_request(
     }
 }
 
-/// `true` si l'IP/port du source passe le filtre réseau (équivalent
-/// `IsGoodIP` + `ipfilter->IsFiltered` — plus strict qu'eMule : rejette
-/// LAN/loopback/réservé en profil public, autorise le loopback en LocalLab).
+/// `true` si la IP/puerto de la fuente supera el filtro de red (equivalente a
+/// `IsGoodIP` + `ipfilter->IsFiltered` — más estricto que eMule: rechaza
+/// LAN/loopback/reservado en perfil público, permite loopback en LocalLab).
 fn source_address_allowed(env: &SxEnv, ip_addr: Ipv4Addr, port: u16) -> bool {
     let sock = SocketAddr::new(IpAddr::V4(ip_addr), port);
     if validate_connect_address(&sock, env.network_policy.profile()).is_err() {
@@ -453,17 +453,16 @@ fn source_address_allowed(env: &SxEnv, ip_addr: Ipv4Addr, port: u16) -> bool {
         .is_none()
 }
 
-/// Traite une réponse SX (`OP_ANSWERSOURCES`/`OP_ANSWERSOURCES2`) — eMule
-/// `CPartFile::AddClientSources` + `CanAddSource` (`PartFile.cpp:3714-3890,
-/// 2368-2405`).
+/// Procesa una respuesta SX (`OP_ANSWERSOURCES`/`OP_ANSWERSOURCES2`) — `CPartFile::AddClientSources`
+/// + `CanAddSource` de eMule (`PartFile.cpp:3714-3890, 2368-2405`).
 ///
-/// Filtrage à l'ingestion, miroir d'eMule (avec notre policy plus stricte) :
-/// - hash du fichier attendu ;
-/// - `user_hash == own` → drop ;
-/// - HighID : `IsGoodIP` (policy), `ipfilter`, self-check `client_id`+port ;
-/// - LowID : conservé comme `lowid:<id>` (callback serveur), sauf si nous
-///   sommes nous-mêmes LowID (`IsFirewalled`) ou si c'est notre propre ID ;
-/// - arrêt à `GetMaxSources()` (`max_sources` ou 400 par défaut).
+/// Filtrado en la ingesta, reflejo de eMule (con nuestra política más estricta):
+/// - hash del archivo esperado;
+/// - `user_hash == own` → descartar;
+/// - HighID: `IsGoodIP` (política), `ipfilter`, autocomprobación `client_id`+puerto;
+/// - LowID: conservado como `lowid:<id>` (devolución de llamada del servidor), salvo si nosotros
+///   mismos somos LowID (`IsFirewalled`) o si es nuestro propio ID;
+/// - parada en `GetMaxSources()` (`max_sources` o 400 por defecto).
 pub async fn handle_sx_answer(
     packet: &mule_protocol::framing::RawPacket,
     dl_hash_bytes: [u8; 16],
@@ -499,7 +498,7 @@ pub async fn handle_sx_answer(
         return;
     }
 
-    // eMule `SetLastAnsweredTime` : une réponse valide recule le re-ask.
+    // `SetLastAnsweredTime` de eMule: una respuesta válida retrasa la repetición de petición.
     mark_sx_answer_received(env, dl_hash_bytes);
 
     let now_ms = std::time::SystemTime::now()
@@ -507,8 +506,8 @@ pub async fn handle_sx_answer(
         .unwrap_or_default()
         .as_millis() as i64;
 
-    // Cap d'ingestion : `GetSourceCount() >= GetMaxSources()` stoppe la
-    // boucle (sources déjà connues + nouvelles acceptées).
+    // Límite de ingesta: `GetSourceCount() >= GetMaxSources()` detiene el
+    // bucle (fuentes ya conocidas + nuevas aceptadas).
     let (existing_count, max_sources) = {
         let dl_svc = downloads.lock().await;
         let max = dl_svc
@@ -516,8 +515,8 @@ pub async fn handle_sx_answer(
             .and_then(|d| d.max_sources)
             .map(|m| m as usize)
             .or_else(|| {
-                // eMule `GetMaxSources()` : sans override par fichier, le
-                // réglage global `max_peers_per_download` fait foi.
+                // `GetMaxSources()` de eMule: sin anulación por archivo, el
+                // ajuste global `max_peers_per_download` prevalece.
                 dl_svc
                     .get_setting("max_peers_per_download")
                     .ok()
@@ -543,21 +542,21 @@ pub async fn handle_sx_answer(
         if existing_count + discovered_sources.len() >= max_sources {
             break;
         }
-        // Source qui porte notre user hash : c'est nous.
+        // Fuente que lleva nuestro user hash: somos nosotros.
         if src.user_hash == Some(env.own_user_hash) {
             dropped_self += 1;
             continue;
         }
 
         let addr_str = if src.is_low_id() {
-            // eMule `CanAddSource` : LowID refusée quand
-            // `theApp.IsFirewalled()` — ni HighID eD2K ni Kad UDP ouvert,
-            // donc impossible de recevoir son connect-back.
+            // `CanAddSource` de eMule: LowID rechazada cuando
+            // `theApp.IsFirewalled()` — ni HighID eD2K ni UDP de Kad abierto,
+            // por lo que es imposible recibir su devolución de conexión.
             if !local.is_high_id && !local.kad_open {
                 dropped_lowid_firewalled += 1;
                 continue;
             }
-            // Self-check LowID : notre propre client_id sur notre serveur.
+            // Autocomprobación LowID: nuestro propio client_id en nuestro servidor.
             if local.client_id != 0
                 && src.ip == local.client_id
                 && src.server_ip == local.server_ip
@@ -573,13 +572,13 @@ pub async fn handle_sx_answer(
                 continue;
             }
             let ip_addr = Ipv4Addr::from(src.ip_bytes);
-            // `IsGoodIP` + `ipfilter->IsFiltered` (policy réseau du projet).
+            // `IsGoodIP` + `ipfilter->IsFiltered` (política de red del proyecto).
             if !source_address_allowed(env, ip_addr, src.port) {
                 dropped_filtered += 1;
                 continue;
             }
-            // Self-check HighID : notre client_id + notre port
-            // (`client_id` HighID = notre IP en host/little-endian order ou le u32 assigné).
+            // Autocomprobación HighID: nuestro client_id + nuestro puerto
+            // (`client_id` HighID = nuestra IP en orden host/little-endian o el u32 asignado).
             if local.client_id >= 16_777_216
                 && (u32::from_le_bytes(src.ip_bytes) == local.client_id
                     || u32::from_be_bytes(src.ip_bytes) == local.client_id)
@@ -609,9 +608,9 @@ pub async fn handle_sx_answer(
             buddy_id: None,
             software: None,
             availability: None,
-            // Serveur du source (eMule `m_dwServerIP`/`m_nServerPort`) — les
-            // LowIDs ne sont uniques que par serveur : le callback serveur
-            // n'est valable que si `IsLocalServer` matche notre serveur.
+            // Servidor de la fuente (`m_dwServerIP`/`m_nServerPort` de eMule) — las
+            // LowIDs solo son únicas por servidor: la devolución de llamada del servidor
+            // solo es válida si `IsLocalServer` coincide con nuestro servidor.
             server_ip: src.server_ip,
             server_port: src.server_port,
             udp_port: 0,
@@ -645,16 +644,16 @@ pub async fn handle_sx_answer(
     }
 }
 
-/// Sélection des sources à servir — eMule `CreateSrcInfoPacket`
-/// (`PartFile.cpp:3652-3698`) :
-/// - `!HasLowID() && IsValidSource()` : uniquement des sources vérifiées
-///   (états `Connected`/`Allowed` — les `Candidate` jamais contactées ne
-///   sont pas re-propagées) ;
-/// - `srcstatus` connu : masque de disponibilité présent, non vide, et dont
-///   la longueur correspond au nombre de parts du fichier ;
-/// - ≥ 1 part utile au demandeur quand son part-status est connu
-///   (`reqstatus`), sinon ≥ 1 part tout court ;
-/// - cap `nCount > 500` → 501 entrées maximum.
+/// Selección de fuentes a servir — `CreateSrcInfoPacket` de eMule
+/// (`PartFile.cpp:3652-3698`):
+/// - `!HasLowID() && IsValidSource()`: únicamente fuentes verificadas
+///   (estados `Connected`/`Allowed` — las `Candidate` nunca contactadas no
+///   se re-propagan);
+/// - `srcstatus` conocido: máscara de disponibilidad presente, no vacía, y cuya
+///   longitud coincide con el número de partes del archivo;
+/// - ≥ 1 parte útil para el solicitante cuando se conoce su estado de partes
+///   (`reqstatus`), de lo contrario ≥ 1 parte en cualquier caso;
+/// - límite `nCount > 500` → 501 entradas como máximo.
 fn select_sx_response_sources(
     known_sources: &[mule_core::model::PeerSource],
     file_part_count: usize,
@@ -663,11 +662,11 @@ fn select_sx_response_sources(
 ) -> Vec<SxSource> {
     let mut out = Vec::new();
     for src in known_sources {
-        // `!cur_src->HasLowID()` — les LowID ne sont jamais servis en SX.
+        // `!cur_src->HasLowID()` — las LowID nunca se sirven en SX.
         if src.ip < 16_777_216 || src.port == 0 {
             continue;
         }
-        // `IsValidSource()` — sources vérifiées seulement.
+        // `IsValidSource()` — solo fuentes verificadas.
         if !matches!(
             src.status,
             mule_core::model::PeerSourceStatus::Connected
@@ -679,17 +678,17 @@ fn select_sx_response_sources(
         if !source_address_allowed(env, ip_addr, src.port) {
             continue;
         }
-        // `srcstatus && cur_src->GetPartCount() == GetPartCount()` :
-        // le masque doit être connu et compatible avec le fichier.
+        // `srcstatus && cur_src->GetPartCount() == GetPartCount()`:
+        // la máscara debe conocerse y ser compatible con el archivo.
         let Some(mask) = src.availability.as_deref() else {
             continue;
         };
         if file_part_count > 0 && mask.len() != file_part_count.div_ceil(8) {
             continue;
         }
-        // `srcstatus[i] && (!reqstatus || !reqstatus[i])` : la source doit
-        // couvrir ≥ 1 part que le demandeur n'a pas (ou ≥ 1 part si son
-        // part-status est inconnu).
+        // `srcstatus[i] && (!reqstatus || !reqstatus[i])`: la fuente debe
+        // cubrir ≥ 1 parte que el solicitante no tenga (o ≥ 1 parte si se
+        // desconoce su estado de partes).
         let useful = (0..mask.len() * 8).any(|i| {
             mask[i / 8] & (1 << (i % 8)) != 0
                 && requester_mask
@@ -702,8 +701,8 @@ fn select_sx_response_sources(
             ip_bytes: src.ip.to_le_bytes(),
             ip: src.ip,
             port: src.port,
-            // ServerIP/ServerPort non persistés dans notre modèle — 0 est
-            // licite sur le fil (eMule les envoie quand connus).
+            // ServerIP/ServerPort no persistidos en nuestro modelo — 0 es
+            // lícito en el cable (eMule los envía cuando se conocen).
             server_ip: 0,
             server_port: 0,
             user_hash: src.user_hash_bytes(),
@@ -717,17 +716,17 @@ fn select_sx_response_sources(
     out
 }
 
-/// Traite une requête SX entrante (`OP_REQUESTSOURCES`/`OP_REQUESTSOURCES2`)
-/// — eMule `ListenSocket.cpp:1165-1228` + `CreateSrcInfoPacket`.
+/// Procesa una petición SX entrante (`OP_REQUESTSOURCES`/`OP_REQUESTSOURCES2`)
+/// — `ListenSocket.cpp:1165-1228` + `CreateSrcInfoPacket` de eMule.
 ///
-/// - Gate `byRequestedVersion > 0 || sx1_version > 1` ;
-/// - le fichier doit être connu (partagé ou en téléchargement) ;
-/// - throttle `SetLastSrcReqTime` : jamais répondu → OK, part-file rare
-///   → > 40 min, sinon > 160 min ;
-/// - version négociée : `min(requested, 4)` en SX2, sinon SX1 à la version
-///   annoncée par le pair ; pas de réponse si `nCount == 0` ;
-/// - `requester_mask` : part-status du demandeur quand connu (ext-info
-///   `OP_REQFILENAME`), utilisé pour ne servir que des sources utiles.
+/// - Filtro `byRequestedVersion > 0 || sx1_version > 1`;
+/// - el archivo debe conocerse (compartido o en descarga);
+/// - limitación `SetLastSrcReqTime`: nunca respondido → OK, part-file raro
+///   → > 40 min, de lo contrario > 160 min;
+/// - versión negociada: `min(requested, 4)` en SX2, si no SX1 a la versión
+///   anunciada por el par; sin respuesta si `nCount == 0`;
+/// - `requester_mask`: estado de partes del solicitante cuando se conoce (ext-info
+///   `OP_REQFILENAME`), utilizado para servir solo fuentes útiles.
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_sx_request(
     packet: &mule_protocol::framing::RawPacket,
@@ -771,9 +770,9 @@ pub async fn handle_sx_request(
     }
 }
 
-/// Répond à une requête SX décodée — partagé entre le chemin standalone et
-/// les sous-opcodes `OP_MULTIPACKET*` (eMule envoie la réponse SX en paquet
-/// séparé, `ListenSocket.cpp:969`).
+/// Responde a una petición SX decodificada — compartido entre la ruta independiente y
+/// los subopcodes `OP_MULTIPACKET*` (eMule envía la respuesta SX en un paquete
+/// separado, `ListenSocket.cpp:969`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn respond_to_sx_request(
     req: &Ed2kRequestSources,
@@ -793,21 +792,21 @@ pub(crate) async fn respond_to_sx_request(
     if by_requested_version == 0 && caps.sx1_version <= 1 {
         return;
     }
-    // Session mono-fichier : ne répondre que pour le fichier de la session.
+    // Sesión monoarchivo: responder solo para el archivo de la sesión.
     if dl_hash_bytes.is_some() && dl_hash_bytes != Some(req.file_hash) {
         return;
     }
 
     let file_hash_str = hex::encode(req.file_hash);
-    // eMule : sharedfiles d'abord, puis downloadqueue (`ListenSocket.cpp:1192`).
+    // eMule: sharedfiles primero, luego downloadqueue (`ListenSocket.cpp:1192`).
     let (is_part_file, file_part_count, known_sources) = {
         let dl_svc = downloads.lock().await;
         let shared = dl_svc.get_shared_file(&file_hash_str).unwrap_or(None);
         let dl_snap = dl_svc.find_by_ed2k_hash(&file_hash_str);
         let known = dl_snap.is_some() || shared.as_ref().is_some_and(|s| s.enabled);
         if !known {
-            // Fichier inconnu : eMule appelle `CheckFailedFileIdReqs` —
-            // ici, silence.
+            // Archivo desconocido: eMule llama a `CheckFailedFileIdReqs` —
+            // aquí, silencio.
             return;
         }
         let is_part = dl_snap
@@ -831,9 +830,9 @@ pub(crate) async fn respond_to_sx_request(
         )
     };
 
-    // Throttle eMule (`ListenSocket.cpp:1204-1215`) : jamais répondu → OK ;
-    // part-file rare (≤ RARE_FILE sources) → > SOURCECLIENTREASKS ;
-    // sinon → > SOURCECLIENTREASKS × MINCOMMONPENALTY.
+    // Limitación de frecuencia de eMule (`ListenSocket.cpp:1204-1215`): nunca respondido → OK;
+    // part-file raro (≤ RARE_FILE fuentes) → > SOURCECLIENTREASKS;
+    // en otro caso → > SOURCECLIENTREASKS × MINCOMMONPENALTY.
     let peer_ip = target_addr.ip();
     let last_answer = env
         .answer_log
@@ -864,7 +863,7 @@ pub(crate) async fn respond_to_sx_request(
     let resp_sources =
         select_sx_response_sources(&known_sources, file_part_count, requester_mask, env);
     if resp_sources.is_empty() {
-        // eMule `if (!nCount) return 0;` — pas de réponse sans source valide.
+        // `if (!nCount) return 0;` de eMule — sin respuesta si no hay fuente válida.
         tracing::debug!(
             "[SOURCE_EXCHANGE] SX request from {peer} for {file_hash_str}: no valid source to offer"
         , peer = log_peer_addr(target_addr));
@@ -886,10 +885,10 @@ pub(crate) async fn respond_to_sx_request(
     let ans = Ed2kAnswerSources::new_v(version, req.file_hash, resp_sources);
     match encoder.encode_answer_sources(&ans, is_sx2_packet, false) {
         Ok(ans_pkt) => {
-            // eMule `CreateSrcInfoPacket` (KnownFile.cpp:1149 /
-            // PartFile.cpp:3708) : un paquet > 354 octets est zlib-packé
-            // en OP_PACKEDPROT (0xD4) quand la compression réduit
-            // réellement la taille.
+            // `CreateSrcInfoPacket` de eMule (KnownFile.cpp:1149 /
+            // PartFile.cpp:3708): un paquete > 354 bytes se empaqueta con zlib
+            // en OP_PACKEDPROT (0xD4) cuando la compresión reduce
+            // realmente el tamaño.
             let wire_pkt = mule_protocol::ed2k::packed::maybe_pack(
                 &ans_pkt,
                 mule_protocol::ed2k::packed::PACK_SRCINFO_MIN_SIZE,
@@ -925,12 +924,12 @@ pub(crate) async fn respond_to_sx_request(
     }
 }
 
-/// Traite un `OP_MULTIPACKET*` reçu pendant une session download outbound —
-/// le pair peut y encapsuler sa requête SX (eMule `ListenSocket.cpp:970-1011`,
-/// sous-opcodes sans hash : celui de l'enveloppe). Seuls les sous-opcodes SX
-/// sont dispatchés ; `dl_hash_bytes` borne la réponse au fichier de la
-/// session (eMule `m_reqfile`). Retourne `true` si le paquet était un
-/// multipacket (consommé, même en cas d'erreur de décodage).
+/// Procesa un `OP_MULTIPACKET*` recibido durante una sesión de descarga saliente —
+/// el par puede encapsular en él su petición SX (`ListenSocket.cpp:970-1011` de eMule,
+/// subopcodes sin hash: el del envoltorio). Solo se despachan los subopcodes SX;
+/// `dl_hash_bytes` acota la respuesta al archivo de la sesión (`m_reqfile` de eMule).
+/// Devuelve `true` si el paquete era un multipaquete (consumido, incluso en caso de error
+/// de decodificación).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_sx_multipacket(
     packet: &mule_protocol::framing::RawPacket,
@@ -976,8 +975,8 @@ pub(crate) async fn handle_sx_multipacket(
     if file_hash == [0u8; 16] {
         return true;
     }
-    // L'ext-info `OP_REQFILENAME` (part-status du demandeur) sert de
-    // `reqstatus` quand le sous-paquet SX le suit dans l'enveloppe.
+    // La ext-info `OP_REQFILENAME` (estado de partes del solicitante) sirve como
+    // `reqstatus` cuando el subpaquete SX le sigue en el envoltorio.
     let mut ext_mask: Option<Vec<u8>> = None;
     for sub in &mp.sub_requests {
         match sub {
@@ -1097,7 +1096,7 @@ mod tests {
         let env = test_env();
         let ip = ip4([85, 25, 13, 5]);
         let fh = [0x01; 16];
-        // Pair sans aucune capacité SX → jamais de requête.
+        // Par sin ninguna capacidad SX → nunca se solicita.
         assert!(!is_source_request_allowed(
             &env,
             ip,
@@ -1121,12 +1120,12 @@ mod tests {
             multipacket: MultiPacketLevel::None,
         file_identifiers: false,
         };
-        // Fichier rare, jamais interrogé → autorisé.
+        // Archivo raro, nunca consultado → permitido.
         assert!(is_source_request_allowed(&env, ip, &fh, 3, 1, 360, &caps));
-        // Requête émise → cooldown SOURCECLIENTREASKS côté client.
+        // Petición emitida → enfriamiento SOURCECLIENTREASKS en el lado cliente.
         mark_sx_request_sent(&env, ip, fh);
         assert!(!is_source_request_allowed(&env, ip, &fh, 3, 1, 360, &caps));
-        // Cooldown expiré (> SOURCECLIENTREASKS) → autorisé à nouveau.
+        // Enfriamiento expirado (> SOURCECLIENTREASKS) → permitido de nuevo.
         env.request_log.lock().unwrap().insert(
             ip,
             Instant::now()
@@ -1148,26 +1147,26 @@ mod tests {
             multipacket: MultiPacketLevel::None,
         file_identifiers: false,
         };
-        // `GetMaxSourcePerFileSoft` atteint → pas de requête.
+        // `GetMaxSourcePerFileSoft` alcanzado → sin petición.
         assert!(!is_source_request_allowed(
             &env, ip, &fh, 360, 300, 360, &caps
         ));
-        // Source complète : les clauses « rare » exigent
-        // `!m_bCompleteSource` — il reste la clause non-rare (160 min),
-        // qui échoue sans historique… sauf `never_asked` qui la rend
-        // vraie : eMule demande une première fois même à une source
-        // complète sur un fichier non rare. On vérifie le gate rare :
-        // complete_source → clause rare impossible.
+        // Fuente completa: las cláusulas «raras» exigen
+        // `!m_bCompleteSource` — queda la cláusula no rara (160 min),
+        // que falla sin historial… salvo `never_asked` que la hace
+        // verdadera: eMule pide una primera vez incluso a una fuente
+        // completa en un archivo no raro. Comprobamos la condición de raro:
+        // complete_source → cláusula rara imposible.
         let complete = PeerSxCaps {
             complete_source: true,
             ..caps
         };
-        // Clause rare bloquée ; clause commune `never_asked` encore
-        // possible — eMule l'autorise réellement (client jamais sollicité).
-        // On s'assure surtout que les clauses rares ne passent pas :
-        // fichier rare (3 sources) + complete → seule la clause commune
-        // peut répondre → elle est vraie (never_asked). Documenté : eMule
-        // demande effectivement aux sources complètes via la clause 3.
+        // Cláusula rara bloqueada; cláusula común `never_asked` aún
+        // posible — eMule la autoriza realmente (cliente nunca solicitado).
+        // Nos aseguramos sobre todo de que las cláusulas raras no pasen:
+        // archivo raro (3 fuentes) + complete → solo la cláusula común
+        // puede responder → es verdadera (never_asked). Documentado: eMule
+        // pide efectivamente a fuentes completas mediante la cláusula 3.
         assert!(is_source_request_allowed(
             &env, ip, &fh, 3, 1, 360, &complete
         ));
@@ -1247,12 +1246,12 @@ mod tests {
             PeerSourceStatus::Connected,
             Some(vec![0x01]),
         );
-        // Le demandeur détient déjà la seule part offerte → rien à servir.
+        // El solicitante ya posee la única parte ofrecida → nada que servir.
         assert!(
             select_sx_response_sources(std::slice::from_ref(&good), 1, Some(&[0x01]), &env)
                 .is_empty()
         );
-        // Il ne l'a pas → la source est servie.
+        // No la tiene → la fuente se sirve.
         assert_eq!(
             select_sx_response_sources(&[good], 1, Some(&[0x00]), &env).len(),
             1
@@ -1340,8 +1339,8 @@ mod tests {
             is_high_id: true,
             kad_open: false,
         };
-        // HighID → `!IsFirewalled()` : les `lowid:` sont acceptées au
-        // funnel d'ingestion comme au filtre SX.
+        // HighID → `!IsFirewalled()`: las `lowid:` se aceptan en el
+        // embudo de ingesta al igual que en el filtro SX.
         downloads.lock().await.set_lowid_source_acceptance(true);
 
         let sources = vec![
@@ -1353,13 +1352,13 @@ mod tests {
             sx_src([85, 25, 13, 9], 0, Some([0x02; 16])),
             // LAN → drop (policy réseau).
             sx_src([10, 0, 0, 7], 49662, Some([0x03; 16])),
-            // LowID → conservé `lowid:` quand on est HighID.
+            // LowID → conservado como `lowid:` cuando somos HighID.
             SxSource {
                 server_ip: 0x0506_0708,
                 server_port: 49661,
                 ..sx_src([88, 0, 0, 0], 0, Some([0x04; 16]))
             },
-            // LowID == notre client_id sur notre serveur → drop.
+            // LowID == nuestro client_id en nuestro servidor → descartar.
             SxSource {
                 server_ip: 0x0102_0304,
                 server_port: 49661,
@@ -1404,8 +1403,8 @@ mod tests {
         let env = test_env();
         let file_hash = [0x22; 16];
         let file_hash_str = hex::encode(file_hash);
-        // Nous-mêmes LowID sans Kad ouvert → `IsFirewalled()`, impossible
-        // de recevoir le callback.
+        // Nosotros mismos somos LowID sin Kad abierto → `IsFirewalled()`, imposible
+        // recibir la devolución de llamada.
         let local = SxLocalIds {
             is_high_id: false,
             kad_open: false,
@@ -1512,8 +1511,8 @@ mod tests {
     ) -> (tempfile::TempDir, Arc<Mutex<DownloadService>>, String) {
         let (tmp, downloads) = memory_downloads().await;
         let hex_hash = hex::encode(file_hash);
-        // Le fichier doit exister : `get_shared_file` ignore désormais
-        // les entrées dont le payload a disparu du disque.
+        // El archivo debe existir: `get_shared_file` ahora ignora
+        // las entradas cuya carga útil haya desaparecido del disco.
         let file_path = tmp.path().join("file.bin");
         std::fs::write(&file_path, b"shared-payload").unwrap();
         {
@@ -1578,7 +1577,7 @@ mod tests {
             .unwrap();
         assert_eq!(ans.version, SOURCE_EXCHANGE2_VERSION);
         assert_eq!(ans.file_hash, file_hash);
-        // Seule la source avec une part utile est servie.
+        // Solo la fuente con una parte útil es servida.
         assert_eq!(ans.sources.len(), 1);
         assert_eq!(ans.sources[0].ip_bytes, [85, 25, 13, 7]);
         assert_eq!(ans.sources[0].user_hash, Some([0x33; 16]));
@@ -1653,7 +1652,7 @@ mod tests {
             .await;
         }
         let _ = read_wire(&mut peer_end).await;
-        // La 2e requête tombe sous le throttle SOURCECLIENTREASKS.
+        // La 2ª petición cae bajo la limitación SOURCECLIENTREASKS.
         let mut tmp = [0u8; 512];
         let res = tokio::time::timeout(Duration::from_millis(300), peer_end.read(&mut tmp)).await;
         assert!(
@@ -1675,7 +1674,7 @@ mod tests {
         file_identifiers: false,
         };
         let (mut our_end, mut peer_end) = socket_pair().await;
-        // Hash inconnu : eMule ne répond pas (`ListenSocket.cpp:1192-1199`).
+        // Hash desconocido: eMule no responde (`ListenSocket.cpp:1192-1199`).
         let req = Ed2kRequestSources::new_v2([0x99; 16]);
         respond_to_sx_request(
             &req,
@@ -1693,7 +1692,7 @@ mod tests {
         let mut tmp = [0u8; 512];
         let res = tokio::time::timeout(Duration::from_millis(300), peer_end.read(&mut tmp)).await;
         assert!(res.is_err(), "unknown file must not produce an SX answer");
-        // Et `answer_log` ne doit pas avoir été marqué (throttle non consommé).
+        // Y `answer_log` no debe haberse marcado (limitación no consumida).
         assert!(env
             .answer_log
             .lock()
@@ -1706,7 +1705,7 @@ mod tests {
     async fn respond_silent_when_no_source_to_offer() {
         let file_hash = [0x46; 16];
         let (_tmp, downloads, hex_hash) = downloads_with_shared(file_hash).await;
-        // Aucune source valide : retirer celles insérées par le helper.
+        // Ninguna fuente válida: retirar las insertadas por el auxiliar.
         downloads
             .lock()
             .await

@@ -11,12 +11,12 @@ use crate::protocol::{ToolCallResult, ToolDefinition};
 pub use handlers::resolve_download_id;
 use serde_json::Value;
 
-/// Returns tool definitions for download and category management.
+/// Devuelve las definiciones de herramientas para la gestión de descargas y categorías.
 pub fn list_tools() -> Vec<ToolDefinition> {
     schemas::definitions()
 }
 
-/// Dispatches download/category tool calls.
+/// Despacha las llamadas a herramientas de descargas/categorías.
 pub async fn handle_tool(
     client: &DaemonClient,
     tool_name: &str,

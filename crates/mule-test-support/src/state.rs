@@ -14,8 +14,8 @@ use serde_json::json;
 
 use crate::rpc::make_req;
 
-/// État minimal en mémoire : workdir temporaire, mode [`WorkDirMode::Portable`],
-/// stockage des téléchargements en mémoire.
+/// Estado mínimo en memoria: workdir temporal, modo [`WorkDirMode::Portable`],
+/// almacenamiento de descargas en memoria.
 pub fn rpc_state(token: &str) -> (AppState, TempDir) {
     let dir = tempdir().unwrap();
     let temp_dir = dir.path().join("temp");
@@ -28,9 +28,9 @@ pub fn rpc_state(token: &str) -> (AppState, TempDir) {
     (state, dir)
 }
 
-/// État en mémoire dont la [`DaemonConfig`] est personnalisée avant
-/// construction (profil réseau, upnp, obfuscation…). Le mode
-/// [`WorkDirMode::Portable`] reste imposé après `customize`.
+/// Estado en memoria cuya [`DaemonConfig`] se personaliza antes de la
+/// construcción (perfil de red, UPnP, ofuscación…). El modo
+/// [`WorkDirMode::Portable`] sigue imponiéndose tras `customize`.
 pub fn rpc_state_with_config(
     token: &str,
     customize: impl FnOnce(DaemonConfig) -> DaemonConfig,
@@ -46,15 +46,15 @@ pub fn rpc_state_with_config(
     (state, dir)
 }
 
-/// État en mémoire avec profil réseau forcé (tests de politique réseau).
+/// Estado en memoria con perfil de red forzado (pruebas de política de red).
 pub fn rpc_state_with_profile(token: &str, profile: NetworkProfile) -> (AppState, TempDir) {
     let (state, dir) = rpc_state(token);
     state.network_policy.set_profile(profile);
     (state, dir)
 }
 
-/// État Kad persistant : arborescence `data/` + `downloads/` dans `tmp`, base
-/// SQLite réelle, mode [`WorkDirMode::ExplicitCli`], token fixe `test-token`.
+/// Estado Kad persistente: estructura de directorios `data/` + `downloads/` en `tmp`, base
+/// SQLite real, modo [`WorkDirMode::ExplicitCli`], token fijo `test-token`.
 pub fn kad_state(tmp: &TempDir) -> AppState {
     let data_dir = tmp.path().join("data");
     let dl_dir = tmp.path().join("downloads");
@@ -71,9 +71,9 @@ pub fn kad_state(tmp: &TempDir) -> AppState {
     AppState::new(config, downloads)
 }
 
-/// État LocalLab avec un téléchargement enregistré via `downloads.addEd2kLink`.
-/// Retourne `(state, workdir, hash_fichier_hex)` — le hash passé en paramètre
-/// est renvoyé tel quel pour les assertions.
+/// Estado LocalLab con una descarga registrada mediante `downloads.addEd2kLink`.
+/// Devuelve `(state, workdir, hash_archivo_hex)` — el hash pasado como parámetro
+/// se devuelve tal cual para las aserciones.
 pub async fn download_state(
     token: &str,
     file_name: &str,
@@ -83,7 +83,7 @@ pub async fn download_state(
     download_state_inner(token, file_name, file_size, file_hash_hex, None).await
 }
 
-/// Variante de [`download_state`] activant l'obfuscation protocolaire
+/// Variante de [`download_state`] que activa la ofuscación protocolaria
 /// (`enabled`, `required`).
 pub async fn download_state_with_obfuscation(
     token: &str,
@@ -103,10 +103,10 @@ pub async fn download_state_with_obfuscation(
     .await
 }
 
-/// État avec un partage `shares.add` adossé à un fichier réel écrit sur disque.
-/// Le chemin upload ne sert que des octets lisibles : `content` est le contenu
-/// physique du fichier, `declared_size` la taille annoncée au réseau.
-/// Retourne `(state, workdir, hash_fichier_hex)`.
+/// Estado con un compartido `shares.add` respaldado por un archivo real escrito en disco.
+/// La ruta de subida solo sirve bytes legibles: `content` es el contenido
+/// físico del archivo, `declared_size` el tamaño anunciado a la red.
+/// Devuelve `(state, workdir, hash_archivo_hex)`.
 pub async fn share_state(
     token: &str,
     file_name: &str,
@@ -160,7 +160,7 @@ async fn download_state_inner(
         .network_policy
         .set_profile(NetworkProfile::LocalLab);
 
-    // Enregistre un téléchargement pour donner une cible aux sessions pair.
+    // Registra una descarga para proporcionar un destino a las sesiones de pares.
     let link = format!("ed2k://|file|{file_name}|{file_size}|{file_hash_hex}|/");
     let req = make_req(1, "downloads.addEd2kLink", Some(json!({ "link": link })));
     let mut authenticated = true;

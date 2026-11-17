@@ -22,7 +22,7 @@ use super::super::profile::Ed2kCompatibilityProfile;
 use super::super::protocol::{PR_ED2K, PR_EMULE};
 use crate::framing::RawPacket;
 
-/// Encodes an `Ed2kFileStatusReq` message using the encoder's active profile opcode.
+/// Codifica un mensaje `Ed2kFileStatusReq` usando el código de operación del perfil activo del codificador.
 pub fn encode_file_status_req(
     limits: &Ed2kLimits,
     profile: Ed2kCompatibilityProfile,
@@ -42,7 +42,7 @@ pub fn encode_file_status_req(
     encode_file_status_req_with_opcode(limits, req, opcode)
 }
 
-/// Encodes an `Ed2kFileStatusReq` message into a `RawPacket` with a specified opcode.
+/// Codifica un mensaje `Ed2kFileStatusReq` en un `RawPacket` con un código de operación especificado.
 pub fn encode_file_status_req_with_opcode(
     limits: &Ed2kLimits,
     req: &Ed2kFileStatusReq,
@@ -67,15 +67,15 @@ pub fn encode_file_status_req_with_opcode(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `OP_REQFILENAME` (`0x58`) request with the negotiated extended
-/// info appended, matching eMule 0.72a `SendFileRequest`:
-/// `hash16` + (`ext_version >= 1`: `u16 part_count` + part-status bitfield
-/// LSB-first; `ext_version >= 2`: + `u16 complete_sources`).
+/// Codifica una petición `OP_REQFILENAME` (`0x58`) con la información extendida
+/// negociada adjunta, coincidiendo con `SendFileRequest` de eMule 0.72a:
+/// `hash16` + (`ext_version >= 1`: `u16 part_count` + mapa de bits de estado de partes
+/// LSB primero; `ext_version >= 2`: + `u16 complete_sources`).
 ///
-/// Mandatory when the peer announced `ExtendedRequestsVersion > 0`: eMule reads
-/// the ext-info unconditionally and throws on a truncated payload, dropping the
-/// connection (`UploadClient.cpp` `ProcessExtendedInfo`). With `ext_version ==
-/// 0`, no ext-info is appended (bare hash16).
+/// Obligatorio cuando el par anunció `ExtendedRequestsVersion > 0`: eMule lee
+/// la información extendida incondicionalmente y lanza una excepción ante una carga útil truncada, cortando la
+/// conexión (`UploadClient.cpp` `ProcessExtendedInfo`). Con `ext_version == 0`, no se adjunta
+/// información extendida (solo hash16 simple).
 pub fn encode_req_filename(
     limits: &Ed2kLimits,
     file_hash: &[u8; 16],
@@ -109,7 +109,7 @@ pub fn encode_req_filename(
     Ok(RawPacket::new(PR_ED2K, OP_REQFILENAME, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kFileStatus` message into a `RawPacket`.
+/// Codifica un mensaje `Ed2kFileStatus` en un `RawPacket`.
 pub fn encode_file_status(
     limits: &Ed2kLimits,
     status: &Ed2kFileStatus,
@@ -171,7 +171,7 @@ pub fn encode_file_status(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kFileReqAnsNoFile` (`0x48`) message into a `RawPacket`.
+/// Codifica un mensaje `Ed2kFileReqAnsNoFile` (`0x48`) en un `RawPacket`.
 pub fn encode_file_req_ans_no_file(
     limits: &Ed2kLimits,
     ans: &Ed2kFileReqAnsNoFile,
@@ -196,7 +196,7 @@ pub fn encode_file_req_ans_no_file(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kHashSetReq` message (`0x51`): 16-byte file hash payload.
+/// Codifica un mensaje `Ed2kHashSetReq` (`0x51`): carga útil de hash de archivo de 16 bytes.
 pub fn encode_hashset_request(
     limits: &Ed2kLimits,
     req: &Ed2kHashSetReq,
@@ -220,7 +220,7 @@ pub fn encode_hashset_request(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kHashSetAnswer` message (`0x52`): `file_hash || u16 count || count*16 hashes`.
+/// Codifica un mensaje `Ed2kHashSetAnswer` (`0x52`): `file_hash || u16 count || count*16 hashes`.
 pub fn encode_hashset_answer(
     limits: &Ed2kLimits,
     ans: &Ed2kHashSetAnswer,
@@ -263,7 +263,7 @@ pub fn encode_hashset_answer(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kRequestParts` message using the encoder's active profile opcode.
+/// Codifica un mensaje `Ed2kRequestParts` usando el código de operación del perfil activo del codificador.
 pub fn encode_request_parts(
     limits: &Ed2kLimits,
     profile: Ed2kCompatibilityProfile,
@@ -283,7 +283,7 @@ pub fn encode_request_parts(
     encode_request_parts_with_opcode(limits, req, opcode)
 }
 
-/// Encodes an `Ed2kRequestParts` message with a specified opcode.
+/// Codifica un mensaje `Ed2kRequestParts` con un código de operación especificado.
 pub fn encode_request_parts_with_opcode(
     limits: &Ed2kLimits,
     req: &Ed2kRequestParts,
@@ -350,10 +350,10 @@ pub fn encode_request_parts_with_opcode(
     Ok(RawPacket::new(PR_ED2K, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kRequestPartsI64` message (`OP_REQUESTPARTS_I64`, `0xA3`).
+/// Codifica un mensaje `Ed2kRequestPartsI64` (`OP_REQUESTPARTS_I64`, `0xA3`).
 ///
-/// Wire layout: `<file_hash 16><start[3] u64 LE><end[3] u64 LE>` — 64 bytes,
-/// same 3-slot structure as the 32-bit variant with widened offsets.
+/// Disposición en cable: `<file_hash 16><start[3] u64 LE><end[3] u64 LE>` — 64 bytes,
+/// misma estructura de 3 ranuras que la variante de 32 bits con desplazamientos ensanchados.
 pub fn encode_request_parts_i64(
     limits: &Ed2kLimits,
     req: &Ed2kRequestPartsI64,
@@ -410,14 +410,14 @@ pub fn encode_request_parts_i64(
         ));
     }
 
-    // Extended requests (OP_REQUESTPARTS_I64, 0xA3) are handled under the
-    // eMule extension protocol (OP_EMULEPROT / ProcessExtPacket in eMule / aMule).
+    // Las peticiones extendidas (OP_REQUESTPARTS_I64, 0xA3) se gestionan bajo el
+    // protocolo de extensión de eMule (OP_EMULEPROT / ProcessExtPacket en eMule / aMule).
     Ok(RawPacket::new(PR_EMULE, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kSendingPartI64` message (`OP_SENDINGPART_I64`, `0xA2`).
+/// Codifica un mensaje `Ed2kSendingPartI64` (`OP_SENDINGPART_I64`, `0xA2`).
 ///
-/// Wire layout: `<file_hash 16><start u64 LE><end u64 LE><data>`.
+/// Disposición en cable: `<file_hash 16><start u64 LE><end u64 LE><datos>`.
 pub fn encode_sending_part_i64(
     limits: &Ed2kLimits,
     part: &Ed2kSendingPartI64,
@@ -466,14 +466,14 @@ pub fn encode_sending_part_i64(
         ));
     }
 
-    // Extended data delivery (OP_SENDINGPART_I64, 0xA2) is sent under the
-    // eMule extension protocol (OP_EMULEPROT / ProcessExtPacket).
+    // La entrega de datos extendida (OP_SENDINGPART_I64, 0xA2) se envía bajo el
+    // protocolo de extensión de eMule (OP_EMULEPROT / ProcessExtPacket).
     Ok(RawPacket::new(PR_EMULE, opcode, Bytes::from(payload)))
 }
 
-/// Encodes an `Ed2kCompressedPartI64` message (`OP_COMPRESSEDPART_I64`, `0xA1`).
+/// Codifica un mensaje `Ed2kCompressedPartI64` (`OP_COMPRESSEDPART_I64`, `0xA1`).
 ///
-/// Wire layout: `<file_hash 16><start u64 LE><compressed_size u32 LE><zlib data>`.
+/// Disposición en cable: `<file_hash 16><start u64 LE><compressed_size u32 LE><datos zlib>`.
 pub fn encode_compressed_part_i64(
     limits: &Ed2kLimits,
     part: &Ed2kCompressedPartI64,
@@ -509,8 +509,8 @@ pub fn encode_compressed_part_i64(
         ));
     }
 
-    // eMule sends compressed parts under the eMule extension protocol
-    // (`UploadDiskIOThread.cpp:449` — `OP_EMULEPROT`), not PR_EMULE_COMPRESSED.
+    // eMule envía partes comprimidas bajo el protocolo de extensión de eMule
+    // (`UploadDiskIOThread.cpp:449` — `OP_EMULEPROT`), no PR_EMULE_COMPRESSED.
     Ok(RawPacket::new(
         super::super::protocol::PR_EMULE,
         opcode,
@@ -518,12 +518,12 @@ pub fn encode_compressed_part_i64(
     ))
 }
 
-/// Encodes an `Ed2kCompressedPart` message (`OP_COMPRESSEDPART`, `0x40`).
+/// Codifica un mensaje `Ed2kCompressedPart` (`OP_COMPRESSEDPART`, `0x40`).
 ///
-/// Wire layout: `<file_hash 16><start u32 LE><compressed_size u32 LE><zlib data>`.
-/// `compressed_size` is the total zlib stream size; for multi-packet blocks
-/// callers emit one `Ed2kCompressedPart` per slice with the same total, so
-/// `compressed_size >= data.len()` (equality for single-chunk blocks).
+/// Disposición en cable: `<file_hash 16><start u32 LE><compressed_size u32 LE><datos zlib>`.
+/// `compressed_size` es el tamaño total del flujo zlib; para bloques multipaquete
+/// los emisores emiten un `Ed2kCompressedPart` por fragmento con el mismo total, por lo
+/// que `compressed_size >= data.len()` (igualdad para bloques de un solo fragmento).
 pub fn encode_compressed_part(
     limits: &Ed2kLimits,
     part: &Ed2kCompressedPart,
@@ -559,7 +559,7 @@ pub fn encode_compressed_part(
         ));
     }
 
-    // eMule sends compressed parts under the eMule extension protocol
+    // eMule envía partes comprimidas bajo el protocolo de extensión de eMule
     // (`UploadDiskIOThread.cpp:456` — `OP_EMULEPROT`).
     Ok(RawPacket::new(
         super::super::protocol::PR_EMULE,
@@ -568,7 +568,7 @@ pub fn encode_compressed_part(
     ))
 }
 
-/// Encodes an `Ed2kSendingPart` message (`0x46`).
+/// Codifica un mensaje `Ed2kSendingPart` (`0x46`).
 pub fn encode_sending_part(
     limits: &Ed2kLimits,
     part: &Ed2kSendingPart,

@@ -38,7 +38,7 @@ El workspace compila con `-D warnings`: no se tolera ninguna advertencia.
 
 ## Convenciones
 
-- Código, documentación, *Inner Doc Comments* (`//!`) y archivos Markdown en **español de España**.
+- Código, documentación, comentarios en el código (`//`, `///`, `//!`, `/* ... */`) y archivos Markdown exclusivamente en **español de España** (no se admite ningún otro idioma).
 - Errores en Rust: `thiserror`, prohibido usar `unwrap()` fuera de las pruebas.
 - Registro (*Logging*): `tracing` (nunca `println!` en los crates).
 - Asincronía: Tokio; sin bloqueos síncronos en tareas asíncronas.

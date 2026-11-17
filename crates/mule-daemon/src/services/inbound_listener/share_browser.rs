@@ -22,20 +22,20 @@ use mule_protocol::ed2k::shared_files::{
 
 use crate::services::downloads::DownloadService;
 
-/// eMule `thePrefs.m_iSeeShares` — `vsfaEverybody`/`vsfaFriends`/`vsfaNobody`.
-/// Persisted under the `view_shared_files` setting; default `Everybody`
-/// (eMule ships with shares browsable by everyone).
+/// `thePrefs.m_iSeeShares` de eMule — `vsfaEverybody`/`vsfaFriends`/`vsfaNobody`.
+/// Persistido bajo el ajuste `view_shared_files`; `Everybody` por defecto
+/// (eMule viene de serie con archivos compartidos explorables por todos).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShareViewLevel {
-    /// Every connected peer may browse (eMule `vsfaEverybody`).
+    /// Cada par conectado puede explorar (`vsfaEverybody` de eMule).
     Everybody,
-    /// Only friends may browse (eMule `vsfaFriends`, gated on `IsFriend`).
+    /// Solo los amigos pueden explorar (`vsfaFriends` de eMule, filtrado por `IsFriend`).
     Friends,
-    /// Nobody may browse (eMule `vsfaNobody`).
+    /// Nadie puede explorar (`vsfaNobody` de eMule).
     Nobody,
 }
 
-/// Setting key persisted in the settings table.
+/// Clave de configuración persistida en la tabla de ajustes.
 pub(crate) const SETTING_VIEW_SHARED_FILES: &str = "view_shared_files";
 
 fn view_level(downloads: &DownloadService) -> ShareViewLevel {
@@ -51,9 +51,8 @@ fn view_level(downloads: &DownloadService) -> ShareViewLevel {
     }
 }
 
-/// eMule `thePrefs.CanSeeShares() == vsfaEverybody || (vsfaFriends &&
-/// client->IsFriend())` — a friend is identified by its user hash
-/// (`CFriend` is keyed on `m_abyUserHash`).
+/// `thePrefs.CanSeeShares() == vsfaEverybody || (vsfaFriends && client->IsFriend())` de eMule —
+/// un amigo se identifica por su user hash (`CFriend` se indexa por `m_abyUserHash`).
 pub(crate) fn peer_can_view_shares(
     downloads: &DownloadService,
     peer_user_hash: Option<[u8; 16]>,
@@ -72,8 +71,8 @@ pub(crate) fn peer_can_view_shares(
     }
 }
 
-/// Pseudo-directory name for one shared file (eMule `GetPseudoDirName` —
-/// basename of the containing directory, never the full path).
+/// Nombre de seudodirectorio para un archivo compartido (`GetPseudoDirName` de eMule —
+/// nombre base del directorio contenedor, nunca la ruta completa).
 fn pseudo_dir_of(f: &SharedFile) -> Option<String> {
     if f.is_partial {
         return Some(OP_INCOMPLETE_SHARED_FILES.to_string());
@@ -88,10 +87,10 @@ fn pseudo_dir_of(f: &SharedFile) -> Option<String> {
         .map(|n| n.to_string_lossy().into_owned())
 }
 
-/// Directory list for `OP_ASKSHAREDDIRSANS` (`SendSharedDirectories`,
-/// `BaseClient.cpp:2916`): shared-directory pseudo names (deduplicated),
-/// then `!Incomplete Files` when part downloads exist, then `!Other` when
-/// hash-only shares exist.
+/// Lista de directorios para `OP_ASKSHAREDDIRSANS` (`SendSharedDirectories` en
+/// `BaseClient.cpp:2916`): seudonombres de directorios compartidos (deduplicados),
+/// luego `!Incomplete Files` cuando existen descargas de partes, y después `!Other`
+/// cuando existen compartidos solo con hash.
 pub(crate) fn browse_dirs(shares: &[SharedFile]) -> Vec<String> {
     let mut dirs: Vec<String> = Vec::new();
     for f in shares.iter().filter(|f| f.enabled) {
@@ -116,10 +115,10 @@ pub(crate) fn browse_dirs(shares: &[SharedFile]) -> Vec<String> {
     dirs
 }
 
-/// Resolves a requested pseudo dir to its files (`ListenSocket.cpp:706-770`):
-/// `!Incomplete Files` → part files, `!Other` → shares without a path,
-/// otherwise the pseudo name is matched against containing-dir basenames.
-/// Unknown pseudo dirs resolve to an empty list, like eMule.
+/// Resuelve un seudodirectorio solicitado a sus archivos (`ListenSocket.cpp:706-770`):
+/// `!Incomplete Files` → archivos de partes, `!Other` → compartidos sin ruta,
+/// de lo contrario el seudonobre se compara con los nombres base de directorios contenedores.
+/// Los seudodirectorios desconocidos se resuelven como una lista vacía, igual que en eMule.
 pub(crate) fn files_in_dir<'a>(
     shares: &'a [SharedFile],
     requested: &str,
@@ -139,10 +138,10 @@ pub(crate) fn files_in_dir<'a>(
         .collect()
 }
 
-/// Builds the offered-file entries for an answer packet
-/// (`CreateOfferedFilePacket` peer variant): real ID+port only on HighID,
-/// large files get the 64-bit `FT_FILESIZE` tag only when the peer supports
-/// them.
+/// Construye las entradas de archivos ofrecidos para un paquete de respuesta
+/// (variante de par de `CreateOfferedFilePacket`): ID+puerto reales solo en HighID,
+/// los archivos grandes obtienen la etiqueta de 64 bits `FT_FILESIZE` solo cuando el par
+/// los admite.
 pub(crate) fn offered_entries<'a>(
     shares: impl Iterator<Item = &'a SharedFile>,
     ctx: &OfferPeerContext,
@@ -198,9 +197,9 @@ mod tests {
             files_in_dir(&shares, OP_INCOMPLETE_SHARED_FILES, true).len(),
             1
         );
-        // Unknown pseudo -> empty (eMule sends an empty answer too).
+        // Seudodirectorio desconocido -> vacío (eMule envía también una respuesta vacía).
         assert!(files_in_dir(&shares, "no-such-dir", true).is_empty());
-        // Large-file gate: a >4GiB file is hidden from peers without support.
+        // Filtro de archivos grandes: un archivo >4 GiB se oculta a pares sin soporte.
         let big = {
             let mut s = share(5, r"C:\Incoming\big.bin", false);
             s.file_size = 5_000_000_000;

@@ -16,7 +16,7 @@ async fn test_kad_source_publish_and_search_flow() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // 1. Start daemon Kad UDP
+    // 1. Iniciar Kad UDP en el daemon
     let _bound_addr = state
         .kad
         .udp()
@@ -24,7 +24,7 @@ async fn test_kad_source_publish_and_search_flow() {
         .await
         .expect("start kad udp");
 
-    // 2. Start mock Kad peer
+    // 2. Iniciar par Kad simulado
     let mock_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind mock peer");
@@ -80,17 +80,17 @@ async fn test_kad_source_publish_and_search_flow() {
         }
     });
 
-    // 3. Bootstrap from mock node
+    // 3. Arrancar (bootstrap) desde el nodo simulado
     let imported = state
         .kad
         .bootstrap_from_node(&mock_addr.ip().to_string(), mock_addr.port())
         .await
         .expect("bootstrap should succeed");
-    // eMule 0.72a insère le nœud répondeur lui-même en plus des contacts de
-    // BOOTSTRAP_RES → 2 contacts importés.
+    // eMule 0.72a inserta el propio nodo respondedor además de los contactos de
+    // BOOTSTRAP_RES → 2 contactos importados.
     assert_eq!(imported, 2);
 
-    // 4. Publish a source
+    // 4. Publicar una fuente
     let published = state
         .kad
         .publish_source(&target_hash_hex, 10_485_760, 39735)
@@ -98,7 +98,7 @@ async fn test_kad_source_publish_and_search_flow() {
         .expect("publish should succeed");
     assert!(published >= 1);
 
-    // 5. Search sources for target hash
+    // 5. Buscar fuentes para el hash de destino
     let discovered = state
         .kad
         .search_sources(&target_hash_hex, 10_485_760)
@@ -110,7 +110,7 @@ async fn test_kad_source_publish_and_search_flow() {
     assert_eq!(discovered[0].port, 39735);
     assert_eq!(discovered[0].file_hash, target_hash_hex);
 
-    // 6. Verify peer sources in DownloadService
+    // 6. Verificar fuentes de pares en DownloadService
     let dl = state.downloads.lock().await;
     let list = dl
         .list_peer_sources(&target_hash_hex)

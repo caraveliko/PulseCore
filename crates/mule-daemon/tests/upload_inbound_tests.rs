@@ -13,8 +13,8 @@ use mule_protocol::ed2k::{Ed2kDecoder, Ed2kEncoder, Ed2kHello, Ed2kRequestParts,
 use mule_protocol::framing::PacketCodec;
 use mule_test_support::{make_req, share_state};
 
-/// Contenu du fichier partagé de test : motif périodique de 256 Ko —
-/// le chemin upload ne sert que des octets réellement présents sur disque.
+/// Contenido del archivo compartido de prueba: patrón periódico de 256 KB —
+/// la ruta de subida solo sirve bytes realmente presentes en el disco.
 fn shared_bytes() -> Vec<u8> {
     (0..262_144u32).map(|i| (i % 251) as u8).collect()
 }
@@ -31,7 +31,7 @@ async fn test_inbound_listener_rejected_under_disabled_network() {
     .await;
     let mut authenticated = true;
 
-    // Disconnect network via kill switch
+    // Desconectar la red mediante el interruptor de corte (kill switch)
     let _ = handle_request(
         &state,
         make_req(1, "network.disconnectAll", None),
@@ -40,7 +40,7 @@ async fn test_inbound_listener_rejected_under_disabled_network() {
     .await
     .unwrap();
 
-    // Attempt to start listener
+    // Intentar iniciar el listener de escucha
     let req = make_req(2, "listener.start", Some(json!({ "port": 0 })));
     let resp = handle_request(&state, req, &mut authenticated)
         .await
@@ -65,7 +65,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     .await;
     let mut authenticated = true;
 
-    // Start listener on ephemeral loopback port
+    // Iniciar el listener en puerto de loopback efímero
     let start_req = make_req(1, "listener.start", Some(json!({ "port": 0 })));
     let start_resp = handle_request(&state, start_req, &mut authenticated)
         .await
@@ -76,7 +76,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
         .unwrap()
         .to_string();
 
-    // Connect remote mock peer client
+    // Conectar cliente par simulado remoto
     let mut client_socket = TcpStream::connect(&listen_addr_str).await.unwrap();
     let mut read_buf = bytes::BytesMut::with_capacity(65536);
     let mut raw_buf = [0u8; 8192];
@@ -84,7 +84,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     let encoder = Ed2kEncoder::default();
     let decoder = Ed2kDecoder::default();
 
-    // 1. Send OP_HELLO
+    // 1. Enviar OP_HELLO
     let hello = Ed2kHello {
         user_hash: [0x44u8; 16],
         client_id: 0x0100007F,
@@ -102,7 +102,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     out.extend_from_slice(&hello_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 2. Expect OP_HELLO_ANSWER
+    // 2. Esperar OP_HELLO_ANSWER
     let mut received_hello_ans = false;
     while !received_hello_ans {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -116,7 +116,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
         }
     }
 
-    // 3. Send OP_FILESTATUSREQ for shared file
+    // 3. Enviar OP_FILESTATUSREQ para el archivo compartido
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
     let status_req = mule_protocol::ed2k::Ed2kFileStatusReq {
         file_hash: hash_bytes,
@@ -129,7 +129,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     out.extend_from_slice(&req_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // Expect OP_FILESTATUS with complete availability
+    // Esperar OP_FILESTATUS con disponibilidad completa
     let mut received_status = false;
     while !received_status {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -143,7 +143,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
         }
     }
 
-    // 4. Send OP_REQUESTPARTS for block 0..184320
+    // 4. Enviar OP_REQUESTPARTS para el bloque 0..184320
     let req_parts = Ed2kRequestParts {
         file_hash: hash_bytes,
         ranges: vec![mule_protocol::ed2k::Ed2kBlockRange {
@@ -159,7 +159,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     out.extend_from_slice(&rp_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 5. Expect OP_SENDINGPART
+    // 5. Esperar OP_SENDINGPART
     let mut received_data = false;
     while !received_data {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -179,7 +179,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
         }
     }
 
-    // Verify upload status via RPC
+    // Verificar el estado de subida mediante RPC
     let status_req = make_req(2, "uploads.status", None);
     let status_resp = handle_request(&state, status_req, &mut authenticated)
         .await
@@ -188,7 +188,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     assert_eq!(upload_snap["state"], "uploading");
     assert!(upload_snap["transferredBytes"].as_u64().unwrap() >= 184320);
 
-    // Stop listener
+    // Detener el listener
     let stop_req = make_req(3, "listener.stop", None);
     let _ = handle_request(&state, stop_req, &mut authenticated)
         .await
@@ -225,7 +225,7 @@ async fn test_inbound_request_unshared_file_does_not_upload() {
     let codec = PacketCodec::new();
     let encoder = Ed2kEncoder::default();
 
-    // Handshake
+    // Apretón de manos (handshake)
     let hello = Ed2kHello {
         user_hash: [0x44u8; 16],
         client_id: 0x0100007F,
@@ -243,7 +243,7 @@ async fn test_inbound_request_unshared_file_does_not_upload() {
     out.extend_from_slice(&hello_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // Read hello answer
+    // Leer respuesta hello
     let mut received_hello_ans = false;
     while !received_hello_ans {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -256,7 +256,7 @@ async fn test_inbound_request_unshared_file_does_not_upload() {
         }
     }
 
-    // Request UNSHARED file
+    // Solicitar archivo NO COMPARTIDO
     let unshared_hash = [0x99u8; 16];
     let req_parts = Ed2kRequestParts {
         file_hash: unshared_hash,
@@ -273,7 +273,7 @@ async fn test_inbound_request_unshared_file_does_not_upload() {
     out.extend_from_slice(&rp_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // Check active upload remains empty
+    // Comprobar que la subida activa permanece vacía
     tokio::time::sleep(Duration::from_millis(100)).await;
     let status_resp = handle_request(
         &state,
@@ -312,7 +312,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     // exercised deterministically (production default is MAX_ACTIVE_UPLOADS).
     state.inbound_listener.upload_manager().set_max_active(1);
 
-    // Start listener
+    // Iniciar listener
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -329,7 +329,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     let encoder = Ed2kEncoder::default();
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
 
-    // Client 1 connects and takes slot 1
+    // El cliente 1 conecta y toma la ranura 1
     let mut client1 = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello1 = Ed2kHello {
         user_hash: [0x11u8; 16],
@@ -348,7 +348,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     out1.extend_from_slice(&h1_pkt.payload);
     client1.write_all(&out1).await.unwrap();
 
-    // Read hello answer for client 1
+    // Leer respuesta hello for client 1
     let mut raw_buf = [0u8; 8192];
     let mut read_buf1 = bytes::BytesMut::with_capacity(65536);
     let mut h1_ok = false;
@@ -363,7 +363,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
         }
     }
 
-    // Request part on client 1
+    // Solicitar parte en el cliente 1
     let req_parts1 = Ed2kRequestParts {
         file_hash: hash_bytes,
         ranges: vec![mule_protocol::ed2k::Ed2kBlockRange {
@@ -379,7 +379,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     out1.extend_from_slice(&rp_pkt1.payload);
     client1.write_all(&out1).await.unwrap();
 
-    // Verify client 1 receives sending part
+    // Verificar que el cliente 1 recibe sending part
     let mut c1_got_data = false;
     while !c1_got_data {
         let n = client1.read(&mut raw_buf).await.unwrap();
@@ -392,7 +392,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
         }
     }
 
-    // Client 2 connects while Client 1 is active (max active = 1)
+    // El cliente 2 conecta mientras el cliente 1 está activo (máximo activos = 1)
     let mut client2 = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello2 = Ed2kHello {
         user_hash: [0x22u8; 16],
@@ -424,7 +424,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
         }
     }
 
-    // Request part on client 2 -> must receive OP_QUEUERANKING with rank 1
+    // Solicitar parte en cliente 2 -> debe recibir OP_QUEUERANKING con posición 1
     let req_parts2 = Ed2kRequestParts {
         file_hash: hash_bytes,
         ranges: vec![mule_protocol::ed2k::Ed2kBlockRange {
@@ -454,7 +454,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
         }
     }
 
-    // Verify uploads.list RPC returns active upload and queued upload
+    // Verificar que uploads.list RPC devuelve subida activa y subida en cola
     let list_resp = handle_request(
         &state,
         make_req(2, "uploads.list", None),
@@ -467,7 +467,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     assert_eq!(uploads_list["queued"].as_array().unwrap().len(), 1);
 
     // Multi-slot promotion: raising the limit then releasing client 1's slot
-    // must promote client 2, which then receives data on its next request.
+    // debe promover al cliente 2, que entonces recibe datos en su siguiente petición.
     state.inbound_listener.upload_manager().set_max_active(2);
     drop(client1);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -513,7 +513,7 @@ async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
     .await;
     let mut authenticated = true;
 
-    // Start listener
+    // Iniciar listener
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -561,7 +561,7 @@ async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
         }
     }
 
-    // Trigger Kill Switch
+    // Activar el interruptor de corte (Kill Switch)
     let kill_resp = handle_request(
         &state,
         make_req(2, "network.disconnectAll", None),
@@ -571,7 +571,7 @@ async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
     .unwrap();
     assert!(kill_resp.error.is_none());
 
-    // Verify listener is now stopped
+    // Verificar que el listener está detenido
     tokio::time::sleep(Duration::from_millis(50)).await;
     let status_resp = handle_request(
         &state,
@@ -584,7 +584,7 @@ async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
     assert_eq!(status_val["isListening"], false);
     assert_eq!(status_val["activeUploads"], 0);
 
-    // Socket should receive EOF on read
+    // El socket debe recibir EOF al leer
     let n = client.read(&mut raw_buf).await.unwrap_or(0);
     assert_eq!(n, 0, "Socket must be closed when kill switch triggers");
 }
@@ -601,7 +601,7 @@ async fn test_inbound_handshake_returns_real_identity_and_listen_port() {
     .await;
     let mut authenticated = true;
 
-    // Start listener
+    // Iniciar listener
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -684,7 +684,7 @@ async fn test_inbound_connection_per_ip_limit() {
     .await;
     let mut authenticated = true;
 
-    // Start listener
+    // Iniciar listener
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -697,32 +697,32 @@ async fn test_inbound_connection_per_ip_limit() {
         .unwrap()
         .to_string();
 
-    // Connect 5 sockets (MAX_INBOUND_PER_IP)
+    // Conectar 5 sockets (MAX_INBOUND_PER_IP)
     let mut clients = Vec::new();
     for _ in 0..5 {
         let s = TcpStream::connect(&listen_addr_str).await.unwrap();
         clients.push(s);
     }
 
-    // Connect 6th socket: should be accepted and then dropped/closed immediately by per-IP limit
+    // Conectar 6.º socket: debe ser aceptado y luego cerrado inmediatamente por el límite por IP
     let mut sixth = TcpStream::connect(&listen_addr_str).await.unwrap();
     let mut buf = [0u8; 128];
-    // Reading on 6th socket should yield EOF
+    // La lectura en el 6.º socket debe devolver EOF
     let res = tokio::time::timeout(Duration::from_millis(500), sixth.read(&mut buf)).await;
     match res {
         Ok(Ok(0)) => {
-            // Expected EOF due to drop
+            // EOF esperado por el cierre
         }
         Ok(Ok(n)) => panic!("Expected EOF on 6th socket, but got {n} bytes"),
         Ok(Err(e)) => panic!("Expected EOF on 6th socket, got error: {e}"),
         Err(_) => panic!("Timed out waiting for EOF on 6th connection (not dropped)"),
     }
 
-    // Drop one of the 5 clients
+    // Desconectar uno de los 5 clientes
     drop(clients.pop());
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // Now a new connection should be accepted and stay open
+    // Ahora una nueva conexión debe ser aceptada y permanecer abierta
     let mut new_client = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello = Ed2kHello {
         user_hash: [0x22u8; 16],
@@ -762,7 +762,7 @@ async fn test_inbound_secident_signature_without_challenge_rejected() {
     .await;
     let mut authenticated = true;
 
-    // Start listener
+    // Iniciar listener
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -780,7 +780,7 @@ async fn test_inbound_secident_signature_without_challenge_rejected() {
     let encoder = Ed2kEncoder::default();
     let decoder = Ed2kDecoder::default();
 
-    // 1. Handshake
+    // 1. Apretón de manos
     let hello = Ed2kHello {
         user_hash: [0x33u8; 16],
         client_id: 0x0100007F,
@@ -812,7 +812,7 @@ async fn test_inbound_secident_signature_without_challenge_rejected() {
         }
     }
 
-    // 2. Send OP_SIGNATURE without having sent OP_PUBLICKEY / received challenge
+    // 2. Enviar OP_SIGNATURE sin haber enviado OP_PUBLICKEY ni recibido desafío
     let sig = mule_protocol::ed2k::Ed2kSignature {
         signature_bytes: vec![0x99u8; 64].into(),
     };
@@ -824,7 +824,7 @@ async fn test_inbound_secident_signature_without_challenge_rejected() {
     out.extend_from_slice(&sig_pkt.payload);
     client.write_all(&out).await.unwrap();
 
-    // 3. Expect Ed2kSecIdentState with state == 0 (rejected / unauthenticated)
+    // 3. Esperar Ed2kSecIdentState con state == 0 (rechazado / no autenticado)
     let mut state_opt = None;
     while state_opt.is_none() {
         let n = client.read(&mut raw_buf).await.unwrap();
@@ -855,7 +855,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
     let download_dir = dir.path().join("downloads");
     std::fs::create_dir_all(&download_dir).unwrap();
     std::fs::write(download_dir.join("rescan_target.bin"), b"rescan-me").unwrap();
-    // A download artifact must be skipped.
+    // Se debe omitir un artefacto de descarga.
     std::fs::write(download_dir.join("pending.part"), b"partial").unwrap();
 
     let token = "test_token_rescan".to_string();
@@ -866,7 +866,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
     let state = AppState::new(config, downloads);
     let mut authenticated = true;
 
-    // First rescan: the new file is discovered, the .part is skipped.
+    // Primer reescaneo: se detecta el nuevo archivo y se omite el .part.
     let resp = handle_request(
         &state,
         make_req(1, "shares.rescan", None),
@@ -877,7 +877,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
     assert!(resp.error.is_none());
     assert_eq!(resp.result.as_ref().unwrap()["added"], 1);
 
-    // List to find the registered share, then change its settings.
+    // Listar para encontrar el recurso registrado y modificar su configuración.
     let resp = handle_request(&state, make_req(2, "shares.list", None), &mut authenticated)
         .await
         .unwrap();
@@ -913,7 +913,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
     .unwrap();
     assert!(resp.error.is_none());
 
-    // Second rescan: nothing new, existing entry keeps its settings.
+    // Segundo reescaneo: nada nuevo, la entrada existente mantiene sus ajustes.
     let resp = handle_request(
         &state,
         make_req(5, "shares.rescan", None),
@@ -942,7 +942,7 @@ async fn test_shares_rescan_is_recursive() {
     std::fs::create_dir_all(&nested).unwrap();
     std::fs::write(nested.join("track01.flac"), b"nested-audio").unwrap();
     std::fs::write(download_dir.join("toplevel.bin"), b"top").unwrap();
-    // Hidden directories must not be shared.
+    // Los directorios ocultos no deben compartirse.
     let hidden = download_dir.join(".hidden");
     std::fs::create_dir_all(&hidden).unwrap();
     std::fs::write(hidden.join("secret.bin"), b"nope").unwrap();
@@ -1006,11 +1006,11 @@ async fn test_shares_rescan_prunes_files_deleted_from_disk() {
     assert!(resp.error.is_none());
     assert_eq!(resp.result.as_ref().unwrap()["added"], 2);
 
-    // Suppression physique du fichier hors daemon.
+    // Eliminación física del archivo fuera del daemon.
     std::fs::remove_file(download_dir.join("gone.bin")).unwrap();
 
-    // La liste ne doit déjà plus annoncer le fichier mort (filtre à la
-    // lecture dans `list_all_shared_files`), avant même un nouveau scan.
+    // La lista ya no debe mostrar el archivo eliminado (filtro en la
+    // lectura en `list_all_shared_files`), incluso antes de un nuevo escaneo.
     let resp = handle_request(&state, make_req(2, "shares.list", None), &mut authenticated)
         .await
         .unwrap();
@@ -1024,7 +1024,7 @@ async fn test_shares_rescan_prunes_files_deleted_from_disk() {
     assert!(names.contains(&"keep.bin"));
     assert!(!names.contains(&"gone.bin"));
 
-    // Le rescan purge définitivement la ligne `shared_files`.
+    // El reescaneo purga definitivamente la fila de `shared_files`.
     let resp = handle_request(
         &state,
         make_req(3, "shares.rescan", None),
@@ -1052,7 +1052,7 @@ async fn test_shares_rescan_respects_share_download_dir_optout() {
     let state = AppState::new(config, downloads);
     let mut authenticated = true;
 
-    // Disable Incoming sharing via the settings RPC.
+    // Desactivar la compartición de Incoming mediante el RPC de ajustes.
     let resp = handle_request(
         &state,
         make_req(
@@ -1095,7 +1095,7 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
     let state = AppState::new(config, downloads);
     let mut authenticated = true;
 
-    // Add a download > 1 eD2K part (2 * 9_728_000 bytes).
+    // Añadir una descarga > 1 parte eD2K (2 * 9_728_000 bytes).
     let resp = handle_request(
         &state,
         make_req(
@@ -1115,9 +1115,9 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
         .unwrap()
         .to_string();
 
-    // No completed part yet: still shared as a partial (eMule
-    // `CDownloadQueue::AddPartFilesToShare` — "part files are always
-    // shared files"), exposing an empty completed-parts mask.
+    // Sin partes completadas aún: se comparte como parcial (eMule
+    // `CDownloadQueue::AddPartFilesToShare` — «los archivos part siempre son
+    // compartidos»), exponiendo una máscara vacía de partes completadas.
     {
         let dl = state.downloads.lock().await;
         let sf = dl
@@ -1135,7 +1135,7 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
                 .eq_ignore_ascii_case("0123456789abcdef0123456789abcdef")));
     }
 
-    // Complete part 0 (9 728 000 bytes) via inject_range.
+    // Completar parte 0 (9 728 000 bytes) mediante inject_range.
     {
         let mut dl = state.downloads.lock().await;
         let uuid = uuid::Uuid::parse_str(&id).unwrap();
@@ -1143,7 +1143,7 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
             .unwrap();
     }
 
-    // Now the partial share must resolve with only part 0 completed.
+    // Ahora la compartición parcial debe resolverse solo con la parte 0 completada.
     {
         let dl = state.downloads.lock().await;
         let sf = dl
@@ -1154,7 +1154,7 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
         assert_eq!(sf.completed_parts, vec![0]);
         assert!(sf.file_path.ends_with(".part"));
 
-        // And it must appear in shares.list output.
+        // Y debe figurar en la salida de shares.list.
         let all = dl.list_all_shared_files().unwrap();
         assert!(all.iter().any(|f| f.is_partial
             && f.file_hash
@@ -1250,11 +1250,11 @@ async fn test_settings_new_keys_roundtrip_and_live_apply() {
     assert_eq!(state.kad_port(), 4725);
     assert!(!state.udp_enabled());
 
-    // Live-applied: effective obfuscation + nickname helpers.
+    // Aplicado en vivo: ofuscación efectiva + auxiliares de apodo.
     assert_eq!(state.effective_obfuscation().await, (true, true));
     assert_eq!(state.current_nickname().await, "TestNick");
 
-    // Nickname validation: empty rejected.
+    // Validación de apodo: vacío rechazado.
     let resp = handle_request(
         &state,
         make_req(3, "settings.set", Some(json!({ "nickname": "  " }))),
@@ -1265,10 +1265,10 @@ async fn test_settings_new_keys_roundtrip_and_live_apply() {
     assert!(resp.error.is_some());
 }
 
-/// Regression: completed downloads persisted in the DB but absent from the
-/// in-memory `active` map (e.g. after a daemon restart) must still appear
-/// in `shares.list` and be resolvable by `get_shared_file` — eMule rehashes
-/// finished files into `CSharedFileList` at startup.
+/// Regresión: las descargas completadas persistidas en la BD pero ausentes del
+/// mapa `active` en memoria (p. ej. tras reiniciar el daemon) deben figurar
+/// en `shares.list` y resolverse en `get_shared_file` — eMule re-hashea
+/// los archivos completados en `CSharedFileList` al iniciar.
 #[tokio::test]
 async fn test_completed_db_download_is_shared_after_restart() {
     let dir = tempdir().unwrap();
@@ -1316,7 +1316,7 @@ async fn test_completed_db_download_is_shared_after_restart() {
         shares.iter().any(|s| s["fileName"] == "finished.bin"),
         "completed DB download must appear in shares.list: {shares:?}"
     );
-    // Peers must be able to resolve it for upload.
+    // Los pares deben poder resolverlo para subida.
     let sf = {
         let dl = state.downloads.lock().await;
         dl.get_shared_file(&hash.to_hex()).unwrap()
@@ -1326,9 +1326,9 @@ async fn test_completed_db_download_is_shared_after_restart() {
     assert_eq!(sf.file_path, file_path.to_string_lossy());
 }
 
-/// eMule ListenSocket.cpp:651-825 -- browsing des partages : le pair
-/// envoie OP_ASKSHAREDFILES / OP_ASKSHAREDDIRS / OP_ASKSHAREDFILESDIR sur
-/// PR_ED2K et recoit les reponses 0x4B / 0x5F / 0x60 (0x61 si refus).
+/// eMule ListenSocket.cpp:651-825 -- exploración de compartidos: el par
+/// envía OP_ASKSHAREDFILES / OP_ASKSHAREDDIRS / OP_ASKSHAREDFILESDIR sobre
+/// PR_ED2K y recibe las respuestas 0x4B / 0x5F / 0x60 (0x61 si se deniega).
 #[tokio::test]
 async fn test_inbound_shared_files_browse() {
     let (state, _dir, hash) = share_state(
@@ -1359,7 +1359,7 @@ async fn test_inbound_shared_files_browse() {
     let codec = PacketCodec::new();
     let encoder = Ed2kEncoder::default();
 
-    // OP_HELLO puis OP_HELLO_ANSWER.
+    // OP_HELLO y luego OP_HELLO_ANSWER.
     let hello = Ed2kHello {
         user_hash: [0x55u8; 16],
         client_id: 0x0100007F,
@@ -1391,7 +1391,7 @@ async fn test_inbound_shared_files_browse() {
         }
     }
 
-    // Envoi d'une trame PR_ED2K brute (opcode + payload).
+    // Envío de una trama PR_ED2K en bruto (opcode + carga útil).
     async fn send_raw(client: &mut TcpStream, opcode: u8, payload: &[u8]) {
         let mut out = Vec::with_capacity(6 + payload.len());
         out.push(PR_ED2K);
@@ -1419,7 +1419,7 @@ async fn test_inbound_shared_files_browse() {
         }
     }
 
-    // 1. OP_ASKSHAREDFILES (0x4A, vide) -> 0x4B avec notre fichier.
+    // 1. OP_ASKSHAREDFILES (0x4A, vacío) -> 0x4B con nuestro archivo.
     send_raw(&mut client, mule_protocol::ed2k::OP_ASKSHAREDFILES, &[]).await;
     let pkt = recv_opcode(
         &mut client,
@@ -1432,7 +1432,7 @@ async fn test_inbound_shared_files_browse() {
     assert_eq!(count, 1, "one shared file expected in answer");
     assert_eq!(&pkt.payload[4..20], &hex::decode(&hash).unwrap()[..]);
 
-    // 2. OP_ASKSHAREDDIRS (0x5D) -> 0x5F avec le pseudo-repertoire parent.
+    // 2. OP_ASKSHAREDDIRS (0x5D) -> 0x5F con el seudodirectorio padre.
     send_raw(&mut client, mule_protocol::ed2k::OP_ASKSHAREDDIRS, &[]).await;
     let pkt = recv_opcode(
         &mut client,
@@ -1444,8 +1444,8 @@ async fn test_inbound_shared_files_browse() {
     let dir_count = u32::from_le_bytes(pkt.payload[..4].try_into().unwrap());
     assert!(dir_count >= 1, "at least one pseudo dir expected");
 
-    // 3. OP_ASKSHAREDFILESDIR (0x5E) sur '!Incomplete Files' -> 0x60
-    //    avec 0 fichier (aucun .part actif).
+    // 3. OP_ASKSHAREDFILESDIR (0x5E) sobre '!Incomplete Files' -> 0x60
+    //    con 0 archivos (ningún .part activo).
     let pseudo = b"!Incomplete Files";
     let mut payload = Vec::new();
     payload.extend_from_slice(&(pseudo.len() as u16).to_le_bytes());
@@ -1475,7 +1475,7 @@ async fn test_inbound_shared_files_browse() {
         "no active part files -> empty list"
     );
 
-    // 4. viewSharedFiles=nobody -> OP_ASKSHAREDDIRS refuse (0x61 vide).
+    // 4. viewSharedFiles=nobody -> OP_ASKSHAREDDIRS deniega (0x61 vacío).
     let set_resp = handle_request(
         &state,
         make_req(
@@ -1507,9 +1507,9 @@ async fn test_inbound_shared_files_browse() {
 }
 
 /// eMule `ListenSocket.cpp:1623` — `OP_KAD_FWTCPCHECK_ACK` (0xA8, PR_EMULE,
-/// vide) arrivant sur une connexion entrante : c'est le connect-back d'un
-/// contact à qui on a demandé un test pare-feu TCP. Gate
-/// `IsKadFirewallCheckIP` → `IncFirewalled`; non sollicité → ignoré.
+/// vacío) llegando en una conexión entrante: es la conexión de vuelta (connect-back) de un
+/// contacto al que se solicitó una comprobación de cortafuegos TCP. Compuerta
+/// `IsKadFirewallCheckIP` → `IncFirewalled`; no solicitado → ignorado.
 #[tokio::test]
 async fn test_inbound_kad_fw_tcpcheck_ack() {
     let (state, _dir, _hash) = share_state(
@@ -1522,7 +1522,7 @@ async fn test_inbound_kad_fw_tcpcheck_ack() {
     .await;
     let mut authenticated = true;
 
-    // Enregistre 127.0.0.1 comme IP sollicitée (AddKadFirewallRequest).
+    // Registra 127.0.0.1 como IP solicitada (AddKadFirewallRequest).
     {
         let tracker = state.kad.udp().firewall_tracker();
         tracker
@@ -1580,7 +1580,7 @@ async fn test_inbound_kad_fw_tcpcheck_ack() {
         }
     }
 
-    // 0xA8 sollicité (PR_EMULE, payload vide) -> inc_tcp_acks.
+    // 0xA8 solicitado (PR_EMULE, carga útil vacía) -> inc_tcp_acks.
     let mut frame = Vec::with_capacity(6);
     frame.push(mule_protocol::ed2k::PR_EMULE);
     frame.extend_from_slice(&1u32.to_le_bytes());
@@ -1592,7 +1592,7 @@ async fn test_inbound_kad_fw_tcpcheck_ack() {
         assert_eq!(tracker.lock().await.tcp_acks, 1, "solicited 0xA8 counted");
     }
 
-    // Unrequested 0xA8 from an unregistered IP would be ignored — here the
+    // Un paquete 0xA8 no solicitado de una IP no registrada se ignoraría — aquí el
     // same socket stays registered, so a second ACK still counts (eMule keeps
     // counting while the pending entry lives; verdict flips at 2).
     client.write_all(&frame).await.unwrap();
@@ -1612,9 +1612,9 @@ async fn test_inbound_kad_fw_tcpcheck_ack() {
     .await;
 }
 
-/// `OP_PUBLICIP_REQ` (0x97, PR_EMULE) — eMule `ListenSocket.cpp:1297` :
-/// répondre `OP_PUBLICIP_ANSWER` (0x98) avec l'IP du demandeur telle que
-/// vue depuis notre socket (octets réseau bruts).
+/// `OP_PUBLICIP_REQ` (0x97, PR_EMULE) — eMule `ListenSocket.cpp:1297`:
+/// responder `OP_PUBLICIP_ANSWER` (0x98) con la IP del solicitante tal como
+/// se ve desde nuestro socket (bytes de red en bruto).
 #[tokio::test]
 async fn test_inbound_publicip_req_echoes_requester_ip() {
     let (state, _dir, _hash) = share_state(
@@ -1676,7 +1676,7 @@ async fn test_inbound_publicip_req_echoes_requester_ip() {
         }
     }
 
-    // PUBLICIP_REQ (payload vide) → PUBLICIP_ANSWER [u32 requester_ip].
+    // PUBLICIP_REQ (carga útil vacía) → PUBLICIP_ANSWER [u32 requester_ip].
     let mut frame = Vec::with_capacity(6);
     frame.push(mule_protocol::ed2k::PR_EMULE);
     frame.extend_from_slice(&1u32.to_le_bytes());
@@ -1710,10 +1710,10 @@ async fn test_inbound_publicip_req_echoes_requester_ip() {
     .await;
 }
 
-/// `OP_PACKEDPROT` (0xD4) — `ListenSocket.cpp:1744` + `Packet::UnPackPacket` :
-/// un paquet pair zlib-compressé doit être inflaté puis dispatché comme un
-/// `PR_EMULE` normal. On pack un `OP_PUBLICIP_REQ` (payload ignoré par le
-/// bras) et on attend `OP_PUBLICIP_ANSWER`.
+/// `OP_PACKEDPROT` (0xD4) — `ListenSocket.cpp:1744` + `Packet::UnPackPacket`:
+/// un paquete de par comprimido con zlib debe descomprimirse y despacharse como un
+/// `PR_EMULE` normal. Empaquetamos un `OP_PUBLICIP_REQ` (carga útil ignorada)
+/// y esperamos `OP_PUBLICIP_ANSWER`.
 #[tokio::test]
 async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
     let (state, _dir, _hash) = share_state(
@@ -1775,7 +1775,7 @@ async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
         }
     }
 
-    // Frame packed : [0xD4][u32 len = 1 + compressed][0x97][zlib].
+    // Trama empaquetada: [0xD4][u32 len = 1 + comprimido][0x97][zlib].
     let compressed = {
         use std::io::Write;
         let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
@@ -1807,8 +1807,8 @@ async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
     .expect("PUBLICIP_ANSWER attendu pour le paquet packé");
     assert_eq!(&answer[..], &[127, 0, 0, 1]);
 
-    // Un flux zlib corrompu est droppé sans casser la session : un REQ
-    // clair envoyé ensuite doit toujours répondre.
+    // Un flujo zlib corrupto se descarta sin romper la sesión: una petición
+    // en claro enviada a continuación debe responder siempre.
     let mut bad = Vec::with_capacity(10);
     bad.push(mule_protocol::ed2k::PR_EMULE_COMPRESSED);
     bad.extend_from_slice(&5u32.to_le_bytes());
@@ -1846,10 +1846,10 @@ async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
     .await;
 }
 
-/// `OP_REASKCALLBACKTCP` (0x9A, PR_EMULE) — eMule `ListenSocket.cpp:1391` :
-/// un re-ask LowID relayé par le lien buddy. La réponse part en UDP chez le
-/// demandeur (`FILENOTFOUND` si le hash n'est pas partagé). Gate : le pair
-/// TCP doit être notre buddy actif.
+/// `OP_REASKCALLBACKTCP` (0x9A, PR_EMULE) — eMule `ListenSocket.cpp:1391`:
+/// un re-ask de LowID retransmitido por el enlace buddy. La respuesta se envía por UDP al
+/// solicitante (`FILENOTFOUND` si el hash no está compartido). Compuerta: el par
+/// TCP debe ser nuestro buddy activo.
 #[tokio::test]
 async fn test_inbound_reaskcallbacktcp_from_buddy_relays_udp_reply() {
     let (state, _dir, _hash) = share_state(
@@ -1912,7 +1912,7 @@ async fn test_inbound_reaskcallbacktcp_from_buddy_relays_udp_reply() {
         }
     }
 
-    // Socket UDP factice = « demandeur » LowID : on attend son datagramme.
+    // Socket UDP simulado = «solicitante» LowID: esperamos su datagrama.
     let udp_dest = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
     let dest_port = udp_dest.local_addr().unwrap().port();
 
@@ -1924,20 +1924,20 @@ async fn test_inbound_reaskcallbacktcp_from_buddy_relays_udp_reply() {
         f.extend_from_slice(payload);
         f
     };
-    // [destip 4][destport 2][reqhash 16] — hash inconnu → FILENOTFOUND.
+    // [destip 4][destport 2][reqhash 16] — hash desconocido → FILENOTFOUND.
     let mut payload = Vec::with_capacity(22);
     payload.extend_from_slice(&[127, 0, 0, 1]);
     payload.extend_from_slice(&dest_port.to_le_bytes());
     payload.extend_from_slice(&[0xAB; 16]);
 
-    // 1) Sans buddy enregistré → ignoré (pas de datagramme).
+    // 1) Sin buddy registrado → ignorado (sin datagrama).
     client.write_all(&mk_frame(&payload)).await.unwrap();
     let early =
         tokio::time::timeout(Duration::from_millis(300), udp_dest.recv_from(&mut raw_buf)).await;
     assert!(early.is_err(), "non-buddy REASKCALLBACKTCP must be ignored");
 
-    // 2) Buddy actif dont remote_addr = notre socket → relais. Le canal
-    // UDP client a besoin d'un socket réel pour émettre la réponse.
+    // 2) Buddy activo cuya remote_addr = nuestro socket → retransmisión. El canal
+    // UDP cliente requiere un socket real para emitir la respuesta.
     let client_udp_sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
     state
         .client_udp
@@ -1972,10 +1972,10 @@ async fn test_inbound_reaskcallbacktcp_from_buddy_relays_udp_reply() {
     .await;
 }
 
-/// `OP_CALLBACK` (0x99, PR_EMULE) — eMule `ListenSocket.cpp:1326` : relais
-/// buddy du `KADEMLIA_CALLBACK_REQ` quand nous sommes LowID.
-/// `[~kad_id][fileid][ip][tcp]` → le demandeur devient source Kad du
-/// fichier (équivalent `TryToConnect`).
+/// `OP_CALLBACK` (0x99, PR_EMULE) — eMule `ListenSocket.cpp:1326`: retransmisión
+/// buddy de `KADEMLIA_CALLBACK_REQ` cuando somos LowID.
+/// `[~kad_id][fileid][ip][tcp]` → el solicitante se convierte en fuente Kad del
+/// archivo (equivalente a `TryToConnect`).
 #[tokio::test]
 async fn test_inbound_callback_registers_requester_as_source() {
     let file_hash = [0x42u8; 16];
@@ -2039,7 +2039,7 @@ async fn test_inbound_callback_registers_requester_as_source() {
         }
     }
 
-    // Mauvais check d'abord → ignoré (IP parasite ne doit pas apparaître).
+    // Comprobación errónea primero → ignorada (la IP parásita no debe aparecer).
     let mut bad_payload = Vec::with_capacity(38);
     bad_payload.extend_from_slice(&[0u8; 16]);
     bad_payload.extend_from_slice(&file_hash);
@@ -2052,7 +2052,7 @@ async fn test_inbound_callback_registers_requester_as_source() {
     bad.extend_from_slice(&bad_payload);
     client.write_all(&bad).await.unwrap();
 
-    // check = ~notre_kad_id (le buddyID publié chez eMule est déjà inversé).
+    // check = ~nuestro_kad_id (el buddyID publicado en eMule ya está invertido).
     let our_kad = state.kad.local_id().0;
     let check: Vec<u8> = our_kad.iter().map(|b| !b).collect();
     let mut payload = Vec::with_capacity(38);
@@ -2089,12 +2089,12 @@ async fn test_inbound_callback_registers_requester_as_source() {
     .await;
 }
 
-/// eMule `SendHashsetPacket(bFileIdentifiers=true)` (`UploadClient.cpp:510`) :
-/// `OP_HASHSETREQUEST2` (0xB1, PR_EMULE) `<FileIdentifier><opts u8>` recu ->
-/// `OP_HASHSETANSWER2` (0xB2) repletant l'identifiant puis le hashset MD4
-/// (`WriteHashSetsToPacket`, `FileIdentifier.cpp:249`). Le bit AICH est omis
-/// quand le set par part n'est pas calculable (ici le .part enregistre est
-/// tronque vs la taille declaree).
+/// eMule `SendHashsetPacket(bFileIdentifiers=true)` (`UploadClient.cpp:510`):
+/// `OP_HASHSETREQUEST2` (0xB1, PR_EMULE) `<FileIdentifier><opts u8>` recibido ->
+/// `OP_HASHSETANSWER2` (0xB2) devolviendo el identificador y luego el conjunto de hashes MD4
+/// (`WriteHashSetsToPacket`, `FileIdentifier.cpp:249`). El bit AICH se omite
+/// si el conjunto por partes no es calculable (aquí el .part guardado está
+/// truncado respecto al tamaño declarado).
 #[tokio::test]
 async fn test_inbound_hashsetrequest2_serves_md4_set() {
     let (state, _dir, hash) = share_state(
@@ -2110,7 +2110,7 @@ async fn test_inbound_hashsetrequest2_serves_md4_set() {
     let mut fh = [0u8; 16];
     fh.copy_from_slice(&file_hash);
 
-    // Hashset MD4 en cache -> servi sans rehash disque.
+    // Conjunto de hashes MD4 en caché -> servido sin rehacer el hash en disco.
     let part_hashes: Vec<[u8; 16]> = vec![[0x11; 16], [0x22; 16]];
     {
         let mut dl = state.downloads.lock().await;
@@ -2167,7 +2167,7 @@ async fn test_inbound_hashsetrequest2_serves_md4_set() {
         }
     }
 
-    // OP_HASHSETREQUEST2 : FileIdentifier {md4, taille} + opts MD4|AICH.
+    // OP_HASHSETREQUEST2: FileIdentifier {md4, tamaño} + opts MD4|AICH.
     let req = mule_protocol::ed2k::Ed2kHashSetReq2 {
         identifier: mule_protocol::ed2k::Ed2kFileIdentifier::new(fh, 18874368),
         want_md4: true,
@@ -2182,7 +2182,7 @@ async fn test_inbound_hashsetrequest2_serves_md4_set() {
     out.extend_from_slice(&req_pkt.payload);
     client.write_all(&out).await.unwrap();
 
-    // Attendre OP_HASHSETANSWER2 (0xB2, PR_EMULE).
+    // Esperar OP_HASHSETANSWER2 (0xB2, PR_EMULE).
     let mut answer = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while answer.is_none() && tokio::time::Instant::now() < deadline {
@@ -2209,7 +2209,7 @@ async fn test_inbound_hashsetrequest2_serves_md4_set() {
     let md4_set = ans.md4_set.expect("md4 hashset attendu");
     assert_eq!(md4_set.file_hash, fh);
     assert_eq!(md4_set.part_hashes, part_hashes);
-    // L'arbre AICH n'est pas calculable ici -> bit omis comme eMule.
+    // El árbol AICH no es calculable aquí -> bit omitido como en eMule.
     assert!(ans.aich_set.is_none());
 
     let _ = handle_request(
@@ -2251,7 +2251,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     let codec = PacketCodec::new();
     let encoder = Ed2kEncoder::default();
 
-    // 1. Send OP_HELLO announcing DataCompVer = 1 in CT_EMULE_MISCOPTIONS1 (0xFA).
+    // 1. Enviar OP_HELLO announcing DataCompVer = 1 in CT_EMULE_MISCOPTIONS1 (0xFA).
     let hello = Ed2kHello {
         user_hash: [0x55u8; 16],
         client_id: 0x0100007F,
@@ -2272,7 +2272,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     out.extend_from_slice(&hello_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 2. Expect OP_HELLO_ANSWER
+    // 2. Esperar OP_HELLO_ANSWER
     let mut received_hello_ans = false;
     while !received_hello_ans {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -2286,7 +2286,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
         }
     }
 
-    // 3. Send OP_REQFILENAME for shared file
+    // 3. Enviar OP_REQFILENAME para el archivo compartido
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
     out.clear();
     out.push(PR_ED2K);
@@ -2295,7 +2295,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     out.extend_from_slice(&hash_bytes);
     client_socket.write_all(&out).await.unwrap();
 
-    // 4. Expect OP_REQFILENAME_ANSWER (0x59) with exact framing
+    // 4. Esperar OP_REQFILENAME_ANSWER (0x59) con entramado exacto
     let mut name_ans_pkt = None;
     while name_ans_pkt.is_none() {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -2316,7 +2316,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     assert_eq!(name_pkt.payload.len(), 18 + name_len);
     assert_eq!(read_buf.len(), 0, "No residual framing desync after filename answer");
 
-    // 5. Send OP_REQUESTPARTS for block 0..184320
+    // 5. Enviar OP_REQUESTPARTS para el bloque 0..184320
     let req_parts = Ed2kRequestParts {
         file_hash: hash_bytes,
         ranges: vec![mule_protocol::ed2k::Ed2kBlockRange {
@@ -2332,7 +2332,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     out.extend_from_slice(&rp_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 6. Expect OP_COMPRESSEDPART (0x40, PR_EMULE) chunks
+    // 6. Esperar fragmentos OP_COMPRESSEDPART (0x40, PR_EMULE)
     let mut raw_compressed_stream = Vec::new();
     let mut expected_compressed_total: Option<u32> = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);

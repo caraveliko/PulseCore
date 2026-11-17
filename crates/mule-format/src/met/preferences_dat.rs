@@ -22,22 +22,22 @@ use std::path::Path;
 use super::error::MetError;
 use super::reader::{open_met_file, CountingReader};
 
-/// `PREFFILE_VERSION` (`Opcodes.h:33`) — informational; eMule accepts
-/// any stored version on read.
+/// `PREFFILE_VERSION` (`Opcodes.h:33`) — informativo; eMule acepta
+/// cualquier versión almacenada al leer.
 pub const PREFFILE_VERSION: u8 = 0x14;
 
-/// Parsed `preferences.dat` identity fields.
+/// Campos de identidad analizados de `preferences.dat`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreferencesDat {
-    /// Stored `Preferences_Ext_Struct.version`.
+    /// `Preferences_Ext_Struct.version` almacenada.
     pub version: u8,
-    /// `m_abyUserHash` — the persisted random user hash that keeps
-    /// eMule credits (`CreateUserHash`, `Preferences.cpp:1484-1492`).
+    /// `m_abyUserHash` — el hash de usuario aleatorio persistido que conserva
+    /// los créditos de eMule (`CreateUserHash`, `Preferences.cpp:1484-1492`).
     pub user_hash: [u8; 16],
 }
 
-/// `isbadhash` (`OtherFunctions.h:380-383`) — a hash is degenerate when
-/// every byte eDonkey-family clients leave zero is zero:
+/// `isbadhash` (`OtherFunctions.h:380-383`) — un hash es degenerado cuando
+/// cada byte que los clientes de la familia eDonkey dejan en cero es cero:
 /// `!(q0 & 0xffff00ffffffffff) && !(q1 & 0xff00ffffffffffff)`.
 pub fn is_bad_hash(hash: &[u8; 16]) -> bool {
     let q0 = u64::from_le_bytes(hash[0..8].try_into().unwrap_or_default());
@@ -57,8 +57,8 @@ impl PreferencesDat {
         let mut user_hash = [0u8; 16];
         user_hash.copy_from_slice(&cr.read_exact_bytes(16, "preferences.dat userhash")?);
         if is_bad_hash(&user_hash) {
-            // `CreateUserHash` regenerates bad hashes — a stored one means
-            // the file is corrupt, not a real identity.
+            // `CreateUserHash` regenera hashes erróneos — uno almacenado significa
+            // que el archivo está corrupto, no que sea una identidad real.
             return Err(MetError::InconsistentMetadata {
                 field: "preferences.dat userhash",
                 reason: "degenerate hash (isbadhash)".to_string(),

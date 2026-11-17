@@ -38,7 +38,7 @@ fn part_met_is_written_on_add_and_updated_on_progress() {
         Vec::<(u64, u64)>::new()
     );
 
-    // After injecting data the met reflects covered ranges (no gaps).
+    // Tras inyectar datos, el met refleja los rangos cubiertos (sin intervalos).
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     let met = mule_format::PartMetFile::open(&met_path).unwrap();
     assert_eq!(met.transferred, 1000);
@@ -78,8 +78,8 @@ fn completed_file_is_deleted_and_unshared_on_remove_with_files() {
     let target_dir = tmp.path().join("incoming");
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    // Le hash du lien doit correspondre au contenu injecté (fichier
-    // mono-part : vérifié à la complétion).
+    // El hash del enlace debe corresponder al contenido inyectado (archivo
+    // de una sola parte: verificado al completarse).
     let content = vec![0x42u8; 5000];
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&content);
@@ -160,7 +160,7 @@ fn shared_file_delete_removes_disk_file_and_entry() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    // Fichier partagé « hors downloads » (rescan Incoming / shares.add).
+    // Archivo compartido «fuera de descargas» (nuevo escaneo de Incoming / shares.add).
     let dir = tmp.path().join("incoming");
     std::fs::create_dir_all(&dir).unwrap();
     let file_path = dir.join("loose.bin");
@@ -216,7 +216,7 @@ fn shared_file_delete_rejects_partial_share() {
         .unwrap();
     let hash = snap.ed2k_hash.clone();
 
-    // Le partage partiel est résolu depuis le download actif.
+    // El compartido parcial se resuelve a partir de la descarga activa.
     let sf = svc.get_shared_file(&hash).unwrap().unwrap();
     assert!(sf.is_partial);
 
@@ -246,16 +246,16 @@ fn shared_file_delete_completed_routes_through_remove_download() {
     let target_path = target_dir.join("shared_done.bin");
     assert!(target_path.exists());
 
-    // La suppression via le partage retire aussi l'entrée download
-    // complétée (sinon elle repointait un fichier inexistant).
+    // La eliminación a través del compartido retira también la entrada de descarga
+    // completada (de lo contrario volvería a apuntar a un archivo inexistente).
     assert!(svc.remove_shared_file(&file_hash, true).unwrap());
     assert!(!target_path.exists());
     assert!(svc.get_shared_file(&file_hash).unwrap().is_none());
     assert!(svc.get_download(&snap.id).is_none());
 }
 
-/// `downloads.rename` sur un téléchargement en cours : met à jour le nom
-/// affiché et le chemin cible sans toucher le `.part` (nommé par UUID).
+/// `downloads.rename` en una descarga en curso: actualiza el nombre
+/// mostrado y la ruta de destino sin tocar el `.part` (nombrado por UUID).
 #[test]
 fn rename_in_progress_updates_name_and_target_not_part_file() {
     let tmp = tempdir().unwrap();
@@ -277,7 +277,7 @@ fn rename_in_progress_updates_name_and_target_not_part_file() {
         svc.get_download_file_info(&snap.id).unwrap().1,
         tmp.path().join("new_name.bin")
     );
-    // Le .part UUID ne bouge pas.
+    // El .part por UUID no se mueve.
     assert!(part_path.exists());
     assert_eq!(
         svc.get_download(&snap.id).unwrap().file_name,
@@ -285,8 +285,8 @@ fn rename_in_progress_updates_name_and_target_not_part_file() {
     );
 }
 
-/// Download terminé : le renommage déplace le fichier disque et met à
-/// jour l'entrée `shared_files` (nom + chemin).
+/// Descarga terminada: el renombramiento mueve el archivo en disco y
+/// actualiza la entrada `shared_files` (nombre + ruta).
 #[test]
 fn rename_completed_renames_disk_file_and_share_entry() {
     let tmp = tempdir().unwrap();
@@ -316,8 +316,8 @@ fn rename_completed_renames_disk_file_and_share_entry() {
     assert_eq!(shared.file_path, new_path.to_string_lossy());
 }
 
-/// `shares.rename` délègue à `rename_download` quand le hash adosse un
-/// download complété — les deux vues restent cohérentes.
+/// `shares.rename` delega en `rename_download` cuando el hash respalda una
+/// descarga completada — ambas vistas se mantienen coherentes.
 #[test]
 fn rename_shared_file_by_hash_delegates_to_completed_download() {
     let tmp = tempdir().unwrap();
@@ -346,8 +346,8 @@ fn rename_shared_file_by_hash_delegates_to_completed_download() {
     );
 }
 
-/// Les noms invalides (vides, séparateurs, caractères interdits Windows)
-/// sont refusés sans toucher au download.
+/// Los nombres no válidos (vacíos, separadores, caracteres prohibidos en Windows)
+/// se rechazan sin tocar la descarga.
 #[test]
 fn rename_rejects_invalid_file_names() {
     let tmp = tempdir().unwrap();
@@ -383,7 +383,7 @@ fn part_met_persists_partial_gaps() {
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // Partial data does not trigger part completion; force a save via pause.
+    // Los datos parciales no activan la finalización de parte; forzar un guardado mediante pausa.
     svc.inject_range(&snap.id, 0, &[0xAAu8; 100], None).unwrap();
     svc.pause_download(&snap.id).unwrap();
 
@@ -399,9 +399,9 @@ fn part_met_persists_partial_gaps() {
     assert_eq!(met.transferred, 100);
 }
 
-/// `stats.resetLifetimeTotals` remet à zéro les compteurs cumulés en
-/// mémoire ET persistés (settings SQLite) ; les valeurs rechargées au
-/// boot repartent bien à zéro.
+/// `stats.resetLifetimeTotals` restablece a cero los contadores acumulados en
+/// memoria Y persistidos (ajustes en SQLite); los valores recargados en
+/// el arranque parten correctamente desde cero.
 #[tokio::test]
 async fn reset_lifetime_totals_zeroes_memory_and_persisted_settings() {
     use std::sync::atomic::Ordering;
@@ -418,7 +418,7 @@ async fn reset_lifetime_totals_zeroes_memory_and_persisted_settings() {
     let config = DaemonConfig::new(tmp.path().to_path_buf(), "t");
     let state = AppState::new(config, downloads);
 
-    // Les compteurs sont hydratés depuis les settings persistés.
+    // Los contadores se hidratan a partir de los ajustes persistidos.
     assert_eq!(
         state.lifetime_downloaded_bytes.load(Ordering::SeqCst),
         12345
@@ -447,20 +447,20 @@ async fn reset_lifetime_totals_zeroes_memory_and_persisted_settings() {
     );
 }
 
-/// `shares.list` enrichit chaque fichier du débit mesuré agrégé sur ses
-/// slots actifs et du total uploadé cumulé (hydraté depuis
-/// `share_upload_stats`) — jointure insensible à la casse du hash.
+/// `shares.list` enriquece cada archivo con la tasa medida agregada en sus
+/// ranuras activas y el total subido acumulado (hidratado desde
+/// `share_upload_stats`) — unión que no distingue entre mayúsculas y minúsculas en el hash.
 #[tokio::test]
 async fn shares_list_enriches_per_file_upload_stats() {
     let tmp = tempdir().unwrap();
     let mut downloads = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
-    // Total persisté d'un « boot précédent ».
+    // Total persistido de un «arranque anterior».
     downloads.add_share_uploaded_bytes("HAA", 7000).unwrap();
     let config = DaemonConfig::new(tmp.path().to_path_buf(), "t");
     let state = AppState::new(config, downloads);
 
-    // Les partages pointent des fichiers réels : `list_all_shared_files`
-    // filtre désormais les entrées dont le payload a disparu du disque.
+    // Los compartidos apuntan a archivos reales: `list_all_shared_files`
+    // ahora filtra las entradas cuya carga útil haya desaparecido del disco.
     let f_path = tmp.path().join("f.iso");
     let g_path = tmp.path().join("g.iso");
     std::fs::write(&f_path, b"f").unwrap();
@@ -483,10 +483,10 @@ async fn shares_list_enriches_per_file_upload_stats() {
         .unwrap();
     }
     let um = state.inbound_listener.upload_manager();
-    // Hydratation au boot : le total persisté doit être visible.
+    // Hidratación en el arranque: el total persistido debe ser visible.
     assert_eq!(um.per_file_uploaded_bytes()["haa"], 7000);
 
-    // Deux slots actifs sur le même fichier (casse différente du hash).
+    // Dos ranuras activas en el mismo archivo (distinto tamaño de mayúsculas/minúsculas en el hash).
     um.request_upload_slot("c1", "c1", "HAA", "f.iso", 1.0, "normal", false, None)
         .await
         .unwrap();
@@ -495,8 +495,8 @@ async fn shares_list_enriches_per_file_upload_stats() {
         .unwrap();
     um.update_progress("c1", 3000).await;
     um.update_progress("c2", 500).await;
-    // La fenêtre de mesure est ouverte au premier envoi — un second envoi
-    // après le premier échantillon (≥ 500 ms) produit un débit mesuré.
+    // La ventana de medición se abre en el primer envío — un segundo envío
+    // tras la primera muestra (≥ 500 ms) produce una tasa medida.
     tokio::time::sleep(std::time::Duration::from_millis(600)).await;
     um.update_progress("c1", 1000).await;
 
@@ -507,16 +507,16 @@ async fn shares_list_enriches_per_file_upload_stats() {
     let f = files.iter().find(|f| f["fileHash"] == "haa").unwrap();
     assert_eq!(f["uploadedBytes"].as_u64().unwrap(), 7000 + 4500);
     assert!(f["uploadRateBps"].as_u64().unwrap() > 0);
-    // Le fichier sans activité : débit 0, total 0.
+    // El archivo sin actividad: tasa 0, total 0.
     let g = files.iter().find(|f| f["fileHash"] == "hbb").unwrap();
     assert_eq!(g["uploadedBytes"].as_u64().unwrap(), 0);
     assert_eq!(g["uploadRateBps"].as_u64().unwrap(), 0);
 }
 
-/// Le `.part` supprimé physiquement pendant que le daemon est arrêté :
-/// au redémarrage l'entrée est retirée de la liste (données perdues) et
-/// le `.part.met` orphelin nettoyé — au lieu de ressusciter avec des
-/// plages fantômes pointant vers un fichier vide.
+/// El archivo `.part` eliminado físicamente mientras el daemon está detenido:
+/// al reiniciar, la entrada se retira de la lista (datos perdidos) y
+/// el `.part.met` huérfano se limpia — en lugar de resucitar con
+/// rangos fantasma que apuntan a un archivo vacío.
 #[test]
 fn missing_part_file_removes_download_at_startup() {
     let tmp = tempdir().unwrap();
@@ -541,19 +541,19 @@ fn missing_part_file_removes_download_at_startup() {
     assert!(temp_path.exists());
     assert!(met_path.exists());
 
-    // Suppression physique du .part pendant que le daemon est arrêté.
+    // Eliminación física del .part mientras el daemon está detenido.
     std::fs::remove_file(&temp_path).unwrap();
 
-    // Redémarrage : l'entrée est retirée, le .met orphelin nettoyé.
+    // Reinicio: la entrada se retira y el .met huérfano se limpia.
     let svc = DownloadService::new(&db_path, temp_dir).unwrap();
     assert!(svc.list_downloads().is_empty());
     assert!(!met_path.exists());
 }
 
-/// eMule `DAPPref` (défaut `true`) : un nouveau download démarre en
-/// priorité « auto » ; `SavePartFile` écrit `FT_DLPRIORITY = PR_AUTO` (5) ;
-/// une priorité manuelle écrit la valeur `PR_*` correspondante et sort du
-/// mode auto ; la ré-importation du `.part.met` restaure le flag.
+/// `DAPPref` de eMule (por defecto `true`): una nueva descarga comienza con
+/// prioridad «auto»; `SavePartFile` escribe `FT_DLPRIORITY = PR_AUTO` (5);
+/// una prioridad manual escribe el valor `PR_*` correspondiente y sale del
+/// modo auto; la reimportación del `.part.met` restaura la bandera.
 #[test]
 fn auto_down_priority_defaults_on_and_roundtrips_via_part_met() {
     let tmp = tempdir().unwrap();
@@ -580,25 +580,25 @@ fn auto_down_priority_defaults_on_and_roundtrips_via_part_met() {
     };
     assert_eq!(dl_prio(&met_path), Some(5), "PR_AUTO tag in .part.met");
 
-    // Priorité manuelle → désactive l'auto (eMule SetDownPriority(PR_LOW)).
+    // Prioridad manual → desactiva el modo auto (SetDownPriority(PR_LOW) en eMule).
     let snap = svc.set_priority(&snap.id, "low").unwrap();
     assert_eq!(snap.priority, "low");
     svc.save_active_part_mets();
     assert_eq!(dl_prio(&met_path), Some(0), "PR_LOW tag in .part.met");
 
-    // Retour en auto → flag restauré.
+    // Retorno a auto → bandera restaurada.
     let snap = svc.set_priority(&snap.id, "auto").unwrap();
     assert_eq!(snap.priority, "auto");
     svc.save_active_part_mets();
     assert_eq!(dl_prio(&met_path), Some(5));
 
-    // Priorité invalide → refusée, l'état n'est pas modifié.
+    // Prioridad no válida → rechazada, el estado no se modifica.
     assert!(svc.set_priority(&snap.id, "urgent").is_err());
     assert_eq!(svc.get_download(&snap.id).unwrap().priority, "auto");
 
-    // Ré-import du met « auto » → flag restauré côté download. Copie sous
-    // un nom neutre : `remove_download` renomme le companion en `.keep`
-    // pour éviter la résurrection au boot — la paire reste importable.
+    // Reimportación del met en modo «auto» → bandera restaurada del lado de la descarga. Copia bajo
+    // un nombre neutro: `remove_download` renombra el acompañante a `.keep`
+    // para evitar la resurrección en el arranque — el par sigue siendo importable.
     let import_dir = tmp.path().join("import");
     std::fs::create_dir_all(&import_dir).unwrap();
     let import_met = import_dir.join("foreign.part.met");

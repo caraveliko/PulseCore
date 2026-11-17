@@ -25,43 +25,43 @@ use super::reader::{open_met_file, CountingReader};
 
 /// `CREDITFILE_VERSION` (`Opcodes.h:39`).
 pub const CREDITFILE_VERSION: u8 = 0x12;
-/// `CREDITFILE_VERSION_29` (`Opcodes.h:40`) — 0.29a layout.
+/// `CREDITFILE_VERSION_29` (`Opcodes.h:40`) — disposición 0.29a.
 pub const CREDITFILE_VERSION_29: u8 = 0x11;
 /// `MAXPUBKEYSIZE` (`ClientCredits.h:21`).
 pub const MAXPUBKEYSIZE: usize = 80;
-/// Packed `CreditStruct` size (version 0x12).
+/// Tamaño de `CreditStruct` empaquetado (versión 0x12).
 const CREDIT_STRUCT_LEN: usize = 119;
-/// Packed `CreditStruct_29a` size (version 0x11).
+/// Tamaño de `CreditStruct_29a` empaquetado (versión 0x11).
 const CREDIT_STRUCT_29A_LEN: usize = 38;
-/// Safety bound on the record count — eMule credit lists are user-scale
-/// (thousands, not millions).
+/// Límite de seguridad en el recuento de registros — las listas de créditos de eMule son a escala de usuario
+/// (miles, no millones).
 pub const MAX_CLIENTS_RECORDS: usize = 5_000_000;
 
-/// One `clients.met` credit record.
+/// Un registro de crédito de `clients.met`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClientsMetRecord {
-    /// `abyKey` — the client's eD2K user hash (credits key in eMule).
+    /// `abyKey` — el hash de usuario eD2K del cliente (clave de créditos en eMule).
     pub key: [u8; 16],
-    /// `nUploadedHi:nUploadedLo` — bytes uploaded TO the peer.
+    /// `nUploadedHi:nUploadedLo` — bytes subidos AL par.
     pub uploaded: u64,
-    /// `nDownloadedHi:nDownloadedLo` — bytes downloaded FROM the peer.
+    /// `nDownloadedHi:nDownloadedLo` — bytes descargados DESDE el par.
     pub downloaded: u64,
-    /// `tLastSeen` — unix seconds; eMule drops entries older than 150
-    /// days at load (`ClientCredits.cpp:207-213`).
+    /// `tLastSeen` — segundos unix; eMule descarta las entradas de más de 150
+    /// días al cargar (`ClientCredits.cpp:207-213`).
     pub last_seen: u32,
-    /// `abySecureIdent[..nKeySize]` — RSA public key when the peer
-    /// completed secure identification; `None` for `nKeySize == 0`.
+    /// `abySecureIdent[..nKeySize]` — clave pública RSA cuando el par
+    /// completó la identificación segura; `None` para `nKeySize == 0`.
     pub pubkey: Option<Vec<u8>>,
 }
 
-/// Parsed `clients.met` content.
+/// Contenido analizado de `clients.met`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClientsMetFile {
-    /// File version (`0x12` or `0x11`).
+    /// Versión del archivo (`0x12` o `0x11`).
     pub version: u8,
-    /// `true` when records carried no public key (`0x11` layout).
+    /// `true` cuando los registros no portaban clave pública (disposición `0x11`).
     pub legacy_format: bool,
-    /// Records in file order.
+    /// Registros en orden de archivo.
     pub records: Vec<ClientsMetRecord>,
 }
 
@@ -107,7 +107,7 @@ impl ClientsMetFile {
 }
 
 fn parse_credit_struct(raw: &[u8], legacy: bool) -> ClientsMetRecord {
-    // Packed field offsets (`ClientCredits.h:41-52`):
+    // Desplazamientos de campos empaquetados (`ClientCredits.h:41-52`):
     // abyKey@0..16 | nUploadedLo@16 | nDownloadedLo@20 | tLastSeen@24 |
     // nUploadedHi@28 | nDownloadedHi@32 | nReserved3@36 u16 |
     // nKeySize@38 u8 | abySecureIdent@39..119

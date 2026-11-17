@@ -10,105 +10,105 @@ use crate::framing::RawPacket;
 use crate::traits::{ReceivedBlock, SourceStateUpdate};
 use crate::types::{PeerId, PR_EMULE_COMPRESSED, PR_LAB};
 
-/// Protocol violation errors triggering immediate session termination.
+/// Errores de violación de protocolo que provocan la terminación inmediata de la sesión.
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum ProtocolViolation {
-    /// Message arrived in an illegal state.
+    /// El mensaje llegó en un estado no permitido.
     #[error("Unexpected message opcode 0x{opcode:02X} in state {state}")]
     UnexpectedMessageInState {
-        /// Current state name.
+        /// Nombre del estado actual.
         state: &'static str,
-        /// Message opcode received.
+        /// Código de operación del mensaje recibido.
         opcode: u8,
     },
 
-    /// Negotiated protocol version is incompatible.
+    /// La versión de protocolo negociada es incompatible.
     #[error("Incompatible protocol version: client={client}, server={server}")]
     IncompatibleVersion {
-        /// Client version.
+        /// Versión del cliente.
         client: u32,
-        /// Server version.
+        /// Versión del servidor.
         server: u32,
     },
 
-    /// Nonce returned in HelloAck did not match the original challenge nonce.
+    /// El nonce devuelto en HelloAck no coincidió con el nonce de desafío original.
     #[error("Handshake nonce mismatch")]
     NonceMismatch,
 
-    /// Hello message was sent more than once.
+    /// El mensaje Hello se envió más de una vez.
     #[error("Double Hello rejected: session already initialized")]
     DoubleHello,
 
-    /// Attempted block transfer before session was in Ready state.
+    /// Intento de transferencia de bloque antes de que la sesión estuviera en estado Ready.
     #[error("Transfer message received before Ready state")]
     PrematureTransferMessage,
 
-    /// Payload structure was malformed.
+    /// La estructura de la carga útil estaba mal formada.
     #[error("Malformed message payload: {0}")]
     Malformed(String),
 
-    /// Compressed frame (0xD4) rejected pending bounded decompression stage.
+    /// Trama comprimida (0xD4) rechazada a la espera de la etapa de descompresión acotada.
     #[error("Compressed frame 0xD4 (PR_EMULE_COMPRESSED) is not supported prior to bounded decompression stage")]
     CompressedProtocolUnsupported,
 
-    /// Unexpected or unsupported protocol byte.
+    /// Byte de protocolo inesperado o no compatible.
     #[error("Unexpected protocol byte 0x{protocol:02X} (expected 0xEE PR_LAB)")]
     UnexpectedProtocol {
-        /// Rejected protocol byte.
+        /// Byte de protocolo rechazado.
         protocol: u8,
     },
 }
 
-/// Cause of terminal session failure.
+/// Causa de fallo terminal de la sesión.
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum PeerFailure {
-    /// Protocol violation error.
+    /// Error de violación de protocolo.
     #[error(transparent)]
     Violation(#[from] ProtocolViolation),
 
-    /// Handshake or idle timeout expired.
+    /// Expiró el tiempo de espera del protocolo de enlace o de inactividad.
     #[error("Timeout: {0}")]
     Timeout(String),
 
-    /// Socket I/O failure.
+    /// Fallo de E/S de socket.
     #[error("I/O error: {0}")]
     Io(String),
 }
 
-/// Lifecycle states of a laboratory peer connection.
+/// Estados del ciclo de vida de una conexión entre pares de laboratorio.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeerState {
-    /// Initial disconnected state.
+    /// Estado inicial desconectado.
     Disconnected,
-    /// Actively establishing transport connection.
+    /// Estableciendo activamente la conexión de transporte.
     Connecting,
-    /// Listener waiting for initiator's Hello.
+    /// Oyente a la espera del Hello del iniciador.
     AwaitingHello,
-    /// Initiator waiting for receiver's HelloAck.
+    /// Iniciador a la espera del HelloAck del receptor.
     AwaitingHelloAck {
-        /// Local challenge nonce awaiting confirmation.
+        /// Nonce de desafío local a la espera de confirmación.
         local_nonce: [u8; 16],
     },
-    /// Fully authenticated and negotiated session ready for data transfer.
+    /// Sesión completamente autenticada y negociada lista para la transferencia de datos.
     Ready {
-        /// Remote peer identifier.
+        /// Identificador del par remoto.
         remote_peer_id: PeerId,
-        /// Mutually agreed lab protocol version.
+        /// Versión del protocolo de laboratorio acordada mutuamente.
         negotiated_version: u32,
     },
-    /// Gracefully terminating connection.
+    /// Terminando la conexión de forma ordenada.
     Closing,
-    /// Session is cleanly terminated.
+    /// La sesión ha terminado limpiamente.
     Closed,
-    /// Irreversible terminal failure state.
+    /// Estado de fallo terminal irreversible.
     Failed {
-        /// Reason for failure.
+        /// Motivo del fallo.
         reason: PeerFailure,
     },
 }
 
 impl PeerState {
-    /// Returns the human-readable name of the current state.
+    /// Devuelve el nombre legible para humanos del estado actual.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Disconnected => "Disconnected",
@@ -122,31 +122,31 @@ impl PeerState {
         }
     }
 
-    /// True if the session is ready for transfers.
+    /// Verdadero si la sesión está lista para transferencias.
     pub fn is_ready(&self) -> bool {
         matches!(self, Self::Ready { .. })
     }
 
-    /// True if the session is in a terminal state (Closed or Failed).
+    /// Verdadero si la sesión se encuentra en un estado terminal (Closed o Failed).
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Closed | Self::Failed { .. })
     }
 }
 
-/// Actions produced by the state machine to be executed by the transport layer.
+/// Acciones producidas por la máquina de estados para ser ejecutadas por la capa de transporte.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeerAction {
-    /// Transmit a message to the remote peer.
+    /// Transmite un mensaje al par remoto.
     SendMessage(LabMessage),
-    /// Forward a downloaded block to the storage sink.
+    /// Reenvía un bloque descargado al sumidero de almacenamiento.
     NotifySink(ReceivedBlock),
-    /// Forward remote peer metadata to the download planner.
+    /// Reenvía los metadatos del par remoto al planificador de descargas.
     NotifyPlanner(SourceStateUpdate),
-    /// Close the physical network transport.
+    /// Cierra el transporte de red físico.
     CloseConnection,
 }
 
-/// State machine controller managing session progression.
+/// Controlador de máquina de estados que gestiona la progresión de la sesión.
 pub struct PeerStateMachine {
     state: PeerState,
     local_peer_id: PeerId,
@@ -154,7 +154,7 @@ pub struct PeerStateMachine {
 }
 
 impl PeerStateMachine {
-    /// Creates a new state machine for a listener waiting for incoming connections.
+    /// Crea una nueva máquina de estados para un oyente que espera conexiones entrantes.
     pub fn new_listener(local_peer_id: PeerId, supported_version: u32) -> Self {
         Self {
             state: PeerState::AwaitingHello,
@@ -163,7 +163,7 @@ impl PeerStateMachine {
         }
     }
 
-    /// Creates a new state machine for an initiator starting a connection.
+    /// Crea una nueva máquina de estados para un iniciador que comienza una conexión.
     pub fn new_initiator(
         local_peer_id: PeerId,
         supported_version: u32,
@@ -184,17 +184,17 @@ impl PeerStateMachine {
         (sm, hello)
     }
 
-    /// Returns a reference to the current state.
+    /// Devuelve una referencia al estado actual.
     pub fn state(&self) -> &PeerState {
         &self.state
     }
 
-    /// Forces the state machine into the Failed state with the given reason.
+    /// Fuerza la máquina de estados al estado Failed con el motivo proporcionado.
     pub fn fail(&mut self, failure: PeerFailure) {
         self.state = PeerState::Failed { reason: failure };
     }
 
-    /// Pure transition step handling an incoming message.
+    /// Paso de transición pura que gestiona un mensaje entrante.
     pub fn on_message(&mut self, msg: LabMessage) -> Result<Vec<PeerAction>, ProtocolViolation> {
         let (next_state, actions) = Self::step(
             self.state.clone(),
@@ -206,10 +206,10 @@ impl PeerStateMachine {
         Ok(actions)
     }
 
-    /// Pure transition handling an incoming raw packet before decoding.
+    /// Transición pura que gestiona un paquete sin procesar entrante antes de decodificarlo.
     ///
-    /// Validates protocol byte (rejecting PR_EMULE_COMPRESSED or unexpected protocols)
-    /// and decodes into a [`LabMessage`].
+    /// Valida el byte de protocolo (rechazando PR_EMULE_COMPRESSED o protocolos inesperados)
+    /// y decodifica en un [`LabMessage`].
     pub fn on_raw_packet(
         &mut self,
         packet: &RawPacket,
@@ -245,14 +245,14 @@ impl PeerStateMachine {
         self.on_message(msg)
     }
 
-    /// Pure transition function testable without network or side-effects.
+    /// Función de transición pura comprobable sin red ni efectos secundarios.
     pub fn step(
         state: PeerState,
         msg: LabMessage,
         local_peer_id: PeerId,
         supported_version: u32,
     ) -> Result<(PeerState, Vec<PeerAction>), ProtocolViolation> {
-        // Universal Goodbye handler: can arrive in any non-terminal state.
+        // Controlador universal de Goodbye: puede llegar en cualquier estado no terminal.
         if let LabMessage::Goodbye { .. } = &msg {
             return match state {
                 PeerState::Closed | PeerState::Failed { .. } => {
@@ -265,7 +265,7 @@ impl PeerStateMachine {
             };
         }
 
-        // Universal Premature transfer check: RequestBlock and BlockData are forbidden before Ready.
+        // Comprobación universal de transferencia prematura: RequestBlock y BlockData están prohibidos antes de Ready.
         if !state.is_ready()
             && matches!(
                 msg,
@@ -359,7 +359,7 @@ impl PeerStateMachine {
                     Ok((next, vec![PeerAction::NotifyPlanner(update)]))
                 }
                 LabMessage::RequestBlock { .. } => {
-                    // RequestBlock is handled by source engine
+                    // RequestBlock lo gestiona el motor de fuentes
                     let next = PeerState::Ready {
                         remote_peer_id,
                         negotiated_version,

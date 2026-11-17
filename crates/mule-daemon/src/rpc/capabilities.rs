@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
-/// Capabilities advertized by the daemon in `system.hello` and `system.status`.
+/// Capacidades anunciadas por el daemon en `system.hello` y `system.status`.
 ///
-/// Single source of truth: both RPC handlers must report the same set.
+/// Fuente única de verdad: ambos manejadores RPC deben notificar el mismo conjunto.
 pub fn daemon_capabilities() -> Vec<&'static str> {
     vec![
         "downloads",

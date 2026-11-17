@@ -44,7 +44,7 @@ fn test_categories_crud_and_reorder() {
     assert_eq!(list[1].id, "cat-music");
     assert_eq!(list[2].id, "cat-archives");
 
-    // Single category fetch
+    // Recuperación de categoría individual
     let fetched = db
         .get_category("cat-music")
         .expect("get cat-music")
@@ -57,7 +57,7 @@ fn test_categories_crud_and_reorder() {
     );
     assert_eq!(fetched.default_priority.as_deref(), Some("normal"));
 
-    // Update
+    // Actualización
     let mut updated_cat1 = cat1.clone();
     updated_cat1.name = "Cinema & Films".into();
     updated_cat1.color = "#9C27B0".into();
@@ -70,7 +70,7 @@ fn test_categories_crud_and_reorder() {
     assert_eq!(fetched_updated.color, "#9C27B0");
     assert_eq!(fetched_updated.default_priority.as_deref(), Some("low"));
 
-    // Reorder
+    // Reordenación
     db.reorder_categories(&[
         "cat-archives".into(),
         "cat-movies".into(),
@@ -129,15 +129,15 @@ fn test_category_deletion_reassigns_downloads_without_deleting_them() {
     let l2 = loaded.iter().find(|d| d.id == id2).unwrap();
     assert_eq!(l2.category_id, None);
 
-    // Delete category: MUST reassign dl1 to NULL, keep both dl1 and dl2 intact
+    // Eliminar categoría: DEBE reasignar dl1 a NULL, mantener intactos tanto dl1 como dl2
     let reassigned = db.delete_category("cat-books").expect("delete category");
     assert_eq!(reassigned, 1);
 
-    // Verify category is gone
+    // Verificar que la categoría ha desaparecido
     let cat_fetch = db.get_category("cat-books").expect("fetch");
     assert!(cat_fetch.is_none());
 
-    // Verify downloads are STILL PRESENT and dl1 has category_id == None
+    // Verificar que las descargas SIGUEN PRESENTES y dl1 tiene category_id == None
     let loaded_after = db.get_all_downloads().expect("load downloads after delete");
     assert_eq!(loaded_after.len(), 2);
 
@@ -148,7 +148,7 @@ fn test_category_deletion_reassigns_downloads_without_deleting_them() {
     let l2_after = loaded_after.iter().find(|d| d.id == id2).unwrap();
     assert_eq!(l2_after.category_id, None);
 
-    // Manually assign category again using set_download_category
+    // Asignar manualmente la categoría de nuevo usando set_download_category
     let mut new_cat = DownloadCategory::new("Tech", "#00BCD4", 0, None, None);
     new_cat.id = "cat-tech".into();
     db.insert_category(&new_cat).expect("insert new_cat");
@@ -162,7 +162,7 @@ fn test_category_deletion_reassigns_downloads_without_deleting_them() {
     let l1_final = loaded_final.iter().find(|d| d.id == id1).unwrap();
     assert_eq!(l1_final.category_id.as_deref(), Some("cat-tech"));
 
-    // Clear category with set_download_category(..., None)
+    // Desasignar categoría con set_download_category(..., None)
     db.set_download_category(&id1, None)
         .expect("clear category");
     let loaded_cleared = db.get_all_downloads().expect("load downloads cleared");
@@ -175,7 +175,7 @@ fn test_phase7_to_phase8_schema_migration() {
     let tmp_dir = tempfile::tempdir().expect("tempdir");
     let db_path = tmp_dir.path().join("state.db");
 
-    // 1. Create a legacy Phase 7 database manually (no category_id, no history/categories/settings tables)
+    // 1. Crear una base de datos heredada de Fase 7 manualmente (sin category_id, sin tablas de historial/categorías/ajustes)
     {
         let conn = rusqlite::Connection::open(&db_path).expect("open legacy db");
         conn.execute_batch(
@@ -210,7 +210,7 @@ fn test_phase7_to_phase8_schema_migration() {
         )
         .expect("create legacy schema");
 
-        // Insert a Phase 7 download
+        // Insertar una descarga de Fase 7
         let legacy_id = Uuid::new_v4().to_string();
         conn.execute(
             "INSERT INTO downloads (id, display_name, target_path, temp_path, total_size, ed2k_hash, aich_root, status, created_at, updated_at)
@@ -231,10 +231,10 @@ fn test_phase7_to_phase8_schema_migration() {
         .expect("insert legacy download");
     }
 
-    // 2. Open legacy database with Database::open (Phase 8.4)
+    // 2. Abrir base de datos heredada con Database::open (Fase 8.4)
     let mut db = Database::open(&db_path).expect("migrate legacy db to phase 8.4");
 
-    // 3. Verify legacy download is preserved and category_id is None
+    // 3. Verificar que la descarga heredada se preserva y category_id es None
     let downloads = db.get_all_downloads().expect("fetch migrated downloads");
     assert_eq!(downloads.len(), 1);
     let dl = &downloads[0];
@@ -242,14 +242,14 @@ fn test_phase7_to_phase8_schema_migration() {
     assert_eq!(dl.category_id, None);
     assert_eq!(dl.status.as_str(), "paused");
 
-    // 4. Verify Phase 8.4 tables are fully functional
+    // 4. Verificar que las tablas de Fase 8.4 son totalmente funcionales
     let cat = DownloadCategory::new("ISOs", "#FF9800", 0, Some("downloads/ISOs".into()), None);
     db.insert_category(&cat)
         .expect("insert category after migration");
     let cats = db.get_categories().expect("fetch categories");
     assert_eq!(cats.len(), 1);
 
-    // Assign category to the legacy download
+    // Asignar categoría a la descarga heredada
     db.set_download_category(&dl.id, Some(&cat.id))
         .expect("set category on legacy download");
     let updated_downloads = db.get_all_downloads().expect("fetch updated");
@@ -258,7 +258,7 @@ fn test_phase7_to_phase8_schema_migration() {
         Some(cat.id.as_str())
     );
 
-    // Settings table is functional
+    // La tabla de ajustes es funcional
     db.set_setting("retention_days", "60").expect("set setting");
     assert_eq!(
         db.get_setting("retention_days")

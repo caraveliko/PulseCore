@@ -7,15 +7,15 @@ use std::io::Read;
 
 use crate::error::FormatError;
 
-/// Exact eD2K part size: 9 728 000 bytes = 9 500 KiB.
+/// Tamaño exacto de una parte eD2K: 9 728 000 bytes = 9 500 KiB.
 pub const ED2K_PART_SIZE: usize = 9_728_000;
 
-/// MD4 digest of an empty stream (0 bytes).
+/// Resumen MD4 de un flujo vacío (0 bytes).
 pub const MD4_EMPTY_DIGEST: [u8; 16] = [
     0x31, 0xd6, 0xcf, 0xe0, 0xd1, 0x6a, 0xe9, 0x31, 0xb7, 0x3c, 0x59, 0xd7, 0xe0, 0xc0, 0x89, 0xc0,
 ];
 
-/// A 16-byte eD2K hash (MD4 digest).
+/// Hash eD2K de 16 bytes (resumen MD4).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Ed2kHash(pub [u8; 16]);
 
@@ -56,18 +56,18 @@ impl fmt::Display for Ed2kHash {
     }
 }
 
-/// Result of hashing a file or stream with the eD2K algorithm.
+/// Resultado de hashear un archivo o flujo con el algoritmo eD2K.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kHashResult {
-    /// Final eD2K root hash.
+    /// Hash raíz eD2K final.
     pub root_hash: Ed2kHash,
-    /// List of individual part hashes (MD4 of each part).
+    /// Lista de hashes individuales de partes (MD4 de cada parte).
     pub part_hashes: Vec<[u8; 16]>,
-    /// Total bytes processed.
+    /// Total de bytes procesados.
     pub total_bytes: u64,
 }
 
-/// Streaming eD2K Hasher.
+/// Hasheador eD2K en flujo continuo.
 pub struct Ed2kHasher {
     current_part_hasher: Md4,
     current_part_bytes: usize,
@@ -91,7 +91,7 @@ impl Ed2kHasher {
         }
     }
 
-    /// Feeds arbitrary data chunks into the hasher.
+    /// Alimenta bloques arbitrarios de datos al hasheador.
     pub fn update(&mut self, mut data: &[u8]) {
         self.total_bytes += data.len() as u64;
 
@@ -112,15 +112,15 @@ impl Ed2kHasher {
         }
     }
 
-    /// Finalizes the calculation and returns the eD2K hash result.
+    /// Finaliza el cálculo y devuelve el resultado del hash eD2K.
     ///
-    /// Empty streams (0 bytes) are rejected by default as invalid eD2K files.
+    /// Los flujos vacíos (0 bytes) se rechazan por defecto como archivos eD2K no válidos.
     pub fn finalize(mut self) -> Result<Ed2kHashResult, FormatError> {
         if self.total_bytes == 0 {
             return Err(FormatError::EmptyInput);
         }
 
-        // Case 1: File is strictly smaller than one part
+        // Caso 1: El archivo es estrictamente menor que una parte
         if self.total_bytes < ED2K_PART_SIZE as u64 {
             let single_digest: [u8; 16] = self.current_part_hasher.finalize().into();
             return Ok(Ed2kHashResult {
@@ -130,17 +130,17 @@ impl Ed2kHasher {
             });
         }
 
-        // Case 2: File is >= ED2K_PART_SIZE
+        // Caso 2: El archivo es >= ED2K_PART_SIZE
         if self.current_part_bytes > 0 {
-            // There was a trailing partial part
+            // Había una parte parcial final
             let last_digest: [u8; 16] = self.current_part_hasher.finalize().into();
             self.part_hashes.push(last_digest);
         } else if self.total_bytes.is_multiple_of(ED2K_PART_SIZE as u64) {
-            // eMule compatibility: exact multiples append MD4(empty)
+            // Compatibilidad con eMule: los múltiplos exactos añaden MD4(vacío)
             self.part_hashes.push(MD4_EMPTY_DIGEST);
         }
 
-        // Compute outer MD4 over the concatenation of all part digests
+        // Calcular el MD4 externo sobre la concatenación de todos los resúmenes de partes
         let mut outer_hasher = Md4::new();
         for ph in &self.part_hashes {
             outer_hasher.update(ph);
@@ -155,15 +155,15 @@ impl Ed2kHasher {
     }
 }
 
-/// Dérive la racine eD2K d'un fichier depuis son hashset de parts sans
-/// relire le disque — mêmes règles que [`Ed2kHasher::finalize`] :
-/// fichier < 1 part → la part unique est la racine ; sinon MD4 de la
-/// concaténation des hash de parts, avec `MD4_EMPTY_DIGEST` ajouté aux
-/// multiples exacts de [`ED2K_PART_SIZE`] quand le hashset ne le porte
-/// pas déjà. Retourne `None` quand le hashset ne couvre pas le fichier.
+/// Obtiene la raíz eD2K de un archivo a partir de su conjunto de hashes de partes sin
+/// volver a leer el disco — mismas reglas que [`Ed2kHasher::finalize`]:
+/// archivo < 1 parte → la parte única es la raíz; de lo contrario MD4 de la
+/// concatenación de los hashes de partes, con `MD4_EMPTY_DIGEST` añadido a los
+/// múltiplos exactos de [`ED2K_PART_SIZE`] cuando el conjunto de hashes no lo incluya
+/// ya. Devuelve `None` cuando el conjunto de hashes no cubra el archivo.
 ///
-/// `part_hashes` peut contenir `total_parts` ou `total_parts + 1`
-/// entrées (la part vide eMule) ; toute autre cardinalité est rejetée.
+/// `part_hashes` puede contener `total_parts` o `total_parts + 1`
+/// entradas (la parte vacía de eMule); cualquier otra cardinalidad es rechazada.
 pub fn ed2k_root_from_part_hashes(total_bytes: u64, part_hashes: &[[u8; 16]]) -> Option<Ed2kHash> {
     if total_bytes == 0 || part_hashes.is_empty() {
         return None;
@@ -196,10 +196,10 @@ pub fn ed2k_root_from_part_hashes(total_bytes: u64, part_hashes: &[[u8; 16]]) ->
     Some(Ed2kHash(root))
 }
 
-/// Convenience helper to hash any reader with a specified buffer size.
+/// Auxiliar de conveniencia para hashear cualquier lector con un tamaño de búfer especificado.
 pub fn hash_reader<R: Read>(reader: &mut R) -> Result<Ed2kHashResult, FormatError> {
     let mut hasher = Ed2kHasher::new();
-    let mut buffer = [0u8; 64 * 1024]; // 64 KiB read buffer
+    let mut buffer = [0u8; 64 * 1024]; // Búfer de lectura de 64 KiB
     loop {
         let n = reader.read(&mut buffer)?;
         if n == 0 {
@@ -247,13 +247,13 @@ mod tests {
     fn root_from_part_hashes_exact_multiple_accepts_both_cardinalities() {
         let data = pattern(ED2K_PART_SIZE * 2);
         let res = hash_bytes(&data);
-        // eMule-style hashset: trailing MD4(empty) part included.
+        // Hashset al estilo eMule: parte final MD4(vacía) incluida.
         assert_eq!(res.part_hashes.len(), 3);
         assert_eq!(
             ed2k_root_from_part_hashes(res.total_bytes, &res.part_hashes),
             Some(res.root_hash)
         );
-        // Hashset without the empty tail part → same derived root.
+        // Hashset sin la parte vacía final → misma raíz derivada.
         let trimmed = &res.part_hashes[..2];
         assert_eq!(
             ed2k_root_from_part_hashes(res.total_bytes, trimmed),
@@ -265,7 +265,7 @@ mod tests {
     fn root_from_part_hashes_rejects_incomplete_or_empty_sets() {
         let data = pattern(ED2K_PART_SIZE + 123);
         let res = hash_bytes(&data);
-        // Hashset tronqué (1 part au lieu de 2).
+        // Hashset truncado (1 parte en lugar de 2).
         assert_eq!(
             ed2k_root_from_part_hashes(res.total_bytes, &res.part_hashes[..1]),
             None

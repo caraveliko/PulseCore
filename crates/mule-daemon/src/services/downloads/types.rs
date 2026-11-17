@@ -30,33 +30,33 @@ pub struct DownloadSnapshot {
     pub created_at_unix_ms: i64,
     pub updated_at_unix_ms: i64,
     pub category_id: Option<String>,
-    /// Seconds remaining at the current rate (None when stalled/done).
+    /// Segundos restantes a la tasa actual (None cuando está estancada o finalizada).
     #[serde(default)]
     pub eta_seconds: Option<u64>,
-    /// eD2K file hash (hex) — needed by clients to query peer sources
-    /// without an extra `downloads.get` round-trip.
+    /// Hash de archivo eD2K (hex) — necesario para que los clientes consulten fuentes de pares
+    /// sin un viaje de ida y vuelta adicional a `downloads.get`.
     #[serde(default)]
     pub ed2k_hash: String,
-    /// Per-part progress summary for the UI availability bar. In list
-    /// snapshots `is_verified` is only exact for completed downloads (all
-    /// parts verified); `downloads.get` reports the authoritative flags.
+    /// Resumen de progreso por parte para la barra de disponibilidad de la interfaz. En las
+    /// instantáneas de lista, `is_verified` solo es exacto para descargas completadas (todas
+    /// las partes verificadas); `downloads.get` informa de los indicadores fidedignos.
     #[serde(default)]
     pub parts: Vec<PartProgressSummary>,
-    /// Byte ranges of blocks currently requested but not yet received
-    /// (eMule `requestedblocks_list` — the yellow "pending" segments).
-    /// Enriched by the RPC/event layer from the swarm state.
+    /// Rangos de bytes de bloques actualmente solicitados pero aún no recibidos
+    /// (`requestedblocks_list` de eMule — los segmentos amarillos «pendientes»).
+    /// Enriquecido por la capa RPC/eventos desde el estado del enjambre.
     #[serde(default)]
     pub pending_ranges: Vec<(u64, u64)>,
-    /// Per-file source cap imported from `.part.met` FT_MAXSOURCES
-    /// (eMule `CPartFile::GetMaxSources`); `None` = global limit.
+    /// Límite de fuentes por archivo importado desde FT_MAXSOURCES de `.part.met`
+    /// (`CPartFile::GetMaxSources` de eMule); `None` = límite global.
     #[serde(default)]
     pub max_sources: Option<u32>,
-    /// Indique si ce fichier est activement en cours de copie vers le NAS
-    /// (`Some(true)`) ou en attente dans la file FIFO du NAS (`Some(false)`),
-    /// actif uniquement lorsque le statut est `Completing`.
+    /// Indica si este archivo está activamente en curso de copia hacia el NAS
+    /// (`Some(true)`) o en espera en la cola FIFO del NAS (`Some(false)`),
+    /// activo únicamente cuando el estado es `Completing`.
     #[serde(default)]
     pub nas_copy_active: Option<bool>,
-    /// Protocol: "ed2k" or "torrent"
+    /// Protocolo: "ed2k" o "torrent"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
 }
@@ -71,19 +71,19 @@ pub struct PartProgressSummary {
     pub received_bytes: u64,
     pub is_verified: bool,
     pub state: String, // "verified", "completed", "downloading", "missing"
-    /// Number of known sources whose availability mask covers this part
-    /// (eMule's blue-shade/red coloring: 0 = no source has it → stuck part).
+    /// Número de fuentes conocidas cuya máscara de disponibilidad cubre esta parte
+    /// (coloración azul/roja de eMule: 0 = ninguna fuente la tiene → parte atascada).
     pub available_source_count: u32,
-    /// Bitmap of the part split into [`PART_MASK_CELLS`] equal cells; bit i is
-    /// set when the cell is fully covered by received data. Lets the UI draw
-    /// eMule-style intra-part gaps without shipping the raw range list.
+    /// Mapa de bits de la parte dividida en [`PART_MASK_CELLS`] celdas iguales; el bit i se
+    /// activa cuando la celda está totalmente cubierta por datos recibidos. Permite a la interfaz dibujar
+    /// huecos dentro de la parte al estilo de eMule sin enviar la lista de rangos en bruto.
     #[serde(default)]
     pub received_mask: u64,
 }
 
-/// Number of cells in [`PartProgressSummary::received_mask`] (one bit each).
-/// ≈152 KiB per cell on a full 9.28 MiB part — close to the 180 KiB eD2K
-/// block granularity eMule's bar actually shows.
+/// Número de celdas en [`PartProgressSummary::received_mask`] (un bit cada una).
+/// ≈152 KiB por celda en una parte completa de 9,28 MiB — cercana a la granularidad de bloque
+/// eD2K de 180 KiB que la barra de eMule muestra en realidad.
 pub const PART_MASK_CELLS: u64 = 64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -133,18 +133,18 @@ pub struct ImportPartMetResult {
     pub report: Option<String>,
 }
 
-/// Neutral availability summary exposed to UI and external clients.
-/// Never leaks raw SocketAddr or network topology.
+/// Resumen neutral de disponibilidad expuesto a la interfaz y clientes externos.
+/// Nunca filtra la SocketAddr en bruto ni la topología de red.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceAvailabilitySummary {
-    /// Opaque source identifier.
+    /// Identificador opaco de fuente.
     pub source_id: String,
-    /// Number of available parts.
+    /// Número de partes disponibles.
     pub available_part_count: u16,
-    /// Total number of parts in the file.
+    /// Número total de partes en el archivo.
     pub total_part_count: u16,
-    /// Timestamp of last observation.
+    /// Marca temporal de la última observación.
     pub last_seen_unix_ms: i64,
 }
 
@@ -171,49 +171,49 @@ pub struct ActiveDownload {
     pub last_rate_update: Option<Instant>,
     pub source_count: u32,
     pub verification_in_progress: bool,
-    /// Parts that failed MD4 verification and await AICH recovery data
-    /// (only populated when a trusted AICH root is known):
+    /// Partes que fallaron en la verificación MD4 y esperan datos de recuperación AICH
+    /// (solo se llena cuando se conoce una raíz AICH de confianza):
     /// `(part_index, enqueued_at)`.
     pub aich_pending: VecDeque<(u32, Instant)>,
-    /// Parts for which an AICH recovery request was already sent:
+    /// Partes para las cuales ya se envió una solicitud de recuperación AICH:
     /// `part -> (sent_at, attempts)`.
     pub aich_requested: HashMap<u32, (Instant, u32)>,
-    /// Untrusted AICH master-hash votes: root hash -> masked source IPs
-    /// (eMule `CAICHUntrustedHash`; IP masked with `0x00F0FFFF`).
+    /// Votos de hash maestro AICH no confiables: hash raíz -> IPs de fuentes enmascaradas
+    /// (`CAICHUntrustedHash` de eMule; IP enmascarada con `0x00F0FFFF`).
     pub aich_votes: HashMap<[u8; 20], HashSet<u32>>,
-    /// Provenance des blocs reçus par part pour attribuer la corruption à
-    /// l'expéditeur (eMule `m_CorruptionBlackBox`).
+    /// Procedencia de los bloques recibidos por parte para atribuir la corrupción al
+    /// remitente (`m_CorruptionBlackBox` de eMule).
     pub corruption_blackbox: super::corruption_blackbox::CorruptionBlackBox,
-    /// Expéditeurs condamnés par `CorruptionBlackBox::evaluate` (>32 % de
-    /// données corrompues) — vidés par l'appelant qui déconnecte le pair et
-    /// marque ses sources `Rejected` (eMule `Ban`/`AddBannedClient`).
+    /// Remitentes condenados por `CorruptionBlackBox::evaluate` (>32 % de
+    /// datos corruptos) — vaciados por el llamador que desconecta al par y
+    /// marca sus fuentes como `Rejected` (`Ban`/`AddBannedClient` de eMule).
     pub pending_corruption_bans: Vec<String>,
-    /// Données reçues non encore fsync'd : le `sync_data` du `.part` est
-    /// batché selon [`PART_PERSIST_INTERVAL`] au lieu d'être payé par bloc
-    /// de 180 Ko. Le bookkeeping SQLite `received_ranges` reste synchronisé
-    /// à chaque bloc via un delta `INSERT` O(1) (`append_received_range`)
-    /// pour le crash-resume, la réécriture complète servant de compaction
-    /// à cadence ; le fsync différé ne risque qu'une perte disque dur —
-    /// les données seraient alors incohérentes mais la part sera
-    /// re-vérifiée (hash MD4/AICH) et re-téléchargée si invalide.
+    /// Datos recibidos aún no sincronizados con fsync: el `sync_data` del `.part` se
+    /// procesa en lotes según [`PART_PERSIST_INTERVAL`] en lugar de pagarse por bloque
+    /// de 180 KiB. La contabilidad SQLite de `received_ranges` se mantiene sincronizada
+    /// en cada bloque mediante un delta `INSERT` O(1) (`append_received_range`)
+    /// para la reanudación tras fallos, sirviendo la reescritura completa como compactación
+    /// periódica; el fsync diferido solo arriesga una pérdida en disco duro —
+    /// los datos serían entonces inconsistentes pero la parte será
+    /// reverificada (hash MD4/AICH) y redescargada si es inválida.
     pub persist_dirty: bool,
-    /// Dernier flush disque réel (fsync + compaction ranges) des données
-    /// reçues.
+    /// Último vaciado a disco real (fsync + compactación de rangos) de los datos
+    /// recibidos.
     pub last_persist_flush: Instant,
-    /// Buffers RAM des parts en cours de réception (eMule `m_tData`,
-    /// libtorrent staging → hash → flush) : la vérification MD4 de part
-    /// se fait depuis ces buffers sans relecture disque quand ils sont
-    /// complets — voir [`super::staged`].
+    /// Búferes RAM de las partes en curso de recepción (`m_tData` de eMule,
+    /// preparación en libtorrent → hash → vaciado): la verificación MD4 de la parte
+    /// se efectúa desde estos búferes sin relectura de disco cuando están
+    /// completos — véase [`super::staged`].
     pub staged_parts: std::collections::HashMap<u32, super::staged::StagedPart>,
 }
 
-/// Cadence maximale de flush disque du chemin de réception : `sync_data`
-/// du `.part` + compaction complète `received_ranges`. eMule flush son
-/// buffer de part (`CPartFile::FlushBuffer`) périodiquement plutôt qu'à
-/// chaque bloc ; même approche ici — les points critiques (complétion de
-/// part, fin de fichier, pause, transition de statut, shutdown) forcent
-/// un flush immédiat. Le crash-resume par bloc est assuré par le delta
-/// `append_received_range`, pas par la réécriture complète.
+/// Cadencia máxima de vaciado a disco de la ruta de recepción: `sync_data`
+/// del `.part` + compactación completa de `received_ranges`. eMule vacía su
+/// búfer de parte (`CPartFile::FlushBuffer`) periódicamente en lugar de en
+/// cada bloque; el mismo enfoque aquí — los puntos críticos (finalización de
+/// parte, fin de archivo, pausa, transición de estado, apagado) fuerzan
+/// un vaciado inmediato. La reanudación tras fallo por bloque está garantizada por el delta
+/// `append_received_range`, no por la reescritura completa.
 pub(crate) const PART_PERSIST_INTERVAL: Duration = Duration::from_secs(30);
 
 impl ActiveDownload {
@@ -221,10 +221,10 @@ impl ActiveDownload {
         self.snapshot_impl(true)
     }
 
-    /// Snapshot sans le résumé par part (`compute_part_summaries` est
-    /// O(parts × ranges)) — pour le hot path de réception qui ne consulte
-    /// que `status`/`progress`. `parts` reste vide : ne jamais l'émettre
-    /// vers les clients RPC/WS.
+    /// Instantánea sin el resumen por parte (`compute_part_summaries` es
+    /// O(partes × rangos)) — para la ruta crítica de recepción que solo consulta
+    /// `status`/`progress`. `parts` permanece vacío: no emitir nunca
+    /// hacia los clientes RPC/WS.
     pub fn snapshot_brief(&self) -> DownloadSnapshot {
         self.snapshot_impl(false)
     }
@@ -247,9 +247,9 @@ impl ActiveDownload {
             effective_rate,
         );
         if with_parts {
-            // Verified part flags live in SQLite; the list snapshot only knows
-            // "all verified" for completed downloads. `downloads.get` re-reads
-            // the authoritative set for the detail view.
+            // Los indicadores de partes verificadas residen en SQLite; la instantánea de lista solo conoce
+            // "todas verificadas" para descargas completadas. `downloads.get` vuelve a leer
+            // el conjunto fidedigno para la vista de detalle.
             let verified_parts: HashSet<u32> = if self.download.status == DownloadStatus::Completed {
                 let pc = self
                     .download
@@ -271,14 +271,14 @@ impl ActiveDownload {
     }
 }
 
-/// Fenêtre de fraîcheur des masques de disponibilité (30 min, comparable au
-/// cycle de requery des sources eMule). Au-delà, une source dont la session
-/// est morte ne contribue plus à `available_source_count` — eMule retire le
-/// client de `srclist` à la déconnexion.
+/// Ventana de frescura de las máscaras de disponibilidad (30 min, comparable al
+/// ciclo de reconsulta de fuentes de eMule). Más allá, una fuente cuya sesión
+/// haya muerto ya no contribuye a `available_source_count` — eMule retira el
+/// cliente de `srclist` al desconectarse.
 pub(crate) const SOURCE_FRESHNESS_MS: i64 = 30 * 60 * 1000;
 
-/// Computes the per-part progress summary shared by `downloads.list`
-/// snapshots and `downloads.get` details (eMule `CPartFile` part states).
+/// Calcula el resumen de progreso por parte compartido por las instantáneas
+/// de `downloads.list` y los detalles de `downloads.get` (estados de parte de `CPartFile` en eMule).
 pub fn compute_part_summaries<'a>(
     total_size: u64,
     ranges: &RangeSet,
@@ -329,16 +329,16 @@ pub fn compute_part_summaries<'a>(
             "missing"
         };
 
-        // Convention eD2K : `part_count == 0` (masque vide) = source
-        // complète couvrant toutes les parts — eMule `ProcessFileStatus`
-        // matérialise alors `m_abyPartStatus` tout à 1.
+        // Convención eD2K: `part_count == 0` (máscara vacía) = fuente
+        // completa que cubre todas las partes — `ProcessFileStatus` de eMule
+        // materializa entonces `m_abyPartStatus` todo a 1.
         let available_source_count = masks
             .iter()
             .filter(|m| m.part_count() == 0 || u16::try_from(i).is_ok_and(|p| m.has_part(p)))
             .count() as u32;
 
-        // Intra-part received bitmap: 64 equal cells, bit set when the cell
-        // is fully covered. Skipped for empty/full parts (mask is trivial).
+        // Mapa de bits recibido dentro de la parte: 64 celdas iguales, bit activado cuando la celda
+        // está totalmente cubierta. Omitido para partes vacías/llenas (la máscara es trivial).
         let received_mask = if received_in_part == 0 {
             0
         } else if received_in_part >= size {
@@ -445,12 +445,12 @@ mod tests {
 
     #[test]
     fn part_summaries_count_only_queried_sources() {
-        // 2-part file, nothing received yet.
+        // Archivo de 2 partes, nada recibido aún.
         let total = ED2K_PART_SIZE as u64 * 2;
         let ranges = RangeSet::new();
         let verified = HashSet::new();
 
-        // No sources at all → every part red (0 sources).
+        // Sin fuentes en absoluto → cada parte en rojo (0 fuentes).
         let parts = compute_part_summaries(
             total,
             &ranges,
@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(parts.len(), 2);
         assert!(parts.iter().all(|p| p.available_source_count == 0));
 
-        // Partial source covering only part 0 → part 1 stays at 0.
+        // Fuente parcial cubriendo solo la parte 0 → la parte 1 permanece en 0.
         let partial = PartAvailabilityMask::from_parts(&[0], 2);
         let sources = [src(partial, 0)];
         let parts = compute_part_summaries(total, &ranges, sources.iter(), &verified);
@@ -470,8 +470,8 @@ mod tests {
 
     #[test]
     fn part_summaries_empty_mask_is_complete_source() {
-        // eD2K convention (eMule ProcessFileStatus): part_count == 0 → the
-        // peer is a complete source covering every part.
+        // Convención eD2K (ProcessFileStatus de eMule): part_count == 0 → el
+        // par es una fuente completa que cubre cada parte.
         let total = ED2K_PART_SIZE as u64 * 3;
         let ranges = RangeSet::new();
         let verified = HashSet::new();
@@ -488,7 +488,7 @@ mod tests {
         let ranges = RangeSet::new();
         let verified = HashSet::new();
 
-        // Mask learned 31 min ago → outside the freshness window.
+        // Máscara aprendida hace 31 min → fuera de la ventana de frescura.
         let stale = src(
             PartAvailabilityMask::from_parts(&[0], 1),
             SOURCE_FRESHNESS_MS + 60_000,

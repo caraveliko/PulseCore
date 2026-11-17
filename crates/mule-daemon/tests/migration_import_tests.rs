@@ -16,7 +16,7 @@ use tempfile::tempdir;
 
 const CANCELLED_VERSION: u8 = 1;
 
-/// Serializes one `emfriends.met` record (CFriend::LoadFromFile layout).
+/// Serializa un registro de `emfriends.met` (diseño de `CFriend::LoadFromFile`).
 fn friend_record(user_hash: &[u8; 16], name: Option<&str>) -> Vec<u8> {
     let mut rec = Vec::new();
     rec.extend_from_slice(user_hash);
@@ -48,7 +48,7 @@ fn emfriends_met(records: &[Vec<u8>]) -> Vec<u8> {
     buf
 }
 
-/// `0x0F` record layout: `[masked hash 16][tag_count u8][tagsâ€¦]`.
+/// Diseño del registro `0x0F`: `[masked hash 16][tag_count u8][tags...]`.
 fn cancelled_met(seed: u32, masked: &[[u8; 16]]) -> Vec<u8> {
     let mut buf = vec![MET_HEADER_I64TAGS, CANCELLED_VERSION];
     buf.extend_from_slice(&seed.to_le_bytes());
@@ -60,7 +60,7 @@ fn cancelled_met(seed: u32, masked: &[[u8; 16]]) -> Vec<u8> {
     buf
 }
 
-/// Deprecated `0x0E` layout â€” real hashes, same per-record tag byte.
+/// Diseño obsoleto `0x0E` — hashes reales, mismo byte de etiqueta por registro.
 fn cancelled_met_legacy(real_hashes: &[[u8; 16]]) -> Vec<u8> {
     let mut buf = vec![MET_HEADER];
     buf.extend_from_slice(&(real_hashes.len() as u32).to_le_bytes());
@@ -99,7 +99,7 @@ fn test_emfriends_import_adds_friends_and_skips_hashless() {
         .unwrap();
     assert_eq!(alice.name, "Alice");
 
-    // Re-import â†’ records already known count as `updated`.
+    // Reimportación → los registros ya conocidos cuentan como `updated`.
     let report2 = svc.import_emfriends_met(&met_path).unwrap();
     assert_eq!(report2.imported, 0);
     assert_eq!(report2.updated, 2);
@@ -124,7 +124,7 @@ fn test_cancelled_met_import_masked_and_lookup() {
     assert!(!report.legacy_format);
     assert_eq!(report.total, 2);
 
-    // Lookup recomputes the mask under every known seed â€” the file's.
+    // La búsqueda recalcula la máscara bajo cada semilla conocida — la del archivo.
     assert!(svc.is_cancelled_file(&hex::encode(real_hash)).unwrap());
     assert!(!svc.is_cancelled_file(&hex::encode([0x00u8; 16])).unwrap());
 }
@@ -167,7 +167,7 @@ async fn test_remove_download_records_cancelled_hash() {
     assert_eq!(svc.cancelled_count().unwrap(), 1);
 }
 
-/// `Preferences_Ext_Struct` prefix: `[version u8][userhash 16]`.
+/// Prefijo de `Preferences_Ext_Struct`: `[version u8][userhash 16]`.
 fn preferences_dat(version: u8, user_hash: &[u8; 16]) -> Vec<u8> {
     let mut buf = vec![version];
     buf.extend_from_slice(user_hash);
@@ -180,7 +180,7 @@ fn test_identity_import_cryptkey_and_preferences() {
     let emule_dir = tempdir().unwrap();
     let data_dir = tempdir().unwrap();
 
-    // Source: a valid eMule-format cryptkey.dat + preferences.dat.
+    // Origen: cryptkey.dat + preferences.dat válidos en formato eMule.
     let src_key = mule_crypto::cryptkey::generate_cryptkey(emule_dir.path()).unwrap();
     let emule_userhash = {
         let mut h = [0x77u8; 16];
@@ -191,7 +191,7 @@ fn test_identity_import_cryptkey_and_preferences() {
     let prefs_path = emule_dir.path().join("preferences.dat");
     std::fs::write(&prefs_path, preferences_dat(0x14, &emule_userhash)).unwrap();
 
-    // First import into an empty data dir â€” no replace needed.
+    // Primera importación en un directorio de datos vacío — no se requiere reemplazo.
     let report = mule_daemon::services::IdentityService::import_emule_identity(
         data_dir.path(),
         Some(&emule_dir.path().join("cryptkey.dat")),
@@ -202,14 +202,14 @@ fn test_identity_import_cryptkey_and_preferences() {
     assert!(report.key_imported);
     assert!(report.userhash_imported);
 
-    // Reloaded identity uses the imported key and the imported user hash.
+    // La identidad recargada utiliza la clave importada y el hash de usuario importado.
     let svc = mule_daemon::services::IdentityService::load_or_generate(data_dir.path());
     assert_eq!(svc.user_hash(), emule_userhash);
     use rsa::pkcs1::EncodeRsaPublicKey;
     let src_pub = rsa::RsaPublicKey::from(&src_key).to_pkcs1_der().unwrap();
     assert_eq!(svc.public_key_bytes(), src_pub.as_bytes());
 
-    // Second import without replace â†’ refused (existing identity).
+    // Segunda importación sin reemplazo → rechazada (identidad existente).
     let err = mule_daemon::services::IdentityService::import_emule_identity(
         data_dir.path(),
         Some(&emule_dir.path().join("cryptkey.dat")),
@@ -219,7 +219,7 @@ fn test_identity_import_cryptkey_and_preferences() {
     .unwrap_err();
     assert!(err.to_string().contains("replace"));
 
-    // Rotation drops the imported user hash â€” it belongs to the eMule key.
+    // La rotación descarta el hash de usuario importado — pertenece a la clave de eMule.
     let rotated = mule_daemon::services::IdentityService::rotate_key(data_dir.path()).unwrap();
     assert_ne!(rotated.user_hash(), emule_userhash);
     assert!(!data_dir.path().join("userhash.dat").exists());
@@ -229,7 +229,7 @@ fn test_identity_import_cryptkey_and_preferences() {
 fn test_identity_import_rejects_degenerate_userhash() {
     let emule_dir = tempdir().unwrap();
     let data_dir = tempdir().unwrap();
-    // All-zero user hash â†’ `isbadhash` â†’ eMule would have regenerated it.
+    // Hash de usuario con todos ceros → `isbadhash` → eMule lo habría regenerado.
     let prefs_path = emule_dir.path().join("preferences.dat");
     std::fs::write(&prefs_path, preferences_dat(0x14, &[0u8; 16])).unwrap();
     let err = mule_daemon::services::IdentityService::import_emule_identity(
@@ -292,7 +292,7 @@ fn test_remember_cancelled_off_disables_set() {
     svc.import_cancelled_met(&met_path).unwrap();
     assert!(svc.is_cancelled_file(&hex::encode(real_hash)).unwrap());
 
-    // `IsRememberingCancelledFiles` off â†’ lookup always false.
+    // `IsRememberingCancelledFiles` desactivado → la búsqueda siempre devuelve false.
     svc.set_setting("remember_cancelled", "0").unwrap();
     assert!(!svc.is_cancelled_file(&hex::encode(real_hash)).unwrap());
 }

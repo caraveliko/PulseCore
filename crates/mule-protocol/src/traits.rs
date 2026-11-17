@@ -12,19 +12,19 @@ use bytes::Bytes;
 use crate::error::ProtocolError;
 use crate::types::PeerId;
 
-/// A contiguous slice of file data received from a peer.
+/// Un fragmento contiguo de datos de archivo recibido de un par.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedBlock {
-    /// 16-byte eD2K file hash.
+    /// Hash de archivo eD2K de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Absolute byte offset within the file where this block begins.
+    /// Desplazamiento absoluto en bytes dentro del archivo donde comienza este bloque.
     pub start_offset: u64,
-    /// Binary data payload for this block.
+    /// Carga útil de datos binarios para este bloque.
     pub data: Bytes,
 }
 
 impl ReceivedBlock {
-    /// Creates a new `ReceivedBlock`.
+    /// Crea un nuevo `ReceivedBlock`.
     pub fn new(file_hash: [u8; 16], start_offset: u64, data: Bytes) -> Self {
         Self {
             file_hash,
@@ -33,63 +33,64 @@ impl ReceivedBlock {
         }
     }
 
-    /// End byte offset (exclusive: `start_offset + data.len()`).
+    /// Desplazamiento de byte final (exclusivo: `start_offset + data.len()`).
     #[inline]
     pub fn end_offset(&self) -> u64 {
         self.start_offset + self.data.len() as u64
     }
 
-    /// Length in bytes.
+    /// Longitud en bytes.
     #[inline]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
-    /// Returns true if this block has empty data.
+    /// Devuelve verdadero si este bloque tiene datos vacíos.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 }
 
-/// The result returned by a `DownloadSink` after persisting a received block.
+/// El resultado devuelto por un `DownloadSink` tras persistir un bloque recibido.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BlockWriteOutcome {
-    /// Number of bytes successfully committed to storage.
+    /// Número de bytes confirmados con éxito en el almacenamiento.
     pub bytes_written: usize,
-    /// Indicates whether this block completed an eD2K part (9.5 MB) boundary.
+    /// Indica si este bloque completó el límite de una parte eD2K (9,5 MB).
     pub part_completed: bool,
-    /// Part index that completed, if applicable.
+    /// Índice de la parte completada, si corresponde.
     pub completed_part_index: Option<u32>,
-    /// Indicates whether this write completed the entire target file.
+    /// Indica si esta escritura completó el archivo de destino por completo.
     pub file_completed: bool,
 }
 
-/// Abstract storage sink for writing downloaded peer blocks.
+/// Sumidero de almacenamiento abstracto para escribir bloques descargados de pares.
 ///
-/// Implementors handle the physical disk writes, sparse `.part` file updates,
-/// and hash integrity checks without coupling to the network protocol layer.
+/// Los implementadores gestionan las escrituras físicas en disco, las actualizaciones
+/// de archivos dispersos `.part` y las comprobaciones de integridad de hash sin acoplarse
+/// a la capa del protocolo de red.
 pub trait DownloadSink: Send + Sync {
-    /// Persists a downloaded block into storage.
+    /// Persiste un bloque descargado en el almacenamiento.
     fn write_block(
         &self,
         block: ReceivedBlock,
     ) -> Pin<Box<dyn Future<Output = Result<BlockWriteOutcome, ProtocolError>> + Send + '_>>;
 }
 
-/// Request for a single block of data from a peer.
+/// Petición de un único bloque de datos a un par.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockRequest {
-    /// 16-byte eD2K file hash being requested.
+    /// Hash de archivo eD2K de 16 bytes solicitado.
     pub file_hash: [u8; 16],
-    /// Absolute byte offset where the requested block begins.
+    /// Desplazamiento absoluto en bytes donde comienza el bloque solicitado.
     pub start_offset: u64,
-    /// Requested block length in bytes (standard is 184,320 bytes = 180 KiB).
+    /// Longitud del bloque solicitado en bytes (lo estándar son 184.320 bytes = 180 KiB).
     pub length: u32,
 }
 
 impl BlockRequest {
-    /// Creates a new `BlockRequest`.
+    /// Crea un nuevo `BlockRequest`.
     pub fn new(file_hash: [u8; 16], start_offset: u64, length: u32) -> Self {
         Self {
             file_hash,
@@ -98,36 +99,36 @@ impl BlockRequest {
         }
     }
 
-    /// End byte offset (exclusive: `start_offset + length`).
+    /// Desplazamiento de byte final (exclusivo: `start_offset + length`).
     #[inline]
     pub fn end_offset(&self) -> u64 {
         self.start_offset + self.length as u64
     }
 }
 
-/// State update describing a remote peer's status and parts availability.
+/// Actualización de estado que describe el estado y la disponibilidad de partes de un par remoto.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceStateUpdate {
-    /// Peer identifier.
+    /// Identificador del par.
     pub peer_id: PeerId,
-    /// 16-byte eD2K file hash.
+    /// Hash de archivo eD2K de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Bitmask of part availability (true = peer has this part).
+    /// Máscara de bits de disponibilidad de partes (true = el par dispone de esta parte).
     pub available_parts: Vec<bool>,
-    /// Optional remote upload queue rank / position.
+    /// Posición o rango opcional en la cola de subida remota.
     pub queue_rank: Option<u32>,
 }
 
-/// Abstract planner responsible for download scheduling, piece selection,
-/// and managing requests across active peers.
+/// Planificador abstracto responsable de la programación de descargas, la selección de piezas
+/// y la gestión de peticiones entre pares activos.
 pub trait DownloadPlanner: Send + Sync {
-    /// Retrieves the next block request to send to a specific peer, if any block is eligible.
+    /// Obtiene la siguiente petición de bloque a enviar a un par específico, si algún bloque es elegible.
     fn next_request(
         &self,
         peer_id: &PeerId,
     ) -> Pin<Box<dyn Future<Output = Option<BlockRequest>> + Send + '_>>;
 
-    /// Notifies the planner of an update in remote peer state (parts bitmask, queue position, etc.).
+    /// Notifica al planificador una actualización en el estado del par remoto (máscara de bits de partes, posición en cola, etc.).
     fn on_source_state(
         &self,
         update: SourceStateUpdate,

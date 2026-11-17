@@ -4,8 +4,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Type d'erreur JSON-RPC canonique — défini dans `mule-daemon` (source de
-/// vérité unique pour les codes et constructeurs du workspace).
+/// Tipo de error JSON-RPC canónico — definido en `mule-daemon` (fuente
+/// única de verdad para los códigos y constructores del workspace).
 pub use mule_daemon::error::JsonRpcError;
 
 pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";

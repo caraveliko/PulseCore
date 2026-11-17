@@ -3,144 +3,144 @@
 
 //! Bytes mágicos, códigos de operación y constantes del protocolo UDP de Kademlia.
 
-/// Standard Kademlia UDP protocol magic byte (0xE4).
+/// Byte mágico estándar del protocolo UDP de Kademlia (0xE4).
 pub const PR_KADEMLIA: u8 = 0xE4;
 
-/// Packed Kademlia UDP protocol magic byte (0xE5).
+/// Byte mágico de protocolo UDP empaquetado de Kademlia (0xE5).
 pub const PR_KADEMLIA_PACKED: u8 = 0xE5;
 
-// eMule reserves `OP_UDPRESERVEDPROT1 = 0xA3` and `OP_UDPRESERVEDPROT2 = 0xB2`
-// (`Opcodes.h:142-143`) so that obfuscated UDP datagrams — whose first byte is
-// pseudorandom — can be routed to `EncryptedDatagramSocket`. Any other unknown
-// first byte is likewise tried against the obfuscation layer, which is why no
-// extra protocol magic must be accepted here: a datagram starting with e.g.
-// `0x8D` is an *encrypted* Kad packet candidate, not plaintext.
+// eMule reserva `OP_UDPRESERVEDPROT1 = 0xA3` y `OP_UDPRESERVEDPROT2 = 0xB2`
+// (`Opcodes.h:142-143`) para que los datagramas UDP ofuscados —cuyo primer byte es
+// seudoaleatorio— puedan enrutarse a `EncryptedDatagramSocket`. Cualquier otro primer byte
+// desconocido se prueba de igual forma contra la capa de ofuscación, por lo que no deben
+// aceptarse bytes mágicos adicionales aquí: un datagrama que comience con ej. `0x8D` es
+// candidato a paquete Kad *cifrado*, no en texto claro.
 
-// --- Kad v1.0 Opcodes (Legacy) ---
-/// Legacy Bootstrap request (0x00).
+// --- Códigos de operación Kad v1.0 (Heredados) ---
+/// Petición heredada de Bootstrap (0x00).
 pub const KADEMLIA_BOOTSTRAP_REQ_OLD: u8 = 0x00;
-/// Bootstrap request (0x01).
+/// Petición de Bootstrap (0x01).
 pub const KADEMLIA_BOOTSTRAP_REQ: u8 = 0x01;
-/// Bootstrap response (0x09).
+/// Respuesta de Bootstrap (0x09).
 pub const KADEMLIA_BOOTSTRAP_RES: u8 = 0x09;
-/// Hello request (0x10).
+/// Petición Hello (0x10).
 pub const KADEMLIA_HELLO_REQ: u8 = 0x10;
-/// Hello response (0x18).
+/// Respuesta Hello (0x18).
 pub const KADEMLIA_HELLO_RES: u8 = 0x18;
 
-// --- Kad v2.0 Opcodes (Official eMule / aMule / Wireshark spec) ---
-/// Kad2 Bootstrap request (0x01).
+// --- Códigos de operación Kad v2.0 (Especificación oficial eMule / aMule / Wireshark) ---
+/// Petición Bootstrap de Kad2 (0x01).
 pub const KADEMLIA2_BOOTSTRAP_REQ: u8 = 0x01;
-/// Kad2 Bootstrap response (0x09).
+/// Respuesta Bootstrap de Kad2 (0x09).
 pub const KADEMLIA2_BOOTSTRAP_RES: u8 = 0x09;
-/// Kad2 Hello request (0x11).
+/// Petición Hello de Kad2 (0x11).
 pub const KADEMLIA2_HELLO_REQ: u8 = 0x11;
-/// Kad2 Hello response (0x19).
+/// Respuesta Hello de Kad2 (0x19).
 pub const KADEMLIA2_HELLO_RES: u8 = 0x19;
-/// Kad2 Hello response ACK (0x22).
+/// Acuse de recibo ACK de Hello de Kad2 (0x22).
 pub const KADEMLIA2_HELLO_RES_ACK: u8 = 0x22;
 
-// NOTE on Kad2 search/publish opcodes (official eMule 0.72a reference):
-// Requests:  SEARCH_KEY_REQ=0x33, SEARCH_SOURCE_REQ=0x34, SEARCH_NOTES_REQ=0x35
-// Response:  SEARCH_RES=0x3B (unified for all search types)
-// Requests:  PUBLISH_KEY_REQ=0x43, PUBLISH_SOURCE_REQ=0x44, PUBLISH_NOTES_REQ=0x45
-// Response:  PUBLISH_RES=0x4B (unified for all publish types)
-/// Kad2 Find Node / Value request (0x21).
+// NOTA sobre los opcodes de búsqueda/publicación de Kad2 (referencia oficial eMule 0.72a):
+// Peticiones:  SEARCH_KEY_REQ=0x33, SEARCH_SOURCE_REQ=0x34, SEARCH_NOTES_REQ=0x35
+// Respuesta:   SEARCH_RES=0x3B (unificada para todos los tipos de búsqueda)
+// Peticiones:  PUBLISH_KEY_REQ=0x43, PUBLISH_SOURCE_REQ=0x44, PUBLISH_NOTES_REQ=0x45
+// Respuesta:   PUBLISH_RES=0x4B (unificada para todos los tipos de publicación)
+/// Petición Find Node / Value de Kad2 (0x21).
 pub const KADEMLIA2_REQ: u8 = 0x21;
-/// Kad2 Find Node contact count / subtype (0x0B = 11 contacts requested).
+/// Recuento de contactos / subtipo Find Node de Kad2 (0x0B = 11 contactos solicitados).
 pub const KADEMLIA_FIND_NODE: u8 = 0x0B;
-/// Kad2 Find Value contact count / subtype (0x02 contacts requested).
+/// Recuento de contactos / subtipo Find Value de Kad2 (0x02 contactos solicitados).
 pub const KADEMLIA_FIND_VALUE: u8 = 0x02;
-/// Kad2 Find Node / Value response (0x29).
+/// Respuesta Find Node / Value de Kad2 (0x29).
 pub const KADEMLIA2_RES: u8 = 0x29;
-/// Kad2 Search Keyword request (0x33).
+/// Petición Search Keyword de Kad2 (0x33).
 pub const KADEMLIA2_SEARCH_KEY_REQ: u8 = 0x33;
-/// Kad2 Search Source request (0x34).
+/// Petición Search Source de Kad2 (0x34).
 pub const KADEMLIA2_SEARCH_SOURCE_REQ: u8 = 0x34;
-/// Kad2 Search Notes request (0x35).
+/// Petición Search Notes de Kad2 (0x35).
 pub const KADEMLIA2_SEARCH_NOTES_REQ: u8 = 0x35;
-/// Legacy Kad1 Search Notes request (0x32) — `[target:16]` only.
+/// Petición heredada Search Notes de Kad1 (0x32) — solo `[target:16]`.
 pub const KADEMLIA_SEARCH_NOTES_REQ_LEGACY: u8 = 0x32;
-/// Legacy Kad1 Search Notes response (0x3A) — `[target:16][count:u16]`
-/// then the same `[answer:16][taglist]` entries as the unified 0x3B form.
-/// NOTE: eMule 0.72a answers Kad2 note searches on `KADEMLIA2_SEARCH_RES`
-/// (0x3B); 0x3A is only seen from Kad1 nodes.
+/// Respuesta heredada Search Notes de Kad1 (0x3A) — `[target:16][count:u16]`
+/// y luego las mismas entradas `[answer:16][taglist]` que la forma unificada 0x3B.
+/// NOTA: eMule 0.72a responde a búsquedas de notas Kad2 con `KADEMLIA2_SEARCH_RES`
+/// (0x3B); 0x3A solo se observa en nodos Kad1.
 pub const KADEMLIA_SEARCH_NOTES_RES: u8 = 0x3A;
-/// Kad2 Search response (0x3B) — unified response for keyword, source, and notes search.
+/// Respuesta Search de Kad2 (0x3B) — respuesta unificada para búsqueda de palabras clave, fuentes y notas.
 pub const KADEMLIA2_SEARCH_RES: u8 = 0x3B;
-/// Alias: Kad2 Search Source response is the unified KADEMLIA2_SEARCH_RES (0x3B).
+/// Alias: la respuesta Search Source de Kad2 es la unificada KADEMLIA2_SEARCH_RES (0x3B).
 pub const KADEMLIA2_SEARCH_SOURCE_RES: u8 = KADEMLIA2_SEARCH_RES;
-/// Alias: Kad2 Search Keyword request is KADEMLIA2_SEARCH_KEY_REQ (0x33).
+/// Alias: la petición Search Keyword de Kad2 es KADEMLIA2_SEARCH_KEY_REQ (0x33).
 pub const KADEMLIA2_SEARCH_KEYWORD_REQ: u8 = KADEMLIA2_SEARCH_KEY_REQ;
-/// Alias: Kad2 Search Keyword response is the unified KADEMLIA2_SEARCH_RES (0x3B).
+/// Alias: la respuesta Search Keyword de Kad2 es la unificada KADEMLIA2_SEARCH_RES (0x3B).
 pub const KADEMLIA2_SEARCH_KEYWORD_RES: u8 = KADEMLIA2_SEARCH_RES;
-/// Legacy internal search keyword response opcode (0x2C, preserved for fallback/tests).
+/// Opcode interno heredado de respuesta Search Keyword (0x2C, preservado para respaldo/pruebas).
 pub const KADEMLIA2_SEARCH_KEYWORD_RES_LEGACY: u8 = 0x2C;
-/// Kad2 Publish Keyword request (0x43).
+/// Petición Publish Keyword de Kad2 (0x43).
 pub const KADEMLIA2_PUBLISH_KEY_REQ: u8 = 0x43;
-/// Kad2 Publish Source request (0x44).
+/// Petición Publish Source de Kad2 (0x44).
 pub const KADEMLIA2_PUBLISH_SOURCE_REQ: u8 = 0x44;
-/// Kad2 Publish Notes request (0x45).
+/// Petición Publish Notes de Kad2 (0x45).
 pub const KADEMLIA2_PUBLISH_NOTES_REQ: u8 = 0x45;
-/// Kad2 Publish response (0x4B) — unified response for keyword, source, and notes publish.
+/// Respuesta Publish de Kad2 (0x4B) — respuesta unificada para publicación de palabras clave, fuentes y notas.
 pub const KADEMLIA2_PUBLISH_RES: u8 = 0x4B;
-/// Kad2 Publish-result acknowledgement (0x4C, empty payload).
+/// Acuse de recibo de resultado de publicación de Kad2 (0x4C, carga útil vacía).
 ///
-/// eMule `KademliaUDPListener.cpp:1444`: sent back when an incoming
-/// `KADEMLIA2_PUBLISH_RES` carries a trailing options byte with bit 0 set
-/// ("for future use" — no released client sets it today). eMule itself does
-/// not handle inbound 0x4C; receiving one is logged and dropped.
+/// eMule `KademliaUDPListener.cpp:1444`: devuelto cuando un `KADEMLIA2_PUBLISH_RES`
+/// entrante incluye un byte de opciones final con el bit 0 activo
+/// ("para uso futuro" — ningún cliente publicado lo activa hoy). eMule
+/// no procesa 0x4C entrante; recibirlo se registra y se descarta.
 pub const KADEMLIA2_PUBLISH_RES_ACK: u8 = 0x4C;
-/// Alias: Kad2 Publish Source response is the unified KADEMLIA2_PUBLISH_RES (0x4B).
+/// Alias: la respuesta Publish Source de Kad2 es la unificada KADEMLIA2_PUBLISH_RES (0x4B).
 pub const KADEMLIA2_PUBLISH_SOURCE_RES: u8 = KADEMLIA2_PUBLISH_RES;
-/// Alias: Kad2 Publish Keyword request is KADEMLIA2_PUBLISH_KEY_REQ (0x43).
+/// Alias: la petición Publish Keyword de Kad2 es KADEMLIA2_PUBLISH_KEY_REQ (0x43).
 pub const KADEMLIA2_PUBLISH_KEYWORD_REQ: u8 = KADEMLIA2_PUBLISH_KEY_REQ;
-/// Alias: Kad2 Publish Keyword response is the unified KADEMLIA2_PUBLISH_RES (0x4B).
-/// NOTE: Previously was 0x2D which is an invented opcode that doesn't exist in official eMule.
+/// Alias: la respuesta Publish Keyword de Kad2 es la unificada KADEMLIA2_PUBLISH_RES (0x4B).
+/// NOTA: Previamente era 0x2D, un código inventado que no existe en el eMule oficial.
 pub const KADEMLIA2_PUBLISH_KEYWORD_RES: u8 = KADEMLIA2_PUBLISH_RES;
-/// Kad2 Ping request (0x60).
+/// Petición Ping de Kad2 (0x60).
 pub const KADEMLIA2_PING: u8 = 0x60;
-/// Kad2 Pong response (0x61).
+/// Respuesta Pong de Kad2 (0x61).
 pub const KADEMLIA2_PONG: u8 = 0x61;
-/// Kad2 Firewall UDP test (0x62).
+/// Prueba de cortafuegos UDP de Kad2 (0x62).
 pub const KADEMLIA2_FIREWALLUDP: u8 = 0x62;
-/// Kad buddy search request (0x51): [buddy_id:16][user_id:16][tcp_port:2].
+/// Petición de búsqueda de buddy de Kad (0x51): [buddy_id:16][user_id:16][tcp_port:2].
 pub const KADEMLIA_FINDBUDDY_REQ: u8 = 0x51;
-/// Kad buddy callback relay request (0x52): [buddy_id:16][file_id:16][tcp_port:2].
+/// Petición de retransmisión de callback buddy de Kad (0x52): [buddy_id:16][file_id:16][tcp_port:2].
 pub const KADEMLIA_CALLBACK_REQ: u8 = 0x52;
-/// Kad buddy search response (0x5A): [buddy_id:16][client_id:16][tcp_port:2][connect_opts:1].
+/// Respuesta de búsqueda de buddy de Kad (0x5A): [buddy_id:16][client_id:16][tcp_port:2][connect_opts:1].
 pub const KADEMLIA_FINDBUDDY_RES: u8 = 0x5A;
-/// Kad TCP firewall check request (0x50): `[tcp_port u16]` (legacy, pre-Kad7).
+/// Petición de comprobación de cortafuegos TCP de Kad (0x50): `[tcp_port u16]` (heredada, previa a Kad7).
 pub const KADEMLIA_FIREWALLED_REQ: u8 = 0x50;
-/// Kad TCP firewall check request v2 (0x53, eMule `KADEMLIA_FIREWALLED2_REQ`):
+/// Petición v2 de comprobación de cortafuegos TCP de Kad (0x53, eMule `KADEMLIA_FIREWALLED2_REQ`):
 /// `[tcp_port u16][user_hash 16][connect_options u8]` — 19 bytes.
-/// Required for Kad version >= 7.
+/// Requerida para versiones de Kad >= 7.
 pub const KADEMLIA_FIREWALLED2_REQ: u8 = 0x53;
-/// Kad firewall check response (0x58): `[ip u32]` — echoes the requester's IP.
+/// Respuesta de comprobación de cortafuegos de Kad (0x58): `[ip u32]` — devuelve la IP del solicitante.
 pub const KADEMLIA_FIREWALLED_RES: u8 = 0x58;
-/// Kad firewall check ack over UDP (0x59, deprecated by `OP_KAD_FWTCPCHECK_ACK`
-/// on TCP since Kad version 7).
+/// Acuse de recibo de cortafuegos de Kad por UDP (0x59, sustituido por `OP_KAD_FWTCPCHECK_ACK`
+/// sobre TCP desde la versión 7 de Kad).
 pub const KADEMLIA_FIREWALLED_ACK_RES: u8 = 0x59;
 
-/// eMule `TAG_KADMISCOPTIONS` (`0xF2`, uint8) carried in KADEMLIA2_HELLO_*:
-/// bit 0 = UDP firewalled, bit 1 = TCP firewalled, bit 2 = requesting
-/// `KADEMLIA2_HELLO_RES_ACK`. Required for Kad version >= 8.
+/// `TAG_KADMISCOPTIONS` de eMule (`0xF2`, uint8) transportado en KADEMLIA2_HELLO_*:
+/// bit 0 = cortafuegos UDP, bit 1 = cortafuegos TCP, bit 2 = solicita
+/// `KADEMLIA2_HELLO_RES_ACK`. Requerido para versiones de Kad >= 8.
 pub const TAG_KADMISCOPTIONS: u8 = 0xF2;
-/// eMule `TAG_SOURCEUPORT` (`0xFC`, uint16) — advertised Kad UDP port.
+/// `TAG_SOURCEUPORT` de eMule (`0xFC`, uint16) — puerto UDP de Kad anunciado.
 pub const TAG_SOURCEUPORT: u8 = 0xFC;
 
-/// Maximum search entries served/sent per Kad search request.
+/// Máximo de entradas de búsqueda servidas/enviadas por petición de búsqueda Kad.
 ///
 /// eMule `CIndexed::SendValidSourceResult`/`SendValidKeywordResult`
-/// (`iMaxResults = 300`, `Indexed.cpp:619/707`): up to 300 results spread
-/// over as many datagrams as needed to stay under `UDP_KAD_MAXFRAGMENT`.
-/// This is also the decode bound — a peer cannot legally send more.
+/// (`iMaxResults = 300`, `Indexed.cpp:619/707`): hasta 300 resultados repartidos
+/// en tantos datagramas como sea necesario para mantenerse bajo `UDP_KAD_MAXFRAGMENT`.
+/// Este es también el límite de decodificación — un par no puede enviar legalmente más.
 pub const MAX_KAD_SEARCH_KEYWORDS: usize = 300;
 
-/// Maximum allowable UDP datagram payload size in bytes (maximum IPv4 UDP payload is 65507 bytes).
+/// Tamaño máximo permitido de carga útil de datagrama UDP en bytes (la carga útil máxima UDP IPv4 es 65507 bytes).
 pub const MAX_KAD_UDP_PACKET_SIZE: usize = 65507;
 
-/// Checks if the protocol byte is a recognized Kademlia UDP protocol magic.
+/// Comprueba si el byte de protocolo es un byte mágico reconocido del protocolo UDP de Kademlia.
 #[inline]
 pub fn is_valid_kad_protocol(protocol: u8) -> bool {
     matches!(protocol, PR_KADEMLIA | PR_KADEMLIA_PACKED)

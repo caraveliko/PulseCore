@@ -33,7 +33,7 @@ use super::storage::Ed2kBlockWriter;
 use super::tags::{Ed2kTag, TagName, TagValue, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION};
 use crate::framing::{PacketCodec, RawPacket};
 
-/// Decodes a test file status request with automatic profile detection based on opcode.
+/// Decodifica una petición de estado de fichero de prueba con detección automática de perfil según el código de operación.
 pub fn decode_test_file_status_req(
     decoder: &Ed2kDecoder,
     protocol: u8,
@@ -48,7 +48,7 @@ pub fn decode_test_file_status_req(
     decoder.decode_file_status_req_with_profile(profile, protocol, opcode, payload, 0)
 }
 
-/// Decodes test request parts with automatic profile detection based on opcode.
+/// Decodifica partes de petición de prueba con detección automática de perfil según el código de operación.
 pub fn decode_test_request_parts(
     decoder: &Ed2kDecoder,
     protocol: u8,
@@ -63,103 +63,103 @@ pub fn decode_test_request_parts(
     decoder.decode_request_parts_with_profile(profile, protocol, opcode, payload, 0)
 }
 
-/// Configurable test peer emulation modes for adversarial and compliance validation.
+/// Modos de emulación de par de pruebas configurables para validación adversarial y de conformidad.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TestPeerMode {
-    /// Nominal compliance: waits for initiator's Hello, responds with HelloAnswer, serves file statuses.
+    /// Conformidad nominal: espera el Hello del iniciador, responde con HelloAnswer, sirve estados de fichero.
     #[default]
     Nominal,
-    /// Transmits the HelloAnswer packet byte-by-byte with small delays.
+    /// Transmite el paquete HelloAnswer byte a byte con pequeños retardos.
     FragmentedByteByByte,
-    /// Violates protocol by sending HelloAnswer before receiving Hello.
+    /// Vulnera el protocolo enviando HelloAnswer antes de recibir Hello.
     HelloAnswerBeforeHello,
-    /// Violates protocol by sending two consecutive Hello packets.
+    /// Vulnera el protocolo enviando dos paquetes Hello consecutivos.
     DoubleHello,
-    /// Emits a packet with unsupported compressed protocol byte (0xD4).
+    /// Emite un paquete con byte de protocolo comprimido no admitido (0xD4).
     UnsupportedProtocol0xD4,
-    /// Emits an unexpected opcode during handshake.
+    /// Emite un código de operación inesperado durante el saludo.
     UnexpectedOpcode,
-    /// Sends a HelloAnswer with an invalid user hash (all zeros).
+    /// Envía un HelloAnswer con un hash de usuario no válido (todo ceros).
     ZeroUserHash,
-    /// Does not respond to Hello, causing handshake timeout.
+    /// No responde a Hello, provocando tiempo de espera agotado en el saludo.
     HangTimeout,
-    /// Immediately closes the TCP socket without sending any data.
+    /// Cierra inmediatamente el socket TCP sin enviar ningún dato.
     ImmediateClose,
-    /// Sends an OP_FILESTATUS packet before handshake completion.
+    /// Envía un paquete OP_FILESTATUS antes de completar el saludo.
     FileStatusBeforeReady,
-    /// Responds to OP_FILESTATUSREQ with a mismatched file hash.
+    /// Responde a OP_FILESTATUSREQ con un hash de fichero discrepante.
     FileStatusMismatchHash,
-    /// Responds with a truncated bitfield mask (shorter than expected).
+    /// Responde con una máscara de mapa de bits truncada (más corta de lo esperado).
     FileStatusShortMask,
-    /// Responds with extraneous trailing bytes beyond the tolerated slack
-    /// (>1024) after the bitfield mask.
+    /// Responde con bytes sobrantes al final más allá del margen tolerado
+    /// (>1024) tras la máscara del mapa de bits.
     FileStatusLongMask,
-    /// Responds with part_count exceeding safety limits.
+    /// Responde con part_count que excede los límites de seguridad.
     FileStatusExcessiveParts,
-    /// Responds with trailing unused bits in the last byte set to 1.
+    /// Responde con bits no utilizados al final en el último byte activos a 1.
     FileStatusTrailingBitsNonZero,
-    /// Responds to OP_FILESTATUSREQ with unsupported compressed 0xD4 frame.
+    /// Responde a OP_FILESTATUSREQ con trama 0xD4 comprimida no admitida.
     FileStatusCompressed0xD4,
-    /// Completes handshake but never responds to OP_FILESTATUSREQ.
+    /// Completa el saludo pero nunca responde a OP_FILESTATUSREQ.
     FileStatusHangTimeout,
-    /// Emits an unsolicited OP_FILESTATUS after handshake.
+    /// Emite un OP_FILESTATUS no solicitado tras el saludo.
     FileStatusUnsolicited,
-    /// Sends two identical OP_FILESTATUS packets consecutively for one request.
+    /// Envía dos paquetes OP_FILESTATUS idénticos consecutivos para una misma petición.
     FileStatusDoubleAnswer,
-    /// Sends an OP_SENDINGPART packet before handshake completion.
+    /// Envía un paquete OP_SENDINGPART antes de completar el saludo.
     SendingPartBeforeReady,
-    /// Responds to OP_REQUESTPARTS with a mismatched file hash.
+    /// Responde a OP_REQUESTPARTS con un hash de fichero discrepante.
     SendingPartUnexpectedHash,
-    /// Responds to OP_REQUESTPARTS with an unexpected offset range.
+    /// Responde a OP_REQUESTPARTS con un rango de desplazamiento inesperado.
     SendingPartUnexpectedOffset,
-    /// Responds to OP_REQUESTPARTS with payload length != (end - start).
+    /// Responde a OP_REQUESTPARTS con longitud de carga útil != (end - start).
     SendingPartLengthMismatch,
-    /// Emits an unsolicited OP_SENDINGPART after handshake without prior request.
+    /// Emite un OP_SENDINGPART no solicitado tras el saludo sin petición previa.
     SendingPartUnsolicited,
-    /// Sends duplicate OP_SENDINGPART packets for a single request.
+    /// Envía paquetes OP_SENDINGPART duplicados para una única petición.
     SendingPartDuplicate,
-    /// Never responds to OP_REQUESTPARTS, triggering timeout.
+    /// Nunca responde a OP_REQUESTPARTS, provocando tiempo de espera agotado.
     SendingPartHangTimeout,
-    /// Responds to OP_REQUESTPARTS with unsupported compressed 0xD4 frame.
+    /// Responde a OP_REQUESTPARTS con trama 0xD4 comprimida no admitida.
     SendingPartCompressed0xD4,
-    /// Responds like eMule 0.72a when the peer advertises compression:
-    /// `OP_COMPRESSEDPART` (`0x40`) under `PR_EMULE`, zlib stream split
-    /// into ≤10240-byte slices (`UploadDiskIOThread.cpp:449-456`).
+    /// Responde como eMule 0.72a cuando el par anuncia compresión:
+    /// `OP_COMPRESSEDPART` (`0x40`) bajo `PR_EMULE`, flujo zlib dividido
+    /// en fragmentos ≤10240 bytes (`UploadDiskIOThread.cpp:449-456`).
     SendingPartCompressed,
-    /// Immediately closes connection upon receiving OP_REQUESTPARTS.
+    /// Cierra inmediatamente la conexión al recibir OP_REQUESTPARTS.
     SendingPartImmediateClose,
 }
 
-/// Accumulateur zlib pour un bloc compressé découpé en plusieurs paquets
-/// `OP_COMPRESSEDPART{,_I64}` — eMule tranche le flux en ≤10240 octets,
-/// `compressed_size` (taille totale) répétée sur chaque tranche
+/// Acumulador zlib para un bloque comprimido dividido en varios paquetes
+/// `OP_COMPRESSEDPART{,_I64}` — eMule divide el flujo en fragmentos de ≤10240 bytes,
+/// con `compressed_size` (tamaño total) repetido en cada fragmento
 /// (`UploadDiskIOThread.cpp:449-456`).
 struct CompressedBlockStream {
     decomp: flate2::Decompress,
-    /// Octets décompressés produits depuis `block_start`.
+    /// Bytes descomprimidos producidos desde `block_start`.
     recv_to: u64,
-    /// Octets compressés consommés jusqu'ici.
+    /// Bytes comprimidos consumidos hasta el momento.
     consumed: u64,
 }
 
-/// Clef de corrélation d'un flux compressé : `(file_hash, block_start)`.
+/// Clave de correlación de un flujo comprimido: `(file_hash, block_start)`.
 type ZlibStreamKey = ([u8; 16], u64);
 
-/// Active loopback client establishing and driving eD2K sessions.
+/// Cliente en bucle local (loopback) activo que establece y conduce sesiones eD2K.
 pub struct Ed2kLoopbackClient {
     stream: TcpStream,
     session: Ed2kSession,
     codec: PacketCodec,
     encoder: Ed2kEncoder,
     read_buf: BytesMut,
-    /// Flux zlib en cours, un par bloc compressé en réception.
+    /// Flujos zlib en curso, uno por bloque comprimido en recepción.
     zstreams: HashMap<ZlibStreamKey, CompressedBlockStream>,
-    /// Parts décompressées en attente de retour par `receive_sending_part`.
+    /// Partes descomprimidas en espera de ser devueltas por `receive_sending_part`.
     ready_parts: VecDeque<Ed2kSendingPart>,
 }
 
 impl Ed2kLoopbackClient {
-    /// Connects to a target socket address (enforcing loopback only) and initiates handshake.
+    /// Conecta con una dirección de socket de destino (restringida estrictamente a bucle local) e inicia el saludo.
     #[allow(clippy::too_many_arguments)]
     pub async fn connect_and_handshake(
         addr: SocketAddr,
@@ -171,7 +171,7 @@ impl Ed2kLoopbackClient {
         server_port: u16,
         handshake_timeout: Duration,
     ) -> Result<(Self, Ed2kPeerInfo), Ed2kSessionError> {
-        // Enforce loopback confinement
+        // Forzar confinamiento a bucle local
         if !addr.ip().is_loopback() {
             return Err(Ed2kSessionError::Io(format!(
                 "Non-loopback address {addr} is strictly forbidden"
@@ -202,19 +202,19 @@ impl Ed2kLoopbackClient {
             ready_parts: VecDeque::new(),
         };
 
-        // Transmit Hello frame
+        // Transmitir trama Hello
         client
             .stream
             .write_all(&wire_bytes)
             .await
             .map_err(|e| Ed2kSessionError::Io(format!("Failed to transmit Hello: {e}")))?;
 
-        // Await HelloAnswer within timeout
+        // Esperar HelloAnswer dentro del tiempo de espera
         let peer_info = client.await_handshake_answer(handshake_timeout).await?;
         Ok((client, peer_info))
     }
 
-    /// Waits for `OP_HELLO_ANSWER` from the remote loopback peer.
+    /// Espera `OP_HELLO_ANSWER` del par remoto en bucle local.
     async fn await_handshake_answer(
         &mut self,
         handshake_timeout: Duration,
@@ -222,7 +222,7 @@ impl Ed2kLoopbackClient {
         let deadline = tokio::time::Instant::now() + handshake_timeout;
 
         loop {
-            // Check if buffer already contains a packet
+            // Comprobar si el búfer ya contiene un paquete
             if let Some(raw_packet) = self
                 .codec
                 .decode(&mut self.read_buf)
@@ -238,8 +238,8 @@ impl Ed2kLoopbackClient {
                     }
                     return Ok(peer);
                 } else if raw_packet.protocol == PR_EMULE {
-                    // Extended eMule packet (e.g. OP_EMULEINFO under PR_EMULE 0xC5) received alongside handshake.
-                    // Continue awaiting OP_HELLOANSWER in the stream.
+                    // Paquete eMule extendido (p. ej. OP_EMULEINFO bajo PR_EMULE 0xC5) recibido junto con el saludo.
+                    // Continuar esperando OP_HELLOANSWER en el flujo.
                     continue;
                 } else {
                     return Err(Ed2kSessionError::UnexpectedMessageInState {
@@ -280,7 +280,7 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Sends any eD2K message to the connected loopback peer.
+    /// Envía cualquier mensaje eD2K al par conectado en bucle local.
     pub async fn send_message(&mut self, msg: &Ed2kMessage) -> Result<(), Ed2kSessionError> {
         let bytes = self
             .encoder
@@ -293,7 +293,7 @@ impl Ed2kLoopbackClient {
         Ok(())
     }
 
-    /// Reads the next incoming packet from the loopback peer.
+    /// Lee el siguiente paquete entrante del par en bucle local.
     pub async fn recv_packet(&mut self) -> Result<RawPacket, Ed2kSessionError> {
         let mut tmp = [0u8; 1024];
         loop {
@@ -316,22 +316,22 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Returns a reference to the underlying session state machine.
+    /// Devuelve una referencia a la máquina de estados de la sesión subyacente.
     pub fn session(&self) -> &Ed2kSession {
         &self.session
     }
 
-    /// Returns a mutable reference to the underlying session state machine.
+    /// Devuelve una referencia mutable a la máquina de estados de la sesión subyacente.
     pub fn session_mut(&mut self) -> &mut Ed2kSession {
         &mut self.session
     }
 
-    /// Returns a reference to the negotiated remote peer info if available.
+    /// Devuelve una referencia a la información negociada del par remoto si está disponible.
     pub fn peer_info(&self) -> Option<&Ed2kPeerInfo> {
         self.session.peer_info()
     }
 
-    /// Sends a raw frame directly over the TCP stream.
+    /// Envía una trama sin procesar directamente a través del flujo TCP.
     pub async fn send_raw_packet(&mut self, packet: &RawPacket) -> Result<(), Ed2kSessionError> {
         let wire_bytes = self
             .codec
@@ -344,7 +344,7 @@ impl Ed2kLoopbackClient {
         Ok(())
     }
 
-    /// Sends an `OP_FILESTATUSREQ` and waits for the corresponding `OP_FILESTATUS` response.
+    /// Envía un `OP_FILESTATUSREQ` y espera la respuesta `OP_FILESTATUS` correspondiente.
     pub async fn request_file_status(
         &mut self,
         file_hash: [u8; 16],
@@ -414,7 +414,7 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Sends an `OP_REQUESTPARTS` block request.
+    /// Envía una petición de bloque `OP_REQUESTPARTS`.
     pub async fn send_block_request(
         &mut self,
         file_hash: [u8; 16],
@@ -437,7 +437,7 @@ impl Ed2kLoopbackClient {
         Ok(())
     }
 
-    /// Sends an `OP_STARTUPLOADREQ` (`0x54`) to enter the upload queue for a file.
+    /// Envía un `OP_STARTUPLOADREQ` (`0x54`) para entrar en la cola de subida de un fichero.
     pub async fn send_start_upload_request(
         &mut self,
         file_hash: [u8; 16],
@@ -453,7 +453,7 @@ impl Ed2kLoopbackClient {
         Ok(())
     }
 
-    /// Reads the next incoming packet from the stream.
+    /// Lee el siguiente paquete entrante desde el flujo.
     pub async fn read_next_packet(
         &mut self,
         timeout_duration: Duration,
@@ -491,7 +491,7 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Requests entry into the remote peer's upload queue and awaits upload slot acceptance (`OP_ACCEPTUPLOADREQ` 0x55).
+    /// Solicita la entrada en la cola de subida del par remoto y espera la aceptación del slot de subida (`OP_ACCEPTUPLOADREQ` 0x55).
     pub async fn request_upload_slot(
         &mut self,
         file_hash: [u8; 16],
@@ -511,13 +511,13 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Alimente le flux zlib d'un bloc compressé (`OP_COMPRESSEDPART` /
-    /// `OP_COMPRESSEDPART_I64`) et empile les tranches décompressées dans
-    /// `ready_parts`, chacune validée contre les requêtes de blocs en vol.
+    /// Alimenta el flujo zlib de un bloque comprimido (`OP_COMPRESSEDPART` /
+    /// `OP_COMPRESSEDPART_I64`) y apila los fragmentos descomprimidos en
+    /// `ready_parts`, cada uno validado frente a las peticiones de bloques en curso.
     ///
-    /// Comme eMule (`DownloadClient.cpp`), plusieurs paquets `0x40`/`0xA1`
-    /// portant le même `block_start` forment un seul flux zlib ;
-    /// `compressed_size` répète la taille compressée **totale**.
+    /// Al igual que eMule (`DownloadClient.cpp`), varios paquetes `0x40`/`0xA1`
+    /// con el mismo `block_start` componen un único flujo zlib;
+    /// `compressed_size` repite el tamaño comprimido **total**.
     fn feed_compressed(
         &mut self,
         file_hash: [u8; 16],
@@ -541,8 +541,8 @@ impl Ed2kLoopbackClient {
             )));
         }
 
-        // Un bloc compressé couvre au plus une requête ≤ ED2K_BLOCK_SIZE ;
-        // on borne la production à la fenêtre restante de cette requête.
+        // Un bloque comprimido cubre como máximo una petición ≤ ED2K_BLOCK_SIZE;
+        // se acota la producción a la ventana restante de dicha petición.
         let produced_cap = crate::limits::ED2K_BLOCK_SIZE;
         let mut out = vec![0u8; produced_cap.min(crate::limits::ED2K_BLOCK_SIZE)];
         let mut offset = 0usize;
@@ -570,8 +570,8 @@ impl Ed2kLoopbackClient {
                         })?,
                     data: bytes::Bytes::copy_from_slice(&out[..produced]),
                 };
-                // Accumule la sous-plage dans le tracker (valide aussi
-                // qu'elle reste à l'intérieur d'une requête en vol).
+                // Acumula el subrango en el rastreador (también valida
+                // que permanezca dentro de una petición en curso).
                 self.session.on_sending_part_received(&part)?;
                 entry.recv_to += produced as u64;
                 self.ready_parts.push_back(part);
@@ -595,13 +595,13 @@ impl Ed2kLoopbackClient {
         Ok(())
     }
 
-    /// Waits for an incoming `OP_SENDINGPART` response within timeout.
+    /// Espera una respuesta `OP_SENDINGPART` entrante dentro del tiempo de espera.
     ///
-    /// `OP_SENDINGPART_I64` (`0xA2`) est rabattu vers `Ed2kSendingPart`
-    /// quand les offsets tiennent sur 32 bits ; `OP_COMPRESSEDPART` /
-    /// `OP_COMPRESSEDPART_I64` (`0x40`/`0xA1`, proto `PR_EMULE`) sont
-    /// décompressés tranche par tranche — eMule 0.72a répond compressé dès
-    /// que notre hello annonce le flag compression.
+    /// `OP_SENDINGPART_I64` (`0xA2`) se transforma en `Ed2kSendingPart`
+    /// cuando los desplazamientos caben en 32 bits; `OP_COMPRESSEDPART` /
+    /// `OP_COMPRESSEDPART_I64` (`0x40`/`0xA1`, protocolo `PR_EMULE`) se
+    /// descomprimen fragmento a fragmento — eMule 0.72a responde comprimido en cuanto
+    /// nuestro hello anuncia el indicador de compresión.
     pub async fn receive_sending_part(
         &mut self,
         timeout_duration: Duration,
@@ -661,8 +661,8 @@ impl Ed2kLoopbackClient {
                     }
                     _ => {}
                 }
-                // Re-boucle : drainer les parts décompressées et les trames
-                // déjà présentes dans `read_buf` avant de bloquer en lecture.
+                // Volver al bucle: drenar las partes descomprimidas y las tramas
+                // ya presentes en `read_buf` antes de bloquear en lectura.
                 continue;
             }
 
@@ -699,7 +699,7 @@ impl Ed2kLoopbackClient {
         }
     }
 
-    /// Downloads a sequence of blocks using a bounded sliding window of in-flight requests.
+    /// Descarga una secuencia de bloques utilizando una ventana deslizante acotada de peticiones en curso.
     pub async fn download_blocks_pipelined<W: Ed2kBlockWriter>(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,
@@ -773,7 +773,7 @@ impl Ed2kLoopbackClient {
         Ok(completed_blocks_count)
     }
 
-    /// High-level helper: requests a block range and awaits the response packet.
+    /// Auxiliar de alto nivel: solicita un rango de bloque y espera el paquete de respuesta.
     pub async fn request_block(
         &mut self,
         file_hash: [u8; 16],
@@ -787,14 +787,14 @@ impl Ed2kLoopbackClient {
         self.receive_sending_part(timeout_duration).await
     }
 
-    /// Gracefully shuts down the client connection.
+    /// Cierra ordenadamente la conexión del cliente.
     pub async fn close(mut self) {
         let _ = self.stream.shutdown().await;
         self.session.state = Ed2kSessionState::Closed;
     }
 }
 
-/// Controlled loopback test peer operating solely on 127.0.0.1.
+/// Par de pruebas en bucle local controlado que opera exclusivamente en 127.0.0.1.
 pub struct Ed2kTestPeer {
     listener: TcpListener,
     local_addr: SocketAddr,
@@ -809,7 +809,7 @@ pub struct Ed2kTestPeer {
 }
 
 impl Ed2kTestPeer {
-    /// Binds a new test peer on a free ephemeral port on 127.0.0.1.
+    /// Vincula un nuevo par de pruebas en un puerto efímero libre en 127.0.0.1.
     pub async fn bind(mode: TestPeerMode) -> Result<Self, Ed2kSessionError> {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -818,7 +818,7 @@ impl Ed2kTestPeer {
             Ed2kSessionError::Io(format!("Failed to retrieve test peer local address: {e}"))
         })?;
 
-        // Standard test peer identity
+        // Identidad estándar del par de pruebas
         let mut local_user_hash = [0xEE; 16];
         local_user_hash[0] = 0xAA;
 
@@ -836,12 +836,12 @@ impl Ed2kTestPeer {
         })
     }
 
-    /// Registers a file's content data in memory to serve block requests.
+    /// Registra los datos de contenido de un fichero en memoria para servir peticiones de bloques.
     pub async fn add_shared_file_data(&self, file_hash: [u8; 16], data: bytes::Bytes) {
         self.shared_file_data.lock().await.insert(file_hash, data);
     }
 
-    /// Registers a shared file on the test peer with specified part count and availability mask.
+    /// Registra un fichero compartido en el par de pruebas con el número de partes y la máscara de disponibilidad especificados.
     pub async fn add_shared_file(
         &self,
         file_hash: [u8; 16],
@@ -856,22 +856,22 @@ impl Ed2kTestPeer {
         self.shared_files.lock().await.insert(file_hash, status);
     }
 
-    /// Returns the local loopback listening socket address.
+    /// Devuelve la dirección del socket de escucha local en bucle local.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
 
-    /// Returns a handle to check the received initiator Hello.
+    /// Devuelve un manejador para comprobar el Hello del iniciador recibido.
     pub fn received_hello_handle(&self) -> Arc<Mutex<Option<Ed2kHello>>> {
         Arc::clone(&self.received_hello)
     }
 
-    /// Returns true if the handshake successfully completed on the test peer.
+    /// Devuelve true si el saludo se completó con éxito en el par de pruebas.
     pub fn is_handshake_successful(&self) -> bool {
         self.handshake_success.load(Ordering::SeqCst)
     }
 
-    /// Runs the test peer continuously accepting connections in Nominal mode.
+    /// Ejecuta el par de pruebas aceptando conexiones continuamente en modo Nominal.
     pub fn spawn_service(self) -> (tokio::task::JoinHandle<()>, Arc<AtomicBool>) {
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = Arc::clone(&stopped);
@@ -1011,7 +1011,7 @@ impl Ed2kTestPeer {
         (handle, stopped)
     }
 
-    /// Runs the test peer handling a single incoming connection according to configured mode.
+    /// Ejecuta el par de pruebas gestionando una única conexión entrante según el modo configurado.
     pub fn spawn(self) -> tokio::task::JoinHandle<Result<(), Ed2kSessionError>> {
         tokio::spawn(async move {
             let (mut stream, _) = self.listener.accept().await.map_err(|e| {
@@ -1393,9 +1393,9 @@ impl Ed2kTestPeer {
                         &req_packet.payload,
                     )?;
 
-                    // bitfield attendu : ceil(10/8) = 2 octets ; on en envoie
-                    // 2 + 1025 de remplissage pour dépasser le slack toléré
-                    // (1024) de decode_file_status et forcer le rejet.
+                    // mapa de bits esperado: ceil(10/8) = 2 bytes; enviamos
+                    // 2 + 1025 de relleno para superar el margen tolerado
+                    // (1024) de decode_file_status y forzar el rechazo.
                     let trailing_len = 2 + 1025usize;
                     let payload_len = 1u32 + 16 + 2 + trailing_len as u32;
                     let mut frame = vec![PR_ED2K];
@@ -1906,14 +1906,14 @@ impl Ed2kTestPeer {
     }
 }
 
-/// Taille de tranche d'un flux zlib compressé émis par eMule 0.72a pour
+/// Tamaño de fragmento de un flujo zlib comprimido emitido por eMule 0.72a para
 /// `OP_COMPRESSEDPART` (`UploadDiskIOThread.cpp` — `CHUNKSIZE` 10240).
 pub const COMPRESSED_PART_CHUNK_SIZE: usize = 10_240;
 
-/// Construit les trames `OP_COMPRESSEDPART` (`0x40`, `PR_EMULE`) pour un
-/// bloc : compression zlib du contenu, puis découpe du flux en tranches
-/// ≤ [`COMPRESSED_PART_CHUNK_SIZE`], `compressed_size` répétant la taille
-/// totale sur chaque trame — comportement exact d'eMule 0.72a.
+/// Construye las tramas `OP_COMPRESSEDPART` (`0x40`, `PR_EMULE`) para un
+/// bloque: compresión zlib del contenido y división posterior del flujo en fragmentos
+/// ≤ [`COMPRESSED_PART_CHUNK_SIZE`], con `compressed_size` repitiendo el tamaño
+/// total en cada trama — comportamiento exacto de eMule 0.72a.
 fn encode_compressed_block(
     encoder: &Ed2kEncoder,
     file_hash: [u8; 16],
@@ -1946,7 +1946,7 @@ fn encode_compressed_block(
         .collect()
 }
 
-/// Helper performing standard responder handshake.
+/// Auxiliar que realiza el saludo estándar del lado respondedor.
 #[allow(clippy::too_many_arguments)]
 pub async fn do_peer_handshake(
     stream: &mut TcpStream,
@@ -1999,7 +1999,7 @@ pub async fn do_peer_handshake(
     Ok(())
 }
 
-/// Helper reading a single framed packet from an async stream.
+/// Auxiliar que lee un único paquete entramado desde un flujo asíncrono.
 pub async fn read_packet(
     stream: &mut TcpStream,
     codec: &mut PacketCodec,

@@ -129,7 +129,7 @@ pub async fn handle_torznab(
 ) -> Response {
     let t = params.t.as_deref().unwrap_or("caps");
 
-    // Validate apikey if provided or when bound to a non-loopback interface (Spec 001 §5 / Spec 002)
+    // Validar apikey si se proporciona o cuando esté vinculado a una interfaz que no sea loopback (Spec 001 §5 / Spec 002)
     if t != "caps" {
         let expected_token = state.config.auth_token.as_str();
         let is_loopback_bind = state.config.bind_addr.ip().is_loopback();
@@ -202,7 +202,7 @@ pub async fn handle_torznab(
         "search" | "movie" | "tvsearch" => {
             let query_text = params.q.as_deref().unwrap_or("").trim();
             if query_text.is_empty() {
-                // Indexer connectivity validation request from *arr
+                // Solicitud de validación de conectividad del indexador desde *arr
                 return sample_validation_feed_response();
             }
 
@@ -237,7 +237,7 @@ pub async fn handle_torznab(
                 let mut results = Vec::new();
                 let mut seen_hashes = HashSet::new();
 
-                // 1. Search Kad for the query text directly
+                // 1. Buscar directamente en Kad el texto de la consulta
                 if let Ok(kad_res) = state.kad.search_keywords(query_text, None, None).await {
                     for r in kad_res {
                         let hash = r["fileHash"].as_str().unwrap_or("").to_lowercase();
@@ -263,7 +263,7 @@ pub async fn handle_torznab(
                 results
             };
 
-            // Extract query words for relevance filtering
+            // Extraer palabras de la consulta para el filtrado de relevancia
             let query_words: Vec<String> = query_text
                 .split(|c: char| !c.is_alphanumeric())
                 .filter(|w| w.len() >= 3)
@@ -288,10 +288,10 @@ pub async fn handle_torznab(
                 })
                 .collect();
 
-            // Sort matched results by source count descending, then size
+            // Ordenar resultados coincidentes por número de fuentes descendente, luego por tamaño
             matched_results.sort_by(|a, b| b.3.cmp(&a.3).then_with(|| b.2.cmp(&a.2)));
 
-            // Apply pagination
+            // Aplicar paginación
             let offset = params.offset.unwrap_or(0);
             let limit = params.limit.unwrap_or(100);
             let page: Vec<_> = matched_results.into_iter().skip(offset).take(limit).collect();
@@ -302,7 +302,7 @@ pub async fn handle_torznab(
                 query_text
             );
 
-            // Generate Torznab RSS XML
+            // Generar XML RSS de Torznab
             let mut xml = String::from(r#"<?xml version="1.0" encoding="UTF-8"?>
 <rss version="1.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:torznab="http://torznab.com/schemas/2015/feed">
   <channel>
@@ -314,7 +314,7 @@ pub async fn handle_torznab(
 
             for (hash, name, size, sources) in page {
                 let esc_title = escape_xml(&name);
-                // amutorrent / Servarr padded magnet format:
+                // Formato magnet con relleno amutorrent / Servarr:
                 // urn:btih:<32-hex-hash>00000000
                 let padded_btih = format!("{hash}00000000");
                 let magnet_url = format!(

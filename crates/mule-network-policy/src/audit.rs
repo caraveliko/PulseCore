@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use crate::profile::NetworkProfile;
 
-/// Decision outcome for an audited network operation.
+/// Resultado de la decisión para una operación de red auditada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AuditDecision {
@@ -16,7 +16,7 @@ pub enum AuditDecision {
     Denied,
 }
 
-/// Category of network event recorded in the audit log.
+/// Categoría del evento de red registrado en el registro de auditoría.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AuditEventType {
@@ -29,7 +29,7 @@ pub enum AuditEventType {
     FilterBlocked,
 }
 
-/// A single redacted, privacy-preserving network audit event.
+/// Un único evento de auditoría de red redactado y que preserva la privacidad.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkAuditEntry {
     pub id: u64,
@@ -42,7 +42,7 @@ pub struct NetworkAuditEntry {
     pub reason: Option<String>,
 }
 
-/// Redacts an IP socket address to protect private topology and user identifiers.
+/// Redacta una dirección de socket IP para proteger la topología privada y los identificadores de usuario.
 pub fn redact_socket_addr(addr: &SocketAddr) -> String {
     let port = addr.port();
     match addr.ip() {
@@ -65,7 +65,7 @@ pub fn redact_socket_addr(addr: &SocketAddr) -> String {
     }
 }
 
-/// In-memory bounded circular audit log.
+/// Registro de auditoría circular acotado en memoria.
 #[derive(Debug)]
 pub struct NetworkAuditLog {
     max_entries: usize,
@@ -119,7 +119,7 @@ impl NetworkAuditLog {
         id
     }
 
-    /// Returns the most recent entries, up to `limit`.
+    /// Devuelve las entradas más recientes, hasta `limit`.
     pub fn recent(&self, limit: usize) -> Vec<NetworkAuditEntry> {
         let take_count = limit.min(self.entries.len());
         self.entries

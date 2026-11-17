@@ -11,110 +11,110 @@ use crate::services::server_session::types::ServerSessionSnapshot;
 use crate::services::upload_queue::UploadSessionSnapshot;
 use crate::services::upnp::UpnpStatusSnapshot;
 
-/// Aggregate daemon metrics emitted on a fixed cadence (~2 s) so clients can
-/// render live top-bar badges and rate graphs without polling or sampling.
+/// Métricas agregadas del daemon emitidas a cadencia fija (~2 s) para que los clientes
+/// puedan renderizar insignias de la barra superior y gráficos de tasa en tiempo real sin sondeo ni muestreo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsTickSnapshot {
-    /// Sum of `download_rate_bps` across all downloads.
+    /// Suma de `download_rate_bps` en todas las descargas.
     pub download_bps: u64,
-    /// Sum of `upload_rate_bps` across active upload slots.
+    /// Suma de `upload_rate_bps` en las ranuras de subida activas.
     pub upload_bps: u64,
-    /// Downloads currently in `downloading` status.
+    /// Descargas actualmente en estado `downloading`.
     pub downloads_active: usize,
-    /// Total active peer connections (all files).
+    /// Conexiones de pares activas totales (todos los archivos).
     pub peers_connected: usize,
-    /// Whether the eD2K server session is connected.
+    /// Si la sesión del servidor eD2K está conectada.
     pub server_connected: bool,
-    /// Total Kad routing-table contacts.
+    /// Contactos totales en la tabla de enrutamiento Kad.
     pub kad_contacts: usize,
-    /// Whether the Kad UDP socket is bound.
+    /// Si el socket UDP Kad está enlazado.
     pub kad_udp_bound: bool,
-    /// Bytes received since daemon start (sum of per-download session deltas).
+    /// Bytes recibidos desde el inicio del daemon (suma de deltas de sesión por descarga).
     pub session_downloaded_bytes: u64,
-    /// Bytes sent since daemon start (upload manager counter).
+    /// Bytes enviados desde el inicio del daemon (contador del gestor de subidas).
     pub session_uploaded_bytes: u64,
-    /// Bytes received since install — persisted, resettable via
+    /// Bytes recibidos desde la instalación — persistidos, reiniciables mediante
     /// `stats.resetLifetimeTotals`.
     pub lifetime_downloaded_bytes: u64,
-    /// Bytes sent since install — persisted, resettable via
+    /// Bytes enviados desde la instalación — persistidos, reiniciables mediante
     /// `stats.resetLifetimeTotals`.
     pub lifetime_uploaded_bytes: u64,
 }
 
-/// Strongly-typed domain and lifecycle events emitted across the daemon.
+/// Eventos fuertemente tipados de dominio y ciclo de vida emitidos a través del daemon.
 ///
-/// This is the single definition of the notification wire format: every
-/// event knows its JSON-RPC `method` name and serializes its payload into
-/// `params`. Emit sites must go through [`DaemonEvent::send`] so the
-/// contract documented in `docs/architecture/rpc_protocol.md` §6 cannot
-/// drift.
+/// Esta es la definición única del formato de cable de notificación: cada
+/// evento conoce su nombre de `method` JSON-RPC y serializa su carga útil en
+/// `params`. Los puntos de emisión deben pasar por [`DaemonEvent::send`] para que el
+/// contrato documentado en `docs/architecture/rpc_protocol.md` §6 no pueda
+/// desviarse.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum DaemonEvent {
-    /// A download's progress, speed, or status was updated.
+    /// Se actualizó el progreso, velocidad o estado de una descarga.
     DownloadUpdated {
         sequence: u64,
         download: DownloadSnapshot,
     },
-    /// A download was added to the queue (any source: RPC, deep link, lab).
+    /// Se añadió una descarga a la cola (cualquier origen: RPC, deep link, laboratorio).
     DownloadAdded {
         sequence: u64,
         download: DownloadSnapshot,
     },
-    /// A download was removed from the queue. Carries only the id.
+    /// Se eliminó una descarga de la cola. Porta únicamente el identificador.
     DownloadRemoved { sequence: u64, id: String },
-    /// A download transitioned to `completed` (verified + moved).
+    /// Una descarga transitó a `completed` (verificada + trasladada).
     DownloadCompleted {
         sequence: u64,
         download: DownloadSnapshot,
     },
-    /// A download transitioned to `failed`.
+    /// Una descarga transitó a `failed`.
     DownloadFailed {
         sequence: u64,
         download: DownloadSnapshot,
         reason: Option<String>,
     },
-    /// A peer session's connection or transfer status changed.
+    /// El estado de conexión o transferencia de una sesión de par cambió.
     PeerSessionUpdated {
         sequence: u64,
         session: PeerSessionSnapshot,
     },
-    /// The eD2K server session connection status changed.
+    /// El estado de conexión de la sesión con el servidor eD2K cambió.
     ServerSessionUpdated {
         sequence: u64,
         session: ServerSessionSnapshot,
     },
-    /// Upload slots/queue changed or upload progress ticked (throttled
-    /// ~500 ms). Carries the full active+queue snapshot plus the
-    /// aggregate upload rate — clients render without diffing.
+    /// Las ranuras/cola de subida cambiaron o el progreso de subida avanzó (limitado
+    /// ~500 ms). Porta la instantánea completa de activos+cola además de la
+    /// tasa de subida agregada — los clientes renderizan sin calcular diferencias.
     UploadsUpdated {
         sequence: u64,
         active: Vec<UploadSessionSnapshot>,
         queue: Vec<UploadSessionSnapshot>,
         upload_rate_bps: u64,
     },
-    /// Periodic aggregate stats tick (topic `stats`, cadence ~2 s).
+    /// Tick periódico de estadísticas agregadas (tema `stats`, cadencia ~2 s).
     StatsTick {
         sequence: u64,
         stats: StatsTickSnapshot,
     },
-    /// Kad routing/UDP state changed (contacts, bootstrap, firewall
-    /// status). Nudge event: clients refetch `kad.status`.
+    /// El estado Kad routing/UDP cambió (contactos, bootstrap, estado
+    /// del cortafuegos). Evento de aviso: los clientes vuelven a consultar `kad.status`.
     KadStatusChanged { sequence: u64 },
-    /// A history entry was recorded. Nudge event: clients refetch
+    /// Se registró una entrada en el historial. Evento de aviso: los clientes vuelven a consultar
     /// `history.list` / `history.stats`.
     HistoryEntryAdded { sequence: u64 },
-    /// Daemon settings changed. `keys` lists the setting keys touched.
+    /// Los ajustes del daemon cambiaron. `keys` enumera las claves de configuración modificadas.
     SettingsChanged { sequence: u64, keys: Vec<String> },
-    /// Network policy changed (profile, kill switch, budgets). Nudge
-    /// event: clients refetch `network.getPolicy`.
+    /// La política de red cambió (perfil, interruptor de corte, presupuestos). Evento
+    /// de aviso: los clientes vuelven a consultar `network.getPolicy`.
     NetworkPolicyChanged { sequence: u64 },
-    /// UPnP gateway/mapping status changed (enable, map, unmap).
-    /// `params` is the full `UpnpStatus` snapshot — no `sequence`.
+    /// El estado de pasarela/mapeo UPnP cambió (habilitar, mapear, desmapear).
+    /// `params` es la instantánea completa de `UpnpStatus` — sin `sequence`.
     UpnpStatusChanged { snapshot: UpnpStatusSnapshot },
-    /// A notification outside the typed set (search results, found
-    /// sources, control events like `event.snapshotRequired`).
+    /// Una notificación fuera del conjunto tipado (resultados de búsqueda, fuentes
+    /// encontradas, eventos de control como `event.snapshotRequired`).
     Custom {
         method: String,
         payload: serde_json::Value,
@@ -122,7 +122,7 @@ pub enum DaemonEvent {
 }
 
 impl DaemonEvent {
-    /// JSON-RPC notification method name on the wire.
+    /// Nombre del método de notificación JSON-RPC en el cable.
     pub fn method(&self) -> &str {
         match self {
             Self::DownloadUpdated { .. } => "event.downloadUpdated",
@@ -143,8 +143,8 @@ impl DaemonEvent {
         }
     }
 
-    /// Subscription topic for `events.subscribe` filtering; `None` marks
-    /// control events that bypass the topic filter.
+    /// Tema de suscripción para filtrado de `events.subscribe`; `None` marca
+    /// eventos de control que omiten el filtro de temas.
     pub fn topic(&self) -> Option<&'static str> {
         match self {
             Self::DownloadUpdated { .. }
@@ -169,7 +169,7 @@ impl DaemonEvent {
         }
     }
 
-    /// Serializes to the JSON-RPC notification frame sent over the socket.
+    /// Serializa a la trama de notificación JSON-RPC enviada a través del socket.
     pub fn to_wire_json(&self) -> Option<String> {
         let params = match self {
             Self::DownloadUpdated { sequence, download }
@@ -231,8 +231,8 @@ impl DaemonEvent {
         serde_json::to_string(&JsonRpcNotification::new(self.method(), params)).ok()
     }
 
-    /// Broadcasts the event to all WebSocket subscribers. Returns the
-    /// receiver count (0 when nobody listens — not an error).
+    /// Difunde el evento a todos los suscriptores de WebSocket. Devuelve el
+    /// recuento de receptores (0 cuando nadie escucha — no es un error).
     pub fn send(self, event_tx: &broadcast::Sender<String>) -> usize {
         match self.to_wire_json() {
             Some(json) => event_tx.send(json).unwrap_or(0),

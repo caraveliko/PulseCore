@@ -21,9 +21,9 @@ fn fixtures_root() -> PathBuf {
         .join("ed2k")
 }
 
-/// Décode `fixture`, le ré-encode et vérifie l'égalité octet-à-octet
-/// (`encode(decode(fixture)) == fixture`). Renvoie le message décodé pour
-/// permettre des assertions de variante supplémentaires.
+/// Decodifica `fixture`, lo vuelve a codificar y verifica la igualdad byte a byte
+/// (`encode(decode(fixture)) == fixture`). Devuelve el mensaje decodificado para
+/// permitir aserciones de variante adicionales.
 fn roundtrip_fixture(fixture: &str, profile: Option<Ed2kCompatibilityProfile>) -> Ed2kMessage {
     let raw_bytes = fs::read(fixtures_root().join(fixture))
         .unwrap_or_else(|e| panic!("failed to read {fixture}: {e}"));
@@ -241,8 +241,8 @@ fn test_synthetic_roundtrip_hello_answer() {
 
 #[test]
 fn test_synthetic_roundtrip_unknown_raw_tags_preservation() {
-    // Tag with standard string type (0x02) that decoder will parse into a tag or custom raw bytes
-    // Test that unknown_tags roundtrips faithfully when encoded
+    // Etiqueta con tipo de cadena estándar (0x02) que el decodificador analizará en una etiqueta o bytes en bruto personalizados
+    // Comprobar que unknown_tags viaja y regresa fielmente al codificarse
     let hello = Ed2kHello {
         user_hash: [0x55; 16],
         client_id: 0x11111111,
@@ -281,7 +281,7 @@ fn test_synthetic_roundtrip_unknown_raw_tags_preservation() {
                 decoded_hello.tags[0].value,
                 TagValue::String("TestPeer".to_string())
             );
-            // The raw tag was encoded with tag_type 0x03, which the decoder recognizes as UInt32!
+            // ¡La etiqueta en bruto fue codificada con tag_type 0x03, que el decodificador reconoce como UInt32!
             assert_eq!(
                 decoded_hello.tags[1].name,
                 TagName::Text("raw_val".to_string())
@@ -1150,7 +1150,7 @@ fn test_boundary_cases_1_byte_residual_and_u32_sentinels() {
     assert_eq!(pkt_single.payload.len(), 40);
 
     // Verify 24-byte single-slot layout:
-    // - Strictly rejected under Emule050a/Amule233 (which mandate 40-byte 3-slot wire layout)
+    // - Rechazado estrictamente bajo Emule050a/Amule233 (que exigen diseño de cable de 40 bytes y 3 ranuras)
     // - Accepted under LegacyEdonkey (OP_REQUESTPARTS 0x4B)
     let mut raw_24 = Vec::with_capacity(24);
     raw_24.extend_from_slice(&hash);

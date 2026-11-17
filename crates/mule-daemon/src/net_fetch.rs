@@ -18,25 +18,25 @@ use mule_network_policy::{
 use crate::error::JsonRpcError;
 use crate::state::AppState;
 
-/// Taille maximale d'un corps de réponse téléchargé (server.met /
-/// nodes.dat restent très loin en dessous ; 16 MiB couvre les listes
-/// volumineuses tout en bornant l'allocation mémoire).
+/// Tamaño máximo del cuerpo de una respuesta descargada (server.met /
+/// nodes.dat quedan muy por debajo; 16 MiB cubre listas
+/// voluminosas acotando al mismo tiempo la asignación de memoria).
 pub const MAX_FETCH_BODY_BYTES: usize = 16 * 1024 * 1024;
 
-/// Timeout global de la requête de fetch.
+/// Tiempo de espera (timeout) global de la petición de descarga.
 const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
-/// Télécharge `raw_url` après validation anti-SSRF du profil courant et
-/// renvoie le corps borné. Aucun octet n'est émis avant validation.
+/// Descarga `raw_url` tras la validación anti-SSRF del perfil actual y
+/// devuelve el cuerpo acotado. No se emite ningún byte antes de la validación.
 pub async fn fetch_url_bytes(
     state: &AppState,
     raw_url: &str,
 ) -> Result<(FetchUrl, Vec<u8>), JsonRpcError> {
     let target = parse_fetch_url(raw_url).map_err(|e| JsonRpcError::business(e.to_string()))?;
 
-    // Résolution DNS si l'hôte n'est pas une IP littérale — toutes les
-    // adresses retournées doivent passer la politique (une entrée
-    // privée dans un round-robin suffit à rejeter).
+    // Resolución DNS si el host no es una IP literal — todas las
+    // direcciones devueltas deben superar la directiva (una entrada
+    // privada en un round-robin basta para rechazar).
     let resolved: Vec<std::net::IpAddr> = match target.literal_ip {
         Some(ip) => vec![ip],
         None => tokio::net::lookup_host(format!("{}:{}", target.host, target.port))
@@ -48,8 +48,8 @@ pub async fn fetch_url_bytes(
     validate_fetch_ips(&target, &resolved, state.network_policy.profile())
         .map_err(|e| JsonRpcError::business(e.to_string()))?;
 
-    // Épingle la première IP validée : le client ne re-résout pas, un
-    // rebind DNS ultérieur ne peut pas détourner la connexion.
+    // Fija la primera IP validada: el cliente no vuelve a resolver, por lo que
+    // un rebind DNS posterior no puede desviar la conexión.
     let pinned: Option<SocketAddr> = pinned_ips(&target, &resolved)
         .into_iter()
         .next()
@@ -88,7 +88,7 @@ pub async fn fetch_url_bytes(
         }
     }
 
-    // Lecture bornée : content-length peut être absent ou menteur.
+    // Lectura acotada: content-length puede estar ausente o ser engañoso.
     let mut body = Vec::new();
     while let Some(chunk) = response
         .chunk()

@@ -41,9 +41,9 @@ use crate::services::obfuscation_stream::ObfuscatedStream;
 use crate::services::peer_session::source_exchange as sx;
 use crate::services::upload_queue::UploadSlotState;
 
-/// Converts an IPv4 address to the `u32` used in the SUI V2 signed payload
-/// (little-endian on the wire). IPv6 peers carry `0`, matching eMule which is
-/// IPv4-only for this field.
+/// Convierte una dirección IPv4 al `u32` utilizado en la carga útil firmada SUI V2
+/// (little-endian en el cable). Los pares IPv6 llevan `0`, coincidiendo con eMule que es
+/// solo IPv4 para este campo.
 fn ip_to_u32(ip: Option<std::net::IpAddr>) -> u32 {
     match ip {
         Some(std::net::IpAddr::V4(v4)) => u32::from_be_bytes(v4.octets()),
@@ -51,9 +51,9 @@ fn ip_to_u32(ip: Option<std::net::IpAddr>) -> u32 {
     }
 }
 
-/// `ExtendedRequestsVersion` annoncée dans un `OP_EMULEINFO` (tag
-/// `ET_EXTENDEDREQUEST` `0x25`, eMule `ProcessMuleInfoPacket` →
-/// `m_byExtendedRequestsVer`). `None` quand le tag est absent.
+/// `ExtendedRequestsVersion` anunciada en un `OP_EMULEINFO` (etiqueta
+/// `ET_EXTENDEDREQUEST` `0x25`, `ProcessMuleInfoPacket` de eMule →
+/// `m_byExtendedRequestsVer`). `None` cuando la etiqueta está ausente.
 fn emule_info_ext_req_version(info: &mule_protocol::ed2k::Ed2kEmuleInfo) -> Option<u8> {
     use mule_protocol::ed2k::tags::{TagName, TagValue, TAG_SPECIAL_EMULE_EXT_EXTENDEDREQUEST};
     info.tags.iter().find_map(|t| {
@@ -94,40 +94,40 @@ impl InboundListenerService {
         let mut remote_pubkey_hash: Option<String> = None;
         let mut remote_pubkey_der: Option<Vec<u8>> = None;
         let mut credit_multiplier = 1.0f64;
-        // eMule IS_IDBADGUY: a peer whose SUI signature was explicitly
-        // rejected gets score 0 in the upload queue (never promoted).
+        // IS_IDBADGUY de eMule: un par cuya firma SUI fue explícitamente
+        // rechazada obtiene puntuación 0 en la cola de subida (nunca es promocionado).
         let mut sui_rejected = false;
-        // Signature SUI vérifiée avec succès (requis en mode paranoid).
+        // Firma SUI verificada con éxito (requerida en modo paranoico).
         let mut sui_verified = false;
         let mut active_challenge: Option<u32> = None;
         let mut pending_peer_challenge: Option<(u8, u32)> = None;
         let mut answered_peer_challenge = false;
         let peer_ip = remote_str.parse::<SocketAddr>().ok().map(|a| a.ip());
-        // Upload queue identity: userhash when the peer announced one in
-        // OP_HELLO (eMule dedups queued clients by identity, not by IP —
-        // a reconnected client keeps its rank, NAT-shared IPs stay distinct),
-        // falling back to the socket address.
+        // Identidad en cola de subida: userhash cuando el par anunció uno en
+        // OP_HELLO (eMule deduplica clientes en cola por identidad, no por IP —
+        // un cliente reconectado conserva su posición, las IPs compartidas por NAT permanecen distintas),
+        // recurriendo a la dirección del socket en su defecto.
         let client_key = peer_user_hash
             .map(|h| format!("uh:{}", hex::encode(h)))
             .unwrap_or_else(|| remote_str.clone());
-        // Signal de promotion depuis la file d'upload — eMule
-        // `AddUpNextClient` pousse OP_ACCEPTUPLOADREQ sur le socket que le
-        // client en attente garde ouvert ; sans lui le client ne serait
-        // servi qu'à son prochain re-ask (~30 min).
+        // Señal de promoción desde la cola de subida — `AddUpNextClient` de
+        // eMule envía OP_ACCEPTUPLOADREQ en el socket que el
+        // cliente en espera mantiene abierto; sin ella el cliente solo sería
+        // atendido en su siguiente repetición de petición (~30 min).
         let mut promote_notify: Option<std::sync::Arc<tokio::sync::Notify>> = None;
-        // Signal de rotation de slot — `process_tick` (`CheckForTimeOver`)
-        // le déclenche quand la session active de ce pair est rendue à la
-        // file ; on pousse alors OP_OUTOFPARTREQS (eMule
+        // Señal de rotación de ranura — `process_tick` (`CheckForTimeOver`)
+        // la dispara cuando la sesión activa de este par es devuelta a la
+        // cola; entonces enviamos OP_OUTOFPARTREQS (eMule
         // `SendOutOfPartReqsAndAddToWaitingQueue`, UploadQueue.cpp:312).
         let mut rotated_notify: Option<std::sync::Arc<tokio::sync::Notify>> = None;
 
-        // eMule `ConnectionEstablished` (BaseClient.cpp:1552) — si ce pair
-        // avait un re-ask différé (`m_bReaskPending` posé par la stratégie
-        // parce qu'il attend dans notre file d'upload), sa requête de
-        // fichier part immédiatement. Nos sockets entrantes/sortantes ne
-        // sont pas partagées : on émet le `OP_DIRECTCALLBACKREQ` tout de
-        // suite — le pair est en ligne — et sa connexion de rappel sera
-        // adoptée via `pending_kad_callbacks`.
+        // `ConnectionEstablished` de eMule (BaseClient.cpp:1552) — si este par
+        // tenía una repetición de petición pospuesta (`m_bReaskPending` establecido por la estrategia
+        // porque espera en nuestra cola de subida), su petición de
+        // archivo sale inmediatamente. Nuestros sockets entrantes/salientes no
+        // se comparten: emitimos el `OP_DIRECTCALLBACKREQ` de inmediato —
+        // el par está en línea — y su conexión de retorno será
+        // adoptada vía `pending_kad_callbacks`.
         if let Some(ip) = peer_ip {
             let mgr = { self.peer_session.read().unwrap().clone() };
             if let Some(mgr) = mgr {
@@ -163,21 +163,21 @@ impl InboundListenerService {
             }
         }
 
-        // Environnement SX partagé (policy + journaux de throttle eMule).
+        // Entorno SX compartido (política + registros de limitación de eMule).
         let sx_env = self.sx_env();
-        // Version de requêtes étendues négociée (eMule
-        // `m_byExtendedRequestsVer`, bornée à notre max = 2) — raffinée par
-        // le tag `ET_EXTENDEDREQUEST` de `OP_EMULEINFO` à son arrivée.
+        // Versión de peticiones extendidas negociada (`m_byExtendedRequestsVer`
+        // de eMule, acotada a nuestro máx = 2) — refinada por
+        // la etiqueta `ET_EXTENDEDREQUEST` de `OP_EMULEINFO` a su llegada.
         let mut peer_ext_req = peer_ext_req.min(2);
-        // Part-status du demandeur par fichier (eMule
-        // `CUpDownClient::m_abyPartStatus`, via `OP_FILESTATUS` standalone ou
-        // l'ext-info `OP_REQFILENAME` du multipacket) — `reqstatus` de
-        // `CreateSrcInfoPacket` pour ne servir que des sources utiles.
+        // Estado de partes del solicitante por archivo (`CUpDownClient::m_abyPartStatus`
+        // de eMule, mediante `OP_FILESTATUS` independiente o
+        // la ext-info `OP_REQFILENAME` del multipaquete) — `reqstatus` de
+        // `CreateSrcInfoPacket` para servir únicamente fuentes útiles.
         let mut peer_masks: std::collections::HashMap<[u8; 16], Vec<u8>> =
             std::collections::HashMap::new();
-        // eMule `CheckFailedFileIdReqs` — compteur par connexion des
-        // requêtes fichier sur des hash totalement inconnus ; à 6 eMule
-        // incrémente le strike clientlist et coupe la connexion
+        // `CheckFailedFileIdReqs` de eMule — contador por conexión de
+        // peticiones de archivo sobre hashes totalmente desconocidos; a las 6 eMule
+        // incrementa la advertencia en clientlist y corta la conexión
         // (`throwCStr`, `BaseClient.cpp:2550`).
         let mut failed_file_id_reqs: u8 = 0;
 
@@ -192,9 +192,9 @@ impl InboundListenerService {
                         None => std::future::pending().await,
                     }
                 } => {
-                    // Le client vient d'être promu depuis la file — pousser
-                    // OP_ACCEPTUPLOADREQ (eMule `AddUpNextClient` écrit sur
-                    // le socket en attente).
+                    // El cliente acaba de ser promocionado desde la cola — enviar
+                    // OP_ACCEPTUPLOADREQ (`AddUpNextClient` de eMule escribe en
+                    // el socket en espera).
                     promote_notify = None;
                     let mut out = Vec::new();
                     out.push(PR_ED2K);
@@ -208,9 +208,9 @@ impl InboundListenerService {
                         None => std::future::pending().await,
                     }
                 } => {
-                    // Notre slot d'upload vient d'être roté
-                    // (`CheckForTimeOver`) — le downloader repasse
-                    // OnQueue chez lui au lieu d'attendre ses blocs.
+                    // Nuestra ranura de subida acaba de ser rotada
+                    // (`CheckForTimeOver`) — el descargador vuelve a estar
+                    // OnQueue en su lado en lugar de esperar sus bloques.
                     rotated_notify = None;
                     let mut out = Vec::new();
                     out.push(PR_ED2K);
@@ -230,10 +230,10 @@ impl InboundListenerService {
                     }
 
                     while let Ok(Some(pkt)) = codec.decode(&mut read_buf) {
-                        // OP_PACKEDPROT (0xD4) — eMule unpacks inline and
-                        // re-tags the packet OP_EMULEPROT
-                        // (ListenSocket.cpp:1742 + fallthrough); corrupt
-                        // packed payloads are dropped.
+                        // OP_PACKEDPROT (0xD4) — eMule descomprime en línea y
+                        // reetiqueta el paquete como OP_EMULEPROT
+                        // (ListenSocket.cpp:1742 + paso continuo); cargas útiles
+                        // empaquetadas corruptas se descartan.
                         let Some(pkt) = mule_protocol::ed2k::packed::unpack_owned(
                             pkt,
                             mule_protocol::ed2k::packed::PACKED_PEER_MAX_DECOMPRESSED,
@@ -256,15 +256,15 @@ impl InboundListenerService {
                                         let hash_hex = hex::encode(hash);
                                         remote_pubkey_hash = Some(hash_hex.clone());
                                         remote_pubkey_der = Some(pk.key_bytes.to_vec());
-                                        // No credit multiplier is granted here: it requires a real
-                                        // RSASSA-PKCS1v15-SHA1 signature verification (OP_SIGNATURE).
+                                        // Aquí no se concede multiplicador de crédito: requiere una verificación
+                                        // real de firma RSASSA-PKCS1v15-SHA1 (OP_SIGNATURE).
                                         tracing::info!(
                                             "[SUI] Inbound peer {} sent public key ({} bytes, md4={}...)",
                                             log_addr_str(&remote_str), pk.key_bytes.len(), &hash_hex[..16]
                                         );
 
-                                        // Only issue a challenge if we hold a usable local identity:
-                                        // the peer signs *our* public key, so no key means no SUI.
+                                        // Solo emitir un desafío si disponemos de una identidad local utilizable:
+                                        // el par firma *nuestra* clave pública, por lo que sin clave no hay SUI.
                                         let Some(my_pub) =
                                             self.sui_pubkey_der.read().unwrap().clone()
                                         else {
@@ -305,9 +305,9 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_SECIDENTSTATE => {
-                                    // The inbound peer challenges us (signer
-                                    // role): answer with our OP_PUBLICKEY when
-                                    // asked (state=2) plus OP_SIGNATURE over
+                                    // El par entrante nos desafía (rol de firmante):
+                                    // responder con nuestra OP_PUBLICKEY cuando se
+                                    // solicite (state=2) más OP_SIGNATURE sobre
                                     // `peer_pubkey || challenge` (V1).
                                     match decoder.decode_secident_state(pkt.protocol, pkt.opcode, &pkt.payload, 0) {
                                         Ok(st) if st.state != 0 && !answered_peer_challenge => {
@@ -336,15 +336,15 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_SIGNATURE => {
-                                    // Real eMule SUI verification: RSA RSASSA-PKCS1v15-SHA1 over
+                                    // Verificación real de SUI de eMule: RSA RSASSA-PKCS1v15-SHA1 sobre
                                     // `challenger_pubkey || challenge [|| ip || kind]`.
-                                    // See docs/ed2k/SUI_WIRE_FORMAT.md.
+                                    // Véase docs/ed2k/SUI_WIRE_FORMAT.md.
                                     let challenge = active_challenge.take();
 
-                                    // Anti-flood (eMule-conformant): one signature per remote
-                                    // IP. `m_dwLastSignatureIP` is only assigned once the
-                                    // packet reaches VerifyIdent — early exits (no pubkey, no
-                                    // challenge) do NOT consume the slot.
+                                    // Anti-inundación (conforme a eMule): una firma por IP
+                                    // remota. `m_dwLastSignatureIP` solo se asigna una vez que el
+                                    // paquete llega a VerifyIdent — salidas tempranas (sin pubkey, sin
+                                    // desafío) NO consumen la ranura.
                                     let flooded = match peer_ip {
                                         Some(ip) => *self.last_sig_ip.lock().await == Some(ip),
                                         None => false,
@@ -378,8 +378,8 @@ impl InboundListenerService {
                                                         if kind_invalid {
                                                             Some("invalid IP-binding kind")
                                                         } else {
-                                                            // Verification is about to run:
-                                                            // consume this IP's signature slot.
+                                                            // La verificación está a punto de ejecutarse:
+                                                            // consumir la ranura de firma de esta IP.
                                                             if let Some(ip) = peer_ip {
                                                                 *self.last_sig_ip.lock().await = Some(ip);
                                                             }
@@ -423,17 +423,17 @@ impl InboundListenerService {
                                     if verified_ok {
                                         sui_verified = true;
                                         self.sui_stats.signatures_verified.fetch_add(1, Relaxed);
-                                        // Verified: pin pubkey to credit record (by pubkey hash)
-                                        // and grant the credit multiplier now.
+                                        // Verificado: asociar pubkey al registro de crédito (por hash de pubkey)
+                                        // y conceder el multiplicador de crédito ahora.
                                         if let Some(ref ph) = remote_pubkey_hash {
                                             let mut dl_svc = self.downloads.lock().await;
-                                            // eMule `AddTrackClient`
+                                            // `AddTrackClient` de eMule
                                             // (`ProcessPublicKeyPacket`,
-                                            // BaseClient.cpp:1899) : la
-                                            // paire (IP, port annoncé) →
-                                            // userhash est mémorisée 2 h —
-                                            // base du `ComparePriorUserhash`
-                                            // anti-usurpation.
+                                            // BaseClient.cpp:1899): el par
+                                            // (IP, puerto anunciado) →
+                                            // userhash se memoriza 2 h —
+                                            // base del `ComparePriorUserhash`
+                                            // anti-usurpación.
                                             if let (Some(ip), Some(uh)) =
                                                 (peer_ip, peer_user_hash)
                                             {
@@ -499,8 +499,8 @@ impl InboundListenerService {
                                             }
                                             _ => None,
                                         };
-                                        // eMule only answers when the AICH hashset is
-                                        // available; otherwise the requester times out.
+                                        // eMule solo responde cuando el hashset AICH está
+                                        // disponible; de lo contrario el solicitante agota su tiempo de espera.
                                         if let Some(root) = root {
                                             let res = Ed2kAichFileHashRes {
                                                 file_hash: req.file_hash,
@@ -549,8 +549,8 @@ impl InboundListenerService {
                                         let answer = Ed2kAichAnswer {
                                             file_hash: req.file_hash,
                                             recovery: recovery.map(|entries| {
-                                                // eMule uses 16-bit identifiers unless the
-                                                // file is large enough to overflow them.
+                                                // eMule utiliza identificadores de 16 bits a menos que el
+                                                // archivo sea suficientemente grande como para desbordarlos.
                                                 let mut entries16 = Vec::new();
                                                 let mut entries32 = Vec::new();
                                                 for e in &entries {
@@ -590,14 +590,14 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_FWCHECKUDPREQ => {
-                                    // eMule ProcessFirewallCheckUDPRequest:
-                                    // read u16 intern + u16 extern + u32 key,
-                                    // then send KADEMLIA2_FIREWALLUDP to the
-                                    // requester's IP on its intern port (and
-                                    // extern port when it differs). The UDP
-                                    // verify key is only used for encrypted
-                                    // Kad UDP (not implemented) — accepted and
-                                    // ignored.
+                                    // ProcessFirewallCheckUDPRequest de eMule:
+                                    // leer u16 interno + u16 externo + u32 clave,
+                                    // luego enviar KADEMLIA2_FIREWALLUDP a la
+                                    // IP del solicitante en su puerto interno (y
+                                    // puerto externo cuando difiera). La clave de
+                                    // verificación UDP solo se utiliza para UDP Kad
+                                    // cifrado (no implementado) — aceptada e
+                                    // ignorada.
                                     if pkt.payload.len() >= 8 {
                                         let intern = u16::from_le_bytes([pkt.payload[0], pkt.payload[1]]);
                                         let extern_p = u16::from_le_bytes([pkt.payload[2], pkt.payload[3]]);
@@ -606,9 +606,9 @@ impl InboundListenerService {
                                                 self.kad_udp.read().unwrap().as_ref().cloned()
                                             };
                                             if let (Some(ip), Some(ku)) = (peer_ip, ku) {
-                                                // eMule flags results as biased when
-                                                // the requester is already a known
-                                                // contact/peer; not tracked here.
+                                                // eMule marca los resultados como sesgados cuando
+                                                // el solicitante ya es un contacto/par
+                                                // conocido; no se rastrea aquí.
                                                 let error_code: u8 = 0;
                                                 let t1 = SocketAddr::new(ip, intern);
                                                 match ku.send_firewall_udp(t1, error_code, intern).await {
@@ -631,16 +631,16 @@ impl InboundListenerService {
                                     }
                                 }
                                 mule_protocol::ed2k::OP_CALLBACK => {
-                                    // eMule ListenSocket.cpp:1326 — le buddy
-                                    // nous relaie un KADEMLIA_CALLBACK_REQ
-                                    // (nous sommes LowID) :
+                                    // ListenSocket.cpp:1326 de eMule — el compañero
+                                    // nos retransmite un KADEMLIA_CALLBACK_REQ
+                                    // (somos LowID):
                                     // [check u128][fileid u128][ip u32][tcp u16]
-                                    // avec check = ~notre_kad_id sur le fil
-                                    // (le buddyID de la requête = GetBuddyID
-                                    // du destinataire, déjà inversé chez
-                                    // eMule). Pas de check « c'est notre
-                                    // buddy » : l'inversion sert
-                                    // d'authentification.
+                                    // con check = ~notre_kad_id en el cable
+                                    // (el buddyID de la petición = GetBuddyID
+                                    // del destinatario, ya invertido en
+                                    // eMule). Sin comprobación «es nuestro
+                                    // compañero»: la inversión sirve
+                                    // de autenticación.
                                     let our_kad = {
                                         let kad =
                                             self.kad.read().unwrap().as_ref().cloned();
@@ -682,9 +682,9 @@ impl InboundListenerService {
                                     let req_port = u16::from_le_bytes(
                                         [pkt.payload[36], pkt.payload[37]],
                                     );
-                                    // TryToConnect(true) eMule : injecter le
-                                    // demandeur comme source Kad — le
-                                    // coordinateur compose la connexion.
+                                    // TryToConnect(true) de eMule: inyectar el
+                                    // solicitante como fuente Kad — el
+                                    // coordinador establece la conexión.
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
@@ -722,13 +722,13 @@ impl InboundListenerService {
                                     );
                                 }
                                 mule_protocol::ed2k::OP_REASKCALLBACKTCP => {
-                                    // eMule ListenSocket.cpp:1391-1479 — re-ask
-                                    // LowID relayé par le lien TCP du buddy :
+                                    // ListenSocket.cpp:1391-1479 de eMule — re-ask
+                                    // LowID retransmitido por el enlace TCP del compañero:
                                     // [destip u32][destport u16][reqhash 16]
-                                    // [extinfo…]. Seul notre buddy actif peut
-                                    // relayer (`GetBuddy() != client → ignore`),
-                                    // et la réponse part en UDP chez le
-                                    // demandeur originel, pas chez le buddy.
+                                    // [extinfo…]. Solo nuestro compañero activo puede
+                                    // retransmitir (`GetBuddy() != client → ignore`),
+                                    // y la respuesta sale en UDP hacia el
+                                    // solicitante original, no hacia el compañero.
                                     let is_buddy = {
                                         let svc =
                                             self.kad_udp.read().unwrap().as_ref().cloned();
@@ -803,8 +803,8 @@ impl InboundListenerService {
                                                 Some(mule_protocol::ed2k::client_udp::encode_queue_full())
                                             }
                                             // FileMismatch / Ambiguous /
-                                            // NoSender non saturé → silence
-                                            // (eMule force une connexion TCP).
+                                            // NoSender no saturado → silencio
+                                            // (eMule fuerza una conexión TCP).
                                             _ => None,
                                         }
                                     };
@@ -813,11 +813,11 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_PUBLICIP_REQ => {
-                                    // eMule ListenSocket.cpp:1297 — répondre
-                                    // OP_PUBLICIP_ANSWER (PR_EMULE) avec l'IP
-                                    // du demandeur telle qu'on la voit
-                                    // (PokeUInt32(client->GetIP()) — octets
-                                    // réseau bruts).
+                                    // ListenSocket.cpp:1297 de eMule — responder
+                                    // OP_PUBLICIP_ANSWER (PR_EMULE) con la IP
+                                    // del solicitante tal como la vemos
+                                    // (`PokeUInt32(client->GetIP())` — bytes
+                                    // de red en bruto).
                                     if let Some(std::net::IpAddr::V4(v4)) = peer_ip {
                                         let mut out = Vec::with_capacity(10);
                                         out.push(PR_EMULE);
@@ -828,9 +828,9 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_EMULE_INFO | OP_EMULE_INFO_ANSWER => {
-                                    // eMule ProcessMuleInfoPacket: decode the
-                                    // extended capability announcement and
-                                    // reply OP_EMULEINFOANSWER to OP_EMULEINFO.
+                                    // ProcessMuleInfoPacket de eMule: decodificar el
+                                    // anuncio de capacidades extendidas y
+                                    // responder OP_EMULEINFOANSWER ante OP_EMULEINFO.
                                     match decoder.decode_emule_info(
                                         pkt.protocol,
                                         pkt.opcode,
@@ -856,10 +856,10 @@ impl InboundListenerService {
                                                 tag_desc.join(","),
                                                 info.unknown_tags.len()
                                             );
-                                            // eMule ProcessMuleInfoPacket :
-                                            // les tags ET_SOURCEEXCHANGE /
-                                            // ET_EXTENDEDREQUEST raffinent
-                                            // les capacités négociées.
+                                            // ProcessMuleInfoPacket de eMule:
+                                            // las etiquetas ET_SOURCEEXCHANGE /
+                                            // ET_EXTENDEDREQUEST refinan
+                                            // las capacidades negociadas.
                                             sx_caps.sx1_version = sx_caps
                                                 .sx1_version
                                                 .max(sx::emule_info_sx_version(&info));
@@ -937,8 +937,8 @@ impl InboundListenerService {
                                 }
                                 OP_MULTIPACKET | OP_MULTIPACKET_EXT
                                 | OP_MULTIPACKET_EXT2 => {
-                                    // eMule emballe ses requêtes fichier
-                                    // (filename, setreqfileid, SX, AICH) dans
+                                    // eMule empaqueta sus peticiones de archivo
+                                    // (filename, setreqfileid, SX, AICH) en
                                     // un OP_MULTIPACKET* — ListenSocket.cpp:970.
                                     match mule_protocol::ed2k::decoder::decode_multipacket_request(
                                         pkt.protocol,
@@ -969,12 +969,12 @@ impl InboundListenerService {
                                     }
                                 }
                                 mule_protocol::ed2k::OP_KAD_FWTCPCHECK_ACK => {
-                                    // eMule `ListenSocket.cpp:1623` — verdict
-                                    // du test pare-feu TCP Kad : le contact
-                                    // qu'on a sollicité (`FIREWALLED{2}_REQ`)
-                                    // s'est connecté à notre port et accuse
-                                    // réception. Gate `IsKadFirewallCheckIP`
-                                    // — un ACK non sollicité est ignoré.
+                                    // `ListenSocket.cpp:1623` de eMule — veredicto
+                                    // de la prueba de cortafuegos TCP de Kad: el contacto
+                                    // al que solicitamos (`FIREWALLED{2}_REQ`)
+                                    // se conectó a nuestro puerto y acusa
+                                    // recibo. Filtro `IsKadFirewallCheckIP`
+                                    // — un ACK no solicitado se ignora.
                                     let tracker = self
                                         .kad_udp
                                         .read()
@@ -999,12 +999,12 @@ impl InboundListenerService {
                                     }
                                 }
                                 OP_HASHSETREQUEST2 => {
-                                    // eMule `SendHashsetPacket(bFileIdentifiers=true)`
-                                    // (`UploadClient.cpp:510`) : `<FileIdentifier><opts u8>`
-                                    // — bit0 demande le hashset MD4, bit1 le hashset
-                                    // AICH par part. La réponse `OP_HASHSETANSWER2`
-                                    // répète l'identifiant puis sérialise chaque set
-                                    // demandé disponible (`WriteHashSetsToPacket`,
+                                    // `SendHashsetPacket(bFileIdentifiers=true)` de eMule
+                                    // (`UploadClient.cpp:510`): `<FileIdentifier><opts u8>`
+                                    // — bit0 solicita el hashset MD4, bit1 el hashset
+                                    // AICH por partes. La respuesta `OP_HASHSETANSWER2`
+                                    // repite el identificador y serializa cada conjunto
+                                    // solicitado disponible (`WriteHashSetsToPacket`,
                                     // `FileIdentifier.cpp:249`).
                                     match decoder.decode_hashset_request2(
                                         pkt.protocol,
@@ -1015,8 +1015,8 @@ impl InboundListenerService {
                                         Ok(req) => {
                                             let md4 = match req.identifier.md4_hash {
                                                 Some(h) => h,
-                                                // `read_from(.., false)` exige le MD4 ;
-                                                // garde-fou défensif.
+                                                // `read_from(.., false)` exige el MD4;
+                                                // salvaguarda defensiva.
                                                 None => continue,
                                             };
                                             let hash_hex = hex::encode(md4);
@@ -1025,10 +1025,10 @@ impl InboundListenerService {
                                                 dl_svc.get_shared_file(&hash_hex).unwrap_or(None)
                                             };
 
-                                            // `GetFileByIdentifier` (non strict) =
-                                            // `CompareRelaxed` (`FileIdentifier.cpp:76`) :
-                                            // MD4 égal + taille égale quand les deux
-                                            // sont connues + racine AICH égale idem.
+                                            // `GetFileByIdentifier` (no estricto) =
+                                            // `CompareRelaxed` (`FileIdentifier.cpp:76`):
+                                            // MD4 igual + tamaño igual cuando ambos
+                                            // se conocen + raíz AICH igual idem.
                                             let matches = shared_file.as_ref().is_some_and(|sf| {
                                                 req.identifier
                                                     .file_size
@@ -1057,11 +1057,11 @@ impl InboundListenerService {
                                                 None
                                             };
 
-                                            // AICH : set complet par part uniquement
-                                            // calculable sur un fichier partagé entier
-                                            // (`shared_aich_tree`) ; un `.part` ne sert
-                                            // que sa racine — le bit 0x02 est alors omis
-                                            // comme eMule quand le set est indisponible.
+                                            // AICH: conjunto completo por partes únicamente
+                                            // calculable en un archivo compartido entero
+                                            // (`shared_aich_tree`); un `.part` solo sirve
+                                            // su raíz — el bit 0x02 se omite entonces
+                                            // como en eMule cuando el conjunto no está disponible.
                                             let mut aich_root_known = shared_file
                                                 .as_ref()
                                                 .and_then(|sf| sf.aich_root);
@@ -1150,12 +1150,12 @@ impl InboundListenerService {
 
                         match pkt.opcode {
                             mule_protocol::ed2k::OP_PORTTEST => {
-                                // eMule ListenSocket.cpp:1311 — ack « TCP
-                                // reachable » immédiat : OP_PORTTEST +
-                                // payload 0x12. Le relais du verdict UDP
-                                // (SendPortTestReply vers le socket marqué
-                                // m_bPortTestCon) reste non implémenté —
-                                // outil externe, cf. compat-notes §24.
+                                // ListenSocket.cpp:1311 de eMule — confirmación «TCP
+                                // alcanzable» inmediata: OP_PORTTEST +
+                                // carga útil 0x12. El relevo del veredicto UDP
+                                // (SendPortTestReply hacia el socket marcado
+                                // m_bPortTestCon) permanece no implementado —
+                                // herramienta externa, cf. compat-notes §24.
                                 let mut out = Vec::with_capacity(7);
                                 out.push(PR_ED2K);
                                 out.extend_from_slice(&2u32.to_le_bytes());
@@ -1172,12 +1172,12 @@ impl InboundListenerService {
                                         dl_svc.get_shared_file(&hash_hex).unwrap_or(None)
                                     };
 
-                                    // eMule `ListenSocket.cpp:359` : fichier
-                                    // servi = partagé actif, ou `.part` du
-                                    // downloadqueue avec `partcount > 1`.
-                                    // Sinon `OP_FILEREQANSNOFIL` + compteur
-                                    // anti-flood (uniquement si le hash est
-                                    // totalement inconnu).
+                                    // `ListenSocket.cpp:359` de eMule: archivo
+                                    // servido = compartido activo, o `.part` de
+                                    // downloadqueue con `partcount > 1`.
+                                    // Si no `OP_FILEREQANSNOFIL` + contador
+                                    // anti-inundación (únicamente si el hash es
+                                    // totalmente desconocido).
                                     let servable = shared_file.as_ref().is_some_and(|sf| {
                                         sf.enabled && {
                                             let part_count = if sf.file_size == 0 {
@@ -1230,11 +1230,11 @@ impl InboundListenerService {
                                 }
                             }
                             OP_END_OF_DOWNLOAD => {
-                                // eMule `ListenSocket.cpp:537` : `0x49` +
-                                // `hash16` — le downloader a terminé ; on le
-                                // retire de la file d'upload si le hash
-                                // correspond à son fichier servi, sinon
-                                // compteur anti-flood.
+                                // `ListenSocket.cpp:537` de eMule: `0x49` +
+                                // `hash16` — el descargador ha terminado; se
+                                // retira de la cola de subida si el hash
+                                // coincide con su archivo servido, si no
+                                // contador anti-inundación.
                                 if pkt.payload.len() >= 16 {
                                     let mut file_hash = [0u8; 16];
                                     file_hash.copy_from_slice(&pkt.payload[..16]);
@@ -1244,11 +1244,10 @@ impl InboundListenerService {
                                         .end_of_download(&client_key, &hash_hex)
                                         .await
                                     {
-                                        // Hash ne correspond à aucun fichier
-                                        // servi pour ce client — n'incrémenter
-                                        // que si totalement inconnu (eMule
-                                        // `CheckFailedFileIdReqs` skip les
-                                        // fichiers connus non partagés).
+                                        // El hash no coincide con ningún archivo
+                                        // servido para este cliente — no incrementar
+                                        // salvo si es totalmente desconocido (`CheckFailedFileIdReqs`
+                                        // de eMule omite archivos conocidos no compartidos).
                                         let known = {
                                             let dl_svc = self.downloads.lock().await;
                                             dl_svc.get_shared_file(&hash_hex).unwrap_or(None).is_some()
@@ -1260,10 +1259,10 @@ impl InboundListenerService {
                                 }
                             }
                             OP_CHANGE_CLIENT_ID => {
-                                // eMule `ListenSocket.cpp:590` : applique
-                                // `SetServerIP`/`SetServerPort` sur les
-                                // lignes source des fichiers engagés par
-                                // ce pair (serveur connu en serverlist).
+                                // `ListenSocket.cpp:590` de eMule: aplica
+                                // `SetServerIP`/`SetServerPort` sobre las
+                                // filas de fuentes de archivos comprometidos por
+                                // este par (servidor conocido en serverlist).
                                 let engaged: Vec<String> = peer_masks
                                     .keys()
                                     .map(hex::encode)
@@ -1277,9 +1276,9 @@ impl InboundListenerService {
                                 .await;
                             }
                             OP_REQFILENAME => {
-                                // eMule `ListenSocket.cpp:292` — requête de
-                                // nom standalone (chemin emprunté par les
-                                // pairs n'ayant pas annoncé MultiPacket).
+                                // `ListenSocket.cpp:292` de eMule — petición de
+                                // nombre independiente (ruta tomada por
+                                // pares que no anunciaron MultiPacket).
                                 if pkt.payload.len() >= 16 {
                                     let mut file_hash = [0u8; 16];
                                     file_hash.copy_from_slice(&pkt.payload[..16]);
@@ -1288,19 +1287,19 @@ impl InboundListenerService {
                                         let dl_svc = self.downloads.lock().await;
                                         dl_svc.get_shared_file(&hash_hex).unwrap_or(None)
                                     };
-                                    // Servi si partagé actif, ou `.part` avec
-                                    // au moins une part complète (eMule :
+                                    // Servido si compartido activo, o `.part` con
+                                    // al menos una parte completa (eMule:
                                     // `GetCompletedSize() < PARTSIZE` →
-                                    // silence + compteur anti-flood).
+                                    // silencio + contador anti-inundación).
                                     let servable = shared_file.as_ref().is_some_and(|sf| {
                                         sf.enabled && (!sf.is_partial || !sf.completed_parts.is_empty())
                                     });
                                     if let Some(sf) = shared_file.as_ref().filter(|_| servable) {
-                                        // Ext-info du demandeur (eMule
-                                        // `ProcessExtendedInfo`) : part-status
-                                        // puis complete-sources quand
+                                        // Ext-info del solicitante (`ProcessExtendedInfo`
+                                        // de eMule): estado de partes
+                                        // y luego complete-sources cuando
                                         // `ExtendedRequestsVersion > 1` —
-                                        // nourrit `reqstatus` SX.
+                                        // alimenta `reqstatus` SX.
                                         if peer_ext_req > 0 {
                                             let mut off = 16usize;
                                             if pkt.payload.len() >= off + 2 {
@@ -1330,10 +1329,10 @@ impl InboundListenerService {
                                         out.extend_from_slice(name);
                                         let _ = stream.write_all(&out).await;
 
-                                        // eMule `CheckAndAddKnownSource` : le
-                                        // demandeur annonce (ext-info) des
-                                        // parts du même `.part` → source
-                                        // candidate passive pour ce fichier.
+                                        // `CheckAndAddKnownSource` de eMule: el
+                                        // solicitante anuncia (ext-info)
+                                        // partes del mismo `.part` → fuente
+                                        // candidata pasiva para este archivo.
                                         if sf.is_partial
                                             && sf.file_size > 9728000
                                             && peer_tcp_port > 0
@@ -1379,13 +1378,13 @@ impl InboundListenerService {
                             mule_protocol::ed2k::OP_ASKSHAREDFILES
                             | mule_protocol::ed2k::OP_ASKSHAREDDIRS
                             | mule_protocol::ed2k::OP_ASKSHAREDFILESDIR => {
-                                // eMule `ListenSocket.cpp:651-825` — browsing
-                                // des partages (annonce `NoViewSharedFiles=0`
-                                // dans MISCOPTIONS1). Gate `CanSeeShares` :
-                                // everybody/friends/nobody. Réponses
-                                // PR_ED2K : liste complète 0x4B, liste de
-                                // répertoires 0x5F, fichiers d'un
-                                // pseudo-répertoire 0x60, refus 0x61.
+                                // `ListenSocket.cpp:651-825` de eMule — exploración
+                                // de compartidos (anuncio `NoViewSharedFiles=0`
+                                // en MISCOPTIONS1). Filtro `CanSeeShares`:
+                                // everybody/friends/nobody. Respuestas
+                                // PR_ED2K: lista completa 0x4B, lista de
+                                // directorios 0x5F, archivos de un
+                                // seudodirectorio 0x60, rechazo 0x61.
                                 use mule_protocol::ed2k::shared_files as sfbrowse;
 
                                 let (can_see, shares) = {
@@ -1411,8 +1410,8 @@ impl InboundListenerService {
 
                                 let frame = match pkt.opcode {
                                     mule_protocol::ed2k::OP_ASKSHAREDFILES => {
-                                        // eMule répond toujours — refus = liste
-                                        // vide (pas de ASKSHAREDDENIEDANS ici).
+                                        // eMule responde siempre — rechazo = lista
+                                        // vacía (sin ASKSHAREDDENIEDANS aquí).
                                         let entries = if can_see {
                                             share_browser::offered_entries(
                                                 shares.iter().filter(|f| f.enabled),
@@ -1480,10 +1479,10 @@ impl InboundListenerService {
                                 }
                             }
                             OP_FILESTATUS => {
-                                // eMule `CUpDownClient::ProcessFileStatus` :
-                                // le demandeur annonce les parts qu'il détient
-                                // (`m_abyPartStatus`) — `reqstatus` utilisé
-                                // pour ne servir que des sources utiles en SX.
+                                // `CUpDownClient::ProcessFileStatus` de eMule:
+                                // el solicitante anuncia las partes que posee
+                                // (`m_abyPartStatus`) — `reqstatus` usado
+                                // para servir solo fuentes útiles en SX.
                                 if let Ok(st) = decoder.decode_file_status(
                                     pkt.protocol, pkt.opcode, &pkt.payload, 0,
                                 ) {
@@ -1528,9 +1527,9 @@ impl InboundListenerService {
                                 }
                             }
                             OP_CANCELTRANSFER => {
-                                // eMule OP_CANCELTRANSFER (empty payload): the
-                                // downloader aborts the session — free the
-                                // upload slot immediately and drop the socket.
+                                // OP_CANCELTRANSFER de eMule (carga útil vacía): el
+                                // descargador aborta la sesión — liberar la ranura
+                                // de subida inmediatamente y cerrar el socket.
                                 tracing::info!(
                                     "[UPLOAD] Inbound peer {} sent OP_CANCELTRANSFER, releasing upload slot",
                                     log_addr_str(&remote_str)
@@ -1539,8 +1538,8 @@ impl InboundListenerService {
                                 return;
                             }
                             OP_OUTOFPARTS => {
-                                // The downloader signals it currently has no
-                                // pending block requests for this file.
+                                // El descargador comunica que actualmente no tiene
+                                // peticiones de bloques pendientes para este archivo.
                                 tracing::debug!(
                                     "Inbound peer {} sent OP_OUTOFPARTS",
                                     log_addr_str(&remote_str)
@@ -1567,9 +1566,9 @@ impl InboundListenerService {
                                         log_addr_str(&remote_str), shared_file.file_name, hash_hex
                                     );
 
-                                    // Mode paranoid (eMuleRust) : ne servir
-                                    // que les pairs obfusqués et dont la
-                                    // signature SUI a été vérifiée.
+                                    // Modo paranoico (eMuleRust): servir únicamente
+                                    // a pares ofuscados y cuya firma SUI
+                                    // haya sido verificada.
                                     if self.paranoid_mode.load(std::sync::atomic::Ordering::Relaxed)
                                         && !(stream.is_obfuscated() && sui_verified)
                                     {
@@ -1618,8 +1617,8 @@ impl InboundListenerService {
                                 }
                             }
                             OP_REQUESTPARTS | OP_REQUESTPARTS_EMULE | OP_REQUESTPARTS_I64 => {
-                                 // Decode 32-bit (0x47/0x4B) or 64-bit (0xA3) block
-                                 // requests into a common (hash, u64 ranges) shape.
+                                 // Decodifica peticiones de bloques de 32 bits (0x47/0x4B) o 64 bits (0xA3)
+                                 // en una forma común (hash, rangos u64).
                                  let decoded_req = if pkt.opcode == OP_REQUESTPARTS_I64 {
                                      mule_protocol::ed2k::decoder::decode_request_parts_i64(
                                          pkt.protocol, pkt.opcode, &pkt.payload, 0,
@@ -1700,10 +1699,10 @@ impl InboundListenerService {
                                                      log_addr_str(&remote_str), start, end, shared_file.file_name, hash_hex
                                                  );
 
-                                                 // Rate limit pacing via network policy upload token bucket.
-                                                 // Acquire in <=10240-byte quanta (eMule UploadBandwidthThrottler
-                                                 // grants per-slot quanta): keeps inter-slot fairness when
-                                                 // MAX_ACTIVE_UPLOADS slots share the global bucket.
+                                                 // Regulación de velocidad mediante el cubo de fichas de subida de la política de red.
+                                                 // Adquirir en cuantos de <=10240 bytes (UploadBandwidthThrottler de eMule
+                                                 // otorga cuantos por ranura): mantiene equidad entre ranuras cuando
+                                                 // MAX_ACTIVE_UPLOADS ranuras comparten el cubo global.
                                                  let upload_bucket = &self.network_policy.rate_limiters().upload_bucket;
                                                  let is_cancelled = || cancel_token.is_cancelled();
                                                  let mut throttled_ok = true;
@@ -1720,11 +1719,11 @@ impl InboundListenerService {
                                                      break;
                                                  }
 
-                                                 // Read real bytes from disk — never fabricate
-                                                 // data: an unreadable range is left unanswered
-                                                 // (eMule simply does not serve what it cannot
-                                                 // read), otherwise the peer would store
-                                                 // corrupted bytes and fail its part hash.
+                                                 // Leer bytes reales del disco — nunca inventar
+                                                 // datos: un rango no legible se deja sin responder
+                                                 // (eMule simplemente no sirve lo que no puede
+                                                 // leer), de lo contrario el par almacenaría
+                                                 // bytes corruptos y fallaría el hash de su parte.
                                                  let mut payload = None;
                                                  if !shared_file.file_path.is_empty() {
                                                      let p = std::path::Path::new(&shared_file.file_path);
@@ -1750,15 +1749,15 @@ impl InboundListenerService {
                                                      continue;
                                                  };
 
-                                                 // eMule CreatePackedPackets: when the
-                                                 // downloader announced compression support
-                                                 // (MiscOptions1 DataCompVer), try
-                                                 // OP_COMPRESSEDPART (zlib, Z_BEST_SPEED) and
-                                                 // fall back to raw SENDINGPART when
-                                                 // compression gains nothing. Already-packed
-                                                 // extensions are skipped
-                                                 // (ShouldCompressBasedOnFilename) and eMule
-                                                 // only packs blocks longer than 31 bytes.
+                                                 // CreatePackedPackets de eMule: cuando el
+                                                 // descargador anunció soporte de compresión
+                                                 // (DataCompVer de MiscOptions1), intentar
+                                                 // OP_COMPRESSEDPART (zlib, Z_BEST_SPEED) y
+                                                 // recurrir a SENDINGPART sin comprimir cuando la
+                                                 // compresión no aporte ganancia. Extensiones ya
+                                                 // comprimidas se omiten
+                                                 // (ShouldCompressBasedOnFilename) y eMule
+                                                 // solo comprime bloques mayores de 31 bytes.
                                                  let compressible_name = match shared_file
                                                      .file_name
                                                      .rsplit_once('.')
@@ -1910,10 +1909,10 @@ impl InboundListenerService {
                             _ => {}
                         }
 
-                        // eMule `CheckFailedFileIdReqs` — à 6 requêtes sur
-                        // des fichiers inconnus, la connexion est coupée
-                        // (`throwCStr`) ; le strike clientlist est approché
-                        // par la coupure stricte côté daemon.
+                        // `CheckFailedFileIdReqs` de eMule — a las 6 peticiones sobre
+                        // archivos desconocidos, la conexión se corta
+                        // (`throwCStr`); la sanción en clientlist se aproxima
+                        // mediante el corte estricto en el daemon.
                         if failed_file_id_reqs >= 6 {
                             warn!(
                                 "Inbound peer {} flooded file-id requests ({}), dropping connection (eMule FileReq flood)",
@@ -1927,17 +1926,17 @@ impl InboundListenerService {
             }
         }
 
-        // Socket mort : eMule conserve le client en file
-        // (`US_ONUPLOADQUEUE` survit à `Disconnected`) — le slot actif est
-        // libéré mais l'entrée attend `MAX_PURGEQUEUETIME` / une reconnexion.
+        // Socket muerto: eMule conserva el cliente en la cola
+        // (`US_ONUPLOADQUEUE` sobrevive a `Disconnected`) — la ranura activa se
+        // libera pero la entrada espera `MAX_PURGEQUEUETIME` o una reconexión.
         self.upload_manager.mark_disconnected(&client_key).await;
     }
 
-    /// Traduit les bannissements `BAD_CLIENT_BAN` de la file d'upload en
-    /// bans IP (`DownloadService::ban_source`, 2 h — eMule
-    /// `Ban()`/`AddBannedClient`). Retourne `true` quand le pair courant
-    /// vient d'être banni — l'appelant doit `break` pour couper le socket
-    /// (eMule `Disconnected` dans `Ban`).
+    /// Traduce las sanciones `BAD_CLIENT_BAN` de la cola de subida a
+    /// baneos de IP (`DownloadService::ban_source`, 2 h — `Ban()`/`AddBannedClient`
+    /// de eMule). Devuelve `true` cuando el par actual
+    /// acaba de ser baneado — quien llama debe hacer `break` para cortar el socket
+    /// (`Disconnected` en `Ban` de eMule).
     async fn drain_upload_bans(
         &self,
         peer_ip: Option<std::net::IpAddr>,
@@ -1970,11 +1969,11 @@ impl InboundListenerService {
         drop_peer
     }
 
-    /// Dispatches the sub-requests of an inbound `OP_MULTIPACKET*` — eMule
-    /// `ListenSocket.cpp:970-1011`. The envelope file hash applies to every
-    /// sub-request; SX sub-requests go through the same handler as the
-    /// standalone opcodes, and filename/file-status/AICH answers are grouped
-    /// in a single `OP_MULTIPACKETANSWER` like eMule does.
+    /// Despacha las subpeticiones de un `OP_MULTIPACKET*` entrante — `ListenSocket.cpp:970-1011`
+    /// de eMule. El hash de archivo del envoltorio se aplica a cada
+    /// subpetición; las subpeticiones SX van al mismo manejador que los
+    /// opcodes independientes, y las respuestas de nombre/file-status/AICH se agrupan
+    /// en un único `OP_MULTIPACKETANSWER` como hace eMule.
     #[allow(clippy::too_many_arguments)]
     async fn handle_inbound_multipacket(
         &self,
@@ -1988,8 +1987,8 @@ impl InboundListenerService {
     ) {
         let file_hash = mp.file.file_hash();
         if file_hash == [0u8; 16] {
-            // `FileIdentifier` sans MD4 (contexte Kad) — aucune réponse
-            // fichier possible.
+            // `FileIdentifier` sin MD4 (contexto Kad) — ninguna respuesta
+            // de archivo posible.
             return;
         }
         let target_addr = remote_str
@@ -2003,7 +2002,7 @@ impl InboundListenerService {
             match sub {
                 Ed2kMultiPacketSubRequest::FileName { ext_info } => {
                     want_filename = true;
-                    // Ext-info : part-status du demandeur → `reqstatus` SX.
+                    // Ext-info: estado de partes del solicitante → `reqstatus` SX.
                     if let Some(ext) = ext_info {
                         peer_masks.insert(file_hash, ext.part_status.to_vec());
                     }
@@ -2054,8 +2053,8 @@ impl InboundListenerService {
             return;
         }
 
-        // Réponse groupée eMule (`OP_MULTIPACKETANSWER`) : nom du fichier +
-        // file-status (+ hash AICH) pour le fichier de l'enveloppe.
+        // Respuesta agrupada de eMule (`OP_MULTIPACKETANSWER`): nombre del archivo +
+        // file-status (+ hash AICH) para el archivo del envoltorio.
         let shared_file = {
             let dl_svc = self.downloads.lock().await;
             dl_svc.get_shared_file(&hash_hex).unwrap_or(None)
@@ -2119,12 +2118,12 @@ impl InboundListenerService {
         }
     }
 
-    /// Returns the trusted AICH root of a shared file, computing (and caching)
-    /// the hash tree from disk when absent.
-    /// Resolves the per-part MD4 hashset for `hash_hex`: DB cache first
-    /// (learned during download or already computed), else computed from the
-    /// shared file on disk and cached (`hash_reader` verifies the root hash
-    /// against `expected_hash` before anything is served).
+    /// Devuelve la raíz AICH de confianza de un archivo compartido, calculando (y almacenando
+    /// en caché) el árbol de hashes desde el disco cuando esté ausente.
+    /// Resuelve el conjunto de hashes MD4 por partes para `hash_hex`: primero la caché en BD
+    /// (aprendida durante la descarga o ya calculada), si no calculada a partir del
+    /// archivo compartido en disco y almacenada en caché (`hash_reader` verifica el hash raíz
+    /// contra `expected_hash` antes de servir nada).
     async fn resolve_part_hashes(
         &self,
         hash_hex: &str,
@@ -2182,8 +2181,8 @@ impl InboundListenerService {
         self.shared_aich_tree(sf, hash_hex).await.map(|(_, r)| r)
     }
 
-    /// Loads or computes the full AICH hash tree of a shared file.
-    /// The computed root is persisted on the shared-file record.
+    /// Carga o calcula el árbol de hashes AICH completo de un archivo compartido.
+    /// La raíz calculada se persiste en el registro del archivo compartido.
     async fn shared_aich_tree(
         &self,
         sf: &mule_core::model::SharedFile,
@@ -2192,9 +2191,9 @@ impl InboundListenerService {
         if sf.file_path.is_empty() || sf.file_size == 0 {
             return None;
         }
-        // Partial share: the AICH tree cannot be computed from an incomplete
-        // .part file — the trusted root (from the .met) is still servable via
-        // `shared_aich_root`, but no recovery set can be built.
+        // Compartido parcial: el árbol AICH no puede calcularse a partir de un archivo
+        // .part incompleto — la raíz de confianza (del .met) sigue siendo servible vía
+        // `shared_aich_root`, pero no se puede construir ningún conjunto de recuperación.
         if sf.is_partial {
             return None;
         }
@@ -2222,9 +2221,9 @@ impl InboundListenerService {
         Some((tree, root))
     }
 
-    /// Answers an inbound peer's `OP_SECIDENTSTATE` challenge (signer role):
-    /// sends our `OP_PUBLICKEY` when requested (state=2), then `OP_SIGNATURE`
-    /// over `peer_pubkey || challenge` (V1 payload).
+    /// Responde al desafío `OP_SECIDENTSTATE` de un par entrante (rol de firmante):
+    /// envía nuestra `OP_PUBLICKEY` cuando se solicita (state=2), luego `OP_SIGNATURE`
+    /// sobre `peer_pubkey || challenge` (carga útil V1).
     async fn answer_peer_challenge(
         &self,
         state: u8,

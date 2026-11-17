@@ -82,7 +82,7 @@ pub async fn handle_categories_delete(
 
     let reassigned = state.downloads.lock().await.delete_category(id)?;
 
-    // Broadcast updates for all active downloads
+    // Difundir actualizaciones para todas las descargas activas
     let snapshots = state.downloads.lock().await.list_downloads();
     for snap in snapshots {
         state.broadcast_download_update(snap);

@@ -15,32 +15,32 @@ pub enum TokenBucketError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitsConfig {
-    /// Download rate limit in bytes per second (0 = unlimited)
+    /// Límite de tasa de descarga en bytes por segundo (0 = ilimitado)
     pub download_bytes_per_sec: u64,
-    /// Upload rate limit in bytes per second (0 = unlimited)
+    /// Límite de tasa de subida en bytes por segundo (0 = ilimitado)
     pub upload_bytes_per_sec: u64,
-    /// Connection creation rate limit in connections per minute (0 = unlimited)
+    /// Límite de creación de conexiones en conexiones por minuto (0 = ilimitado)
     pub connections_per_minute: u32,
-    /// Server search and interaction requests per second (0 = unlimited)
+    /// Peticiones de búsqueda e interacción con servidores por segundo (0 = ilimitado)
     pub server_requests_per_sec: u32,
-    /// Kad/UDP packets per second (0 = unlimited)
+    /// Paquetes Kad/UDP por segundo (0 = ilimitado)
     pub kad_packets_per_sec: u32,
 }
 
 impl Default for RateLimitsConfig {
     fn default() -> Self {
         Self {
-            download_bytes_per_sec: 0,   // unlimited
-            upload_bytes_per_sec: 0,     // unlimited
-            connections_per_minute: 120, // 2 per second max by default
+            download_bytes_per_sec: 0,   // ilimitado
+            upload_bytes_per_sec: 0,     // ilimitado
+            connections_per_minute: 120, // 2 por segundo máx. por defecto
             server_requests_per_sec: 10,
             kad_packets_per_sec: 50,
         }
     }
 }
 
-/// Token bucket for rate limiting bytes or operations.
-/// Supports burst allowance, dynamic refill, and cancellation.
+/// Cubo de fichas (token bucket) para la limitación de tasa de bytes u operaciones.
+/// Admite ráfagas, recarga dinámica y cancelación.
 pub struct TokenBucket {
     rate_per_sec: AtomicU64,
     burst_capacity: AtomicU64,
@@ -82,12 +82,12 @@ impl TokenBucket {
         self.burst_capacity.load(Ordering::Relaxed)
     }
 
-    /// Tries to acquire `count` tokens immediately without waiting.
-    /// Returns `true` if tokens were acquired, `false` otherwise.
+    /// Intenta adquirir `count` fichas inmediatamente sin esperar.
+    /// Devuelve `true` si se adquirieron las fichas, `false` en caso contrario.
     pub fn try_acquire(&self, count: u64) -> bool {
         let rate = self.rate_per_sec.load(Ordering::Relaxed);
         if rate == 0 {
-            // 0 means unlimited
+            // 0 significa ilimitado
             return true;
         }
 
@@ -107,8 +107,8 @@ impl TokenBucket {
         }
     }
 
-    /// Asynchronously acquires `count` tokens, sleeping if necessary.
-    /// If the `cancel` callback or cancellation token fires, returns `Err(TokenBucketError::Cancelled)`.
+    /// Adquiere `count` fichas de forma asíncrona, durmiendo si es necesario.
+    /// Si la retrollamada `cancel` o el token de cancelación se activan, devuelve `Err(TokenBucketError::Cancelled)`.
     pub async fn acquire_tokens<F>(
         &self,
         count: u64,
@@ -141,16 +141,16 @@ impl TokenBucket {
                     return Ok(());
                 }
 
-                // Needed tokens
+                // Fichas necesarias
                 let needed = (count as f64) - state.tokens;
                 let wait_secs = needed / (rate as f64);
                 Duration::from_secs_f64(wait_secs.clamp(0.005, 2.0))
             };
 
-            // Sleep in small increments or for wait_duration
+            // Dormir en pequeños incrementos o durante wait_duration
             tokio::select! {
                 _ = tokio::time::sleep(wait_duration) => {
-                    // loop around and recheck
+                    // repetir el bucle y volver a comprobar
                 }
             }
         }

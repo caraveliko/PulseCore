@@ -79,7 +79,7 @@ impl KadDecoder {
         {
             // eMule ClientUDPSocket: inflate bounded at 250000, drop the
             // datagram on failure. The zlib-magic sniffing keeps decoding
-            // lenient clients that compress without the 0xE5 proto byte.
+            // clientes permisivos que comprimen sin el byte de protocolo 0xE5.
             match crate::ed2k::packed::unpack_payload(
                 raw_payload,
                 crate::ed2k::packed::PACKED_KAD_UDP_MAX_DECOMPRESSED,

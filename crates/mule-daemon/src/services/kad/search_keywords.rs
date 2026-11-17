@@ -11,11 +11,11 @@ use mule_network_policy::{classify_ip, IpCategory, NetworkPolicyManager, Network
 
 use crate::services::kad_udp::KadUdpService;
 
-/// Standard stored tag list published with each keyword entry — eMule
-/// `PreparePacketForTags` pushes `TAG_SOURCES` (and optional metadata)
-/// into the publish tag list; `TAG_FILENAME`/`TAG_FILESIZE` are emitted
-/// by the encoder from the entry fields (`WriteTagListInc`), not stored
-/// in `m_listTag`.
+/// Lista de etiquetas almacenada estándar publicada con cada entrada de palabra clave —
+/// `PreparePacketForTags` de eMule añade `TAG_SOURCES` (y metadatos opcionales)
+/// a la lista de etiquetas de publicación; `TAG_FILENAME`/`TAG_FILESIZE` son emitidos
+/// por el codificador a partir de los campos de la entrada (`WriteTagListInc`), no almacenados
+/// en `m_listTag`.
 fn standard_keyword_tags(
     _file_name: &str,
     _file_size: u64,
@@ -37,9 +37,9 @@ pub const STOP_WORDS: &[&str] = &[
     "dans", "sur", "sous", "avec"
 ];
 
-// Mots génériques ou titres honorifiques multi-langues qui ne doivent pas être préférés
-// à un nom propre plus spécifique mais légèrement plus court (ex: "Monsieur Ibrahim" -> "ibrahim",
-// ou "The Secret of Roan Inish" -> "inish"/"roan").
+// Palabras genéricas o títulos honoríficos multilingües que no deben ser preferidos
+// frente a un nombre propio más específico pero ligeramente más corto (ej.: "Monsieur Ibrahim" -> "ibrahim",
+// o "The Secret of Roan Inish" -> "inish"/"roan").
 pub const LOW_SPECIFICITY_WORDS: &[&str] = &[
     "monsieur", "madame", "mademoiselle", "senor", "senora", "senorita",
     "mister", "doctor", "docteur", "professor", "profesor", "captain", "capitan",
@@ -51,7 +51,7 @@ pub const LOW_SPECIFICITY_WORDS: &[&str] = &[
     "true", "lost", "black", "white"
 ];
 
-/// Sélectionne le mot-clé le plus discriminant pour une recherche Kad DHT.
+/// Selecciona la palabra clave más discriminante para una búsqueda en Kad DHT.
 pub fn select_best_kad_keyword(term: &str) -> (String, KadId) {
     let keywords = extract_kad_keywords(term);
     let candidates: Vec<&(String, KadId)> = keywords
@@ -184,10 +184,10 @@ pub async fn search_keywords_iterative(
                     }
 
                     if seen_hashes.insert(file_hash_hex.clone()) {
-                        // eMule `ProcessResultKeyword` (Search.cpp:1165):
-                        // the AICH popularity histogram and publish-info
-                        // u32 accompany each keyword result on Kad >= v9
-                        // nodes.
+                        // `ProcessResultKeyword` de eMule (Search.cpp:1165):
+                        // el histograma de popularidad AICH y el u32 de información
+                        // de publicación acompañan a cada resultado de palabra clave
+                        // en nodos Kad >= v9.
                         discovered_entries.push(serde_json::json!({
                             "fileHash": file_hash_hex,
                             "fileName": w.file_name,
@@ -225,12 +225,12 @@ pub async fn search_keywords_iterative(
     Ok(discovered_entries)
 }
 
-/// Publishes keyword entries for a file to the closest Kad contacts.
+/// Publica entradas de palabras clave para un archivo en los contactos Kad más cercanos.
 ///
-/// eMule nodes silently drop a `PUBLISH_KEY_REQ` whose keyword hash lies
-/// outside `SEARCHTOLERANCE` of their KadID, and only live nodes answer at
-/// all — so the publish targets are first converged with an iterative
-/// `find_node` lookup, then restricted to in-tolerance contacts.
+/// Los nodos eMule descartan silenciosamente un `PUBLISH_KEY_REQ` cuyo hash de palabra clave
+/// quede fuera de `SEARCHTOLERANCE` de su KadID, y solo los nodos activos responden —
+/// por tanto los destinos de publicación se convergen primero con una búsqueda iterativa
+/// `find_node`, restringiéndose luego a los contactos dentro de tolerancia.
 pub async fn publish_keyword(
     file_hash_hex: &str,
     file_name: &str,
@@ -261,8 +261,8 @@ pub async fn publish_keyword(
         )
         .await;
 
-        // Only nodes within SEARCHTOLERANCE will index the keyword and reply;
-        // fall back to the closest converged contacts when none qualify.
+        // Solo los nodos dentro de SEARCHTOLERANCE indexarán la palabra clave y responderán;
+        // recurrir a los contactos convergidos más cercanos si ninguno cumple el criterio.
         let mut targets: Vec<KadContact> = candidates
             .iter()
             .filter(|c| c.kad_id.is_within_search_tolerance(&kw_kad_id))
@@ -278,9 +278,9 @@ pub async fn publish_keyword(
             file_name: file_name.to_string(),
             file_size,
             source_count: 1,
-            // Standard published tag list (filename/filesize/sources) —
-            // remote indexers evaluate restrictive search expressions
-            // against these tags (eMule `WriteTagListWithPublishInfo`).
+            // Lista de etiquetas publicada estándar (filename/filesize/sources) —
+            // los indexadores remotos evalúan expresiones de búsqueda restrictivas
+            // contra estas etiquetas (`WriteTagListWithPublishInfo` de eMule).
             tags: standard_keyword_tags(file_name, file_size, 1),
             aich_pub: None,
             aich_votes: Vec::new(),
@@ -293,9 +293,9 @@ pub async fn publish_keyword(
             let udp_c = Arc::clone(udp);
             let kw = kw_kad_id.0;
             let mut entries_c = entries.clone();
-            // eMule `PreparePacketForTags` (`Search.cpp:1390`): the
-            // `TAG_KADAICHHASHPUB` tag is only appended when the target
-            // node advertises Kad >= v9.
+            // `PreparePacketForTags` de eMule (`Search.cpp:1390`): la
+            // etiqueta `TAG_KADAICHHASHPUB` solo se adjunta cuando el nodo
+            // destino anuncia Kad >= v9.
             if contact.version >= mule_protocol::kad::KADEMLIA_VERSION_AICH {
                 entries_c[0].aich_pub = aich_root;
             }
@@ -317,22 +317,22 @@ mod tests {
 
     #[test]
     fn test_select_best_kad_keyword_avoids_stop_words_and_low_specificity() {
-        // "The Secret of Roan Inish 1994" : "the", "of" sont stop words, "secret" est peu spécifique.
-        // Doit choisir "inish" (5 lettres) ou "roan" (4 lettres), pas "secret" ni "1994".
+        // "The Secret of Roan Inish 1994" : "the", "of" son palabras vacías, "secret" es poco específico.
+        // Debe elegir "inish" (5 letras) o "roan" (4 letras), no "secret" ni "1994".
         let (kw, _) = select_best_kad_keyword("The Secret of Roan Inish 1994");
         assert_eq!(kw, "inish");
 
-        // "Ali G: Who Iz I? 2026" : "who" est stop word, 2026 est numérique.
-        // Ne doit pas sélectionner "who" ni "2026".
+        // "Ali G: Who Iz I? 2026" : "who" es palabra vacía, 2026 es numérico.
+        // No debe seleccionar "who" ni "2026".
         let (kw_ali, _) = select_best_kad_keyword("Ali G: Who Iz I? 2026");
         assert!(kw_ali == "ali" || kw_ali == "iz", "Actual kw was: {}", kw_ali);
 
-        // "Le Voyage dans la Lune 1902" : "le", "dans", "la" sont stop words, "1902" numérique.
-        // "voyage" a 6 lettres, "lune" 4 lettres.
+        // "Le Voyage dans la Lune 1902" : "le", "dans", "la" son palabras vacías, "1902" numérico.
+        // "voyage" tiene 6 letras, "lune" 4 letras.
         let (kw_lune, _) = select_best_kad_keyword("Le Voyage dans la Lune 1902");
         assert_eq!(kw_lune, "voyage");
 
-        // "El secreto de la isla de las focas" : "secreto" est peu spécifique, "isla" 4 lettres, "focas" 5 lettres.
+        // "El secreto de la isla de las focas" : "secreto" es poco específico, "isla" 4 letras, "focas" 5 letras.
         let (kw_focas, _) = select_best_kad_keyword("El secreto de la isla de las focas");
         assert_eq!(kw_focas, "focas");
     }

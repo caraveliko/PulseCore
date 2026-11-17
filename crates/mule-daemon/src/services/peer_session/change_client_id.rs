@@ -27,14 +27,14 @@ use crate::services::downloads::DownloadService;
 
 use super::log_addr_str;
 
-/// eMule `IsLowID` — a client ID below this bound is a server-issued
-/// LowID, not a routable IP (`opcodes.h` `HIGHEST_LOWID_ED2K + 1`).
+/// `IsLowID` de eMule — un ID de cliente por debajo de este límite es un
+/// LowID emitido por un servidor, no una IP enrutable (`opcodes.h` `HIGHEST_LOWID_ED2K + 1`).
 const LOWID_BOUND: u32 = 16_777_216;
 
-/// Applies one inbound `OP_CHANGE_CLIENT_ID` payload for the connection
-/// at `remote_str` ("ip:port"), on behalf of every file hash the peer is
-/// engaged with. No-op on malformed payloads and for the cases eMule
-/// ignores (unknown server, unknown contents).
+/// Aplica una carga útil entrante de `OP_CHANGE_CLIENT_ID` para la conexión
+/// en `remote_str` ("ip:port"), en nombre de cada hash de archivo con el que el par esté
+/// comprometido. Operación no operativa ante cargas malformadas y en los casos que eMule
+/// ignora (servidor desconocido, contenido desconocido).
 pub(crate) async fn apply_change_client_id(
     payload: &[u8],
     remote_str: &str,
@@ -48,9 +48,9 @@ pub(crate) async fn apply_change_client_id(
     let new_server_ip = u32::from_le_bytes(payload[4..8].try_into().unwrap_or_default());
 
     let is_lowid = new_user_id != 0 && new_user_id < LOWID_BOUND;
-    // HighID case: the announced ID equals the peer's real IP on the
-    // wire — eMule compares `nNewUserID` (little-endian read) to
-    // `client->GetIP()` stored in network order.
+    // Caso HighID: el ID anunciado coincide con la IP real del par en el
+    // cable — eMule compara `nNewUserID` (lectura en little-endian) con
+    // `client->GetIP()` almacenado en orden de red.
     let peer_ip_wire: Option<u32> =
         remote_str
             .parse::<SocketAddr>()
@@ -68,8 +68,8 @@ pub(crate) async fn apply_change_client_id(
         return;
     }
 
-    // eMule `serverlist->GetServerByIP(nNewServerIP)` — the update only
-    // happens when the announced server is one we already know.
+    // `serverlist->GetServerByIP(nNewServerIP)` de eMule — la actualización solo
+    // se produce cuando el servidor anunciado es uno que ya conocemos.
     let server_port = {
         let dl_svc = downloads.lock().await;
         dl_svc
@@ -88,10 +88,10 @@ pub(crate) async fn apply_change_client_id(
         return;
     };
 
-    // Update the source rows this connection maps to: the `ip:port` row
-    // always, plus the `lowid:<new_id>` row when the announced ID is a
-    // LowID (the claim ties that lowid identity to its new server —
-    // `IsLocalServer` can then match it for callback decisions).
+    // Actualiza las filas de origen a las que esta conexión corresponde: la fila `ip:port`
+    // siempre, además de la fila `lowid:<new_id>` cuando el ID anunciado es un
+    // LowID (la declaración vincula esa identidad lowid a su nuevo servidor —
+    // `IsLocalServer` puede entonces emparejarla para decisiones de callback).
     let mut dl_svc = downloads.lock().await;
     for file_hash in file_hashes {
         let _ = dl_svc.update_peer_source_server(file_hash, remote_str, new_server_ip, server_port);
@@ -182,9 +182,9 @@ mod tests {
             .unwrap_or((0, 0))
     }
 
-    /// eMule `ListenSocket.cpp:598-605` : LowID + serveur connu → les
-    /// coordonnées du nouveau serveur s'appliquent sur la ligne `lowid:<id>`
-    /// (et la ligne `ip:port` de la connexion).
+    /// `ListenSocket.cpp:598-605` de eMule: LowID + servidor conocido → las
+    /// coordenadas del nuevo servidor se aplican en la fila `lowid:<id>`
+    /// (y en la fila `ip:port` de la conexión).
     #[tokio::test]
     async fn lowid_on_known_server_updates_source_server_fields() {
         let dir = tempfile::tempdir().unwrap();
@@ -192,7 +192,7 @@ mod tests {
         {
             let mut dl = svc.lock().await;
             dl.set_lowid_source_acceptance(true);
-            // Serveur connu : 1.2.3.4:49661 (server_ip wire = LE octets).
+            // Servidor conocido: 1.2.3.4:49661 (server_ip wire = octetos LE).
             dl.upsert_servers(&[server("1.2.3.4", 49661)]).unwrap();
             let hash = "aa".repeat(16);
             dl.upsert_peer_sources(
@@ -213,8 +213,8 @@ mod tests {
         assert_eq!(server_fields(&dl, &hash, "9.9.9.9:49662"), (wire_ip, 49661));
     }
 
-    /// LowID annoncé sur un serveur INCONNU de la serverlist → eMule ne
-    /// touche rien (`pNewServer == NULL` → pas de SetUserIDHybrid).
+    /// LowID anunciado en un servidor DESCONOCIDO de la lista de servidores → eMule no
+    /// modifica nada (`pNewServer == NULL` → sin SetUserIDHybrid).
     #[tokio::test]
     async fn lowid_on_unknown_server_is_noop() {
         let dir = tempfile::tempdir().unwrap();
@@ -233,9 +233,9 @@ mod tests {
         assert_eq!(server_fields(&dl, &hash, "lowid:42"), (0, 0));
     }
 
-    /// HighID : `nNewUserID` == IP réelle du pair (wire/BE) + serveur
-    /// connu → les coordonnées s'appliquent sur la ligne `ip:port`
-    /// uniquement (aucune ligne `lowid:` n'existe pour un HighID).
+    /// HighID: `nNewUserID` == IP real del par (cable/BE) + servidor
+    /// conocido → las coordenadas se aplican en la fila `ip:port`
+    /// únicamente (no existe ninguna fila `lowid:` para un HighID).
     #[tokio::test]
     async fn highid_matching_peer_ip_updates_ip_row_only() {
         let dir = tempfile::tempdir().unwrap();
@@ -248,7 +248,7 @@ mod tests {
                 .unwrap();
         }
         let hash = "cc".repeat(16);
-        // newUserID = IP du pair 9.9.9.9 en ordre wire (BE).
+        // newUserID = IP del par 9.9.9.9 en orden de cable (BE).
         let p = payload(
             u32::from_be_bytes([9, 9, 9, 9]),
             u32::from_le_bytes([1, 2, 3, 4]),
@@ -261,8 +261,8 @@ mod tests {
         );
     }
 
-    /// Contenu inconnu (HighID qui ne correspond pas à l'IP du pair) et
-    /// payload tronqué → ignorés comme eMule.
+    /// Contenido desconocido (HighID que no corresponde con la IP del par) y
+    /// carga útil truncada → ignorados igual que en eMule.
     #[tokio::test]
     async fn unknown_contents_and_short_payload_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
@@ -275,13 +275,13 @@ mod tests {
                 .unwrap();
         }
         let hash = "dd".repeat(16);
-        // HighID ≠ IP du pair → "unknown contents" eMule.
+        // HighID ≠ IP del par → "unknown contents" de eMule.
         let p = payload(
             u32::from_be_bytes([7, 7, 7, 7]),
             u32::from_le_bytes([1, 2, 3, 4]),
         );
         apply_change_client_id(&p, "9.9.9.9:49662", std::slice::from_ref(&hash), &svc).await;
-        // Payload tronqué → ignoré.
+        // Carga útil truncada → ignorada.
         apply_change_client_id(
             &[1, 2, 3],
             "9.9.9.9:49662",

@@ -3,25 +3,25 @@
 
 //! Modelo del índice de notas de Kad (comentarios / valoraciones de ficheros, rol de nodo de almacenamiento).
 
-/// A note entry indexed for a target file, mirroring eMule `CEntry` with
-/// `m_bSource = false`. Tags are kept as their wire-encoded blob
-/// (`[tag_count:u8][tags]`) so arbitrary/unknown tags survive a restart;
-/// the protocol layer re-decodes them on hydrate.
+/// Una entrada de nota indexada para un archivo objetivo, reflejando `CEntry` de eMule con
+/// `m_bSource = false`. Las etiquetas se mantienen como su blob codificado en el cable
+/// (`[tag_count:u8][tags]`) de modo que etiquetas arbitrarias/desconocidas sobrevivan a un reinicio;
+/// la capa de protocolo las redecodifica al hidratar.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KadIndexedNote {
-    /// 32-char lowercase hex of the target file hash.
+    /// Hexadecimal en minúsculas de 32 caracteres del hash del archivo objetivo.
     pub file_hash: String,
-    /// 32-char lowercase hex of the publisher's Kad ID (`m_uSourceID`).
+    /// Hexadecimal en minúsculas de 32 caracteres del Kad ID del publicador (`m_uSourceID`).
     pub source_id: String,
-    /// Publisher IPv4 (dotted string).
+    /// IPv4 del publicador (cadena con puntos).
     pub publisher_ip: String,
-    /// Publisher Kad UDP port.
+    /// Puerto UDP de Kad del publicador.
     pub publisher_udp_port: u16,
-    /// Wire-encoded tag list blob (bounded, display-only data).
+    /// Blob de lista de etiquetas codificado en el cable (datos acotados, solo para visualización).
     pub tags_blob: Vec<u8>,
-    /// Timestamp when first stored.
+    /// Marca de tiempo de cuando se almacenó por primera vez.
     pub discovered_at_unix_ms: i64,
-    /// Expiration timestamp (TTL ~5h, like eMule `KADEMLIAREPUBLISHTIMEN`).
+    /// Marca de tiempo de caducidad (TTL ~5h, como en `KADEMLIAREPUBLISHTIMEN` de eMule).
     pub expires_at_unix_ms: i64,
 }

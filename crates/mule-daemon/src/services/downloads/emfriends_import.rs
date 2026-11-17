@@ -22,26 +22,26 @@ use crate::error::DaemonError;
 
 use super::db_err;
 
-/// Outcome of `import_emfriends_met`.
+/// Resultado de `import_emfriends_met`.
 #[derive(Debug, Default, Serialize)]
 pub struct EmfriendsImportReport {
-    /// Records read from `emfriends.met`.
+    /// Registros leídos de `emfriends.met`.
     pub records: usize,
-    /// Records without user hash — eMule lists them but our table is
-    /// hash-keyed, so they cannot be matched to a peer anyway.
+    /// Registros sin hash de usuario — eMule los lista pero nuestra tabla está
+    /// indexada por hash, por lo que de todos modos no se pueden emparejar con un par.
     pub skipped_no_userhash: usize,
-    /// Records already known (same user hash) — name refreshed.
+    /// Registros ya conocidos (mismo hash de usuario) — nombre actualizado.
     pub updated: usize,
-    /// New friends added.
+    /// Nuevos amigos añadidos.
     pub imported: usize,
-    /// User hashes (hex) added or updated — the caller registers them
-    /// with the upload manager (`set_friend`).
+    /// Hashes de usuario (hex) añadidos o actualizados — el llamador los registra
+    /// en el gestor de subidas (`set_friend`).
     pub user_hashes: Vec<String>,
 }
 
-/// `LoadFriendsList` — imports an `emfriends.met` file into `friends`.
-/// Existing entries keep their slot and get their name refreshed
-/// (`add_friend` is an upsert, matching `CFriend` overwrite semantics).
+/// `LoadFriendsList` — importa un archivo `emfriends.met` en `friends`.
+/// Las entradas existentes conservan su ranura y actualizan su nombre
+/// (`add_friend` es un upsert, coincidiendo con la semántica de sobreescritura de `CFriend`).
 pub fn import_emfriends_met(
     db: &mut Database,
     path: &Path,

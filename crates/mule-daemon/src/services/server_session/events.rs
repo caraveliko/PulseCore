@@ -40,8 +40,8 @@ pub fn emit_search_results(
                 "fileName": f.name().unwrap_or_else(|| "Unknown".to_string()),
                 "fileSize": f.size().unwrap_or(0),
                 "sourceCount": f.source_count().unwrap_or(1),
-                // eMule marque les fichiers annulés dans les résultats de
-                // recherche (IsCancelledFileByID → m_MyListCtrlItem).
+                // eMule marca los archivos cancelados en los resultados de
+                // búsqueda (IsCancelledFileByID → m_MyListCtrlItem).
                 "cancelled": cancelled.contains(&hash),
             })
         })
@@ -57,8 +57,8 @@ pub fn emit_search_results(
     .send(event_tx);
 }
 
-/// eMule `IsCancelledFileByID` sur chaque résultat — l'ensemble des
-/// hashes annulés à marquer dans `server.searchResult`.
+/// eMule `IsCancelledFileByID` en cada resultado — el conjunto de
+/// hashes cancelados a marcar en `server.searchResult`.
 pub async fn search_result_cancelled_flags(
     downloads: &Option<Arc<tokio::sync::Mutex<crate::services::downloads::DownloadService>>>,
     sr: &SearchResult,
@@ -110,8 +110,8 @@ fn source_to_json<S: FoundSourceLike>(s: &S) -> serde_json::Value {
     })
 }
 
-/// Common surface of `FoundSourcePeer` / `FoundSourcePeerObfu` for the
-/// `server.foundSources` payload.
+/// Superficie común de `FoundSourcePeer` / `FoundSourcePeerObfu` para la
+/// carga útil de `server.foundSources`.
 trait FoundSourceLike {
     fn to_address_string(&self) -> String;
     fn ip_u32(&self) -> u32;

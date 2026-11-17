@@ -18,25 +18,25 @@ use mule_core::model::{PeerFailureReason, PeerSourceStatus};
 
 use crate::services::downloads::DownloadService;
 
-/// Maximum consecutive swaps on one socket — eMule has no explicit bound
-/// (re-ask timing prevents ping-pong); we cap to avoid an infinite chain of
-/// NNP files for a pathological peer.
+/// Intercambios consecutivos máximos en un socket — eMule no tiene un límite explícito
+/// (el tiempo de repetición de petición previene el ping-pong); limitamos para evitar una cadena infinita de
+/// archivos NNP para un par patológico.
 const MAX_A4AF_SWAPS: u32 = 4;
 
-/// NNP re-ask cooldown — eMule `FILEREASKTIME * 2` = 58 min
+/// Tiempo de enfriamiento para repetir petición NNP — `FILEREASKTIME * 2` de eMule = 58 min
 /// (`DownloadClient.cpp:1888`, `PartFile.cpp:2276`).
 const NNP_REASK_COOLDOWN_MS: i64 = 58 * 60 * 1000;
 
-/// Maximum swaps per session (`MAX_A4AF_SWAPS`).
+/// Intercambios máximos por sesión (`MAX_A4AF_SWAPS`).
 pub(crate) fn max_swaps() -> u32 {
     MAX_A4AF_SWAPS
 }
 
-/// Failure reasons that keep the socket alive and are eligible for a swap:
-/// eMule calls `SwapToAnotherFile` on NNP (`ProcessFileStatus`,
-/// `SendBlockRequests`) and FNF (`UDPReaskFNF`, `OP_FILEREQANSNOFILE` via
-/// `ListenSocket.cpp:428`). Any other error means the connection is dead —
-/// nothing to swap on.
+/// Motivos de fallo que mantienen el socket activo y son aptos para un intercambio:
+/// eMule llama a `SwapToAnotherFile` en NNP (`ProcessFileStatus`,
+/// `SendBlockRequests`) y FNF (`UDPReaskFNF`, `OP_FILEREQANSNOFILE` mediante
+/// `ListenSocket.cpp:428`). Cualquier otro error significa que la conexión está muerta —
+/// nada sobre lo que intercambiar.
 pub(crate) fn is_swap_eligible(reason: &PeerFailureReason) -> bool {
     matches!(
         reason,
@@ -44,17 +44,17 @@ pub(crate) fn is_swap_eligible(reason: &PeerFailureReason) -> bool {
     )
 }
 
-/// Picks the file a session should swap to (eMule `SwapToAnotherFile`
-/// candidate scan over `m_OtherRequests_list` then `m_OtherNoNeeded_list`,
-/// with `SwapToRightFile` ordering reduced to: highest download priority,
-/// then deterministic hash order).
+/// Elige el archivo al que una sesión debe intercambiar (escaneo de candidatos de
+/// `SwapToAnotherFile` de eMule sobre `m_OtherRequests_list` y luego `m_OtherNoNeeded_list`,
+/// con ordenación `SwapToRightFile` reducida a: mayor prioridad de descarga,
+/// y luego orden determinista por hash).
 ///
-/// A candidate file must be an active download (eMule `IsPartFile`,
-/// `!IsStopped`, `PS_READY || PS_EMPTY`), must list `address` as a source
-/// (eMule A4AFsrclist), and must not already exceed its source cap
-/// (`cur_file->GetSourceCount() < GetMaxSources()`). Sources flagged
-/// NNP/FNF *on the candidate file* are only chosen when no clean candidate
-/// exists (eMule OtherNoNeeded tier).
+/// Un archivo candidato debe ser una descarga activa (`IsPartFile`, `!IsStopped`,
+/// `PS_READY || PS_EMPTY` de eMule), debe listar `address` como fuente
+/// (A4AFsrclist de eMule), y no debe superar ya su límite de fuentes
+/// (`cur_file->GetSourceCount() < GetMaxSources()`). Las fuentes marcadas como
+/// NNP/FNF *en el archivo candidato* solo se eligen cuando no existe ningún candidato limpio
+/// (nivel OtherNoNeeded de eMule).
 pub(crate) async fn find_swap_target(
     downloads: &Arc<Mutex<DownloadService>>,
     address: &str,
@@ -102,9 +102,9 @@ pub(crate) async fn find_swap_target(
                     e.contains("no needed parts") || e.contains("file not found")
                 })
                 .unwrap_or(false);
-            // Cooldown applies to every status — an NNP-flagged source
-            // (`Allowed` + 58 min cooldown) must not be re-picked within the
-            // same socket chain (eMule `DontSwapTo`/`GetTimeUntilReask`).
+            // El enfriamiento se aplica a todos los estados — una fuente marcada como NNP
+            // (`Allowed` + enfriamiento de 58 min) no debe volver a elegirse dentro de la
+            // misma cadena de sockets (`DontSwapTo`/`GetTimeUntilReask` de eMule).
             if src.cooldown_until_unix_ms.is_some_and(|c| c > now_ms) {
                 continue;
             }
@@ -133,8 +133,8 @@ pub(crate) async fn find_swap_target(
         v
     };
 
-    // eMule: OtherRequests (clean sources) before OtherNoNeeded (NNP-flagged
-    // on that file), `RightFileHasHigherPrio` = download priority first.
+    // eMule: OtherRequests (fuentes limpias) antes de OtherNoNeeded (marcadas como NNP
+    // en ese archivo), `RightFileHasHigherPrio` = prioridad de descarga primero.
     cands.sort_by(|a, b| {
         (a.nnp as u8)
             .cmp(&(b.nnp as u8))
@@ -151,9 +151,9 @@ pub(crate) async fn find_swap_target(
     Some((cand.hash, hash))
 }
 
-/// Records the swap bookkeeping before the session re-asks another file on
-/// the same socket (eMule `DoSwap`: the client leaves the old file's source
-/// list — deadlist for FNF, NNP cooldown — and joins the new file's list).
+/// Registra la contabilidad del intercambio antes de que la sesión vuelva a pedir otro archivo en
+/// el mismo socket (`DoSwap` de eMule: el cliente abandona la lista de fuentes del archivo antiguo —
+/// lista muerta para FNF, enfriamiento NNP — y se une a la lista del nuevo archivo).
 pub(crate) async fn apply_swap(
     downloads: &Arc<Mutex<DownloadService>>,
     address: &str,
@@ -184,9 +184,9 @@ pub(crate) async fn apply_swap(
         }
         _ => {}
     }
-    // The source is now actively served for `to_hash` on the live socket:
-    // mark it connected and clear any leftover cooldown so the coordinator
-    // counts it as a live source (eMule `SwapTo->srclist.AddTail(this)`).
+    // La fuente ahora se sirve activamente para `to_hash` en el socket en vivo:
+    // marcarla como conectada y limpiar cualquier enfriamiento restante para que el coordinador
+    // la cuente como fuente activa (`SwapTo->srclist.AddTail(this)` de eMule).
     let _ = dl.update_peer_source_status(to_hash, address, PeerSourceStatus::Connected, None, None);
 }
 
@@ -235,9 +235,9 @@ mod tests {
 
         let got = find_swap_target(&svc, addr, &ha, 100, 0).await;
         assert_eq!(got.map(|(h, _)| h), Some(hb.clone()));
-        // Not offered for the file it already serves.
+        // No se ofrece para el archivo al que ya sirve.
         assert!(find_swap_target(&svc, addr, &hb, 100, 0).await.is_none());
-        // Unknown address -> nothing.
+        // Dirección desconocida -> nada.
         assert!(find_swap_target(&svc, "9.9.9.9:1", &ha, 100, 0)
             .await
             .is_none());
@@ -255,7 +255,7 @@ mod tests {
         let svc = Arc::new(Mutex::new(svc));
         assert!(find_swap_target(&svc, addr, &ha, 100, 0).await.is_none());
 
-        // Failed with a live cooldown is skipped; expired cooldown is viable.
+        // Con fallo y enfriamiento activo se omite; con enfriamiento expirado es viable.
         {
             let mut dl = svc.lock().await;
             dl.update_peer_source_status(
@@ -281,7 +281,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (ha, hb, hc) = (hash_hex(0x55), hash_hex(0x66), hash_hex(0x77));
         let mut svc = svc_with_two_files(&ha, &hb, &tmp);
-        // Third download whose source record is NNP-flagged.
+        // Tercera descarga cuyo registro de fuente está marcado como NNP.
         let link_c = format!("ed2k://|file|file_c.bin|10000000|{hc}|/");
         svc.add_ed2k_link(
             &link_c,
@@ -298,7 +298,7 @@ mod tests {
         svc.upsert_peer_sources(&hc, &[peer_source(&hc, addr)])
             .unwrap();
         let svc = Arc::new(Mutex::new(svc));
-        // Clean candidate (hc) wins over the NNP-flagged one (hb).
+        // El candidato limpio (hc) se impone al marcado como NNP (hb).
         assert_eq!(
             find_swap_target(&svc, addr, &ha, 100, 0)
                 .await

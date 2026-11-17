@@ -16,16 +16,16 @@ use tracing::info;
 pub use downloads::resolve_download_id;
 pub use policy::{classify, ToolProfile, ToolRisk};
 
-/// Propriété de schéma simple `{ "type": ty, "description": desc }`.
+/// Propiedad de esquema simple `{ "type": ty, "description": desc }`.
 ///
-/// Source unique du boilerplate répété dans les ~87 définitions d'outils ;
-/// les propriétés complexes (enum, items, default…) restent en `json!` brut.
+/// Fuente única del boilerplate repetido en las ~87 definiciones de herramientas;
+/// las propiedades complejas (enum, items, default…) permanecen como `json!` puro.
 pub(crate) fn prop(ty: &str, desc: &str) -> Value {
     serde_json::json!({ "type": ty, "description": desc })
 }
 
-/// Schéma d'entrée d'un outil : `{"type":"object","properties":…,"required":…}`.
-/// `required` est omis quand la liste est vide.
+/// Esquema de entrada de una herramienta: `{"type":"object","properties":…,"required":…}`.
+/// `required` se omite cuando la lista está vacía.
 pub(crate) fn obj_schema(properties: Value, required: &[&str]) -> Value {
     let mut schema = serde_json::json!({ "type": "object", "properties": properties });
     if !required.is_empty() {
@@ -44,8 +44,8 @@ pub fn list_tools() -> Vec<ToolDefinition> {
     tools
 }
 
-/// Variante de [`list_tools`] filtrée par profil : les outils hors profil
-/// — ou non classés — sont masqués. Le profil `Full` reproduit `list_tools`.
+/// Variante de [`list_tools`] filtrada por perfil: las herramientas fuera del perfil
+/// — o no clasificadas — se ocultan. El perfil `Full` reproduce `list_tools`.
 pub fn list_tools_for(profile: ToolProfile) -> Vec<ToolDefinition> {
     list_tools()
         .into_iter()
@@ -57,10 +57,10 @@ pub fn list_tools_for(profile: ToolProfile) -> Vec<ToolDefinition> {
         .collect()
 }
 
-/// Variante de [`execute_tool`] appliquant le profil avant tout appel RPC :
-/// un outil hors profil est refusé sans contact avec le daemon. Filtrer
-/// `tools/list` seul est cosmétique — un client peut invoquer par son nom
-/// un outil qui n'y figure pas.
+/// Variante de [`execute_tool`] que aplica el perfil antes de cualquier llamada RPC:
+/// una herramienta fuera del perfil es rechazada sin contactar con el daemon. Filtrar
+/// `tools/list` solo es cosmético — un cliente puede invocar por su nombre
+/// una herramienta que no figure en la lista.
 pub async fn execute_tool_for(
     profile: ToolProfile,
     client: &DaemonClient,

@@ -18,7 +18,7 @@ pub fn hash_file(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
         println!("  Part #{:<3} : {}", i, hex::encode(ph));
     }
 
-    // Also compute AICH if feasible in memory (or up to reasonable size)
+    // Calcular también AICH si es factible en memoria (o hasta un tamaño razonable)
     if let Ok(metadata) = std::fs::metadata(file) {
         if metadata.len() <= 100 * 1024 * 1024 {
             let mut content = Vec::new();
@@ -71,12 +71,12 @@ pub fn make_link(file: &Path, detailed: bool) -> Result<(), Box<dyn std::error::
         }
     };
 
-    // If file has multiple parts, include part hashes
+    // Si el archivo tiene varias partes, incluir los hashes de las partes
     if ed2k_res.part_hashes.len() > 1 {
         link.part_hashes = ed2k_res.part_hashes.clone();
     }
 
-    // Optionally compute AICH root if <= 100 MiB
+    // Opcionalmente calcular la raíz AICH si es <= 100 MiB
     if let Ok(metadata) = std::fs::metadata(file) {
         if metadata.len() <= 100 * 1024 * 1024 {
             let mut content = Vec::new();

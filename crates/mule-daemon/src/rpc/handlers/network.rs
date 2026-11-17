@@ -49,22 +49,22 @@ pub async fn handle_network_set_profile(
 
 pub async fn handle_network_disconnect_all(state: &AppState) -> Result<Value, JsonRpcError> {
     state.network_policy.disconnect_all();
-    // Le token annulé détruit proprement toutes les sessions TCP (pairs
-    // et serveur) — leur épilogue libère sessions map, blocks in-flight et
-    // statuts SQLite. `last_target` est conservé pour que `network.enable`
-    // puisse restaurer la session via le watcher de reconnexion.
+    // El token cancelado destruye limpiamente todas las sesiones TCP (pares
+    // y servidor) — su epílogo libera el mapa de sesiones, los bloques en vuelo y los
+    // estados en SQLite. `last_target` se conserva para que `network.enable`
+    // pueda restaurar la sesión mediante el observador de reconexión.
     let _ = state.server_session.disconnect_for_kill_switch().await;
     state.inbound_listener.stop().await;
-    // Les sockets UDP ne sont pas liés au token d'annulation — sans stop
-    // explicite ils continueraient à émettre/recevoir pendant le kill
-    // switch.
+    // Los sockets UDP no están vinculados al token de cancelación — sin detención
+    // explícita seguirían emitiendo/recibiendo durante el corte
+    // de red (kill switch).
     let _ = state.kad.udp().stop().await;
     state.server_udp.stop().await;
-    // Les superviseurs (watcher reconnect, coordinateur swarm, rotateur
-    // d'identité, quota d'upload) restent vivants : ils s'auto-inhibent
-    // tant que l'état est `Disabled` et reprennent à `network.enable`.
-    // Seuls les pairs de laboratoire, non couverts par le token, sont
-    // avortés ici.
+    // Los supervisores (observador de reconexión, coordinador de enjambre, rotador
+    // de identidad, cuota de subida) permanecen vivos: se auto-inhiben
+    // mientras el estado sea `Disabled` y se reanudan en `network.enable`.
+    // Solo los pares de laboratorio, no cubiertos por el token, se
+    // cancelan aquí.
     #[cfg(feature = "lab-tools")]
     {
         let mut peer = state.active_lab_peer.lock().await;
@@ -83,12 +83,12 @@ pub async fn handle_network_enable(state: &AppState) -> Result<Value, JsonRpcErr
     let was_disabled = state.network_policy.state() == mule_network_policy::NetworkState::Disabled;
     state.network_policy.enable();
     if was_disabled {
-        // `enable()` vient de créer un nouveau cancel token : redémarrer
-        // les services qui étaient liés à l'ancien (listener entrant,
-        // sockets UDP, maintenance Kad, USS, refresh UPnP). Les
-        // superviseurs n'ont jamais été tués — ils reprennent seuls leur
-        // tick dès que l'état n'est plus `Disabled`, et le watcher
-        // reconnecte au `last_target` conservé par le kill switch.
+        // `enable()` acaba de crear un nuevo token de cancelación: reiniciar
+        // los servicios que estaban vinculados al anterior (oyente entrante,
+        // sockets UDP, mantenimiento de Kad, USS, refresco UPnP). Los
+        // supervisores nunca fueron terminados — retoman solos su
+        // pulso en cuanto el estado deja de ser `Disabled`, y el observador
+        // reconecta al `last_target` conservado por el interruptor de corte.
         let profile = state.network_policy.profile();
         let bind_ip = if profile.is_loopback_only() {
             "127.0.0.1"
@@ -213,17 +213,17 @@ pub async fn handle_filter_import_file(
             JsonRpcError::invalid_params(&format!("Failed to parse ipfilter file: {e}"))
         })?;
 
-    // Persist the source path so the filter is reloaded at boot (eMule
-    // keeps ipfilter.dat loaded across restarts).
+    // Persistir la ruta de origen para recargar el filtro en el arranque (eMule
+    // mantiene ipfilter.dat cargado entre reinicios).
     state
         .downloads
         .lock()
         .await
         .set_setting("ipfilter_path", path_str)?;
 
-    // Même shape que `filter.getStatus`/`setEnabled`/`clear` : le client
-    // parse un `FilterStatusModel` à plat — le rapport de l'import est
-    // déjà exposé via `stats.last_import_report` (stocké par
+    // Mismo formato que `filter.getStatus`/`setEnabled`/`clear`: el cliente
+    // procesa un `FilterStatusModel` plano — el informe de importación ya
+    // está expuesto mediante `stats.last_import_report` (almacenado por
     // `load_from_file`).
     handle_filter_get_status(state).await
 }
@@ -271,8 +271,8 @@ pub async fn handle_limits_get(state: &AppState) -> Result<Value, JsonRpcError> 
     Ok(json!({
         "downloadBytesPerSec": download,
         "uploadBytesPerSec": upload,
-        // Valeurs *configurées* persistées — le bucket ci-dessus porte
-        // l'effectif (ratio eD2K eMule déjà appliqué si upload < 20 Ko/s).
+        // Valores *configurados* persistidos — el depósito anterior lleva
+        // el valor efectivo (proporción eD2K de eMule ya aplicada si subida < 20 KB/s).
         "downloadConfiguredBytesPerSec": persisted_dl.unwrap_or(download),
         "uploadConfiguredBytesPerSec": persisted_ul.unwrap_or(upload),
         "downloadRatioApplied": download < persisted_dl.unwrap_or(download),
@@ -297,8 +297,8 @@ pub async fn handle_limits_set(
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params"))?;
-    // Seed from the live config: a partial update must not silently reset
-    // the other limiters to compile-time defaults.
+    // Semilla de la configuración activa: una actualización parcial no debe restablecer
+    // silenciosamente los otros limitadores a los valores predeterminados de compilación.
     let live = state.network_policy.rate_limiters();
     let mut cfg = mule_filter::RateLimitsConfig {
         download_bytes_per_sec: live.download_bucket.rate_per_sec(),
@@ -311,9 +311,9 @@ pub async fn handle_limits_set(
     let (cap_dl_kbs, cap_ul_kbs) = read_capacities(state).await;
     let (persisted_dl, persisted_ul) = read_persisted_limits(state).await;
 
-    // Limite *configurée* (priorité : paramètre > setting persisté > bucket
-    // live). Le bucket ne contient que l'effectif (ratio déjà appliqué) —
-    // seed sur le bucket ferait décroître la limite à chaque appel.
+    // Límite *configurado* (prioridad: parámetro > ajuste persistido > depósito
+    // activo). El depósito solo contiene el valor efectivo (proporción ya aplicada) —
+    // sembrar sobre el depósito haría decrecer el límite en cada llamada.
     let dl_cfg = params["downloadBytesPerSec"]
         .as_u64()
         .or_else(|| params["downloadLimit"].as_u64().map(|kb| kb * 1024))
@@ -335,18 +335,18 @@ pub async fn handle_limits_set(
         .or_else(|| params["uploadLimit"].as_u64().map(|kb| kb * 1024));
     if ul_bytes.is_some() {
         state.uss.note_manual_limit(ul_cfg);
-        // eMule : quand DynUp (USS) est actif, la limite upload configurée
-        // est son plafond (`LastCommonRouteFinder` borne la limite
-        // dynamique à MaxUpload). 0 = plafond illimité.
+        // eMule: cuando DynUp (USS) está activo, el límite de subida configurado
+        // es su techo (`LastCommonRouteFinder` acota el límite
+        // dinámico a MaxUpload). 0 = techo ilimitado.
         if state.uss.snapshot().enabled {
             state.uss.update_config(|c| c.max_upload_bps = ul_cfg).await;
         }
     }
     state.uss.note_manual_download_limit(dl_cfg);
 
-    // eMule `GetMaxDownloadInBytesPerSec` : le download *effectif* est
-    // plafonné à coef×upload quand l'upload < 20 Ko/s. Le persisté garde
-    // la valeur configurée ; seul le bucket reçoit l'effectif.
+    // `GetMaxDownloadInBytesPerSec` de eMule: la descarga *efectiva* está
+    // limitada a coef×subida cuando la subida < 20 KB/s. El persistido mantiene
+    // el valor configurado; solo el depósito recibe el valor efectivo.
     cfg.upload_bytes_per_sec = ul_cfg;
     cfg.download_bytes_per_sec =
         mule_network_policy::emule_ud_ratio(dl_cfg, effective_upload_for_ratio(state, ul_cfg));
@@ -362,10 +362,10 @@ pub async fn handle_limits_set(
 
     state.network_policy.rate_limiters().apply_config(&cfg);
 
-    // Persist the provided fields (eMule stores MaxUpload/MaxDownload in
-    // preferences.ini) so throttles survive daemon restarts. On persiste
-    // les valeurs *configurées* — le ratio upload/download est recalculé
-    // à chaque application, jamais réécrit dans les settings.
+    // Persistir los campos proporcionados (eMule guarda MaxUpload/MaxDownload en
+    // preferences.ini) para que los limitadores sobrevivan a los reinicios del daemon. Se persisten
+    // los valores *configurados* — la proporción upload/download se recalcula
+    // en cada aplicación, nunca se reescribe en los ajustes.
     {
         let mut dls = state.downloads.lock().await;
         if dl_bytes.is_some() {
@@ -385,7 +385,7 @@ pub async fn handle_limits_set(
         }
     }
 
-    // Optional USS (Upload Speed Sense) config update.
+    // Actualización opcional de la configuración de USS (Upload Speed Sense).
     if let Some(uss_params) = params.get("uss") {
         let enabled = uss_params["enabled"].as_bool();
         let ping_host = uss_params["pingHost"].as_str().map(|s| s.to_string());
@@ -437,8 +437,8 @@ pub async fn handle_limits_set(
     handle_limits_get(state).await
 }
 
-/// Declared line capacities (`capacity_download_kbs` / `capacity_upload_kbs`,
-/// Ko/s — eMule `DownloadCapacity`/`UploadCapacityNew`). 0 = non renseignée.
+/// Capacidades de línea declaradas (`capacity_download_kbs` / `capacity_upload_kbs`,
+/// KB/s — `DownloadCapacity`/`UploadCapacityNew` de eMule). 0 = no indicada.
 async fn read_capacities(state: &AppState) -> (u64, u64) {
     let dls = state.downloads.lock().await;
     let read = |key: &str| {
@@ -451,11 +451,11 @@ async fn read_capacities(state: &AppState) -> (u64, u64) {
     (read("capacity_download_kbs"), read("capacity_upload_kbs"))
 }
 
-/// Limites *configurées* persistées (`rate_limit_*_bps`). eMule stocke
-/// `MaxDownload`/`MaxUpload` bruts dans preferences.ini — le ratio
-/// upload/download est un plafond recalculé à la lecture, jamais réécrit.
-/// Le bucket ne contient que la valeur *effective* : il faut donc relire
-/// le setting pour éviter que le ratio s'applique en cascade.
+/// Límites *configurados* persistidos (`rate_limit_*_bps`). eMule almacena
+/// `MaxDownload`/`MaxUpload` brutos en preferences.ini — la proporción
+/// subida/descarga es un techo recalculado al leer, nunca reescrito.
+/// El depósito solo contiene el valor *efectivo*: por tanto, es necesario releer
+/// el ajuste para evitar que la proporción se aplique en cascada.
 async fn read_persisted_limits(state: &AppState) -> (Option<u64>, Option<u64>) {
     let dls = state.downloads.lock().await;
     let read = |key: &str| {
@@ -470,9 +470,9 @@ async fn read_persisted_limits(state: &AppState) -> (Option<u64>, Option<u64>) {
     )
 }
 
-/// eMule `LoadPreferences` (Preferences.cpp) : la limite effective ne peut
-/// pas excéder la capacité de ligne déclarée — download ≤ capacité × 9/10,
-/// upload ≤ capacité × 4/5. Une limite à 0 (illimitée) n'est jamais clampée.
+/// `LoadPreferences` de eMule (Preferences.cpp): el límite efectivo no puede
+/// superar la capacidad de línea declarada — download ≤ capacidad × 9/10,
+/// upload ≤ capacidad × 4/5. Un límite a 0 (ilimitado) nunca se restringe.
 fn clamp_to_capacity(limit_bps: u64, capacity_kbs: u64, num: u64, den: u64) -> u64 {
     if limit_bps == 0 || capacity_kbs == 0 {
         return limit_bps;
@@ -481,10 +481,10 @@ fn clamp_to_capacity(limit_bps: u64, capacity_kbs: u64, num: u64, den: u64) -> u
     limit_bps.min(cap)
 }
 
-/// Limite upload de référence pour le ratio eMule : quand USS (DynUp)
-/// pilote le bucket, sa limite dynamique courante fait foi (eMule utilise
-/// `uploadqueue->GetDatarate()` quand DynUp est actif) ; sinon la limite
-/// upload configurée.
+/// Límite de subida de referencia para la proporción de eMule: cuando USS (DynUp)
+/// gobierna el depósito, su límite dinámico actual hace fe (eMule utiliza
+/// `uploadqueue->GetDatarate()` cuando DynUp está activo); en caso contrario, el límite
+/// de subida configurado.
 fn effective_upload_for_ratio(state: &AppState, configured_ul_bps: u64) -> u64 {
     let snap = state.uss.snapshot();
     if snap.enabled && snap.current_limit_bps > 0 {
@@ -494,10 +494,10 @@ fn effective_upload_for_ratio(state: &AppState, configured_ul_bps: u64) -> u64 {
     }
 }
 
-/// Re-applique le clamp de capacité puis le ratio upload/download aux
-/// limites courantes quand `capacity*Kbs` change via `settings.set`
-/// (même règle que `limits.set`). Les valeurs *configurées* persistées
-/// font foi — les buckets contiennent l'effectif.
+/// Reaplica la restricción de capacidad y luego la proporción upload/download a los
+/// límites actuales cuando `capacity*Kbs` cambia mediante `settings.set`
+/// (misma regla que en `limits.set`). Los valores *configurados* persistidos
+/// hacen fe — los depósitos contienen el valor efectivo.
 pub async fn apply_capacity_clamp(state: &AppState) -> Result<(), JsonRpcError> {
     let live = state.network_policy.rate_limiters();
     let (persisted_dl, persisted_ul) = read_persisted_limits(state).await;
@@ -528,9 +528,9 @@ pub async fn apply_capacity_clamp(state: &AppState) -> Result<(), JsonRpcError> 
         }
     }
     state.uss.note_manual_limit(clamped_ul);
-    // Le plafond USS suit la limite upload configurée (même règle que
-    // `limits.set` : MaxUpload borne la limite dynamique quand USS est
-    // actif). 0 = plafond illimité.
+    // El techo de USS sigue el límite de subida configurado (misma regla que en
+    // `limits.set`: MaxUpload acota el límite dinámico cuando USS está
+    // activo). 0 = techo ilimitado.
     if state.uss.snapshot().enabled {
         state
             .uss

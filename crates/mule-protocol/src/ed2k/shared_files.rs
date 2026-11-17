@@ -40,22 +40,22 @@ use crate::ed2k::server::OfferedFile;
 use crate::ed2k::tags::{Ed2kTag, TagName, TagValue, TAG_SPECIAL_FILESIZE, TAG_SPECIAL_FILETYPE};
 use crate::framing::RawPacket;
 
-/// Pseudo-directory listing the in-progress part files
-/// (eMule `OP_INCOMPLETE_SHARED_FILES`, `opcodes.h:241`).
+/// Pseudodirectorio que lista los ficheros parciales en progreso
+/// (`OP_INCOMPLETE_SHARED_FILES` de eMule, `opcodes.h:241`).
 pub const OP_INCOMPLETE_SHARED_FILES: &str = "!Incomplete Files";
 
-/// Pseudo-directory for shares not under any shared directory
-/// (eMule `OP_OTHER_SHARED_FILES`, `opcodes.h:242`).
+/// Pseudodirectorio para compartidos que no están bajo ningún directorio compartido
+/// (`OP_OTHER_SHARED_FILES` de eMule, `opcodes.h:242`).
 pub const OP_OTHER_SHARED_FILES: &str = "!Other";
 
-/// `FT_FILERATING` (`0xF7`, `<uint8>`) — eMule `opcodes.h:414`.
-/// For client-bound answers the 0..5 rating is scaled to 0..255
+/// `FT_FILERATING` (`0xF7`, `<uint8>`) — `opcodes.h:414` de eMule.
+/// Para respuestas destinadas a clientes, la calificación 0..5 se escala a 0..255
 /// (`SharedFileList.cpp:960`: `rating * 255/5`).
 const FT_FILERATING: u8 = 0xF7;
 
-/// eMule `WriteString` wire form: `<u16 len><utf8 bytes>`.
-/// `MAX_CLIENT_MSG_LEN`-style safety: directory strings are bounded by the
-/// generic frame limit anyway; a bogus huge length just fails the bounds check.
+/// Formato en cable de `WriteString` de eMule: `<longitud u16><bytes utf8>`.
+/// Seguridad estilo `MAX_CLIENT_MSG_LEN`: las cadenas de directorio están acotadas por el
+/// límite genérico de trama de todos modos; una longitud desmesurada errónea simplemente falla la comprobación de límites.
 fn write_str(dst: &mut Vec<u8>, s: &str) {
     let bytes = s.as_bytes();
     let len = bytes.len().min(u16::MAX as usize) as u16;
@@ -63,34 +63,34 @@ fn write_str(dst: &mut Vec<u8>, s: &str) {
     dst.extend_from_slice(&bytes[..len as usize]);
 }
 
-/// Connection context deciding what a browse answer reveals about us
-/// (`CreateOfferedFilePacket` peer variant, `SharedFileList.cpp:883` with
+/// Contexto de conexión que decide qué revela sobre nosotros una respuesta de exploración
+/// (variante para pares de `CreateOfferedFilePacket`, `SharedFileList.cpp:883` con
 /// `pServer == NULL`).
 #[derive(Clone, Copy, Debug)]
 pub struct OfferPeerContext {
-    /// Our eD2K client ID (sent only when `our_high_id` is set).
+    /// Nuestro ID de cliente eD2K (enviado solo cuando `our_high_id` está activo).
     pub our_client_id: u32,
-    /// Our listening TCP port (sent only when `our_high_id` is set).
+    /// Nuestro puerto TCP de escucha (enviado solo cuando `our_high_id` está activo).
     pub our_tcp_port: u16,
-    /// Whether we currently hold a HighID — LowID writes `0`/`0`.
+    /// Si actualmente poseemos un HighID — LowID escribe `0`/`0`.
     pub our_high_id: bool,
-    /// Whether the *browsing* peer announced large-file support
-    /// (misc2 bit 4) — gates 64-bit `FT_FILESIZE` and the entry itself.
+    /// Si el par *explorador* anunció soporte de ficheros grandes
+    /// (bit 4 de misc2) — habilita `FT_FILESIZE` de 64 bits y la entrada en sí.
     pub peer_large_files: bool,
 }
 
-/// Builds the peer variant of `CreateOfferedFilePacket`
-/// (`SharedFileList.cpp:883` with `pServer == NULL`):
+/// Construye la variante para pares de `CreateOfferedFilePacket`
+/// (`SharedFileList.cpp:883` con `pServer == NULL`):
 ///
-/// - `client_id`/`client_port` carry our real HighID + TCP port when we are
-///   connected and not firewalled; `0`/`0` otherwise;
-/// - `FT_FILESIZE` is a single `TAGTYPE_UINT64` tag when the file is large
-///   **and** the peer announced large-file support (misc2 bit 4);
-/// - `FT_FILERATING` is sent when `rating > 0`, scaled `r * 51`;
-/// - `FT_FILETYPE` string like for servers.
+/// - `client_id`/`client_port` portan nuestro HighID real + puerto TCP cuando estamos
+///   conectados y sin cortafuegos; `0`/`0` en caso contrario;
+/// - `FT_FILESIZE` es una única etiqueta `TAGTYPE_UINT64` cuando el fichero es grande
+///   **y** el par anunció soporte para ficheros grandes (bit 4 de misc2);
+/// - `FT_FILERATING` se envía cuando `rating > 0`, escalado `r * 51`;
+/// - cadena `FT_FILETYPE` como para los servidores.
 ///
-/// Returns `None` when the file is large but the peer does not support
-/// large files (eMule skips the entry entirely — the ASSERT path).
+/// Devuelve `None` cuando el fichero es grande pero el par no admite
+/// ficheros grandes (eMule omite la entrada por completo — ruta ASSERT).
 pub fn offered_file_for_peer(
     file_hash: [u8; 16],
     file_name: &str,
@@ -126,8 +126,8 @@ pub fn offered_file_for_peer(
         });
     }
     if rating > 0 {
-        // eMule `SharedFileList.cpp:960` — client answers rescale 0..5
-        // into the 0..255 eserver format.
+        // `SharedFileList.cpp:960` de eMule — las respuestas al cliente reescalan 0..5
+        // al formato de eserver 0..255.
         tags.push(Ed2kTag {
             name: TagName::Id(FT_FILERATING),
             value: TagValue::UInt8((rating as u32 * 255 / 5) as u8),
@@ -148,7 +148,7 @@ pub fn offered_file_for_peer(
     })
 }
 
-/// Appends one offered-file entry (`hash + id + port + tags`) to `buf`.
+/// Añade una entrada de fichero ofrecido (`hash + id + puerto + etiquetas`) a `buf`.
 fn write_offered_entry(
     encoder: &Ed2kEncoder,
     opcode: u8,
@@ -185,9 +185,9 @@ fn finish_frame(
 }
 
 /// `OP_ASKSHAREDFILESANSWER` (`0x4B`, PR_ED2K):
-/// `<u32 count>` + offered-file entries (`ListenSocket.cpp:676`).
-/// A denied request still gets this answer — with `count == 0`
-/// (eMule sends the empty list instead of `ASKSHAREDDENIEDANS`).
+/// `<recuento u32>` + entradas de ficheros ofrecidos (`ListenSocket.cpp:676`).
+/// Una petición denegada sigue recibiendo esta respuesta — con `count == 0`
+/// (eMule envía la lista vacía en lugar de `ASKSHAREDDENIEDANS`).
 pub fn encode_shared_files_answer(
     files: &[OfferedFile],
     limits: &Ed2kLimits,
@@ -202,7 +202,7 @@ pub fn encode_shared_files_answer(
 }
 
 /// `OP_ASKSHAREDDIRSANS` (`0x5F`, PR_ED2K):
-/// `<u32 count>(<u16 len><dir utf8>)*` (`SendSharedDirectories`,
+/// `<recuento u32>(<longitud u16><directorio utf8>)*` (`SendSharedDirectories`,
 /// `BaseClient.cpp:2916`).
 pub fn encode_shared_dirs_answer(
     dirs: &[String],
@@ -217,9 +217,9 @@ pub fn encode_shared_dirs_answer(
 }
 
 /// `OP_ASKSHAREDFILESDIRANS` (`0x60`, PR_ED2K):
-/// `<u16 len><dir utf8><u32 count>` + offered-file entries
-/// (`ListenSocket.cpp:766-787`). The echoed string is the *requested*
-/// pseudo name verbatim (`strOrgReqDir`), even when it resolved to nothing.
+/// `<longitud u16><directorio utf8><recuento u32>` + entradas de ficheros ofrecidos
+/// (`ListenSocket.cpp:766-787`). La cadena devuelta es el pseudonombre *solicitado*
+/// textual (`strOrgReqDir`), incluso cuando no se resolvió en nada.
 pub fn encode_shared_files_dir_answer(
     requested_dir: &str,
     files: &[OfferedFile],
@@ -235,15 +235,15 @@ pub fn encode_shared_files_dir_answer(
     finish_frame(OP_ASKSHAREDFILESDIRANS, buf, limits)
 }
 
-/// `OP_ASKSHAREDDENIEDANS` (`0x61`, PR_ED2K, empty payload) — sent when the
-/// share-viewing preference denies the requester (`ListenSocket.cpp:701`).
+/// `OP_ASKSHAREDDENIEDANS` (`0x61`, PR_ED2K, carga útil vacía) — enviado cuando la
+/// preferencia de visualización de compartidos deniega al solicitante (`ListenSocket.cpp:701`).
 pub fn encode_shared_denied() -> RawPacket {
     RawPacket::with_vec(PR_ED2K, OP_ASKSHAREDDENIEDANS, Vec::new())
 }
 
-/// Decodes an `OP_ASKSHAREDFILESDIR` (`0x5E`) payload `<u16 len><dir>`.
-/// Returns `None` on truncation — eMule tolerates trailing garbage but the
-/// length prefix must be present and in-bounds.
+/// Decodifica una carga útil `OP_ASKSHAREDFILESDIR` (`0x5E`) `<longitud u16><directorio>`.
+/// Devuelve `None` ante truncamiento — eMule tolera basura residual pero el
+/// prefijo de longitud debe estar presente y dentro de los límites.
 pub fn decode_ask_files_dir(payload: &[u8]) -> Option<String> {
     if payload.len() < 2 {
         return None;
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn shared_files_answer_wire_layout() {
-        // eMule `ListenSocket.cpp:676` — `<u32 count><entry>*` on PR_ED2K 0x4B.
+        // eMule `ListenSocket.cpp:676` — `<u32 count><entry>*` en PR_ED2K 0x4B.
         let f = entry(0xAA, 0x01020304, 39735, "x.bin", 42, false);
         let pkt = encode_shared_files_answer(&[f], &Ed2kLimits::default()).unwrap();
         assert_eq!(pkt.protocol, PR_ED2K);
@@ -310,7 +310,7 @@ mod tests {
         let pkt = encode_shared_dirs_answer(&dirs, &Ed2kLimits::default()).unwrap();
         assert_eq!(pkt.opcode, 0x5F);
         assert_eq!(&pkt.payload[..4], &2u32.to_le_bytes());
-        // First string: len 17 + bytes
+        // Primera cadena: len 17 + bytes
         let l = u16::from_le_bytes([pkt.payload[4], pkt.payload[5]]) as usize;
         assert_eq!(l, 17);
         assert_eq!(&pkt.payload[6..6 + l], b"!Incomplete Files");
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(
             &pkt.payload[2 + l..2 + l + 4],
             &0u32.to_le_bytes(),
-            "unknown pseudo dir -> empty list (eMule sends count=0)"
+            "directorio simulado desconocido -> lista vacía (eMule envía count=0)"
         );
     }
 
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(decode_ask_files_dir(&[4, 0, b't', b'e', b's', b't']), Some("test".into()));
         assert_eq!(decode_ask_files_dir(&[9, 0, b's']), None);
         assert_eq!(decode_ask_files_dir(&[]), None);
-        // Trailing bytes tolerated (eMule ASSERT only in debug).
+        // Se toleran bytes sobrantes al final (eMule ASSERT solo en debug).
         assert_eq!(
             decode_ask_files_dir(&[2, 0, b'h', b'i', 0xFF]),
             Some("hi".into())
@@ -349,15 +349,15 @@ mod tests {
             our_high_id: true,
             peer_large_files: true,
         };
-        // HighID -> real id+port; large file + peer support -> u64 tag.
+        // HighID -> id+puerto reales; archivo grande + soporte del par -> etiqueta u64.
         let f = offered_file_for_peer([1; 16], "big.iso", 5_000_000_000, 4, &high).unwrap();
         assert_eq!(f.client_id, 0x7F000001);
         assert_eq!(f.client_port, 39735);
         assert!(matches!(f.tags[1].value, TagValue::UInt64(5_000_000_000)));
-        // rating 4 -> 4*51 = 204
+        // valoración 4 -> 4*51 = 204
         assert!(matches!(f.tags[2].value, TagValue::UInt8(204)));
 
-        // LowID -> zeros.
+        // LowID -> ceros.
         let low = OfferPeerContext {
             our_high_id: false,
             ..high
@@ -365,7 +365,7 @@ mod tests {
         let f2 = offered_file_for_peer([1; 16], "a", 1, 0, &low).unwrap();
         assert_eq!((f2.client_id, f2.client_port), (0, 0));
 
-        // Large file + no peer support -> skipped entirely.
+        // Archivo grande + sin soporte del par -> se omite por completo.
         let no_large = OfferPeerContext {
             our_client_id: 0,
             our_tcp_port: 0,

@@ -20,7 +20,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Calling method before handshake must be rejected
+    // 1. La invocación de un método antes del apretón de manos (handshake) debe ser rechazada
     let req_unauth = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -34,9 +34,9 @@ async fn test_full_rpc_contract_and_event_streaming() {
 
     let msg = read.next().await.unwrap().unwrap();
     let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
-    assert_eq!(resp["error"]["code"], -32000); // Auth failed
+    assert_eq!(resp["error"]["code"], -32000); // Fallo de autenticación
 
-    // 2. Handshake with bad token
+    // 2. Apretón de manos con token incorrecto
     let req_bad_token = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -54,7 +54,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
     assert_eq!(resp["error"]["code"], -32000);
 
-    // 3. Handshake with valid token
+    // 3. Apretón de manos con token válido
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -73,7 +73,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     assert!(resp["result"]["instanceId"].is_string());
     assert_eq!(resp["result"]["protocolVersion"], 1);
 
-    // 4. Add eD2K Link
+    // 4. Agregar enlace eD2K
     let valid_link = "ed2k://|file|test_archive.zip|10000|0123456789abcdef0123456789abcdef|/";
     let req_add = json!({
         "jsonrpc": "2.0",
@@ -89,7 +89,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
         .await
         .unwrap();
 
-    // Might receive the response plus lifecycle/update events in any order
+    // Podría recibirse la respuesta más eventos de ciclo de vida/actualización en cualquier orden
     let mut add_resp: Option<Value> = None;
     let mut add_event: Option<Value> = None;
 
@@ -116,7 +116,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     let add_event = add_event.expect("Expected event.downloadUpdated notification");
     assert_eq!(add_event["params"]["download"]["id"], download_id);
 
-    // 5. List downloads
+    // 5. Listar descargas
     let req_list = json!({
         "jsonrpc": "2.0",
         "id": 5,
@@ -135,7 +135,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
 
     #[cfg(any(feature = "debug-rpc", feature = "lab-tools"))]
     {
-        // 6. Inject Range (simulate data arrival)
+        // 6. Inyectar rango (simular llegada de datos)
         let req_inject = json!({
             "jsonrpc": "2.0",
             "id": 6,
@@ -175,7 +175,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
         assert!(inject_event["params"]["sequence"].as_u64().unwrap() > 0);
     }
 
-    // 7. Pause and Resume
+    // 7. Pausar y reanudar
     let req_pause = json!({
         "jsonrpc": "2.0",
         "id": 7,
@@ -198,7 +198,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     }
     assert_eq!(pause_resp.unwrap()["result"]["status"], "paused");
 
-    // 8. Test system.stop
+    // 8. Probar system.stop
     let req_stop = json!({
         "jsonrpc": "2.0",
         "id": 8,
@@ -233,7 +233,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
     let link = "ed2k://|file|sample_file.iso|1048576|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     let download_id: String;
 
-    // 1. First run: Start daemon with on-disk SQLite, add link, remove link
+    // 1. Primera ejecución: iniciar el daemon con SQLite en disco, agregar enlace y eliminar enlace
     {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -249,7 +249,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
         let (ws_stream, _) = connect_async(&ws_url).await.unwrap();
         let (mut write, mut read) = ws_stream.split();
 
-        // Handshake
+        // Apretón de manos (handshake)
         write
             .send(Message::Text(
                 json!({
@@ -265,7 +265,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
             .unwrap();
         let _ = recv_response_by_id(&mut read, 1).await;
 
-        // Add eD2K link
+        // Agregar enlace eD2K
         write
             .send(Message::Text(
                 json!({
@@ -285,7 +285,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
             .unwrap()
             .to_string();
 
-        // List downloads -> must have 1
+        // Listar descargas -> debe tener 1
         write
             .send(Message::Text(
                 json!({
@@ -302,7 +302,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
         let list_val = recv_response_by_id(&mut read, 3).await;
         assert_eq!(list_val["result"]["downloads"].as_array().unwrap().len(), 1);
 
-        // Remove download
+        // Eliminar descarga
         write
             .send(Message::Text(
                 json!({
@@ -319,7 +319,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
         let rem_val = recv_response_by_id(&mut read, 4).await;
         assert_eq!(rem_val["result"]["success"], true);
 
-        // List downloads -> must have 0
+        // Listar descargas -> debe tener 0
         write
             .send(Message::Text(
                 json!({
@@ -342,7 +342,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
         server_handle.abort();
     }
 
-    // 2. Restart daemon on the SAME database file!
+    // 2. ¡Reiniciar el daemon sobre el MISMO archivo de base de datos!
     {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -358,7 +358,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
         let (ws_stream, _) = connect_async(&ws_url).await.unwrap();
         let (mut write, mut read) = ws_stream.split();
 
-        // Handshake
+        // Apretón de manos (handshake)
         write
             .send(Message::Text(
                 json!({
@@ -374,7 +374,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
             .unwrap();
         let _ = recv_response_by_id(&mut read, 1).await;
 
-        // List downloads on restarted daemon -> MUST BE 0!
+        // Listar descargas en el daemon reiniciado -> ¡DEBE SER 0!
         write
             .send(Message::Text(
                 json!({

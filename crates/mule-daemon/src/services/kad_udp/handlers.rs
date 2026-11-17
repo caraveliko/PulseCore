@@ -19,9 +19,9 @@ use crate::services::downloads::DownloadService;
 use crate::services::kad::firewall::OUR_KAD_VERSION;
 use mule_protocol::ed2k::packed::pack_kad_datagram;
 
-/// eMule `KADEMLIA_VERSION7_49a` (`Opcodes.h:29`) — contacts strictly above
-/// `KADEMLIA_VERSION6_49aBETA` (6) get the extended `FIREWALLED2_REQ` and
-/// answer with `OP_KAD_FWTCPCHECK_ACK` over TCP.
+/// `KADEMLIA_VERSION7_49a` de eMule (`Opcodes.h:29`) — los contactos estrictamente superiores
+/// a `KADEMLIA_VERSION6_49aBETA` (6) reciben el `FIREWALLED2_REQ` extendido y
+/// responden con `OP_KAD_FWTCPCHECK_ACK` por TCP.
 const KADEMLIA_VERSION7_49A: u8 = 7;
 
 type DownloadsSlot = Arc<tokio::sync::RwLock<Option<Arc<tokio::sync::Mutex<DownloadService>>>>>;
@@ -34,8 +34,8 @@ pub async fn handle_incoming_message(
     msg: KadMessage,
     in_flight: &InFlightMap,
     local_kad_id: &[u8; 16],
-    // Our eD2K user hash — `clientHash` field of `KADEMLIA_FIREWALLED2_REQ`
-    // (eMule `CPrefs::GetClientHash()` = the user hash, not the Kad ID).
+    // Nuestro hash de usuario eD2K — campo `clientHash` de `KADEMLIA_FIREWALLED2_REQ`
+    // (`CPrefs::GetClientHash()` de eMule = el hash de usuario, no el ID Kad).
     our_user_hash: &[u8; 16],
     local_port: u16,
     storage: &Arc<tokio::sync::Mutex<KadStorage>>,
@@ -88,9 +88,9 @@ pub async fn handle_incoming_message(
                 hello.tcp_port,
                 hello.misc_options
             , peer = log_peer_addr(peer_addr));
-            // eMule AddContact_KADEMLIA2: every HELLO_REQ feeds the routing
-            // table. The contact stays unverified until it answers one of
-            // our requests or completes the HELLO_RES_ACK handshake.
+            // AddContact_KADEMLIA2 de eMule: cada HELLO_REQ alimenta la tabla de
+            // enrutamiento. El contacto permanece no verificado hasta que responde a una
+            // de nuestras solicitudes o completa el saludo HELLO_RES_ACK.
             if let IpAddr::V4(ip) = peer_addr.ip() {
                 learn_contact(
                     &routing_table,
@@ -111,10 +111,10 @@ pub async fn handle_incoming_message(
                 )
                 .await;
             }
-            // eMule KADMISCOPTIONS (KademliaUDPListener.cpp:131-137):
-            // bit0 = UDP firewalled, bit1 = TCP firewalled (CPrefs
-            // GetFirewalled), bit2 = ask the receiver to complete the
-            // handshake with HELLO_RES_ACK.
+            // KADMISCOPTIONS de eMule (KademliaUDPListener.cpp:131-137):
+            // bit0 = cortafuegos UDP, bit1 = cortafuegos TCP (GetFirewalled de
+            // CPrefs), bit2 = solicitar al receptor completar el
+            // saludo con HELLO_RES_ACK.
             let mut misc = 0x04u8;
             {
                 let fw = firewall.lock().await;
@@ -135,8 +135,8 @@ pub async fn handle_incoming_message(
             let _ = socket
                 .send_to(&pack_kad_datagram(&hello_res), peer_addr)
                 .await;
-            // eMule tail of Process_KADEMLIA2_HELLO_REQ — a recheck round in
-            // progress turns each inbound HELLO into a TCP probe request.
+            // Final de Process_KADEMLIA2_HELLO_REQ en eMule — una ronda de recomprobación en
+            // curso transforma cada HELLO entrante en una solicitud de sondeo TCP.
             maybe_tcp_firewall_check(
                 socket,
                 peer_addr,
@@ -149,20 +149,20 @@ pub async fn handle_incoming_message(
             .await;
         }
         KadMessage::HelloRes(hello_res) => {
-            // Kad >= 8: the responder may ask us to prove our IP with a
-            // HELLO_RES_ACK (KADMISCOPTIONS bit 2).
+            // Kad >= 8: el respondedor puede solicitarnos demostrar nuestra IP con un
+            // HELLO_RES_ACK (bit 2 de KADMISCOPTIONS).
             let wants_ack = hello_res.requests_ack();
-            // Captured before `hello_res` is moved into the transaction
-            // sender below — needed by the TCP recheck hook.
+            // Capturado antes de mover `hello_res` al remitente de transacción
+            // inferior — necesario para el gancho de recomprobación TCP.
             let peer_kad_version = hello_res.version;
             let peer_udp_port = if hello_res.udp_port != 0 {
                 hello_res.udp_port
             } else {
                 peer_addr.port()
             };
-            // in_flight must be released before learn_contact awaits
-            // routing_table — holding it creates an in_flight → routing_table
-            // ordering that deadlocks against get_status (routing_table →
+            // in_flight debe liberarse antes de que learn_contact espere a
+            // routing_table — retenerlo crea un orden in_flight → routing_table
+            // que provocaría interbloqueo con get_status (routing_table →
             // get_snapshot → in_flight).
             let (matched_id, matched_sender) = {
                 let mut inf = in_flight.lock().await;
@@ -184,8 +184,8 @@ pub async fn handle_incoming_message(
                 peer_udp_port
             , peer = log_peer_addr(peer_addr));
             if let Some(tx) = matched_sender {
-                // A solicited HELLO_RES proves the remote owns its advertised
-                // IP:port — the contact is verified (eMule IsIpVerified).
+                // Un HELLO_RES solicitado demuestra que el remoto posee su IP:puerto
+                // anunciados — el contacto queda verificado (IsIpVerified de eMule).
                 if let IpAddr::V4(ip) = peer_addr.ip() {
                     learn_contact(
                         &routing_table,
@@ -221,11 +221,11 @@ pub async fn handle_incoming_message(
             .await;
         }
         KadMessage::HelloResAck(ack) => {
-            // Completes the three-way hello (eMule
-            // Process_KADEMLIA2_HELLO_RES_ACK): the peer acked our HELLO_RES,
-            // proving it owns its advertised IP — promote the stored contact
-            // to verified, but only if the packet source matches the contact's
-            // IP (an ACK for someone else's KadID must not verify them).
+            // Completa el saludo de tres vías (Process_KADEMLIA2_HELLO_RES_ACK de
+            // eMule): el par confirmó nuestro HELLO_RES, demostrando que posee su
+            // IP anunciada — promueve el contacto almacenado a verificado, pero solo
+            // si el origen del paquete coincide con la IP del contacto (un ACK para el
+            // KadID de otro no debe verificarlo).
             if let (Some(table), IpAddr::V4(ip)) = (&routing_table, peer_addr.ip()) {
                 let mut t = table.lock().await;
                 let id = KadId(ack.kad_id);
@@ -246,10 +246,10 @@ pub async fn handle_incoming_message(
             handle_firewalled_check(socket, peer_addr, req.tcp_port, true).await;
         }
         KadMessage::FirewalledRes(res) => {
-            // Answer to a FIREWALLED_REQ we sent — carries our public IP as
-            // seen by the responder. eMule `Process_KADEMLIA_FIREWALLED_RES`
-            // drops unrequested answers (`IsKadFirewallCheckIP`), records the
-            // observed IP (`SetIPAddress`) and ticks the round (`IncRecheckIP`).
+            // Respuesta a un FIREWALLED_REQ enviado por nosotros — contiene nuestra IP
+            // pública según la observó el respondedor. `Process_KADEMLIA_FIREWALLED_RES` de eMule
+            // descarta respuestas no solicitadas (`IsKadFirewallCheckIP`), registra la IP
+            // observada (`SetIPAddress`) y avanza la ronda (`IncRecheckIP`).
             let ip = std::net::Ipv4Addr::from(res.ip.to_le_bytes());
             let mut fw = firewall.lock().await;
             if !fw.is_tcp_check_ip(peer_addr.ip()) {
@@ -267,7 +267,7 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::FirewalledAckRes => {
-            // Legacy (Kad < 7) connect-back verdict over UDP — eMule
+            // Veredicto de devolución de conexión heredado (Kad < 7) por UDP — eMule
             // `Process_KADEMLIA_FIREWALLED_ACK_RES` → `IncFirewalled`.
             firewall.lock().await.inc_tcp_acks();
             tracing::debug!(
@@ -276,9 +276,9 @@ pub async fn handle_incoming_message(
             );
         }
         KadMessage::BootstrapReq(req) => {
-            // eMule Process_KADEMLIA2_BOOTSTRAP_REQ: answer with our KadID +
-            // eD2K TCP port + Kad version and up to 20 verified contacts
-            // spread across the keyspace (GetBootstrapContacts).
+            // Process_KADEMLIA2_BOOTSTRAP_REQ de eMule: responde con nuestro KadID +
+            // puerto eD2K TCP + versión de Kad y hasta 20 contactos verificados
+            // distribuidos a lo largo del espacio de claves (GetBootstrapContacts).
             let contacts: Vec<KadContactWire> = match &routing_table {
                 Some(table) => table
                     .lock()
@@ -303,9 +303,9 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::Req(req) => {
-            // eMule Process_KADEMLIA2_REQ: [type][target][uCheck] — uCheck is
-            // the KadID the requester believes we own; a mismatch means a
-            // stale contact entry and eMule drops the request silently.
+            // Process_KADEMLIA2_REQ de eMule: [type][target][uCheck] — uCheck es
+            // el KadID que el solicitante cree que poseemos; una discrepancia indica
+            // una entrada de contacto obsoleta y eMule descarta la solicitud en silencio.
             let count = (req.req_type & 0x1F) as usize;
             if count == 0 || req.sender_id != *local_kad_id {
                 tracing::debug!(
@@ -342,7 +342,7 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::BootstrapRes(boot_res) => {
-            // Release in_flight before learn_contact awaits routing_table —
+            // Liberar in_flight antes de que learn_contact espere routing_table —
             // same in_flight → routing_table ordering hazard as HelloRes.
             let (matched_id, matched_sender) = {
                 let mut inf = in_flight.lock().await;
@@ -363,8 +363,8 @@ pub async fn handle_incoming_message(
                 boot_res.contacts.len()
             , peer = log_peer_addr(peer_addr));
             if matched_id.is_some() {
-                // Solicited response → the responder is verified. Its header
-                // port field is its TCP port (eMule BOOTSTRAP_RES layout).
+                // Respuesta solicitada → el respondedor queda verificado. El campo de puerto
+                // de su encabezado es su puerto TCP (disposición BOOTSTRAP_RES de eMule).
                 if let IpAddr::V4(ip) = peer_addr.ip() {
                     learn_contact(
                         &routing_table,
@@ -391,8 +391,8 @@ pub async fn handle_incoming_message(
                 let mut store = storage.lock().await;
                 store.get_sources(&req.target_file_hash, req.start_pos)
             };
-            // eMule `SendValidSourceResult`: results are split into as many
-            // datagrams as needed to stay under `UDP_KAD_MAXFRAGMENT`.
+            // `SendValidSourceResult` de eMule: los resultados se dividen en tantos
+            // datagramas como sea necesario para mantenerse bajo `UDP_KAD_MAXFRAGMENT`.
             let packets =
                 KadCodec::encode_search_source_res_fragmented(&req.target_file_hash, &sources);
             tracing::debug!(
@@ -425,9 +425,9 @@ pub async fn handle_incoming_message(
                 hex::encode(search_res.target_file_hash)
             , peer = log_peer_addr(peer_addr));
             if let Some(id) = matched_tx {
-                // Multi-packet response: keep the transaction registered so
-                // the next batch from this peer still routes to the sender;
-                // drop it only when the collector is gone.
+                // Respuesta multipaquete: mantener registrada la transacción para que
+                // el siguiente lote de este par se siga enrutando al remitente;
+                // eliminarla únicamente cuando el recolector haya finalizado.
                 if let Some(tx) = inf.get(&id) {
                     if tx
                         .sender
@@ -440,8 +440,8 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::PublishSourceReq(req) => {
-            // eMule ProcessPublishSourceRequest: out-of-tolerance targets are
-            // dropped silently — we are not an indexer for this key.
+            // ProcessPublishSourceRequest de eMule: los destinos fuera de tolerancia
+            // se descartan en silencio — no somos indexador para esta clave.
             if !within_publish_tolerance(local_kad_id, &req.target_file_hash) {
                 tracing::debug!(
                     "Kad UDP: dropping out-of-tolerance PublishSourceReq from {peer} for file {}",
@@ -454,12 +454,12 @@ pub async fn handle_incoming_message(
                 std::net::IpAddr::V4(v4) => v4.octets(),
                 std::net::IpAddr::V6(_) => [127, 0, 0, 1],
             };
-            // eMule CKademliaUDPListener::ProcessPublishSourceRequest: the
-            // advertised contact must match the sender's IP and carry a TCP port.
+            // CKademliaUDPListener::ProcessPublishSourceRequest de eMule: el
+            // contacto anunciado debe coincidir con la IP del remitente y portar un puerto TCP.
             let valid_contact = req.contact.ip == peer_ip_bytes && req.contact.tcp_port > 0;
             if valid_contact {
-                // The publisher's self-announced contact is IP-bound and
-                // validated — learn it (unverified) like eMule's AddContact.
+                // El contacto autoanunciado del publicador está vinculado a su IP y
+                // validado — aprenderlo (no verificado) como en AddContact de eMule.
                 learn_contact(
                     &routing_table,
                     req.contact.kad_id,
@@ -505,14 +505,14 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::PublishSourceRes(pub_res) => {
-            // eMule `Process_KADEMLIA2_PUBLISH_RES` ("for future use"): a
-            // trailing options byte with bit 0 requests a bare
-            // `KADEMLIA2_PUBLISH_RES_ACK` (0x4C) datagram back.
+            // `Process_KADEMLIA2_PUBLISH_RES` de eMule («para uso futuro»): un
+            // byte de opciones final con el bit 0 solicita un datagrama
+            // `KADEMLIA2_PUBLISH_RES_ACK` (0x4C) simple de vuelta.
             if pub_res.request_ack {
                 let ack = [PR_KADEMLIA, KADEMLIA2_PUBLISH_RES_ACK];
                 let _ = socket.send_to(&pack_kad_datagram(&ack), peer_addr).await;
             }
-            // Opcode 0x4B is the unified publish response for both source and keyword publish.
+            // El opcode 0x4B es la respuesta de publicación unificada tanto para fuentes como para palabras clave.
             // Match in-flight transactions expecting either PublishSourceRes or PublishKeywordRes.
             let mut inf = in_flight.lock().await;
             let mut matched_tx = None;
@@ -556,10 +556,10 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::SearchKeywordReq(req) => {
-            // eMule `Process_KADEMLIA2_SEARCH_KEY_REQ`: when `restrictive`
-            // is set the trailing bytes form a search-expression tree
-            // (`CreateSearchExpressionTree`). A malformed tree throws and the
-            // whole datagram is dropped.
+            // `Process_KADEMLIA2_SEARCH_KEY_REQ` de eMule: cuando `restrictive`
+            // está activado, los bytes finales forman un árbol de expresiones de búsqueda
+            // (`CreateSearchExpressionTree`). Un árbol malformado genera error y el
+            // datagrama entero se descarta.
             let expr = if req.restrictive {
                 match req.search_expression.as_deref() {
                     Some(bytes) => {
@@ -579,7 +579,7 @@ pub async fn handle_incoming_message(
                             }
                         }
                     }
-                    // Restrictive flag without an expression: eMule serves
+                    // Indicador restrictivo sin expresión: eMule sirve
                     // unfiltered results (pSearchTerms == NULL).
                     None => None,
                 }
@@ -626,8 +626,8 @@ pub async fn handle_incoming_message(
                 hex::encode(search_res.keyword_hash)
             , peer = log_peer_addr(peer_addr));
             if let Some(id) = matched_tx {
-                // Multi-packet response: keep the transaction registered so
-                // the next batch from this peer still routes to the sender.
+                // Respuesta multipaquete: mantener la transacción registrada para que
+                // el siguiente lote de este par se siga enrutando al remitente.
                 if let Some(tx) = inf.get(&id) {
                     if tx
                         .sender
@@ -640,8 +640,8 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::PublishKeywordReq(req) => {
-            // eMule ProcessPublishKeywordRequest: out-of-tolerance keyword
-            // hashes are dropped silently.
+            // ProcessPublishKeywordRequest de eMule: los hashes de palabras clave
+            // fuera de tolerancia se descartan en silencio.
             if !within_publish_tolerance(local_kad_id, &req.keyword_hash) {
                 tracing::debug!(
                     "Kad UDP: dropping out-of-tolerance PublishKeywordReq from {peer} for keyword {}",
@@ -649,7 +649,7 @@ pub async fn handle_incoming_message(
                 , peer = log_peer_addr(peer_addr));
                 return;
             }
-            // Reject malformed entries: zero file hash or empty/oversized name.
+            // Rechazar entradas malformadas: hash de archivo cero o nombre vacío/excesivo.
             let valid_entries: Vec<_> = req
                 .entries
                 .into_iter()
@@ -705,9 +705,9 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::FirewallUdp(fw) => {
-            // eMule Process_KADEMLIA2_FIREWALLUDP → CUDPFirewallTester::
-            // SetUDPFWCheckResult: only answer packets from candidate IPs we
-            // actually asked are routed to a pending test.
+            // Process_KADEMLIA2_FIREWALLUDP de eMule → SetUDPFWCheckResult de
+            // CUDPFirewallTester: solo los paquetes de respuesta procedentes de IPs candidatas
+            // que realmente hayamos consultado se enrutan a una prueba pendiente.
             let delivered = {
                 let mut fw_track = firewall.lock().await;
                 fw_track.notify_packet(
@@ -733,10 +733,10 @@ pub async fn handle_incoming_message(
                 );
             }
         }
-        // --- Buddy relay role (eMule CClientList::GetBuddy machinery) ---
+        // --- Rol de repetidor de amigos (mecanismo GetBuddy de CClientList de eMule) ---
         KadMessage::FindBuddyReq(req) => {
-            // eMule Process_KADEMLIA_FINDBUDDY_REQ: only a verified,
-            // non-firewalled node with no current buddy may accept.
+            // Process_KADEMLIA_FINDBUDDY_REQ de eMule: solo un nodo verificado,
+            // no tras cortafuegos y sin amigo actual puede aceptar.
             let eligible = {
                 let fw = firewall.lock().await;
                 fw.verified && fw.status == UdpFirewallStatus::Open
@@ -765,7 +765,7 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::FindBuddyRes(res) => {
-            // We never send FINDBUDDY_REQ (the LowID-self buddy client is
+            // Nunca enviamos FINDBUDDY_REQ (el cliente buddy para uno mismo en LowID es
             // not implemented); log unsolicited responses.
             tracing::debug!(
                 "Kad UDP: ignoring unsolicited FINDBUDDY_RES from {peer} (tcp_port={})",
@@ -812,7 +812,7 @@ pub async fn handle_incoming_message(
                 );
             }
         }
-        // --- Kad notes (file comments / ratings) ---
+        // --- Notas Kad (comentarios / valoraciones de archivos) ---
         KadMessage::SearchNotesReq(req) => {
             let notes = {
                 let mut store = storage.lock().await;
@@ -862,8 +862,8 @@ pub async fn handle_incoming_message(
                 hex::encode(res.target_file_hash)
             , peer = log_peer_addr(peer_addr));
             if let Some(id) = matched_tx {
-                // Multi-packet response: keep the transaction registered so
-                // the next batch from this peer still routes to the sender.
+                // Respuesta multipaquete: mantener la transacción registrada para que
+                // el siguiente lote de este par se siga enrutando al remitente.
                 if let Some(tx) = inf.get(&id) {
                     if tx.sender.send(Ok(KadMessage::SearchNotesRes(res))).is_err() {
                         inf.remove(&id);
@@ -872,8 +872,8 @@ pub async fn handle_incoming_message(
             }
         }
         KadMessage::PublishNotesReq(req) => {
-            // eMule Process_KADEMLIA2_PUBLISH_NOTES_REQ: out-of-tolerance
-            // targets are dropped silently before any index work.
+            // Process_KADEMLIA2_PUBLISH_NOTES_REQ de eMule: fuera de tolerancia
+            // los objetivos se descartan silenciosamente antes de cualquier trabajo de indexación.
             if !within_publish_tolerance(local_kad_id, &req.target_file_hash) {
                 tracing::debug!(
                     "Kad UDP: dropping out-of-tolerance PublishNotesReq from {peer} for file {}",
@@ -938,19 +938,19 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::PublishNotesRes(_) => {
-            // Shares opcode 0x4B with PublishSourceRes/PublishKeywordRes; the
-            // unified PublishSourceRes arm above already routes it by the
-            // in-flight expected_response. Unreachable in practice.
+            // Comparte el opcode 0x4B con PublishSourceRes/PublishKeywordRes; la
+            // rama PublishSourceRes unificada superior ya lo enruta según el
+            // expected_response en curso. Inalcanzable en la práctica.
         }
     }
 }
 
-/// Handles a `KADEMLIA_FIREWALLED_REQ` (0x50) / `KADEMLIA_FIREWALLED2_REQ`
-/// (0x53): eMule `Process_KADEMLIA_FIREWALLED{2}_REQ`. We immediately echo the
-/// sender's observed IPv4 back in `KADEMLIA_FIREWALLED_RES`, then TCP-connect
-/// to their advertised port. On success we acknowledge via
-/// `OP_KAD_FWTCPCHECK_ACK` on the TCP stream (Kad >= 7) or a UDP
-/// `KADEMLIA_FIREWALLED_ACK_RES` null packet (legacy).
+/// Gestiona un `KADEMLIA_FIREWALLED_REQ` (0x50) / `KADEMLIA_FIREWALLED2_REQ`
+/// (0x53): `Process_KADEMLIA_FIREWALLED{2}_REQ` de eMule. Devolvemos de inmediato en eco
+/// la IPv4 observada del remitente en `KADEMLIA_FIREWALLED_RES`, y luego nos conectamos por TCP
+/// a su puerto anunciado. En caso de éxito reconocemos mediante
+/// `OP_KAD_FWTCPCHECK_ACK` en el flujo TCP (Kad >= 7) o un paquete nulo UDP
+/// `KADEMLIA_FIREWALLED_ACK_RES` (legado).
 async fn handle_firewalled_check(
     socket: &Arc<UdpSocket>,
     peer_addr: SocketAddr,
@@ -972,8 +972,8 @@ async fn handle_firewalled_check(
         return;
     }
 
-    // FIREWALLED_RES echoes the requester's observed IP (eMule sends it once
-    // RequestTCP is accepted — before the probe outcome is known).
+    // FIREWALLED_RES devuelve en eco la IP observada del solicitante (eMule lo envía una
+    // vez aceptado RequestTCP — antes de conocer el resultado del sondeo).
     let res = KadCodec::encode_firewalled_res(u32::from_le_bytes(v4.octets()));
     let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
 
@@ -988,8 +988,8 @@ async fn handle_firewalled_check(
         match probe {
             Ok(Ok(mut stream)) => {
                 if kad7_plus {
-                    // Kad >= 7: OP_KAD_FWTCPCHECK_ACK (PR_EMULE, empty payload)
-                    // on the probe connection itself.
+                    // Kad >= 7: OP_KAD_FWTCPCHECK_ACK (PR_EMULE, carga útil vacía)
+                    // en la propia conexión de sondeo.
                     let frame = frame_emule_packet(mule_protocol::ed2k::OP_KAD_FWTCPCHECK_ACK, &[]);
                     use tokio::io::AsyncWriteExt;
                     match stream.write_all(&frame).await {
@@ -1019,8 +1019,8 @@ async fn handle_firewalled_check(
     });
 }
 
-/// Frames an eD2K/eMule TCP packet: `[proto][len:u32][opcode][payload]`
-/// (opcode included in the length, like `Packet`/`PacketCodec`).
+/// Entrama un paquete TCP eD2K/eMule: `[proto][len:u32][opcode][payload]`
+/// (opcode incluido en la longitud, como en `Packet`/`PacketCodec`).
 fn frame_emule_packet(opcode: u8, payload: &[u8]) -> Vec<u8> {
     use mule_protocol::ed2k::PR_EMULE;
     let mut out = Vec::with_capacity(6 + payload.len());
@@ -1038,7 +1038,7 @@ fn now_unix_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Converts a routing-table contact into its wire form for `KADEMLIA2_RES` /
+/// Convierte un contacto de la tabla de enrutamiento a su forma en cable para `KADEMLIA2_RES` /
 /// `BOOTSTRAP_RES` answers.
 fn contact_to_wire(c: &KadContact) -> KadContactWire {
     KadContactWire {
@@ -1050,14 +1050,14 @@ fn contact_to_wire(c: &KadContact) -> KadContactWire {
     }
 }
 
-/// Records a contact learned from an inbound packet into the routing table
-/// (eMule `AddContact_KADEMLIA2` / `CRoutingZone::Add` — every packet feeds
-/// the routing zone).
+/// Registra un contacto aprendido de un paquete entrante en la tabla de enrutamiento
+/// (`AddContact_KADEMLIA2` / `CRoutingZone::Add` de eMule — cada paquete alimenta
+/// la zona de enrutamiento).
 ///
-/// `verified` semantics mirror eMule: contacts are learned *unverified*;
-/// `verified` is earned only by a solicited response (`mark_seen = true`,
-/// the peer answered one of our requests — proving IP ownership) or by the
-/// `HELLO_RES_ACK` three-way handshake.
+/// La semántica de `verified` refleja la de eMule: los contactos se aprenden *no verificados*;
+/// `verified` se obtiene únicamente mediante una respuesta solicitada (`mark_seen = true`,
+/// el par respondió a una de nuestras solicitudes — demostrando la posesión de la IP) o
+/// mediante el saludo de tres vías `HELLO_RES_ACK`.
 async fn learn_contact(
     routing_table: &Option<Arc<tokio::sync::Mutex<KBucketTable>>>,
     kad_id_bytes: [u8; 16],
@@ -1081,17 +1081,17 @@ async fn learn_contact(
     table.lock().await.insert_or_update(contact);
 }
 
-/// `SEARCHTOLERANCE` gate shared by the publish handlers: eMule drops a
-/// publish request whose target key lies outside tolerance of our KadID
-/// (`uDistance.Get32BitChunk(0) > SEARCHTOLERANCE → return` in
-/// `KademliaUDPListener.cpp`). Without it this node becomes a universal
-/// index sink for arbitrary keys.
+/// Compuerta `SEARCHTOLERANCE` compartida por los manejadores de publicación: eMule descarta
+/// una solicitud de publicación cuya clave de destino quede fuera de la tolerancia de nuestro KadID
+/// (`uDistance.Get32BitChunk(0) > SEARCHTOLERANCE → return` en
+/// `KademliaUDPListener.cpp`). Sin esto, este nodo se convertiría en un sumidero
+/// universal de indexación para claves arbitrarias.
 fn within_publish_tolerance(local_kad_id: &[u8; 16], target: &[u8; 16]) -> bool {
     KadId(*local_kad_id).is_within_search_tolerance(&KadId(*target))
 }
 
-/// Mirrors an accepted `PublishSourceReq` into `kad_sources_index` so the
-/// storage-node role survives daemon restarts (TTL = `KAD_SOURCE_TTL`).
+/// Refleja un `PublishSourceReq` aceptado en `kad_sources_index` para que el rol
+/// de nodo de almacenamiento sobreviva a reinicios del daemon (TTL = `KAD_SOURCE_TTL`).
 async fn persist_indexed_source(downloads: &DownloadsSlot, req: &KadPublishSourceReq) {
     let Some(dl) = downloads.read().await.as_ref().cloned() else {
         return;
@@ -1114,10 +1114,10 @@ async fn persist_indexed_source(downloads: &DownloadsSlot, req: &KadPublishSourc
     }
 }
 
-/// Mirrors an accepted `PublishNotesReq` into `kad_notes_index` so the
-/// storage-node role survives daemon restarts. The tag list is persisted
-/// as its wire-encoded blob (`encode_note_tags_blob`) — arbitrary/unknown
-/// tags round-trip exactly.
+/// Refleja un `PublishNotesReq` aceptado en `kad_notes_index` para que el rol
+/// de nodo de almacenamiento sobreviva a reinicios del daemon. La lista de etiquetas se
+/// persiste como su blob codificado en red (`encode_note_tags_blob`) — las etiquetas
+/// arbitrarias/desconocidas realizan el viaje de ida y vuelta con exactitud.
 async fn persist_indexed_note(
     downloads: &DownloadsSlot,
     target_hash: &KadIdBytes,
@@ -1149,7 +1149,7 @@ async fn persist_indexed_note(
     }
 }
 
-/// Mirrors accepted keyword entries into `kad_keywords_index`.
+/// Refleja las entradas de palabras clave aceptadas en `kad_keywords_index`.
 async fn persist_keyword_entries(
     downloads: &DownloadsSlot,
     keyword_hash: &[u8; 16],
@@ -1181,13 +1181,13 @@ async fn persist_keyword_entries(
     }
 }
 
-/// eMule `CKademliaUDPListener::FirewalledCheck` (KademliaUDPListener.cpp:159):
-/// while a TCP recheck round is active, each inbound HELLO_REQ/HELLO_RES
-/// triggers a `KADEMLIA_FIREWALLED{2}_REQ` back to the sender, asking it to
-/// TCP-connect to our advertised eD2K port. The contact version picks the
-/// packet shape — `FIREWALLED2_REQ` (≥ `KADEMLIA_VERSION7_49A`) carries our
-/// user hash + connect-options so the responder can complete a full Kad
-/// handshake on the connect-back.
+/// `CKademliaUDPListener::FirewalledCheck` de eMule (KademliaUDPListener.cpp:159):
+/// mientras una ronda de recomprobación TCP esté activa, cada HELLO_REQ/HELLO_RES entrante
+/// desencadena un `KADEMLIA_FIREWALLED{2}_REQ` de vuelta al remitente, solicitándole conectar
+/// por TCP a nuestro puerto eD2K anunciado. La versión del contacto determina el formato
+/// del paquete — `FIREWALLED2_REQ` (≥ `KADEMLIA_VERSION7_49A`) transporta nuestro hash
+/// de usuario + opciones de conexión para que el respondedor pueda completar un saludo
+/// Kad completo en la conexión de retorno.
 #[allow(clippy::too_many_arguments)]
 async fn maybe_tcp_firewall_check(
     socket: &Arc<UdpSocket>,
@@ -1203,7 +1203,7 @@ async fn maybe_tcp_firewall_check(
         if !fw.tcp_recheck_active() || fw.is_tcp_check_ip(peer_addr.ip()) {
             return;
         }
-        // Registered before send (`AddKadFirewallRequest`) so a fast
+        // Registrado antes del envío (`AddKadFirewallRequest`) para que una rápida
         // FIREWALLED_RES or TCP connect-back is never dropped as unrequested.
         fw.add_tcp_check_ip(peer_addr.ip());
     }

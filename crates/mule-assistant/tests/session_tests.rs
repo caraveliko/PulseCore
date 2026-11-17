@@ -66,7 +66,7 @@ async fn connect(
     .expect("connexion session de test")
 }
 
-/// Draine tous les events émis pendant le tour.
+/// Drena todos los eventos emitidos durante el turno.
 fn drain_events(rx: &mut mpsc::UnboundedReceiver<AssistantEvent>) -> Vec<AssistantEvent> {
     let mut out = Vec::new();
     while let Ok(ev) = rx.try_recv() {
@@ -75,7 +75,7 @@ fn drain_events(rx: &mut mpsc::UnboundedReceiver<AssistantEvent>) -> Vec<Assista
     out
 }
 
-/// Tour texte simple : le modèle répond sans outil → `Final`.
+/// Turno de texto simple: el modelo responde sin herramientas → `Final`.
 #[tokio::test]
 async fn test_simple_text_turn() {
     let mut h = build_session(vec![text_turn("Réponse du modèle")]).await;
@@ -96,9 +96,9 @@ async fn test_simple_text_turn() {
         .any(|e| matches!(e, AssistantEvent::Token { content } if content == "Réponse du modèle")));
 }
 
-/// Appel d'outil : le modèle demande `emule_status`, le daemon répond,
-/// puis le modèle conclut — l'historique renvoyé au backend contient
-/// `assistant(tool_calls)` puis `tool(tool_name)` dans l'ordre.
+/// Llamada a herramienta: el modelo solicita `emule_status`, el daemon responde,
+/// y luego el modelo concluye: el historial devuelto al backend contiene
+/// `assistant(tool_calls)` y luego `tool(tool_name)` en orden.
 #[tokio::test]
 async fn test_tool_call_executed_then_final() {
     let mut h = build_session(vec![
@@ -124,8 +124,8 @@ async fn test_tool_call_executed_then_final() {
         .iter()
         .any(|e| matches!(e, AssistantEvent::Final { content } if content.contains("Voici"))));
 
-    // Historique vu par le backend au 2e appel : …, assistant(tool_calls),
-    // tool(emule_status) — dans cet ordre.
+    // Historial visto por el backend en la segunda llamada: …, assistant(tool_calls),
+    // tool(emule_status): en este orden.
     let history = h.backend.last_history();
     let assistant_idx = history
         .iter()
@@ -138,9 +138,9 @@ async fn test_tool_call_executed_then_final() {
     assert!(assistant_idx < tool_idx, "ordre assistant→tool respecté");
 }
 
-/// Outil hors allowlist : refusé sans contact daemon, le refus repart au
-/// modèle comme résultat `role: "tool"` (la boucle ne casse pas) et la
-/// confirmation n'est jamais demandée.
+/// Herramienta fuera de la lista de permitidos: rechazada sin contactar al daemon,
+/// el rechazo regresa al modelo como resultado `role: "tool"` (el bucle no se rompe)
+/// y la confirmación nunca se solicita.
 #[tokio::test]
 async fn test_out_of_allowlist_tool_refused() {
     let mut h = build_session(vec![
@@ -160,19 +160,19 @@ async fn test_out_of_allowlist_tool_refused() {
         AssistantEvent::ToolResult { name, is_error, content }
             if name == "emule_shutdown" && *is_error && content.contains("allowlist")
     )));
-    // Aucun ToolStart n'a été émis : l'outil n'a pas été exécuté.
+    // No se emitió ningún ToolStart: la herramienta no se ejecutó.
     assert!(!events
         .iter()
         .any(|e| matches!(e, AssistantEvent::ToolStart { name, .. } if name == "emule_shutdown")));
-    // Pas de confirmation demandée : le channel n'a rien reçu.
+    // Sin confirmación solicitada: el canal no recibió nada.
     assert!(h.confirm_rx.try_recv().is_err());
-    // La boucle a continué jusqu'au Final.
+    // El bucle continuó hasta el Final.
     assert!(events
         .iter()
         .any(|e| matches!(e, AssistantEvent::Final { .. })));
 }
 
-/// Confirmation acceptée : `emule_add_link` s'exécute après `o`.
+/// Confirmación aceptada: `emule_add_link` se ejecuta tras `o`.
 #[tokio::test]
 async fn test_confirmed_tool_executes() {
     let mut h = build_session(vec![
@@ -208,8 +208,8 @@ async fn test_confirmed_tool_executes() {
     )));
 }
 
-/// Confirmation refusée : l'outil n'est pas exécuté, le modèle reçoit
-/// « annulé par l'utilisateur » comme résultat d'outil.
+/// Confirmación rechazada: la herramienta no se ejecuta, el modelo recibe
+/// «annulé par l'utilisateur» como resultado de herramienta.
 #[tokio::test]
 async fn test_denied_tool_not_executed() {
     let mut h = build_session(vec![
@@ -245,8 +245,8 @@ async fn test_denied_tool_not_executed() {
     )));
 }
 
-/// Sans répondeur de confirmation (canal fermé), un appel à confirmer
-/// est refusé — défaut sûr en mode non interactif.
+/// Sin respondedor de confirmación (canal cerrado), una llamada por confirmar
+/// se rechaza: comportamiento seguro por defecto en modo no interactivo.
 #[tokio::test]
 async fn test_confirm_without_responder_refused() {
     let mut h = build_session(vec![
@@ -254,7 +254,7 @@ async fn test_confirm_without_responder_refused() {
         text_turn("impossible"),
     ])
     .await;
-    drop(h.confirm_rx); // ferme le canal : plus de répondeur
+    drop(h.confirm_rx); // cierra el canal: no hay respondedor
 
     h.session
         .user_turn("connecte un serveur", &h.events_tx, &h.confirm_tx)
@@ -269,8 +269,8 @@ async fn test_confirm_without_responder_refused() {
     )));
 }
 
-/// La boucle est bornée par `max_tool_rounds` — un modèle qui demande
-/// toujours un outil est interrompu par un `Notice`.
+/// El bucle está acotado por `max_tool_rounds`: un modelo que siempre solicita
+/// una herramienta se interrumpe con un `Notice`.
 #[tokio::test]
 async fn test_tool_round_limit() {
     let turns = (0..6)
@@ -278,7 +278,7 @@ async fn test_tool_round_limit() {
         .collect();
     let mut h = build_session(turns).await;
 
-    // Reconnexion avec une borne serrée — même daemon, même backend.
+    // Reconexión con un límite estricto: mismo daemon, mismo backend.
     h.session = connect(
         &h.addr,
         TOKEN,
@@ -300,7 +300,7 @@ async fn test_tool_round_limit() {
     assert!(events
         .iter()
         .any(|e| matches!(e, AssistantEvent::Notice { .. })));
-    // 2 rounds × 1 appel = 2 ToolResult, pas plus.
+    // 2 rondas × 1 llamada = 2 ToolResult, no más.
     let tool_results = events
         .iter()
         .filter(|e| matches!(e, AssistantEvent::ToolResult { .. }))

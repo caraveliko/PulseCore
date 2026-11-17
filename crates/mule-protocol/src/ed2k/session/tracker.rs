@@ -8,16 +8,16 @@ use std::time::{Duration, Instant};
 
 use super::types::Ed2kSessionError;
 
-/// Metadata for an in-flight file status request.
+/// Metadatos para una petición de estado de archivo en curso.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileStatusRequest {
-    /// 16-byte MD4 file hash requested.
+    /// Hash MD4 de archivo de 16 bytes solicitado.
     pub file_hash: [u8; 16],
-    /// Instant when the request was dispatched.
+    /// Instante en el que se despachó la petición.
     pub sent_at: Instant,
 }
 
-/// Bounded tracking structure for pending `OP_FILESTATUSREQ` exchanges.
+/// Estructura de seguimiento acotada para intercambios `OP_FILESTATUSREQ` pendientes.
 #[derive(Debug, Clone)]
 pub struct FileStatusTracker {
     pending: HashMap<[u8; 16], FileStatusRequest>,
@@ -31,7 +31,7 @@ impl Default for FileStatusTracker {
 }
 
 impl FileStatusTracker {
-    /// Creates a new tracker with a maximum in-flight capacity.
+    /// Crea un nuevo rastreador con una capacidad máxima en curso.
     pub fn new(max_pending: usize) -> Self {
         Self {
             pending: HashMap::with_capacity(max_pending.min(32)),
@@ -39,7 +39,7 @@ impl FileStatusTracker {
         }
     }
 
-    /// Registers a newly sent file status request.
+    /// Registra una petición de estado de archivo recién enviada.
     pub fn register_request(
         &mut self,
         file_hash: [u8; 16],
@@ -63,7 +63,7 @@ impl FileStatusTracker {
         Ok(())
     }
 
-    /// Validates an incoming response and removes the pending entry.
+    /// Valida una respuesta entrante y elimina la entrada pendiente.
     pub fn validate_and_remove(
         &mut self,
         file_hash: &[u8; 16],
@@ -73,17 +73,17 @@ impl FileStatusTracker {
             .ok_or_else(|| Ed2kSessionError::UnsolicitedFileStatus(hex::encode(file_hash)))
     }
 
-    /// Checks if a request is currently pending for the specified hash.
+    /// Comprueba si una petición está actualmente pendiente para el hash especificado.
     pub fn is_pending(&self, file_hash: &[u8; 16]) -> bool {
         self.pending.contains_key(file_hash)
     }
 
-    /// Returns the number of currently pending requests.
+    /// Devuelve el número de peticiones actualmente pendientes.
     pub fn pending_count(&self) -> usize {
         self.pending.len()
     }
 
-    /// Removes and returns hashes of all requests that exceeded the timeout threshold.
+    /// Elimina y devuelve los hashes de todas las peticiones que superaron el umbral de tiempo de espera.
     pub fn expire_timed_out(&mut self, timeout: Duration, now: Instant) -> Vec<[u8; 16]> {
         let mut expired = Vec::new();
         self.pending.retain(|hash, req| {
@@ -97,28 +97,28 @@ impl FileStatusTracker {
         expired
     }
 
-    /// Clears all pending requests (e.g. on disconnection).
+    /// Borra todas las peticiones pendientes (p. ej., ante una desconexión).
     pub fn clear(&mut self) {
         self.pending.clear();
     }
 }
 
-/// Default maximum concurrent in-flight block requests per peer (8).
+/// Máximo predeterminado de peticiones de bloques simultáneas en curso por par (8).
 pub const MAX_IN_FLIGHT_BLOCK_REQUESTS: usize = 8;
 
-/// Composite key uniquely identifying an in-flight eD2K block request.
+/// Clave compuesta que identifica de forma única una petición de bloque eD2K en curso.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct BlockRequestKey {
-    /// 16-byte MD4 eD2K file hash.
+    /// Hash MD4 de archivo eD2K de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Absolute start byte offset.
+    /// Desplazamiento de byte inicial absoluto.
     pub start: u64,
-    /// Absolute end byte offset (exclusive).
+    /// Desplazamiento de byte final absoluto (exclusivo).
     pub end: u64,
 }
 
 impl BlockRequestKey {
-    /// Creates a new `BlockRequestKey`.
+    /// Crea una nueva `BlockRequestKey`.
     pub fn new(file_hash: [u8; 16], start: u64, end: u64) -> Self {
         Self {
             file_hash,
@@ -127,33 +127,33 @@ impl BlockRequestKey {
         }
     }
 
-    /// Length in bytes of the requested block range.
+    /// Longitud en bytes del rango de bloque solicitado.
     #[inline]
     pub fn len(&self) -> u64 {
         self.end.saturating_sub(self.start)
     }
 
-    /// Returns true if start >= end.
+    /// Devuelve verdadero si start >= end.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.start >= self.end
     }
 }
 
-/// Information tracking an active in-flight block request.
+/// Información de seguimiento de una petición de bloque activa en curso.
 #[derive(Clone, Debug)]
 pub struct PendingBlockRequest {
-    /// Unique composite key.
+    /// Clave compuesta única.
     pub key: BlockRequestKey,
-    /// Timestamp when this request was issued.
+    /// Marca de tiempo de cuándo se emitió esta petición.
     pub requested_at: Instant,
-    /// Retry attempt counter.
+    /// Contador de intentos de reintento.
     pub attempt: u16,
-    /// Byte ranges received so far for this request.
+    /// Rangos de bytes recibidos hasta ahora para esta petición.
     pub received_ranges: Vec<(u64, u64)>,
 }
 
-/// Bounded tracking structure for pending `OP_REQUESTPARTS` exchanges.
+/// Estructura de seguimiento acotada para intercambios `OP_REQUESTPARTS` pendientes.
 #[derive(Debug, Clone)]
 pub struct BlockRequestTracker {
     pending: HashMap<BlockRequestKey, PendingBlockRequest>,
@@ -167,7 +167,7 @@ impl Default for BlockRequestTracker {
 }
 
 impl BlockRequestTracker {
-    /// Creates a new tracker with a maximum in-flight capacity.
+    /// Crea un nuevo rastreador con una capacidad máxima en curso.
     pub fn new(max_pending: usize) -> Self {
         Self {
             pending: HashMap::with_capacity(max_pending.min(32)),
@@ -175,37 +175,37 @@ impl BlockRequestTracker {
         }
     }
 
-    /// Returns true if the tracker has capacity for more requests.
+    /// Devuelve verdadero si el rastreador tiene capacidad para más peticiones.
     #[inline]
     pub fn can_request(&self) -> bool {
         self.pending.len() < self.max_pending
     }
 
-    /// Returns the number of active in-flight block requests.
+    /// Devuelve el número de peticiones de bloque en curso activas.
     #[inline]
     pub fn pending_count(&self) -> usize {
         self.pending.len()
     }
 
-    /// Returns true if there are no pending block requests.
+    /// Devuelve verdadero si no hay peticiones de bloque pendientes.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }
 
-    /// Checks if an exact request key is currently pending.
+    /// Comprueba si una clave de petición exacta está actualmente pendiente.
     pub fn is_pending(&self, key: &BlockRequestKey) -> bool {
         self.pending.contains_key(key)
     }
 
-    /// Checks if any pending request for the given file hash overlaps [start..end].
+    /// Comprueba si alguna petición pendiente para el hash de archivo dado se solapa con [start..end].
     pub fn has_overlap(&self, file_hash: &[u8; 16], start: u64, end: u64) -> bool {
         self.pending
             .keys()
             .any(|k| &k.file_hash == file_hash && k.start < end && start < k.end)
     }
 
-    /// Registers a newly sent block request.
+    /// Registra una petición de bloque recién enviada.
     pub fn register_request(
         &mut self,
         key: BlockRequestKey,
@@ -246,7 +246,7 @@ impl BlockRequestTracker {
         Ok(())
     }
 
-    /// Validates an incoming chunk response and removes the pending entry when fully received.
+    /// Valida una respuesta de fragmento entrante y elimina la entrada pendiente cuando se ha recibido por completo.
     pub fn validate_and_remove(
         &mut self,
         file_hash: &[u8; 16],
@@ -329,7 +329,7 @@ impl BlockRequestTracker {
         }
     }
 
-    /// Removes and returns all requests that exceeded the timeout threshold.
+    /// Elimina y devuelve todas las peticiones que superaron el umbral de tiempo de espera.
     pub fn reap_timeouts(&mut self, timeout: Duration, now: Instant) -> Vec<PendingBlockRequest> {
         let mut expired = Vec::new();
         self.pending.retain(|_, req| {
@@ -343,7 +343,7 @@ impl BlockRequestTracker {
         expired
     }
 
-    /// Clears all in-flight requests and returns them.
+    /// Borra todas las peticiones en curso y las devuelve.
     pub fn cancel_all(&mut self) -> Vec<PendingBlockRequest> {
         self.pending.drain().map(|(_, req)| req).collect()
     }

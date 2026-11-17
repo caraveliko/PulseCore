@@ -75,8 +75,8 @@ fn encode_string_field(
     Ok(())
 }
 
-/// Encodes an `Ed2kMessage` (`OP_MESSAGE`, `0x4E`, eDonkey protocol):
-/// `<len u16><message bytes>`.
+/// Codifica un `Ed2kMessage` (`OP_MESSAGE`, `0x4E`, protocolo eDonkey):
+/// `<longitud u16><bytes del mensaje>`.
 pub fn encode_message(
     limits: &Ed2kLimits,
     msg: &Ed2kChatMessage,
@@ -86,8 +86,8 @@ pub fn encode_message(
     finish(limits, PR_ED2K, OP_MESSAGE, payload)
 }
 
-/// Encodes an `Ed2kQueueRank` (`OP_QUEUERANK`, `0x5C`, eDonkey protocol):
-/// `<rank u32>`.
+/// Codifica un `Ed2kQueueRank` (`OP_QUEUERANK`, `0x5C`, protocolo eDonkey):
+/// `<rango u32>`.
 pub fn encode_queue_rank(
     limits: &Ed2kLimits,
     qr: &Ed2kQueueRank,
@@ -97,8 +97,8 @@ pub fn encode_queue_rank(
     finish(limits, PR_ED2K, OP_QUEUERANK, payload)
 }
 
-/// Encodes an `Ed2kQueueRanking` (`OP_QUEUERANKING`, `0x60`, eMule protocol):
-/// exactly 12 bytes, `<rank u16><10 reserved>`.
+/// Codifica un `Ed2kQueueRanking` (`OP_QUEUERANKING`, `0x60`, protocolo eMule):
+/// exactamente 12 bytes, `<rango u16><10 reservados>`.
 pub fn encode_queue_ranking(
     limits: &Ed2kLimits,
     qr: &Ed2kQueueRanking,
@@ -109,7 +109,7 @@ pub fn encode_queue_ranking(
     finish(limits, PR_EMULE, OP_QUEUERANKING, payload)
 }
 
-/// Encodes an `Ed2kChangeSlot` (`OP_CHANGE_SLOT`, `0x5B`, eDonkey protocol):
+/// Codifica un `Ed2kChangeSlot` (`OP_CHANGE_SLOT`, `0x5B`, protocolo eDonkey):
 /// `<HASH 16>`.
 pub fn encode_change_slot(
     limits: &Ed2kLimits,
@@ -120,8 +120,8 @@ pub fn encode_change_slot(
     finish(limits, PR_ED2K, OP_CHANGE_SLOT, payload)
 }
 
-/// Encodes an `Ed2kFileDesc` (`OP_FILEDESC`, `0x61`, eMule protocol):
-/// `<rating u8><len u16><description bytes>`.
+/// Codifica un `Ed2kFileDesc` (`OP_FILEDESC`, `0x61`, protocolo eMule):
+/// `<calificación u8><longitud u16><bytes de descripción>`.
 pub fn encode_file_desc(
     limits: &Ed2kLimits,
     fd: &Ed2kFileDesc,
@@ -132,8 +132,8 @@ pub fn encode_file_desc(
     finish(limits, PR_EMULE, OP_FILEDESC, payload)
 }
 
-/// Encodes an `Ed2kPortTest` (`OP_PORTTEST`, `0xFE`, eDonkey protocol):
-/// single status byte.
+/// Codifica un `Ed2kPortTest` (`OP_PORTTEST`, `0xFE`, protocolo eDonkey):
+/// byte de estado único.
 pub fn encode_port_test(
     limits: &Ed2kLimits,
     pt: &Ed2kPortTest,
@@ -141,8 +141,8 @@ pub fn encode_port_test(
     finish(limits, PR_ED2K, OP_PORTTEST, vec![pt.value])
 }
 
-/// Encodes an `Ed2kCaptchaRequest` (`OP_CHATCAPTCHAREQ`, `0xA5`, eMule
-/// protocol): `<tag_count u8><tags><bitmap bytes>`.
+/// Codifica un `Ed2kCaptchaRequest` (`OP_CHATCAPTCHAREQ`, `0xA5`, protocolo
+/// eMule): `<número_etiquetas u8><etiquetas><bytes del mapa de bits>`.
 pub fn encode_captcha_request(
     limits: &Ed2kLimits,
     req: &Ed2kCaptchaRequest,
@@ -170,7 +170,7 @@ pub fn encode_captcha_request(
     finish(limits, PR_EMULE, OP_CHATCAPTCHAREQ, payload)
 }
 
-/// Encodes an `Ed2kCaptchaResponse` (`OP_CHATCAPTCHARES`, `0xA6`): `<status u8>`.
+/// Codifica un `Ed2kCaptchaResponse` (`OP_CHATCAPTCHARES`, `0xA6`): `<estado u8>`.
 pub fn encode_captcha_response(
     limits: &Ed2kLimits,
     res: &Ed2kCaptchaResponse,
@@ -178,9 +178,9 @@ pub fn encode_captcha_response(
     finish(limits, PR_EMULE, OP_CHATCAPTCHARES, vec![res.status])
 }
 
-/// Encodes an `Ed2kHashSetReq2` (`OP_HASHSETREQUEST2`, `0xB1`, eMule protocol):
-/// `<FileIdentifier><options u8>`. At least one of `want_md4`/`want_aich`
-/// must be set (eMule rejects empty option masks).
+/// Codifica un `Ed2kHashSetReq2` (`OP_HASHSETREQUEST2`, `0xB1`, protocolo eMule):
+/// `<FileIdentifier><opciones u8>`. Debe estar configurada al menos una de
+/// `want_md4`/`want_aich` (eMule rechaza máscaras de opciones vacías).
 pub fn encode_hashset_request2(
     limits: &Ed2kLimits,
     req: &Ed2kHashSetReq2,
@@ -207,8 +207,8 @@ pub fn encode_hashset_request2(
     finish(limits, PR_EMULE, OP_HASHSETREQUEST2, payload)
 }
 
-/// Encodes an `Ed2kHashSetAnswer2` (`OP_HASHSETANSWER2`, `0xB2`):
-/// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`.
+/// Codifica un `Ed2kHashSetAnswer2` (`OP_HASHSETANSWER2`, `0xB2`):
+/// `<FileIdentifier><opciones u8>[<conjunto md4>][<conjunto aich>]`.
 pub fn encode_hashset_answer2(
     limits: &Ed2kLimits,
     ans: &Ed2kHashSetAnswer2,
@@ -249,7 +249,7 @@ pub fn encode_hashset_answer2(
     finish(limits, PR_EMULE, OP_HASHSETANSWER2, payload)
 }
 
-/// Serializes one multipacket sub-request into `out`.
+/// Serializa una subpetición multipaquete en `out`.
 fn write_sub_request(
     sub: &Ed2kMultiPacketSubRequest,
     out: &mut Vec<u8>,
@@ -298,8 +298,8 @@ fn write_ext_info(
     Ok(())
 }
 
-/// Encodes an `Ed2kMultiPacketRequest`. The opcode is derived from the file
-/// reference: `Hash` → `0x92`, `HashAndSize` → `0xA4`, `Identifier` → `0xA9`.
+/// Codifica un `Ed2kMultiPacketRequest`. El código de operación se deriva de la referencia
+/// de archivo: `Hash` → `0x92`, `HashAndSize` → `0xA4`, `Identifier` → `0xA9`.
 pub fn encode_multipacket_request(
     limits: &Ed2kLimits,
     req: &Ed2kMultiPacketRequest,
@@ -326,8 +326,8 @@ pub fn encode_multipacket_request(
     finish(limits, PR_EMULE, opcode, payload)
 }
 
-/// Encodes an `Ed2kMultiPacketAnswer`. The opcode is derived from the file
-/// reference: `Hash`/`HashAndSize` → `0x93`, `Identifier` → `0xB0`.
+/// Codifica un `Ed2kMultiPacketAnswer`. El código de operación se deriva de la referencia
+/// de archivo: `Hash`/`HashAndSize` → `0x93`, `Identifier` → `0xB0`.
 pub fn encode_multipacket_answer(
     limits: &Ed2kLimits,
     ans: &Ed2kMultiPacketAnswer,
@@ -339,8 +339,8 @@ pub fn encode_multipacket_answer(
             OP_MULTIPACKETANSWER
         }
         Ed2kMultiPacketFileRef::HashAndSize { file_hash, .. } => {
-            // eMule emits only hash or FileIdentifier on answers; a hash+size
-            // reference is normalized to the legacy hash-only answer.
+            // eMule solo emite hash o FileIdentifier en respuestas; una referencia de
+            // hash+tamaño se normaliza a la respuesta clásica solo de hash.
             payload.extend_from_slice(file_hash);
             OP_MULTIPACKETANSWER
         }

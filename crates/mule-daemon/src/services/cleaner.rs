@@ -12,20 +12,20 @@ use crate::services::media_probe::probe_video_file_sync;
 use crate::services::organizer::{clean_movie_title, remove_companion_subtitles_sync};
 use crate::state::AppState;
 
-/// Extensions de fichiers résiduels ou indésirables à supprimer dans les dossiers de téléchargements entrants.
-/// NOTE: "nfo", les images et les sous-titres ne sont JAMAIS dans cette liste car ce sont des données Jellyfin/Plex légitimes.
+/// Extensiones de archivos residuales o no deseados a eliminar en las carpetas de descargas entrantes.
+/// NOTA: "nfo", las imágenes y los subtítulos NUNCA están en esta lista porque son datos legítimos de Jellyfin/Plex.
 pub const JUNK_EXTENSIONS: &[&str] = &[
     "url", "html", "htm", "exe", "bat", "cmd", "scr", "lnk",
     "sfv", "md5", "srr", "srs", "nzb", "torrent", "ds_store", "db",
 ];
 
-/// Noms d'images de jaquette standard Jellyfin/Plex à préserver dans les dossiers racine de titres.
+/// Nombres de imágenes de carátula estándar de Jellyfin/Plex a preservar en las carpetas raíz de títulos.
 const PRESERVED_ARTWORK_STEMS: &[&str] = &[
     "poster", "fanart", "backdrop", "banner", "clearlogo", "landscape", "logo",
     "season-specials-poster",
 ];
 
-/// Vérifie si une image (.jpg, .png...) est un fichier poubelle/résiduel
+/// Comprueba si una imagen (.jpg, .png...) es un archivo basura/residual
 fn is_junk_image(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     if !matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif") {
@@ -35,7 +35,7 @@ fn is_junk_image(path: &Path) -> bool {
     let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
     let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
 
-    // Toute image située dans un sous-dossier de saison ("Season 01", etc.) est un résidu P2P
+    // Toda imagen ubicada en una subcarpeta de temporada ("Season 01", etc.) es un residuo P2P
     if let Some(parent_name) = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()) {
         let parent_lower = parent_name.to_lowercase();
         if parent_lower.starts_with("season") || parent_lower.starts_with("temporada") {
@@ -43,37 +43,37 @@ fn is_junk_image(path: &Path) -> bool {
         }
     }
 
-    // Images nommées explicitement thumbnail / proof / screen / rarbg
+    // Imágenes nombradas explícitamente thumbnail / proof / screen / rarbg
     if fname.contains("thumb") || fname.contains("sample") || fname.contains("proof") || fname.contains("screen") || fname.contains("rarbg") {
         return true;
     }
 
-    // Affiches de saison à la racine (e.g. season01-poster.jpg) sont préservées
+    // Los pósteres de temporada en la raíz (ej. season01-poster.jpg) se preservan
     if stem.starts_with("season") && stem.ends_with("-poster") {
         return false;
     }
 
-    // Si le nom correspond à une pochette Jellyfin/Kodi officielle, préserver
+    // Si el nombre coincide con una carátula oficial de Jellyfin/Kodi, preservar
     if PRESERVED_ARTWORK_STEMS.contains(&stem.as_str()) {
         return false;
     }
 
-    // Autrement, image orpheline/inconnue
+    // De lo contrario, imagen huérfana/desconocida
     true
 }
 
-/// Extensions vidéo reconnues par le lecteur multimédia.
+/// Extensiones de vídeo reconocidas por el reproductor multimedia.
 pub const VIDEO_EXTENSIONS: &[&str] = &[
     "mkv", "mp4", "avi", "m4v", "mov", "wmv", "flv", "ts",
 ];
 
-/// Extensions de sous-titres compagnons.
+/// Extensiones de subtítulos complementarios.
 pub const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "sub", "vtt"];
 
-/// Taille maximale d'un extrait d'aperçu « sample / trailer » (85 Mio).
+/// Tamaño máximo de un extracto de vista previa «sample / trailer» (85 MiB).
 pub const SAMPLE_MAX_BYTES: u64 = 85 * 1024 * 1024;
 
-/// Âge minimal (en secondes) d'un fichier part temporaire orphelin avant suppression (1 heure).
+/// Antigüedad mínima (en segundos) de un archivo part temporal huérfano antes de su eliminación (1 hora).
 pub const ORPHAN_TEMP_MIN_AGE_SECS: u64 = 3600;
 
 #[derive(Default, Debug)]
@@ -118,12 +118,12 @@ impl CleanReport {
 pub struct MediaCleaner;
 
 impl MediaCleaner {
-    /// Score an existing video file to choose the best candidate when duplicates exist
+    /// Puntúa un archivo de vídeo existente para elegir el mejor candidato cuando existen duplicados
     fn score_candidate(path: &Path, file_size: u64) -> i32 {
         let probe = probe_video_file_sync(path);
         let mut score: i32 = 0;
 
-        // 1. Language score
+        // 1. Puntuación de idioma
         if probe.has_spanish_audio {
             score += 100;
         } else if probe.has_spanish_subtitles {
@@ -132,7 +132,7 @@ impl MediaCleaner {
             score += 10;
         }
 
-        // 2. Resolution score
+        // 2. Puntuación de resolución
         match probe.quality_tag.as_str() {
             "2160p" => score += 80,
             "1080p" => score += 60,
@@ -140,7 +140,7 @@ impl MediaCleaner {
             _ => score += 10,
         }
 
-        // 3. Modern codecs
+        // 3. Códecs modernos
         if let Some(ref codec) = probe.video_codec {
             let lower = codec.to_lowercase();
             if lower.contains("hevc") || lower.contains("h265") || lower.contains("av1") {
@@ -148,7 +148,7 @@ impl MediaCleaner {
             }
         }
 
-        // 4. Filename metadata bonus (proper episode title vs generic "Episode 1")
+        // 4. Bonificación de metadatos del nombre de archivo (título propio de episodio frente a genérico "Episode 1")
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
             let lower = stem.to_lowercase();
             if !lower.contains("sample") && !lower.contains("trailer") {
@@ -159,14 +159,14 @@ impl MediaCleaner {
             }
         }
 
-        // 5. Size tier bonus (slight preference for higher bitrate/uncompressed stream)
+        // 5. Bonificación por nivel de tamaño (ligera preferencia por mayor tasa de bits / flujo sin comprimir)
         let size_mb = (file_size / (1024 * 1024)) as i32;
         score += size_mb.min(50);
 
         score
     }
 
-    /// Check if a file is a sample / trailer video
+    /// Comprueba si un archivo es un vídeo de muestra / tráiler
     pub fn is_sample_or_trailer(path: &Path, file_size: u64) -> bool {
         if file_size > SAMPLE_MAX_BYTES {
             return false;
@@ -178,7 +178,7 @@ impl MediaCleaner {
         lower.contains("sample") || lower.contains("trailer") || lower.contains("rarbg.com")
     }
 
-    /// Recursively remove empty directories under root, skipping protected directories
+    /// Elimina recursivamente directorios vacíos bajo la raíz, omitiendo directorios protegidos
     fn purge_empty_dirs_recursive(
         dir: &Path,
         protected_dirs: &[PathBuf],
@@ -211,7 +211,7 @@ impl MediaCleaner {
             return;
         }
 
-        // Re-check after subdirectories were potentially deleted
+        // Volver a comprobar tras la posible eliminación de subdirectorios
         if let Ok(mut remaining) = std::fs::read_dir(dir) {
             if remaining.next().is_none() {
                 report.empty_dirs_removed.push(dir.to_string_lossy().to_string());
@@ -228,9 +228,9 @@ impl MediaCleaner {
         }
     }
 
-    /// Scan directory and remove junk files & orphan companion subtitles.
-    /// In library folders (movies_dir / series_dir), artwork images (.jpg, .png...), metadata (.nfo, .xml),
-    /// and subtitles (.srt, .vtt) are NEVER deleted because they belong to Jellyfin/Plex.
+    /// Escanea el directorio y elimina archivos basura y subtítulos complementarios huérfanos.
+    /// En las carpetas de biblioteca (movies_dir / series_dir), las imágenes de portada (.jpg, .png...), metadatos (.nfo, .xml)
+    /// y subtítulos (.srt, .vtt) NUNCA se eliminan porque pertenecen a Jellyfin/Plex.
     fn clean_junk_and_orphan_subtitles(
         dir: &Path,
         is_library_folder: bool,
@@ -258,9 +258,9 @@ impl MediaCleaner {
             let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
             let size = p.metadata().map(|m| m.len()).unwrap_or(0);
 
-            // In library folders (movies_dir and series_dir), never delete artwork or metadata files:
+            // En las carpetas de biblioteca (movies_dir y series_dir), nunca eliminar archivos de portada o metadatos:
             // .nfo, .xml, .json, .jpg, .jpeg, .png, .webp, .tbn, .gif, .bif, .srt, .sub, .vtt, .ass, .ssa, .idx
-            // and dotfiles (.plexmatch, .ignore) are official Jellyfin/Plex assets.
+            // y archivos de puntos (.plexmatch, .ignore) son recursos oficiales de Jellyfin/Plex.
             let is_artwork_or_meta = matches!(
                 ext.as_str(),
                 "nfo" | "xml" | "json" | "jpg" | "jpeg" | "png" | "webp" | "tbn" | "gif" | "bif" | "srt" | "sub" | "vtt" | "ass" | "ssa" | "idx"
@@ -270,15 +270,15 @@ impl MediaCleaner {
                 continue;
             }
 
-            // 1. Junk extensions and junk image files
+            // 1. Extensiones basura y archivos de imagen basura
             let is_junk = if is_library_folder {
-                // In library folders: only delete dangerous binaries, shortcuts, web links or leftover temp markers
+                // En carpetas de biblioteca: solo eliminar binarios peligrosos, accesos directos, enlaces web o marcadores temporales residuales
                 matches!(
                     ext.as_str(),
                     "url" | "html" | "htm" | "exe" | "bat" | "cmd" | "scr" | "lnk" | "ds_store"
                 ) || fname.ends_with(".part.met.keep")
             } else {
-                // In incoming download folders: scene junk + proof/sample junk images
+                // En carpetas de descargas entrantes: basura de la escena + imágenes basura de prueba/muestra
                 JUNK_EXTENSIONS.contains(&ext.as_str())
                     || fname.ends_with(".part.met.keep")
                     || is_junk_image(&p)
@@ -294,7 +294,7 @@ impl MediaCleaner {
                 continue;
             }
 
-            // 2. Sample / trailer videos
+            // 2. Vídeos de muestra / tráiler
             if VIDEO_EXTENSIONS.contains(&ext.as_str()) {
                 if Self::is_sample_or_trailer(&p, size) {
                     report.junk_files_removed.push(p.to_string_lossy().to_string());
@@ -310,13 +310,13 @@ impl MediaCleaner {
                 }
             }
 
-            // 3. Subtitles (only clean orphan subtitles in incoming folders, NEVER in organized library!)
+            // 3. Subtítulos (¡solo limpiar subtítulos huérfanos en carpetas entrantes, NUNCA en la biblioteca organizada!)
             if !is_library_folder && SUBTITLE_EXTENSIONS.contains(&ext.as_str()) {
                 subtitle_candidates.push((p, size));
             }
         }
 
-        // Verify orphan subtitles in incoming download folders
+        // Verificar subtítulos huérfanos en carpetas de descargas entrantes
         for (sub_path, size) in subtitle_candidates {
             let Some(stem) = sub_path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
@@ -341,7 +341,7 @@ impl MediaCleaner {
         }
     }
 
-    /// Deduplicate TV episodes in series_dir
+    /// Deduplica episodios de series de TV en series_dir
     async fn deduplicate_series(state: &AppState, dry_run: bool, report: &mut CleanReport) {
         let series_dir = &state.config.series_dir;
         if !series_dir.is_dir() {
@@ -365,7 +365,7 @@ impl MediaCleaner {
 
             let s_folder_name = s_entry.file_name().to_string_lossy().to_string();
 
-            // Find matching media series in SQLite
+            // Hallar la serie de medios coincidente en SQLite
             let series_item_opt = shows.iter().find(|s| {
                 if let Some(tvdb_id) = s.tvdb_id {
                     if s_folder_name.contains(&format!("tvdbid-{tvdb_id}")) {
@@ -375,7 +375,7 @@ impl MediaCleaner {
                 clean_movie_title(&s.title).to_lowercase() == clean_movie_title(&s_folder_name).to_lowercase()
             });
 
-            // Collect all video files across Season folders and series root
+            // Recopilar todos los archivos de vídeo a través de las carpetas de temporada y la raíz de la serie
             let mut all_video_files = Vec::new();
             let mut to_visit = vec![s_path.clone()];
 
@@ -398,12 +398,12 @@ impl MediaCleaner {
                 }
             }
 
-            // Group video files by (season_num, ep_num)
+            // Agrupar archivos de vídeo por (season_num, ep_num)
             let mut episodes_map: HashMap<(u32, u32), Vec<(PathBuf, u64)>> = HashMap::new();
 
             for (vpath, size) in all_video_files {
                 let fname = vpath.file_name().unwrap_or_default().to_string_lossy().to_string();
-                // Determine season hint from parent folder (e.g. "Season 01")
+                // Determinar la pista de temporada a partir de la carpeta contenedora (ej. "Season 01")
                 let season_hint = vpath
                     .parent()
                     .and_then(|p| p.file_name())
@@ -422,7 +422,7 @@ impl MediaCleaner {
                 }
             }
 
-            // For each (season, episode), if there is more than 1 file, find winner and remove duplicates
+            // Para cada (temporada, episodio), si hay más de 1 archivo, encontrar el ganador y eliminar duplicados
             for ((s_num, ep_num), files) in episodes_map {
                 if files.len() <= 1 {
                     continue;
@@ -436,7 +436,7 @@ impl MediaCleaner {
                     ep_num
                 );
 
-                // Score candidates
+                // Puntuar candidatos
                 let mut scored: Vec<(i32, PathBuf, u64)> = files
                     .into_iter()
                     .map(|(p, sz)| {
@@ -445,7 +445,7 @@ impl MediaCleaner {
                     })
                     .collect();
 
-                // Highest score first; on tie, larger file size first
+                // Mayor puntuación primero; en caso de empate, mayor tamaño de archivo primero
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
 
                 let winner = &scored[0].1;
@@ -465,7 +465,7 @@ impl MediaCleaner {
                     }
                 }
 
-                // Update winning path in SQLite database
+                // Actualizar ruta ganadora en la base de datos SQLite
                 if !dry_run {
                     if let Some(series) = series_item_opt {
                         let dl_svc = state.downloads.lock().await;
@@ -487,7 +487,7 @@ impl MediaCleaner {
         }
     }
 
-    /// Deduplicate movies in movies_dir
+    /// Deduplica películas en movies_dir
     async fn deduplicate_movies(state: &AppState, dry_run: bool, report: &mut CleanReport) {
         let movies_dir = &state.config.movies_dir;
         if !movies_dir.is_dir() {
@@ -511,7 +511,7 @@ impl MediaCleaner {
 
             let m_folder_name = m_entry.file_name().to_string_lossy().to_string();
 
-            // Collect video files in movie folder (excluding sample/trailer)
+            // Recopilar archivos de vídeo en la carpeta de la película (excluyendo muestra/tráiler)
             let mut video_files = Vec::new();
             if let Ok(entries) = std::fs::read_dir(&m_path) {
                 for entry in entries.flatten() {
@@ -581,7 +581,7 @@ impl MediaCleaner {
         }
     }
 
-    /// Clean incoming directories (default_download_dir + extra_incoming_dirs + temp_dir)
+    /// Limpia directorios entrantes (default_download_dir + extra_incoming_dirs + temp_dir)
     async fn clean_incoming(state: &AppState, dry_run: bool, report: &mut CleanReport) {
         let mut incoming_dirs = vec![state.config.default_download_dir.clone()];
         for d in &state.config.extra_incoming_dirs {
@@ -590,13 +590,13 @@ impl MediaCleaner {
             }
         }
 
-        // Active download IDs and temp files
+        // Identificadores de descargas activas y archivos temporales
         let active_temp_paths = {
             let dl_svc = state.downloads.lock().await;
             let details = dl_svc.list_download_details();
             let mut temps = Vec::new();
             for d in details {
-                // uuid based temp path
+                // Ruta temporal basada en UUID
                 temps.push(format!("{}.part", d.snapshot.id));
                 temps.push(format!("{}.part.met", d.snapshot.id));
                 temps.push(format!("{}.part.met.bak", d.snapshot.id));
@@ -605,7 +605,7 @@ impl MediaCleaner {
             temps
         };
 
-        // 1. Clean junk and samples from incoming folders (not library folders)
+        // 1. Limpiar basura y muestras de las carpetas entrantes (no carpetas de biblioteca)
         for inc_dir in &incoming_dirs {
             if !inc_dir.is_dir() {
                 continue;
@@ -619,7 +619,7 @@ impl MediaCleaner {
             Self::clean_junk_and_orphan_subtitles(inc_dir, false, dry_run, report);
         }
 
-        // 2. Clean orphaned temporary .part files in temp_dir older than ORPHAN_TEMP_MIN_AGE_SECS
+        // 2. Limpiar archivos temporales .part huérfanos en temp_dir más antiguos que ORPHAN_TEMP_MIN_AGE_SECS
         let temp_dir = state.config.data_dir.join("temp");
         if temp_dir.is_dir() {
             if let Ok(entries) = std::fs::read_dir(temp_dir) {
@@ -656,7 +656,7 @@ impl MediaCleaner {
         }
     }
 
-    /// Cancel redundant in-flight downloads for episodes/movies that are already completed on disk
+    /// Cancela descargas en vuelo redundantes para episodios/películas que ya están completados en disco
     async fn cancel_redundant_downloads(state: &AppState, dry_run: bool, report: &mut CleanReport) {
         let mut ag_state = crate::services::AutoGrabber::load_state(state).await;
 
@@ -669,11 +669,11 @@ impl MediaCleaner {
 
             for (dl_id_str, grab_item) in active_grabs {
                 if grab_item.is_upgrade {
-                    // Legitimate quality upgrade intentionally initiated
+                    // Mejora legítima de calidad iniciada intencionadamente
                     continue;
                 }
 
-                // Check if corresponding episode or movie is already completed on disk
+                // Comprobar si el episodio o película correspondiente ya está completado en disco
                 let already_completed = if let Ok(Some(ep)) = db.find_episode_by_download_id(&dl_id_str) {
                     ep.status == "completed" && ep.file_path.as_ref().map(|p| Path::new(p).exists()).unwrap_or(false)
                 } else if let Ok(Some(m)) = db.find_media_by_download_id(&dl_id_str) {
@@ -693,8 +693,8 @@ impl MediaCleaner {
             if !dry_run {
                 if let Ok(dl_uuid) = Uuid::parse_str(&dl_id_str) {
                     let mut dl_svc_mut = state.downloads.lock().await;
-                    // CRITIQUE: Toujours passer delete_files = false pour ne JAMAIS supprimer
-                    // le fichier multimédia final que le système vient de télécharger et organiser !
+                    // CRÍTICO: ¡Pasar siempre delete_files = false para NO eliminar NUNCA
+                    // el archivo multimedia final que el sistema acaba de descargar y organizar!
                     let _ = dl_svc_mut.remove_download(&dl_uuid, false);
                 }
                 ag_state.active_grabs.remove(&dl_id_str);
@@ -710,7 +710,7 @@ impl MediaCleaner {
         }
     }
 
-    /// Run full duplicate and residue cleanup across the entire media ecosystem
+    /// Ejecuta la limpieza completa de duplicados y residuos en todo el ecosistema de medios
     pub async fn clean_all(state: &AppState, dry_run: bool) -> Value {
         let mut report = CleanReport {
             dry_run,
@@ -722,23 +722,23 @@ impl MediaCleaner {
             dry_run
         );
 
-        // 1. Deduplicate TV episodes
+        // 1. Deduplicar episodios de series de TV
         Self::deduplicate_series(state, dry_run, &mut report).await;
 
-        // 2. Deduplicate movies
+        // 2. Deduplicar películas
         Self::deduplicate_movies(state, dry_run, &mut report).await;
 
-        // 3. Purge junk, trailers/samples from media folders (strictly preserving artwork, nfo metadata and subtitles)
+        // 3. Purgar basura, tráileres/muestras de carpetas de medios (preservando estrictamente portadas, metadatos nfo y subtítulos)
         Self::clean_junk_and_orphan_subtitles(&state.config.series_dir, true, dry_run, &mut report);
         Self::clean_junk_and_orphan_subtitles(&state.config.movies_dir, true, dry_run, &mut report);
 
-        // 4. Clean incoming folders and orphan temp files
+        // 4. Limpiar carpetas entrantes y archivos temporales huérfanos
         Self::clean_incoming(state, dry_run, &mut report).await;
 
-        // 5. Cancel redundant active downloads
+        // 5. Cancelar descargas activas redundantes
         Self::cancel_redundant_downloads(state, dry_run, &mut report).await;
 
-        // 6. Purge empty directories, preserving folders for tracked library media
+        // 6. Purgar directorios vacíos, preservando carpetas para medios rastreados de la biblioteca
         let protected_dirs: Vec<PathBuf> = {
             let dl_svc = state.downloads.lock().await;
             let items = dl_svc.db().list_media_items(None, None).unwrap_or_default();
@@ -846,7 +846,7 @@ mod tests {
         std::fs::write(&malware, b"dangerous binary").unwrap();
 
         let mut report = CleanReport::default();
-        // Test library mode: artwork, nfo metadata and subtitles are preserved!
+        // Modo biblioteca de prueba: ¡las portadas, metadatos nfo y subtítulos se preservan!
         MediaCleaner::clean_junk_and_orphan_subtitles(p, true, false, &mut report);
 
         assert!(video1.exists(), "Main video must be kept");

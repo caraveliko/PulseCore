@@ -40,12 +40,12 @@ fn aich_root_reaches_consensus_with_ten_unique_ips() {
         assert_eq!(outcome, AichVoteOutcome::Untrusted);
         assert_eq!(svc.trusted_aich_root(&snap.id), None);
     }
-    // 10th unique masked IP reaches consensus.
+    // La décima IP enmascarada única alcanza el consenso.
     let outcome = svc.record_aich_root_vote(&snap.id, root, 10 << 16);
     assert_eq!(outcome, AichVoteOutcome::Trusted);
     assert_eq!(svc.trusted_aich_root(&snap.id), Some(root));
 
-    // A conflicting report is rejected once the root is trusted.
+    // Un informe conflictivo se rechaza una vez que se confía en la raíz.
     let outcome = svc.record_aich_root_vote(&snap.id, [0xEE; 20], 11 << 16);
     assert_eq!(outcome, AichVoteOutcome::Mismatch);
 }
@@ -73,7 +73,7 @@ fn aich_recovery_evicts_only_corrupted_blocks() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    // 3 AICH blocks (553 KB) in one eD2K part.
+    // 3 bloques AICH (553 KB) en una parte eD2K.
     let good = build_file(3);
     let tree = mule_format::build_aich_tree(&good).unwrap();
     let root = tree.root_hash().unwrap();
@@ -88,13 +88,13 @@ fn aich_recovery_evicts_only_corrupted_blocks() {
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
-    // Inject the full part with block 1 corrupted.
+    // Inyectar la parte completa con el bloque 1 dañado.
     let mut received = good.clone();
     received[BLOCK + 100] ^= 0xFF;
     svc.inject_range(&snap.id, 0, &received, None).unwrap();
     assert_eq!(svc.get_covered_len(&snap.id), Some(good.len() as u64));
 
-    // Build recovery data as an uploader would, then apply it.
+    // Construir datos de recuperación como lo haría quien sube, luego aplicarlos.
     let entries = mule_format::create_part_recovery_data(&tree, good.len() as u64, 0).unwrap();
     let report = svc
         .apply_aich_recovery(&snap.id, 0, root.0, entries)
@@ -105,7 +105,7 @@ fn aich_recovery_evicts_only_corrupted_blocks() {
         report.evicted_ranges,
         vec![(BLOCK as u64, (2 * BLOCK) as u64)]
     );
-    // Blocks 0 and 2 remain covered.
+    // Los bloques 0 y 2 permanecen cubiertos.
     assert_eq!(
         svc.get_covered_len(&snap.id),
         Some(good.len() as u64 - BLOCK as u64)
@@ -162,8 +162,8 @@ fn aich_recovery_rejects_untrusted_master_hash() {
         .unwrap();
     svc.inject_range(&snap.id, 0, &good, None).unwrap();
 
-    // Recovery data carrying a different master hash must not overwrite the
-    // trusted root nor mutate ranges.
+    // Los datos de recuperación con un hash maestro diferente no deben sobrescribir la
+    // raíz de confianza ni alterar los rangos.
     let entries = mule_format::create_part_recovery_data(&tree, good.len() as u64, 0).unwrap();
     assert!(svc
         .apply_aich_recovery(&snap.id, 0, [0xEE; 20], entries)

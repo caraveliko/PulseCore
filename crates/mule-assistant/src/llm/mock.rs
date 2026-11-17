@@ -14,17 +14,17 @@ use crate::llm::{
     AssistantTurn, ChatMessage, LlmBackend, LlmMetrics, TokenSink, ToolSchema,
 };
 
-/// Backend LLM dépilataire : chaque appel à [`LlmBackend::chat`]
-/// consomme le prochain [`AssistantTurn`] scripté et pousse son contenu
-/// via le sink. File vide = tour vide (réponse finale sans texte).
+/// Backend LLM de extracción de cola: cada llamada a [`LlmBackend::chat`]
+/// consume el siguiente [`AssistantTurn`] preparado y envía su contenido
+/// a través del sumidero (sink). Cola vacía = turno vacío (respuesta final sin texto).
 pub struct MockBackend {
     turns: Mutex<VecDeque<AssistantTurn>>,
-    /// Dernier historique reçu — pour assertions de test.
+    /// Último historial recibido: para aserciones de prueba.
     last_history: Mutex<Vec<ChatMessage>>,
 }
 
 impl MockBackend {
-    /// Construit le backend avec la séquence de tours à jouer.
+    /// Construye el backend con la secuencia de turnos a reproducir.
     pub fn new(turns: Vec<AssistantTurn>) -> Self {
         Self {
             turns: Mutex::new(turns.into()),
@@ -32,7 +32,7 @@ impl MockBackend {
         }
     }
 
-    /// Copie du dernier historique reçu (assertions de test).
+    /// Copia del último historial recibido (aserciones de prueba).
     pub fn last_history(&self) -> Vec<ChatMessage> {
         self.last_history.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -61,7 +61,7 @@ impl LlmBackend for MockBackend {
     }
 }
 
-/// Fabrique un tour « texte simple » pour les tests.
+/// Fabrica un turno de «texto simple» para las pruebas.
 pub fn text_turn(content: &str) -> AssistantTurn {
     AssistantTurn {
         content: content.to_string(),
@@ -69,7 +69,7 @@ pub fn text_turn(content: &str) -> AssistantTurn {
     }
 }
 
-/// Fabrique un tour « appel d'outil » pour les tests.
+/// Fabrica un turno de «llamada a herramienta» para las pruebas.
 pub fn tool_call_turn(name: &str, args: serde_json::Value) -> AssistantTurn {
     AssistantTurn {
         tool_calls: vec![crate::llm::ToolCall {
@@ -81,7 +81,7 @@ pub fn tool_call_turn(name: &str, args: serde_json::Value) -> AssistantTurn {
     }
 }
 
-/// Métriques factices pour les tests.
+/// Métricas simuladas para las pruebas.
 pub fn fake_metrics() -> Option<LlmMetrics> {
     Some(LlmMetrics {
         load_duration_ms: Some(10),

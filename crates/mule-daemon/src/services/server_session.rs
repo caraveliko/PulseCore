@@ -29,41 +29,41 @@ use connection::{spawn_connection_task, ActiveSession};
 use events::emit_event;
 pub use types::{ServerConnectionStatus, ServerSessionSnapshot};
 
-/// Thread-safe manager for the single eD2K server connection.
+/// Gestor seguro para subprocesos (thread-safe) para la única conexión al servidor eD2K.
 #[derive(Clone)]
 pub struct ServerSessionManager {
     inner: Arc<Mutex<ActiveSession>>,
     event_tx: broadcast::Sender<String>,
     sequence: Arc<AtomicU64>,
     downloads: Arc<std::sync::RwLock<Option<Arc<Mutex<DownloadService>>>>>,
-    /// Inbound listener — `OP_CALLBACKREQUESTED` (server-relayed callback to
-    /// a LowID us) triggers an outbound connect-back served by this service.
+    /// Escuchador entrante — `OP_CALLBACKREQUESTED` (devolución de llamada retransmitida por el
+    /// servidor hacia nosotros como LowID) desencadena una conexión de retorno atendida por este servicio.
     inbound:
         Arc<std::sync::RwLock<Option<crate::services::inbound_listener::InboundListenerService>>>,
-    /// Kad service — a HighID `OP_IDCHANGE` teaches it our public IPv4
-    /// (advertised in `PUBLISH_SOURCE` contacts).
+    /// Servicio Kad — un `OP_IDCHANGE` HighID le comunica nuestra IPv4 pública
+    /// (anunciada en contactos `PUBLISH_SOURCE`).
     kad: Arc<std::sync::RwLock<Option<Arc<crate::services::kad::KadService>>>>,
-    /// Prefer the server's dedicated obfuscation port (`ST_TCPPORTOBFUSCATION`)
-    /// when advertised — mirrors eMule `IsServerCryptLayerConnection()`.
+    /// Preferir el puerto de ofuscación dedicado del servidor (`ST_TCPPORTOBFUSCATION`)
+    /// cuando se anuncie — refleja el comportamiento de `IsServerCryptLayerConnection()` en eMule.
     prefer_obfuscation: Arc<std::sync::atomic::AtomicBool>,
-    /// Max random padding for the obfuscated handshake (eMule PAD_DIGITS).
+    /// Relleno aleatorio máximo para el apretón de manos ofuscado (PAD_DIGITS en eMule).
     obfuscation_padding_max: Arc<std::sync::atomic::AtomicU8>,
-    /// Last successful connection target — used by the auto-reconnect
-    /// watcher (eMule `Reconnect` pref). Cleared on user-initiated disconnect.
+    /// Último destino de conexión exitosa — empleado por el supervisor de reconexión
+    /// automática (preferencia `Reconnect` en eMule). Limpiado ante desconexión iniciada por el usuario.
     last_target: Arc<std::sync::Mutex<Option<ServerTarget>>>,
 }
 
-/// Remembered server target for auto-reconnect (address + display name).
+/// Destino de servidor recordado para la reconexión automática (dirección + nombre visible).
 #[derive(Clone)]
 pub struct ServerTarget {
-    /// Server socket address (`ip:port`).
+    /// Dirección del socket del servidor (`ip:puerto`).
     pub addr: SocketAddr,
-    /// Server display name, if known.
+    /// Nombre visible del servidor, si se conoce.
     pub name: Option<String>,
 }
 
 impl ServerSessionManager {
-    /// Creates a new `ServerSessionManager`.
+    /// Crea un nuevo `ServerSessionManager`.
     pub fn new(event_tx: broadcast::Sender<String>, sequence: Arc<AtomicU64>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(ActiveSession::new())),
@@ -78,20 +78,20 @@ impl ServerSessionManager {
         }
     }
 
-    /// Returns the last connection target for the auto-reconnect watcher.
+    /// Devuelve el último destino de conexión para el supervisor de reconexión automática.
     pub fn last_target(&self) -> Option<ServerTarget> {
         self.last_target.lock().ok().and_then(|g| g.clone())
     }
 
-    /// Clears the remembered target (auto-removed dead server, tests).
+    /// Limpia el destino recordado (servidor inactivo eliminado automáticamente, pruebas).
     pub fn clear_last_target(&self) {
         if let Ok(mut g) = self.last_target.lock() {
             *g = None;
         }
     }
 
-    /// Enables/disables obfuscated server connections (`ST_TCPPORTOBFUSCATION`)
-    /// and sets the max handshake padding (0 = no padding, eMule default ≤ 254).
+    /// Habilita/deshabilita conexiones ofuscadas al servidor (`ST_TCPPORTOBFUSCATION`)
+    /// y establece el relleno máximo del apretón de manos (0 = sin relleno, por defecto en eMule ≤ 254).
     pub fn set_obfuscation_preference(&self, enabled: bool, padding_max: u8) {
         self.prefer_obfuscation
             .store(enabled, std::sync::atomic::Ordering::Relaxed);
@@ -99,8 +99,8 @@ impl ServerSessionManager {
             .store(padding_max, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Injects the inbound listener service used for `OP_CALLBACKREQUESTED`
-    /// connect-backs.
+    /// Inyecta el servicio de escucha entrante empleado para conexiones de retorno
+    /// `OP_CALLBACKREQUESTED`.
     pub fn set_inbound_listener(
         &self,
         svc: crate::services::inbound_listener::InboundListenerService,
@@ -108,28 +108,28 @@ impl ServerSessionManager {
         *self.inbound.write().unwrap() = Some(svc);
     }
 
-    /// Sets the download service reference for auto-ingesting found sources.
+    /// Establece la referencia al servicio de descargas para la incorporación automática de fuentes encontradas.
     pub fn set_downloads(&self, downloads: Arc<Mutex<DownloadService>>) {
         if let Ok(mut d) = self.downloads.write() {
             *d = Some(downloads);
         }
     }
 
-    /// Injects the Kad service — the server-assigned HighID is forwarded to
-    /// it as our observed public IPv4 for `PUBLISH_SOURCE` contacts.
+    /// Inyecta el servicio Kad — el HighID asignado por el servidor se le reenvía
+    /// como nuestra IPv4 pública observada para los contactos `PUBLISH_SOURCE`.
     pub fn set_kad(&self, kad: Arc<crate::services::kad::KadService>) {
         if let Ok(mut k) = self.kad.write() {
             *k = Some(kad);
         }
     }
 
-    /// Returns a snapshot of the current server session.
+    /// Devuelve una instantánea de la sesión actual del servidor.
     pub async fn snapshot(&self) -> ServerSessionSnapshot {
         let guard = self.inner.lock().await;
         guard.snapshot.clone()
     }
 
-    /// Returns true if a server connection is active or in progress.
+    /// Devuelve true si una conexión con el servidor está activa o en curso.
     pub async fn is_active(&self) -> bool {
         let guard = self.inner.lock().await;
         matches!(
@@ -138,7 +138,7 @@ impl ServerSessionManager {
         )
     }
 
-    /// Sends a search query to the connected server.
+    /// Envía una consulta de búsqueda al servidor conectado.
     pub async fn search(&self, query: SearchQuery) -> Result<(), DaemonError> {
         let guard = self.inner.lock().await;
         if guard.snapshot.status != ServerConnectionStatus::Connected {
@@ -169,7 +169,7 @@ impl ServerSessionManager {
         Ok(())
     }
 
-    /// Sends a get sources request to the connected server for a specific file hash.
+    /// Envía una solicitud de obtención de fuentes al servidor conectado para un hash de archivo específico.
     pub async fn get_sources(&self, request: GetSourcesRequest) -> Result<(), DaemonError> {
         let guard = self.inner.lock().await;
         if guard.snapshot.status != ServerConnectionStatus::Connected {
@@ -195,9 +195,9 @@ impl ServerSessionManager {
         Ok(())
     }
 
-    /// Sends an `OP_CALLBACKREQUEST` to the connected server, asking it to
-    /// relay a connection request to a LowID client (`client_id < 0x01000000`).
-    /// The target then opens a TCP connection back to us.
+    /// Envía un `OP_CALLBACKREQUEST` al servidor conectado, solicitándole que
+    /// retransmita una petición de conexión a un cliente LowID (`client_id < 0x01000000`).
+    /// El destino abrirá entonces una conexión TCP de retorno hacia nosotros.
     pub async fn request_callback(&self, client_id: u32) -> Result<(), DaemonError> {
         let guard = self.inner.lock().await;
         if guard.snapshot.status != ServerConnectionStatus::Connected {
@@ -216,14 +216,14 @@ impl ServerSessionManager {
         Ok(())
     }
 
-    /// Disconnects any active session and resets state.
+    /// Desconecta cualquier sesión activa y reinicia el estado.
     pub async fn disconnect(&self) -> Result<(), DaemonError> {
         self.disconnect_inner(false).await
     }
 
-    /// Kill-switch variant (`network.disconnectAll`): identical teardown
-    /// but keeps `last_target` so the reconnect watcher can restore the
-    /// session once `network.enable` re-arms the policy.
+    /// Variante del interruptor de corte (`network.disconnectAll`): desmontaje idéntico
+    /// pero conserva `last_target` para que el supervisor de reconexión pueda restaurar
+    /// la sesión una vez que `network.enable` rearme la política.
     pub async fn disconnect_for_kill_switch(&self) -> Result<(), DaemonError> {
         self.disconnect_inner(true).await
     }
@@ -237,15 +237,15 @@ impl ServerSessionManager {
         guard.outgoing_tx = None;
         guard.snapshot = ServerSessionSnapshot::default();
         if !keep_target {
-            // User-initiated disconnect: no auto-reconnect to this target.
+            // Desconexión iniciada por el usuario: sin reconexión automática a este destino.
             self.clear_last_target();
         }
         self.emit_notification(&guard.snapshot);
         Ok(())
     }
 
-    /// Initiates a connection to `target_addr` under `permit`.
-    /// Rejects if already connecting or connected.
+    /// Inicia una conexión a `target_addr` bajo el permiso `permit`.
+    /// Rechaza si ya está conectando o conectado.
     #[allow(clippy::too_many_arguments)]
     pub async fn connect(
         &self,

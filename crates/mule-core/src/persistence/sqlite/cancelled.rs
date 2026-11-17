@@ -15,12 +15,12 @@ use rusqlite::{params, Connection};
 
 use crate::error::CoreError;
 
-/// Setting key storing our `m_dwCancelledFilesSeed` (decimal u32,
-/// `1..=0xFFFFFFFE` — generated lazily like eMule).
+/// Clave de configuración que almacena nuestro `m_dwCancelledFilesSeed` (u32 decimal,
+/// `1..=0xFFFFFFFE` — generado de forma diferida igual que en eMule).
 pub const CANCELLED_SEED_KEY: &str = "cancelled_seed";
 
-/// Records a masked hash under `seed` (`INSERT OR IGNORE` — the set is
-/// idempotent like `m_mapCancelledFiles[key] = 1`).
+/// Registra un hash enmascarado bajo `seed` (`INSERT OR IGNORE` — el conjunto es
+/// idempotente como `m_mapCancelledFiles[key] = 1`).
 pub fn add_cancelled_hash(
     conn: &mut Connection,
     seed: u32,
@@ -33,7 +33,7 @@ pub fn add_cancelled_hash(
     Ok(())
 }
 
-/// Returns `true` when `masked_hash_hex` exists under `seed`.
+/// Devuelve `true` cuando `masked_hash_hex` existe bajo `seed`.
 pub fn is_cancelled_masked(
     conn: &Connection,
     seed: u32,
@@ -47,8 +47,8 @@ pub fn is_cancelled_masked(
     Ok(exists)
 }
 
-/// All distinct seeds present — `is_cancelled_file` must try every seed
-/// (imported files keep their own `m_dwCancelledFilesSeed`).
+/// Todas las semillas distintas presentes — `is_cancelled_file` debe probar cada semilla
+/// (los archivos importados conservan su propio `m_dwCancelledFilesSeed`).
 pub fn distinct_seeds(conn: &Connection) -> Result<Vec<u32>, CoreError> {
     let mut stmt = conn.prepare("SELECT DISTINCT seed FROM cancelled_files")?;
     let rows = stmt.query_map([], |r| r.get::<_, i64>(0))?;
@@ -59,7 +59,7 @@ pub fn distinct_seeds(conn: &Connection) -> Result<Vec<u32>, CoreError> {
     Ok(out)
 }
 
-/// Number of stored masked hashes (inspection / import reporting).
+/// Número de hashes enmascarados almacenados (inspección / informes de importación).
 pub fn cancelled_count(conn: &Connection) -> Result<usize, CoreError> {
     let n: i64 = conn.query_row("SELECT COUNT(*) FROM cancelled_files", [], |r| r.get(0))?;
     Ok(n as usize)

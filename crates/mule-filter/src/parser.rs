@@ -9,9 +9,9 @@ use thiserror::Error;
 
 use crate::interval::{coalesce_ranges, FilterRange};
 
-pub const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50 MB limit
-pub const MAX_LINE_LEN: usize = 1024; // 1024 bytes per line max
-pub const MAX_ENTRIES: usize = 500_000; // 500,000 rules max
+pub const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // Límite de 50 MB
+pub const MAX_LINE_LEN: usize = 1024; // Máximo 1024 bytes por línea
+pub const MAX_ENTRIES: usize = 500_000; // Máximo 500.000 reglas
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -36,17 +36,17 @@ pub struct ParseReport {
     pub warnings: Vec<String>,
 }
 
-/// Parses an `ipfilter.dat` stream defensively.
+/// Analiza defensivamente un flujo de `ipfilter.dat`.
 ///
-/// Supported formats:
-/// 1) Standard eMule / PeerGuardian:
+/// Formatos admitidos:
+/// 1) Estándar eMule / PeerGuardian:
 ///    `001.000.000.000 - 001.255.255.255 , 000 , Description`
-/// 2) Short format:
-///    `1.0.0.0 - 1.255.255.255 , Description` (default level 0)
-/// 3) CIDR / Single IP (if separated by hyphen or same start-end):
+/// 2) Formato corto:
+///    `1.0.0.0 - 1.255.255.255 , Description` (nivel 0 por defecto)
+/// 3) CIDR / IP única (si está separada por guion o tiene el mismo inicio y fin):
 ///    `1.2.3.4 - 1.2.3.4 , 100 , Spam`
 ///
-/// Lines starting with `#`, `//`, `;` are treated as comments.
+/// Las líneas que comienzan por `#`, `//`, `;` se tratan como comentarios.
 pub fn parse_ipfilter<R: BufRead>(
     reader: R,
 ) -> Result<(Vec<FilterRange>, ParseReport), ParseError> {
@@ -71,7 +71,7 @@ pub fn parse_ipfilter<R: BufRead>(
         report.total_lines += 1;
         let trimmed = line.trim();
 
-        // Comments or empty line
+        // Comentarios o línea vacía
         if trimmed.is_empty()
             || trimmed.starts_with('#')
             || trimmed.starts_with("//")
@@ -109,7 +109,7 @@ pub fn parse_ipfilter<R: BufRead>(
 }
 
 fn parse_line(line: &str) -> Option<FilterRange> {
-    // Format: "start - end , level , description" or "start - end , description"
+    // Formato: "start - end , level , description" o "start - end , description"
     let parts: Vec<&str> = line.splitn(3, ',').collect();
     if parts.is_empty() {
         return None;
@@ -128,7 +128,7 @@ fn parse_line(line: &str) -> Option<FilterRange> {
         (0u32, String::new())
     } else if parts.len() == 2 {
         let second = parts[1].trim();
-        // Check if second part is numeric level or description
+        // Comprobar si la segunda parte es un nivel numérico o una descripción
         if let Ok(lvl) = second.parse::<u32>() {
             (lvl, String::new())
         } else {
@@ -144,7 +144,7 @@ fn parse_line(line: &str) -> Option<FilterRange> {
     Some(FilterRange::new(start_ip, end_ip, level, description))
 }
 
-/// Parses an IPv4 address, supporting zero-padded octets (e.g., "001.000.000.000").
+/// Analiza una dirección IPv4, admitiendo octetos con relleno de ceros (p. ej., "001.000.000.000").
 fn parse_ipv4(s: &str) -> Option<Ipv4Addr> {
     let octets: Vec<&str> = s.split('.').collect();
     if octets.len() != 4 {
@@ -154,7 +154,7 @@ fn parse_ipv4(s: &str) -> Option<Ipv4Addr> {
     let mut b = [0u8; 4];
     for i in 0..4 {
         let octet_str = octets[i].trim();
-        // Parse directly as u8 (handles standard base 10 even with leading zeroes, standard FromStr fails if leading 0s on some implementations)
+        // Analizar directamente como u8 (maneja base 10 estándar incluso con ceros a la izquierda; FromStr estándar falla con ceros a la izquierda en algunas implementaciones)
         let val = u8::from_str(octet_str).ok()?;
         b[i] = val;
     }

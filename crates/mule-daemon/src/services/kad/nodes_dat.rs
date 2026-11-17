@@ -34,7 +34,7 @@ pub fn inspect_nodes_dat(
     for entry in &nodes_file.contacts {
         let ip = IpAddr::V4(entry.ip);
 
-        // Policy check
+        // Verificación de política
         let category = classify_ip(ip);
         let policy_allowed = match profile {
             NetworkProfile::LocalLab => category == IpCategory::Loopback,
@@ -48,7 +48,7 @@ pub fn inspect_nodes_dat(
             continue;
         }
 
-        // Filter check
+        // Verificación de filtro
         if ip_filter.check_ip(ip).is_some() {
             filter_rejected += 1;
             continue;

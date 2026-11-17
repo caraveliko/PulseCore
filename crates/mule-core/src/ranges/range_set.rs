@@ -6,12 +6,12 @@ use std::ops::Range;
 
 use crate::error::CoreError;
 
-/// Canonical set of half-open intervals `[start, end)`.
+/// Conjunto canónico de intervalos semiabiertos `[start, end)`.
 ///
-/// Invariants:
-/// - Every range is non-empty: `start < end`.
-/// - Ranges are sorted by `start`.
-/// - No two ranges overlap or touch (adjacent ranges are automatically merged).
+/// Invariantes:
+/// - Cada rango no está vacío: `start < end`.
+/// - Los rangos están ordenados por `start`.
+/// - Ningún par de rangos se solapa o toca (los rangos adyacentes se fusionan automáticamente).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RangeSet {
     ranges: BTreeMap<u64, u64>,
@@ -36,12 +36,12 @@ impl RangeSet {
         self.ranges.iter().map(|(&s, &e)| s..e).collect()
     }
 
-    /// Total number of bytes covered across all intervals.
+    /// Número total de bytes cubiertos en todos los intervalos.
     pub fn covered_len(&self) -> u64 {
         self.ranges.iter().map(|(&s, &e)| e - s).sum()
     }
 
-    /// Inserts a half-open range `[start, end)` into the set, merging overlapping and adjacent intervals.
+    /// Inserta un rango semiabierto `[start, end)` en el conjunto, fusionando intervalos solapados y adyacentes.
     pub fn insert(&mut self, range: Range<u64>) -> Result<(), CoreError> {
         let (mut new_start, mut new_end) = (range.start, range.end);
         if new_start >= new_end {
@@ -52,12 +52,12 @@ impl RangeSet {
             });
         }
 
-        // Find existing ranges that overlap or touch [new_start, new_end].
-        // An existing range [s, e) overlaps or touches [new_start, new_end] if:
-        // s <= new_end and e >= new_start.
+        // Buscar rangos existentes que se solapen o toquen [new_start, new_end].
+        // Un rango existente [s, e) se solapa o toca con [new_start, new_end] si:
+        // s <= new_end y e >= new_start.
         let mut to_remove = Vec::new();
 
-        // Check the predecessor range (if any) that starts before new_start
+        // Comprobar el rango predecesor (si existe) que comienza antes de new_start
         if let Some((&s, &e)) = self.ranges.range(..=new_start).next_back() {
             if e >= new_start {
                 new_start = s;
@@ -66,7 +66,7 @@ impl RangeSet {
             }
         }
 
-        // Check all ranges starting between new_start and new_end
+        // Comprobar todos los rangos que comienzan entre new_start y new_end
         for (&s, &e) in self.ranges.range(new_start..=new_end) {
             new_end = new_end.max(e);
             to_remove.push(s);
@@ -80,7 +80,7 @@ impl RangeSet {
         Ok(())
     }
 
-    /// Checks whether the entire `[start, end)` interval is covered.
+    /// Comprueba si el intervalo `[start, end)` completo está cubierto.
     pub fn contains(&self, range: Range<u64>) -> bool {
         if range.start >= range.end {
             return false;
@@ -93,20 +93,20 @@ impl RangeSet {
         }
     }
 
-    /// Checks whether any part of `[start, end)` intersects with the set.
+    /// Comprueba si alguna parte de `[start, end)` interseca con el conjunto.
     pub fn intersects(&self, range: Range<u64>) -> bool {
         if range.start >= range.end {
             return false;
         }
 
-        // Check predecessor
+        // Comprobar predecesor
         if let Some((_, &e)) = self.ranges.range(..=range.start).next_back() {
             if e > range.start {
                 return true;
             }
         }
 
-        // Check any range starting inside the query interval
+        // Comprobar cualquier rango que comience dentro del intervalo de consulta
         if let Some((&s, _)) = self.ranges.range(range.start..range.end).next() {
             if s < range.end {
                 return true;
@@ -116,7 +116,7 @@ impl RangeSet {
         false
     }
 
-    /// Returns the missing gaps within a given bounding interval `limit`.
+    /// Devuelve los huecos faltantes dentro de un intervalo delimitador `limit` dado.
     pub fn missing_within(&self, limit: Range<u64>) -> Vec<Range<u64>> {
         let (limit_start, limit_end) = (limit.start, limit.end);
         if limit_start >= limit_end {
@@ -150,7 +150,7 @@ impl RangeSet {
         gaps
     }
 
-    /// Evicts a range `[start, end)` from the set (e.g. upon detecting corruption).
+    /// Desaloja un rango `[start, end)` del conjunto (p. ej. al detectar corrupción).
     pub fn remove(&mut self, range: Range<u64>) -> Result<(), CoreError> {
         let (rem_start, rem_end) = (range.start, range.end);
         if rem_start >= rem_end {
@@ -164,7 +164,7 @@ impl RangeSet {
         let mut to_remove = Vec::new();
         let mut to_insert = Vec::new();
 
-        // Check predecessor
+        // Comprobar predecesor
         if let Some((&s, &e)) = self.ranges.range(..=rem_start).next_back() {
             if e > rem_start {
                 to_remove.push(s);
@@ -177,7 +177,7 @@ impl RangeSet {
             }
         }
 
-        // Check ranges starting inside the removed range
+        // Comprobar los rangos que comienzan dentro del rango eliminado
         for (&s, &e) in self.ranges.range(rem_start..rem_end) {
             to_remove.push(s);
             if e > rem_end {

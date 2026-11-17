@@ -28,10 +28,10 @@ use crate::llm::{
     AssistantTurn, ChatMessage, LlmBackend, LlmMetrics, Role, ToolCall, ToolSchema,
 };
 
-/// Durées Ollama sont rapportées en nanosecondes.
+/// Las duraciones de Ollama se reportan en nanosegundos.
 const NS_PER_MS: u64 = 1_000_000;
 
-/// Backend LLM pour l'API native Ollama (`/api/chat`).
+/// Backend LLM para la API nativa de Ollama (`/api/chat`).
 pub struct OllamaBackend {
     client: reqwest::Client,
     endpoint: String,
@@ -39,7 +39,7 @@ pub struct OllamaBackend {
 }
 
 impl OllamaBackend {
-    /// Construit le backend et son client HTTP verrouillé.
+    /// Construye el backend y su cliente HTTP bloqueado.
     pub fn new(config: &AssistantConfig) -> Result<Self, AssistantError> {
         config.validate()?;
         let client = reqwest::Client::builder()
@@ -99,7 +99,7 @@ impl OllamaBackend {
             )));
         }
 
-        // Stream NDJSON : une ligne JSON par chunk.
+        // Flujo NDJSON: una línea JSON por fragmento (chunk).
         let mut turn = AssistantTurn::default();
         let mut metrics = LlmMetrics::default();
         let mut buffer = String::new();
@@ -110,7 +110,7 @@ impl OllamaBackend {
                 .map_err(|e| AssistantError::Backend(format!("stream Ollama : {e}")))?;
             buffer.push_str(&String::from_utf8_lossy(&bytes));
 
-            // Consomme les lignes complètes ; le reste attend le chunk suivant.
+            // Consume las líneas completas; el resto espera al siguiente fragmento.
             while let Some(pos) = buffer.find('\n') {
                 let line = buffer[..pos].trim().to_string();
                 buffer.drain(..=pos);
@@ -125,14 +125,14 @@ impl OllamaBackend {
             }
         }
 
-        // Flux terminé sans chunk `done` — accepte ce qui a été accumulé.
+        // Flujo terminado sin fragmento `done`: se acepta lo que se haya acumulado.
         turn.metrics = Some(metrics);
         Ok(turn)
     }
 }
 
-/// Traite une ligne NDJSON : accumule content/thinking/tool_calls et les
-/// métriques du chunk final. Retourne `true` quand `done` est atteint.
+/// Procesa una línea NDJSON: acumula content/thinking/tool_calls y las
+/// métricas del fragmento final. Devuelve `true` cuando se alcanza `done`.
 fn consume_chunk(
     line: &str,
     turn: &mut AssistantTurn,
@@ -187,8 +187,8 @@ fn consume_chunk(
     Ok(done)
 }
 
-/// `{"function":{"name","arguments"}}` → [`ToolCall`] (`id` absent côté
-/// Ollama natif — conservé si jamais présent).
+/// `{"function":{"name","arguments"}}` → [`ToolCall`] (`id` ausente en
+/// Ollama nativo; conservado si alguna vez estuviera presente).
 fn parse_tool_call(raw: &Value) -> Option<ToolCall> {
     let func = raw.get("function")?;
     let name = func.get("name")?.as_str()?.to_string();
@@ -200,10 +200,10 @@ fn parse_tool_call(raw: &Value) -> Option<ToolCall> {
     })
 }
 
-/// Sérialisation filaire d'un message : `role`, `content`, `tool_calls`
-/// au format fonction Ollama, et `tool_name` + `name` sur les résultats
-/// d'outils (les deux clés sont envoyées pour couvrir les versions
-/// d'Ollama qui attendent l'une ou l'autre).
+/// Serialización en cable de un mensaje: `role`, `content`, `tool_calls`
+/// en formato de función de Ollama, y `tool_name` + `name` en los resultados
+/// de herramientas (ambas claves se envían para cubrir las versiones
+/// de Ollama que esperan una u otra).
 fn to_ollama_message(msg: &ChatMessage) -> Value {
     let mut out = json!({
         "role": match msg.role {
@@ -235,7 +235,7 @@ fn to_ollama_message(msg: &ChatMessage) -> Value {
     out
 }
 
-/// Sérialisation filaire d'un outil : `{type:"function", function:{…}}`.
+/// Serialización en cable de una herramienta: `{type:"function", function:{…}}`.
 fn to_ollama_tool(tool: &ToolSchema) -> Value {
     json!({
         "type": "function",

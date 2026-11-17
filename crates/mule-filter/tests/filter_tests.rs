@@ -23,7 +23,7 @@ fn test_parse_standard_emule_ipfilter() {
     assert_eq!(report.valid_entries_parsed, 4);
     assert_eq!(report.invalid_lines, 0);
 
-    // Ranges 1 and 2 are adjacent with same level (100) -> merged into 001.000.000.000 - 001.000.001.255
+    // Los rangos 1 y 2 son adyacentes con el mismo nivel (100) -> fusionados en 001.000.000.000 - 001.000.001.255
     assert_eq!(report.coalesced_count, 1);
     assert_eq!(report.final_range_count, 3);
     assert_eq!(ranges.len(), 3);
@@ -39,26 +39,26 @@ fn test_filter_binary_search_lookup() {
 "#;
     filter.load_from_str(content).unwrap();
 
-    // Check hit inside Range A
+    // Comprobar coincidencia dentro del Rango A
     let hit = filter.check_ip("10.0.0.50".parse().unwrap());
     assert!(hit.is_some());
     let r = hit.unwrap();
     assert_eq!(r.description.as_ref(), "Blocked Range A");
     assert_eq!(r.level, 90);
 
-    // Check hit boundary Range B
+    // Comprobar coincidencia en el límite del Rango B
     assert!(filter.check_ip("20.0.0.0".parse().unwrap()).is_some());
     assert!(filter.check_ip("20.0.0.200".parse().unwrap()).is_some());
 
-    // Check miss just outside Range B
+    // Comprobar no coincidencia justo fuera del Rango B
     assert!(filter.check_ip("20.0.0.201".parse().unwrap()).is_none());
 
-    // Check IPv4-mapped IPv6 hit
+    // Comprobar coincidencia con IPv6 asignada a IPv4
     let v6_mapped: IpAddr = "::ffff:10.0.0.50".parse().unwrap();
     let hit_v6 = filter.check_ip(v6_mapped);
     assert!(hit_v6.is_some());
 
-    // Verify stats
+    // Verificar estadísticas
     let stats = filter.stats();
     assert!(stats.enabled);
     assert_eq!(stats.range_count, 3);
@@ -80,7 +80,7 @@ fn test_filter_disabled_allows_all() {
 
 #[test]
 fn test_defensive_parser_bounds() {
-    // Exceed line length limit
+    // Superar el límite de longitud de línea
     let too_long = "1.1.1.1 - 1.1.1.2 , 0 , ".to_string() + &"A".repeat(1024);
     let (_, report) = parse_ipfilter(Cursor::new(too_long.as_bytes())).unwrap();
     assert_eq!(report.invalid_lines, 1);

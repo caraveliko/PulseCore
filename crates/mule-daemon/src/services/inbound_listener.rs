@@ -26,7 +26,7 @@ use crate::services::downloads::DownloadService;
 use crate::services::upload_queue::UploadManager;
 
 impl InboundListenerService {
-    /// Creates a new InboundListenerService instance.
+    /// Crea una nueva instancia de InboundListenerService.
     pub fn new(
         network_policy: Arc<NetworkPolicyManager>,
         downloads: Arc<Mutex<DownloadService>>,
@@ -64,15 +64,15 @@ impl InboundListenerService {
         }
     }
 
-    /// Injects the shared Source Exchange environment (network policy +
-    /// throttle journals) created by `AppState`.
+    /// Inyecta el entorno de intercambio de fuentes compartido (política de red +
+    /// diarios de limitación) creado por `AppState`.
     pub fn set_sx_env(&mut self, env: crate::services::peer_session::source_exchange::SxEnv) {
         *self.sx_env.write().unwrap() = Some(env);
     }
 
-    /// Shared `SxEnv` for this listener; builds a fallback from the
-    /// listener's own network policy + user hash when `AppState` did not
-    /// inject one (tests, manual construction).
+    /// `SxEnv` compartido para este listener; construye un respaldo a partir de la
+    /// propia política de red del listener + hash de usuario cuando `AppState` no
+    /// inyectó uno (pruebas, construcción manual).
     pub(crate) fn sx_env(&self) -> crate::services::peer_session::source_exchange::SxEnv {
         self.sx_env.read().unwrap().clone().unwrap_or_else(|| {
             crate::services::peer_session::source_exchange::SxEnv::new(
@@ -82,16 +82,16 @@ impl InboundListenerService {
         })
     }
 
-    /// Local eD2K identity view for `CanAddSource` self-checks (eMule
-    /// `PartFile.cpp:2380-2403`): current server-assigned `client_id`,
-    /// server address and our TCP listen port.
+    /// Vista de identidad eD2K local para las autocomprobaciones de `CanAddSource` (eMule
+    /// `PartFile.cpp:2380-2403`): `client_id` actual asignado por el servidor,
+    /// dirección del servidor y nuestro puerto de escucha TCP.
     pub(crate) async fn sx_local_ids(
         &self,
         listen_port: u16,
     ) -> crate::services::peer_session::source_exchange::SxLocalIds {
         use crate::services::peer_session::source_exchange::SxLocalIds;
         // `CKademlia::IsConnected() && !IsFirewalled()` — socket UDP
-        // active + test firewall positif.
+        // activo + prueba de cortafuegos positiva.
         let kad_udp_svc = { self.kad_udp.read().unwrap().clone() };
         let kad_open = match kad_udp_svc {
             Some(svc) => {
@@ -137,14 +137,14 @@ impl InboundListenerService {
         }
     }
 
-    /// Sets the Kad UDP port announced to inbound peers in handshake answers.
+    /// Establece el puerto Kad UDP anunciado a pares entrantes en las respuestas de saludo.
     pub fn set_kad_udp_port(&mut self, port: u16) {
         self.kad_udp_port = port;
     }
 
-    /// Live-updates the obfuscation (protocol encryption) policy for inbound
-    /// connections — mirrors eMule's "Support obfuscated connections /
-    /// Require obfuscated connections" preferences.
+    /// Actualiza en vivo la política de ofuscación (cifrado de protocolo) para conexiones
+    /// entrantes — refleja las preferencias de eMule "Soportar conexiones ofuscadas /
+    /// Requerir conexiones ofuscadas".
     pub fn set_obfuscation(&self, enabled: bool, required: bool) {
         self.obfuscation_enabled
             .store(enabled, std::sync::atomic::Ordering::Relaxed);
@@ -152,22 +152,22 @@ impl InboundListenerService {
             .store(required, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Injects the client UDP service (inbound UDP version bookkeeping).
+    /// Inyecta el servicio UDP de cliente (contabilidad de versión UDP entrante).
     pub fn set_client_udp(&mut self, svc: crate::services::client_udp::ClientUdpService) {
         *self.client_udp.write().unwrap() = Some(svc);
     }
 
-    /// Injects the Kad UDP service (server side of the UDP firewall check).
+    /// Inyecta el servicio UDP Kad (lado servidor de la comprobación de cortafuegos UDP).
     pub fn set_kad_udp(&mut self, svc: Arc<crate::services::kad_udp::KadUdpService>) {
         *self.kad_udp.write().unwrap() = Some(svc);
     }
 
-    /// Injects the Kad service (bootstrap-from-client on inbound hellos).
+    /// Inyecta el servicio Kad (bootstrap desde cliente en hellos entrantes).
     pub fn set_kad(&mut self, svc: Arc<crate::services::kad::KadService>) {
         *self.kad.write().unwrap() = Some(svc);
     }
 
-    /// Injects the peer session manager (LowID callback adoption).
+    /// Inyecta el gestor de sesiones de pares (adopción de devolución de llamada LowID).
     pub fn set_peer_session(
         &mut self,
         peer_session: crate::services::peer_session::PeerSessionManager,
@@ -175,7 +175,7 @@ impl InboundListenerService {
         *self.peer_session.write().unwrap() = Some(peer_session);
     }
 
-    /// Injects the server session manager (our HighID client ID for callback sessions).
+    /// Inyecta el gestor de sesiones de servidor (nuestro ID de cliente HighID para sesiones de devolución).
     pub fn set_server_session(
         &mut self,
         server_session: crate::services::server_session::ServerSessionManager,
@@ -183,30 +183,30 @@ impl InboundListenerService {
         *self.server_session.write().unwrap() = Some(server_session);
     }
 
-    /// Injects the local identity service so inbound challenges can be signed.
+    /// Inyecta el servicio de identidad local para poder firmar desafíos entrantes.
     pub fn set_identity(&mut self, identity: Arc<Mutex<crate::services::IdentityService>>) {
         self.identity = Some(identity);
     }
 
-    /// Met à jour le matériel d'identité annoncé aux pairs entrants après une
-    /// rotation de clé (`identity.rotate` / `identityRotationHours`).
+    /// Actualiza el material de identidad anunciado a pares entrantes tras una
+    /// rotación de clave (`identity.rotate` / `identityRotationHours`).
     pub fn set_identity_material(&self, user_hash: [u8; 16], sui_pubkey_der: Option<Vec<u8>>) {
         *self.user_hash.write().unwrap() = user_hash;
         *self.sui_pubkey_der.write().unwrap() = sui_pubkey_der;
     }
 
-    /// Active/désactive le mode paranoid (pairs obfusqués + SUI vérifiés
-    /// uniquement pour les slots d'upload).
+    /// Activa/desactiva el modo paranoide (pares ofuscados + SUI verificados
+    /// únicamente para ranuras de subida).
     pub fn set_paranoid_mode(&self, enabled: bool) {
         self.paranoid_mode.store(enabled, Ordering::Relaxed);
     }
 
-    /// Accesses the underlying upload manager.
+    /// Accede al gestor de subidas subyacente.
     pub fn upload_manager(&self) -> &UploadManager {
         &self.upload_manager
     }
 
-    /// Starts the inbound listener on the requested bind address.
+    /// Inicia el listener entrante en la dirección de enlace solicitada.
     pub async fn start(&self, bind_addr: SocketAddr) -> Result<SocketAddr, String> {
         if self
             .is_running
@@ -262,7 +262,7 @@ impl InboundListenerService {
                         match accept_res {
                             Ok((socket, remote_addr)) => {
                                 let ip = remote_addr.ip();
-                                // Détection anti-DDoS / Flood dynamique avant allocation de tâche
+                                // Detección anti-DDoS / inundación dinámica antes de la asignación de tarea
                                 if service_self.network_policy.ip_filter().record_connection_attempt(ip) {
                                     warn!(
                                         "[AUTO_BAN] Dropped inbound connection flood from {peer}",
@@ -273,10 +273,10 @@ impl InboundListenerService {
                                 }
                                 let mut conns = service_self.active_conns.lock().await;
                                 let total_conns: usize = conns.values().sum();
-                                // Le plafond inbound suit le budget sockets
-                                // (`maxConnections`, live) comme chez eMule —
-                                // plus de constante cachée si l'utilisateur
-                                // augmente le budget.
+                                // El límite entrante sigue el presupuesto de sockets
+                                // (`maxConnections`, en vivo) al igual que en eMule —
+                                // sin constantes ocultas si el usuario
+                                // aumenta el presupuesto.
                                 let inbound_cap = service_self
                                     .network_policy
                                     .budgets()
@@ -329,7 +329,7 @@ impl InboundListenerService {
         Ok(actual_addr)
     }
 
-    /// Stops the inbound listener cleanly.
+    /// Detiene el listener entrante limpiamente.
     pub async fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
         let handle = self.listener_handle.lock().await.take();
@@ -342,7 +342,7 @@ impl InboundListenerService {
         self.active_conns.lock().await.clear();
     }
 
-    /// Returns a snapshot of listener status.
+    /// Devuelve una instantánea del estado del listener.
     pub async fn snapshot(&self) -> InboundListenerSnapshot {
         let is_listening = self.is_running.load(Ordering::SeqCst);
         let addr = self.listen_addr.lock().await.map(|a| a.to_string());

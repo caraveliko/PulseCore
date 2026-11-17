@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-/// A peer source discovered through an eD2K link or source exchange.
+/// Una fuente de par descubierta mediante un enlace eD2K o intercambio de fuentes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkSource {
     pub host: String,
@@ -22,7 +22,7 @@ impl LinkSource {
         }
     }
 
-    /// Parses a source string item, e.g. "192.168.1.10:39735" or "host.example.com:39735"
+    /// Analiza un elemento de cadena de fuente, p. ej. "192.168.1.10:39735" o "host.example.com:39735".
     pub fn parse(s: &str) -> Option<Self> {
         let trimmed = s.trim();
         let parts: Vec<&str> = trimmed.split(':').collect();

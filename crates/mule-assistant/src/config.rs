@@ -12,28 +12,28 @@ use mule_mcp::tools::ToolProfile;
 
 use crate::error::AssistantError;
 
-/// Endpoint LLM par défaut : API native Ollama sur loopback.
+/// Punto de conexión LLM por defecto: API nativa de Ollama en bucle local (loopback).
 pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:11434";
 
-/// Modèle par défaut — doit implémenter le tool calling Ollama.
+/// Modelo por defecto: debe implementar la llamada a herramientas (tool calling) de Ollama.
 pub const DEFAULT_MODEL: &str = "qwen3:8b";
 
-/// Nombre maximal de tours « modèle → outils → modèle » par message
-/// utilisateur : borne la boucle agentique.
+/// Número máximo de turnos «modelo → herramientas → modelo» por mensaje
+/// de usuario: acota el bucle agéntico.
 pub const DEFAULT_MAX_TOOL_ROUNDS: u32 = 4;
 
-/// Taille maximale (caractères) du résultat d'outil renvoyé au modèle —
-/// l'UI reçoit toujours la version complète via [`crate::AssistantEvent`].
+/// Tamaño máximo (caracteres) del resultado de herramienta devuelto al modelo:
+/// la interfaz de usuario recibe siempre la versión completa mediante [`crate::AssistantEvent`].
 pub const DEFAULT_TOOL_RESULT_MAX_CHARS: usize = 4000;
 
-/// Timeout global d'une requête vers le backend LLM : une génération
-/// longue sur CPU modeste ne doit pas être tronquée prématurément.
+/// Tiempo de espera global de una petición hacia el backend LLM: una generación
+/// prolongada en una CPU modesta no debe truncarse prematuramente.
 pub const DEFAULT_LLM_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// Timeout d'établissement de la connexion HTTP au backend.
+/// Tiempo de espera de establecimiento de la conexión HTTP con el backend.
 pub const LLM_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Port par défaut du serveur WebSocket de l'assistant.
+/// Puerto por defecto del servidor WebSocket del asistente.
 pub const DEFAULT_WS_PORT: u16 = 4680;
 
 /// Prompt del sistema: contexto y directrices para el modelo.
@@ -44,24 +44,24 @@ Controlas la aplicación a través de las herramientas proporcionadas: utilízal
 Cuando una información baste, responde directamente sin realizar una nueva llamada. \
 Responde en español de España, de forma concisa. Si una herramienta falla, explica el error al usuario.";
 
-/// Configuration validée d'une session assistant.
+/// Configuración validada de una sesión del asistente.
 #[derive(Debug, Clone)]
 pub struct AssistantConfig {
-    /// URL de base du backend LLM (ex. `http://127.0.0.1:11434`).
+    /// URL base del backend LLM (ej. `http://127.0.0.1:11434`).
     pub endpoint: String,
-    /// Nom du modèle côté backend.
+    /// Nombre del modelo en el backend.
     pub model: String,
-    /// Autorise explicitement un endpoint non loopback — désactivé par
-    /// défaut pour coller à la posture d'isolation du projet.
+    /// Permite explícitamente un punto de conexión no local; desactivado por
+    /// defecto para ajustarse a la postura de aislamiento del proyecto.
     pub allow_remote_endpoint: bool,
-    /// Borne de la boucle agentique (cf. [`DEFAULT_MAX_TOOL_ROUNDS`]).
+    /// Límite del bucle agéntico (véase [`DEFAULT_MAX_TOOL_ROUNDS`]).
     pub max_tool_rounds: u32,
-    /// Troncation du résultat d'outil pour le modèle
-    /// (cf. [`DEFAULT_TOOL_RESULT_MAX_CHARS`]).
+    /// Truncamiento del resultado de la herramienta para el modelo
+    /// (véase [`DEFAULT_TOOL_RESULT_MAX_CHARS`]).
     pub tool_result_max_chars: usize,
-    /// Timeout HTTP global vers le backend.
+    /// Tiempo de espera HTTP global hacia el backend.
     pub llm_timeout: Duration,
-    /// Plafond de risque des outils exposés au modèle.
+    /// Techo de riesgo de las herramientas expuestas al modelo.
     pub tool_profile: ToolProfile,
 }
 
@@ -80,9 +80,9 @@ impl Default for AssistantConfig {
 }
 
 impl AssistantConfig {
-    /// Valide l'endpoint : scheme `http` et hôte **IP littérale** loopback
-    /// (`127.0.0.1`, `::1`) — les noms d'hôte sont refusés car résolubles
-    /// vers l'extérieur. `--allow-remote-endpoint` est le seul override.
+    /// Valida el punto de conexión: esquema `http` y host **IP literal** en bucle local
+    /// (`127.0.0.1`, `::1`): los nombres de host se rechazan por ser resolubles
+    /// hacia el exterior. `--allow-remote-endpoint` es la única anulación permitida.
     pub fn validate(&self) -> Result<(), AssistantError> {
         let parsed = url::Url::parse(&self.endpoint).map_err(|e| {
             AssistantError::Config(format!("endpoint illisible '{}': {e}", self.endpoint))

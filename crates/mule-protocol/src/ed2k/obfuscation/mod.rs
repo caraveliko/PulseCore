@@ -27,35 +27,35 @@ pub use rc4::Rc4Cipher;
 
 use thiserror::Error;
 
-/// Errors arising during protocol obfuscation handshakes.
+/// Errores que surgen durante los saludos (handshakes) de ofuscación del protocolo.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ObfuscationError {
-    /// Remote side sent an invalid sync magic value (expected `0x835E6FC4`).
+    /// El extremo remoto envió un valor mágico de sincronización no válido (se esperaba `0x835E6FC4`).
     #[error("Invalid magic sync value: expected 0x835E6FC4, got 0x{0:08X}")]
     InvalidMagicSync(u32),
 
-    /// Remote side selected or requested an unsupported encryption method.
+    /// El extremo remoto seleccionó o solicitó un método de cifrado no compatible.
     #[error("Unsupported encryption method: {0}")]
     UnsupportedMethod(u8),
 
-    /// Initiating an obfuscated peer connection requires knowing the peer's UserHash.
+    /// Iniciar una conexión ofuscada con un par requiere conocer el UserHash del par.
     #[error("Missing target client user hash for obfuscated connection")]
     MissingUserHash,
 
-    /// Socket closed before all expected handshake bytes were received.
+    /// El socket se cerró antes de que se recibieran todos los bytes esperados del saludo.
     #[error("Premature EOF during obfuscation handshake (expected {expected} bytes, got {got})")]
     UnexpectedEof {
-        /// Number of bytes expected.
+        /// Número de bytes esperados.
         expected: usize,
-        /// Number of bytes actually received before EOF.
+        /// Número de bytes realmente recibidos antes de EOF.
         got: usize,
     },
 
-    /// Lower-level I/O error occurred during handshake transmission.
+    /// Ocurrió un error de E/S de nivel inferior durante la transmisión del saludo.
     #[error("I/O error during obfuscation handshake: {0}")]
     Io(String),
 
-    /// Handshake timed out before completion.
+    /// Se agotó el tiempo de espera del saludo antes de completarse.
     #[error("Handshake timed out")]
     Timeout,
 }

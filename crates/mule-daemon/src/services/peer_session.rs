@@ -41,21 +41,21 @@ pub use types::{
 };
 use types::{PeerSessionHandle, SwarmInnerState};
 
-/// Délai minimal avant de re-dialer une source dont la socket en file vient
-/// de mourir quand la deadline de re-ask est déjà passée (garde anti-spin —
-/// eMule re-ask immédiatement à `GetTimeUntilReask() == 0`).
+/// Retardo mínimo antes de volver a marcar una fuente cuyo socket en cola acaba
+/// de morir cuando el límite de reconsulta ya ha pasado (protección anti-spin —
+/// eMule reconsulta inmediatamente en `GetTimeUntilReask() == 0`).
 const QUEUE_LOSS_REDIAL_FLOOR_MS: i64 = 60_000;
 
-/// Pseudonymiseur de session partagé par les sous-modules `peer_session`
-/// : les adresses de pairs externes n'apparaissent jamais en clair dans
-/// les fichiers de log persistants — `peer-NN:port` (loopback en clair,
-/// inoffensif pour la lab).
+/// Seudonimizador de sesión compartido por los submódulos `peer_session`:
+/// las direcciones de pares externos nunca aparecen en claro en los
+/// archivos de log persistentes — `peer-NN:port` (loopback en claro,
+/// inofensivo para el laboratorio).
 static LOG_PSEUDONYMIZER: std::sync::OnceLock<mule_filter::SessionPseudonymizer> =
     std::sync::OnceLock::new();
 
-/// Formate une adresse de pair pour les logs : loopback en clair,
-/// adresses externes pseudonymisées de façon déterministe par session.
-/// À utiliser à chaque émission de log contenant une adresse distante.
+/// Formatea una dirección de par para los logs: loopback en claro,
+/// direcciones externas seudonimizadas de forma determinista por sesión.
+/// A utilizar en cada emisión de log que contenga una dirección remota.
 pub fn log_peer_addr(addr: SocketAddr) -> String {
     if addr.ip().is_loopback() {
         addr.to_string()
@@ -66,8 +66,8 @@ pub fn log_peer_addr(addr: SocketAddr) -> String {
     }
 }
 
-/// Variante serveur : `server-NN:port` pour les endpoints eD2K/Kad UDP
-/// côté serveur (table distincte des pairs).
+/// Variante de servidor: `server-NN:port` para los endpoints eD2K/Kad UDP
+/// del lado del servidor (tabla distinta de la de los pares).
 pub fn log_server_addr(addr: SocketAddr) -> String {
     if addr.ip().is_loopback() {
         addr.to_string()
@@ -78,8 +78,8 @@ pub fn log_server_addr(addr: SocketAddr) -> String {
     }
 }
 
-/// Pour une adresse déjà formatée (`"ip:port"`) — pseudonymisée si
-/// parseable, inchangée sinon (`lowid:<id>` n'est pas une IP).
+/// Para una dirección ya formateada (`"ip:port"`) — seudonimizada si
+/// es analizable, sin cambios en caso contrario (`lowid:<id>` no es una IP).
 pub fn log_addr_str(s: impl std::fmt::Display) -> String {
     let raw = s.to_string();
     match raw.parse::<SocketAddr>() {
@@ -88,8 +88,8 @@ pub fn log_addr_str(s: impl std::fmt::Display) -> String {
     }
 }
 
-/// Pour une IP nue sans port — `peer-NN` (partage la table des pairs).
-/// Accepte `IpAddr` ou `Ipv4Addr` (`Into<IpAddr>`).
+/// Para una IP desnuda sin puerto — `peer-NN` (comparte la tabla de pares).
+/// Acepta `IpAddr` o `Ipv4Addr` (`Into<IpAddr>`).
 pub fn log_peer_ip(ip: impl Into<std::net::IpAddr>) -> String {
     let ip = ip.into();
     if ip.is_loopback() {
@@ -101,7 +101,7 @@ pub fn log_peer_ip(ip: impl Into<std::net::IpAddr>) -> String {
     }
 }
 
-/// Thread-safe manager for multi-source eD2K peer connections.
+/// Gestor seguro para subprocesos para conexiones de pares eD2K multifuente.
 #[derive(Clone)]
 pub struct PeerSessionManager {
     inner: Arc<Mutex<SwarmInnerState>>,
@@ -111,21 +111,21 @@ pub struct PeerSessionManager {
     kad: Arc<std::sync::RwLock<Option<Arc<crate::services::KadService>>>>,
     identity: Arc<std::sync::RwLock<Option<Arc<Mutex<crate::services::IdentityService>>>>>,
     sui_stats: Arc<std::sync::RwLock<Arc<crate::services::identity::SuiStats>>>,
-    /// LowID → (file_hash_hex, expiry unix ms) for pending server-relayed
-    /// callbacks (`OP_CALLBACKREQUEST`). Entries expire after 5 minutes.
+    /// LowID → (file_hash_hex, caducidad unix ms) para devoluciones de llamada
+    /// pendientes retransmitidas por el servidor (`OP_CALLBACKREQUEST`). Las entradas expiran tras 5 minutos.
     pending_callbacks: Arc<std::sync::Mutex<std::collections::HashMap<u32, (String, i64)>>>,
-    /// Peer IP → (file_hash_hex, expiry unix ms) for pending Kad buddy
-    /// callbacks (`KADEMLIA_CALLBACK_REQ`). The LowID source connects
-    /// inbound; matched in the inbound listener by the remote IP.
+    /// IP de par → (file_hash_hex, caducidad unix ms) para devoluciones de llamada
+    /// pendientes mediante buddy de Kad (`KADEMLIA_CALLBACK_REQ`). La fuente LowID conecta
+    /// entrante; emparejada en el listener entrante por la IP remota.
     pending_kad_callbacks:
         Arc<std::sync::Mutex<std::collections::HashMap<std::net::IpAddr, (String, i64)>>>,
-    /// Global bandwidth rate limiters shared with the network policy —
-    /// the transfer loop paces received data through `download_bucket`.
+    /// Limitadores de tasa de ancho de banda globales compartidos con la política de red —
+    /// el bucle de transferencia modula los datos recibidos mediante `download_bucket`.
     rate_limiters: Arc<std::sync::RwLock<Option<Arc<mule_network_policy::PolicyRateLimiters>>>>,
 }
 
 impl PeerSessionManager {
-    /// Creates a new `PeerSessionManager`.
+    /// Crea un nuevo `PeerSessionManager`.
     pub fn new(event_tx: broadcast::Sender<String>, sequence: Arc<AtomicU64>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(SwarmInnerState {
@@ -154,8 +154,8 @@ impl PeerSessionManager {
         }
     }
 
-    /// Injects the shared network-policy rate limiters (global download
-    /// bandwidth scheduler for peer transfer loops).
+    /// Inyecta los limitadores de tasa de política de red compartidos (planificador
+    /// global de ancho de banda de descarga para bucles de transferencia de pares).
     pub fn set_rate_limiters(&self, limiters: Arc<mule_network_policy::PolicyRateLimiters>) {
         *self.rate_limiters.write().unwrap() = Some(limiters);
     }
@@ -164,10 +164,10 @@ impl PeerSessionManager {
         self.rate_limiters.read().unwrap().clone()
     }
 
-    /// Registers a pending LowID callback: after `OP_CALLBACKREQUEST` was sent
-    /// to the server, the target LowID client (`lowid`) is expected to connect
-    /// inbound within `ttl_ms`. Matched in the inbound listener by the peer's
-    /// `client_id` from `OP_HELLO`.
+    /// Registra una devolución de llamada LowID pendiente: tras enviar `OP_CALLBACKREQUEST`
+    /// al servidor, se espera que el cliente LowID objetivo (`lowid`) conecte
+    /// entrante dentro de `ttl_ms`. Emparejado en el listener entrante por el
+    /// `client_id` del par procedente de `OP_HELLO`.
     pub fn register_pending_callback(&self, lowid: u32, file_hash: String, ttl_ms: i64) {
         let expiry = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -179,8 +179,8 @@ impl PeerSessionManager {
         map.insert(lowid, (file_hash, expiry));
     }
 
-    /// Consumes a pending callback registration for `lowid`, returning the
-    /// associated file hash if still fresh.
+    /// Consume un registro de devolución de llamada pendiente para `lowid`, devolviendo
+    /// el hash de archivo asociado si aún es válido.
     pub fn take_pending_callback(&self, lowid: u32) -> Option<String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -191,7 +191,7 @@ impl PeerSessionManager {
         map.remove(&lowid).map(|(h, _)| h)
     }
 
-    /// Returns true if a pending (unexpired) callback exists for `lowid`.
+    /// Devuelve true si existe una devolución de llamada pendiente (no expirada) para `lowid`.
     pub fn has_pending_callback(&self, lowid: u32) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -202,9 +202,9 @@ impl PeerSessionManager {
         map.contains_key(&lowid)
     }
 
-    /// Registers a pending Kad buddy callback: after `KADEMLIA_CALLBACK_REQ`
-    /// was relayed to the buddy, the LowID source (at `ip`) is expected to
-    /// connect inbound within `ttl_ms`.
+    /// Registra una devolución de llamada pendiente mediante buddy de Kad: tras retransmitir
+    /// `KADEMLIA_CALLBACK_REQ` al buddy, se espera que la fuente LowID (en `ip`) conecte
+    /// de entrada dentro de `ttl_ms`.
     pub fn register_pending_kad_callback(
         &self,
         ip: std::net::IpAddr,
@@ -221,7 +221,7 @@ impl PeerSessionManager {
         map.insert(ip, (file_hash, expiry));
     }
 
-    /// Consumes a pending Kad buddy callback registration for `ip`.
+    /// Consume un registro de devolución de llamada pendiente mediante buddy de Kad para `ip`.
     pub fn take_pending_kad_callback(&self, ip: std::net::IpAddr) -> Option<String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -232,7 +232,7 @@ impl PeerSessionManager {
         map.remove(&ip).map(|(h, _)| h)
     }
 
-    /// Returns true if a pending (unexpired) Kad buddy callback exists for `ip`.
+    /// Devuelve true si existe una devolución de llamada pendiente (no expirada) mediante buddy de Kad para `ip`.
     pub fn has_pending_kad_callback(&self, ip: std::net::IpAddr) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -243,13 +243,13 @@ impl PeerSessionManager {
         map.contains_key(&ip)
     }
 
-    /// Sets the shared SUI anomaly counters (identity.status `sui` object).
+    /// Establece los contadores de anomalías SUI compartidos (objeto `sui` de identity.status).
     pub fn set_sui_stats(&self, stats: Arc<crate::services::identity::SuiStats>) {
         *self.sui_stats.write().unwrap() = stats;
     }
 
-    /// Sets the identity service used for outbound eMule Secure User
-    /// Identification (RSA-384 signing of peer challenges).
+    /// Establece el servicio de identidad utilizado para la Identificación Segura
+    /// de Usuario (SUI) saliente de eMule (firma RSA-384 de desafíos de pares).
     pub fn set_identity(&self, identity: Arc<Mutex<crate::services::IdentityService>>) {
         *self.identity.write().unwrap() = Some(identity);
     }
@@ -292,22 +292,22 @@ impl PeerSessionManager {
         g.clone()
     }
 
-    /// UDP endpoints of sessions currently `Queued` on a remote peer that
-    /// announced an eMule UDP port — keep-alive targets for
+    /// Endpoints UDP de sesiones actualmente en estado `Queued` en un par remoto que
+    /// anunció un puerto UDP de eMule — destinos de mantenimiento de conexión para
     /// `OP_REASKFILEPING` (`CUpDownClient::UDPReaskForDownload`).
-    /// Peers we are logically queued on — eMule `UDPReaskForDownload`
-    /// requires `!(socket && socket->IsConnected())` (`DownloadClient.cpp:
-    /// 1344`) : the ping is only meaningful once the queue socket died
-    /// (`DS_ONQUEUE` persists with `socket == NULL`), so live sessions are
-    /// excluded and the state comes from `queued_peers`.
+    /// Pares en cuya cola estamos lógicamente — `UDPReaskForDownload` de eMule
+    /// requiere `!(socket && socket->IsConnected())` (`DownloadClient.cpp:1344`):
+    /// el ping solo tiene sentido una vez que el socket de cola murió
+    /// (`DS_ONQUEUE` persiste con `socket == NULL`), por lo que las sesiones activas
+    /// quedan excluidas y el estado procede de `queued_peers`.
     pub async fn queued_udp_targets(&self) -> Vec<crate::services::client_udp::UdpReaskTarget> {
         let mut g = self.inner.lock().await;
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        // Drop entries whose re-ask deadline is long past — the source was
-        // purged or re-dialed without re-queueing.
+        // Descartar entradas cuyo límite de tiempo de reconsulta ha pasado ampliamente — la fuente fue
+        // purgada o marcada de nuevo sin volver a ponerse en cola.
         g.queued_peers.retain(|_, q| {
             q.next_tcp_reask_unix_ms
                 .map(|d| {
@@ -319,11 +319,11 @@ impl PeerSessionManager {
         });
         g.queued_peers
             .iter()
-            // Live TCP session → eMule would not emit the UDP ping.
+            // Sesión TCP activa → eMule no emitiría el ping UDP.
             .filter(|(addr, _)| !g.sessions.contains_key(*addr))
             .filter_map(|(addr_str, q)| {
                 let (udp_port, ver) = g.peer_udp.get(addr_str)?;
-                // eMule `UDPReaskForDownload` requires `GetUDPVersion() != 0`.
+                // `UDPReaskForDownload` de eMule requiere `GetUDPVersion() != 0`.
                 if *ver == 0 {
                     return None;
                 }
@@ -344,17 +344,17 @@ impl PeerSessionManager {
             .collect()
     }
 
-    /// eMule `m_bReaskPending` — `CUpDownClient::AskForDownload`
-    /// (`DownloadClient.cpp:185-206`): the TCP re-ask of a LowID peer that
-    /// is *also waiting in our upload queue* is deferred by one cycle so
-    /// the peer can reach us with its own upload re-ask. Marks the
-    /// `queued_peers` entry for `ip` (keyed `"ip:port"`) and pushes its
-    /// re-ask deadline to `next_reask_unix_ms`.
+    /// `m_bReaskPending` de eMule — `CUpDownClient::AskForDownload`
+    /// (`DownloadClient.cpp:185-206`): la reconsulta TCP de un par LowID que
+    /// *también está esperando en nuestra cola de subida* se pospone un ciclo para que
+    /// el par pueda contactarnos con su propia reconsulta de subida. Marca la
+    /// entrada `queued_peers` para `ip` (indexada `"ip:port"`) y pospone su
+    /// límite de tiempo de reconsulta a `next_reask_unix_ms`.
     ///
-    /// Returns `false` when no queue entry exists for `ip`+`file_hash`
-    /// (eMule `GetLastAskedTime() > 0` — a never-contacted source is
-    /// dialed immediately) or when the flag is already set (the deferral
-    /// fires once, like `!m_bReaskPending`).
+    /// Devuelve `false` cuando no existe entrada en cola para `ip`+`file_hash`
+    /// (`GetLastAskedTime() > 0` de eMule — una fuente nunca contactada se
+    /// marca de inmediato) o cuando el indicador ya está establecido (el aplazamiento
+    /// se activa una sola vez, como `!m_bReaskPending`).
     pub async fn defer_reask_for_queued_peer(
         &self,
         ip: std::net::IpAddr,
@@ -378,11 +378,11 @@ impl PeerSessionManager {
         marked
     }
 
-    /// Consomme le flag `m_bReaskPending` — eMule `ConnectionEstablished`
-    /// (`BaseClient.cpp:1552`): quand le pair différé ouvre une connexion
-    /// vers nous, sa requête de fichier part immédiatement. Retourne
-    /// l'état de file conservé (hash + deadline) pour que l'appelant
-    /// déclenche le callback.
+    /// Consume el indicador `m_bReaskPending` — `ConnectionEstablished` de eMule
+    /// (`BaseClient.cpp:1552`): cuando el par pospuesto abre una conexión
+    /// hacia nosotros, su petición de archivo sale inmediatamente. Devuelve
+    /// el estado de cola conservado (hash + límite de tiempo) para que el llamador
+    /// active la devolución de llamada.
     pub async fn take_reask_pending(
         &self,
         ip: std::net::IpAddr,
@@ -399,8 +399,8 @@ impl PeerSessionManager {
         found
     }
 
-    /// Applies a queue rank learned via `OP_REASKACK` to the queued
-    /// session of that peer (matched by IP, like
+    /// Aplica una posición en cola aprendida mediante `OP_REASKACK` a la
+    /// sesión en cola de ese par (emparejada por IP, como
     /// `GetDownloadClientByIP_UDP`).
     pub async fn apply_udp_queue_rank(&self, ip: &std::net::IpAddr, rank: u32) {
         let ip_str = ip.to_string();
@@ -415,7 +415,7 @@ impl PeerSessionManager {
                 .unwrap_or(false);
             if matches && s.snapshot.status == PeerConnectionStatus::Queued {
                 s.snapshot.queue_rank = Some(rank);
-                // eMule `UDPReaskACK` → `SetRemoteQueueFull(false)`.
+                // `UDPReaskACK` → `SetRemoteQueueFull(false)` de eMule.
                 s.snapshot.remote_queue_full = false;
                 emit_event(&self.event_tx, &self.sequence, &s.snapshot);
                 tracing::info!(
@@ -426,8 +426,8 @@ impl PeerSessionManager {
         }
     }
 
-    /// Applies `OP_QUEUEFULL` to the queued session of that peer — eMule
-    /// `SetRemoteQueueFull(true)` + `UDPReaskACK(0)` (rank cleared to 0).
+    /// Aplica `OP_QUEUEFULL` a la sesión en cola de ese par — `SetRemoteQueueFull(true)`
+    /// + `UDPReaskACK(0)` de eMule (posición restablecida a 0).
     pub async fn apply_udp_queue_full(&self, ip: &std::net::IpAddr) {
         let ip_str = ip.to_string();
         let mut g = self.inner.lock().await;
@@ -451,8 +451,8 @@ impl PeerSessionManager {
         }
     }
 
-    /// Applies `OP_FILENOTFOUND` to the queued session of that peer —
-    /// eMule `UDPReaskFNF` removes the download client for that file.
+    /// Aplica `OP_FILENOTFOUND` a la sesión en cola de ese par —
+    /// `UDPReaskFNF` de eMule elimina el cliente de descarga para ese archivo.
     pub async fn apply_udp_file_not_found(&self, ip: &std::net::IpAddr) {
         let ip_str = ip.to_string();
         let mut g = self.inner.lock().await;
@@ -485,18 +485,18 @@ impl PeerSessionManager {
             .count()
     }
 
-    /// Checks if any peer sessions are currently active.
+    /// Comprueba si hay alguna sesión de pares actualmente activa.
     pub async fn is_active(&self) -> bool {
         let g = self.inner.lock().await;
         !g.sessions.is_empty()
     }
 
-    /// Disconnects the default peer session (first active) for backward compatibility.
+    /// Desconecta la sesión de par predeterminada (primera activa) para compatibilidad hacia atrás.
     pub async fn disconnect(&self) -> Result<PeerSessionSnapshot, DaemonError> {
         self.disconnect_peer(None).await
     }
 
-    /// Primary connect method using an already acquired permit.
+    /// Método principal de conexión utilizando un permiso previamente adquirido.
     pub async fn connect(
         &self,
         file_hash: &str,
@@ -528,7 +528,7 @@ impl PeerSessionManager {
         let mut dl_hash_arr = [0u8; 16];
         dl_hash_arr.copy_from_slice(&dl_hash_bytes);
 
-        // Enforce max active peers
+        // Hacer cumplir el límite máximo de pares activos
         {
             let g = self.inner.lock().await;
             g.check_session_slot(file_hash, &address)?;
@@ -552,7 +552,7 @@ impl PeerSessionManager {
             obfuscated: false,
         };
 
-        // Spawn async connection handler
+        // Lanzar manejador de conexión asíncrono
         let inner_clone = Arc::clone(&self.inner);
         let event_tx_clone = self.event_tx.clone();
         let seq_clone = Arc::clone(&self.sequence);
@@ -564,8 +564,8 @@ impl PeerSessionManager {
         let sui_stats = self.sui_stats.read().unwrap().clone();
         let rate_limiters_opt = self.rate_limiters();
 
-        // Span de session : `peer` pseudonymisé est joint à tous les
-        // événements de la tâche dans le JSONL (corrélation sans IP brute).
+        // Span de sesión: `peer` seudonimizado se adjunta a todos los
+        // eventos de la tarea en el JSONL (correlación sin IP en bruto).
         let log_addr = log_peer_addr(target_addr);
         let session_span = tracing::info_span!("peer_session", peer = %log_addr);
         let join_handle = tokio::spawn(
@@ -615,8 +615,8 @@ impl PeerSessionManager {
                         final_status = PeerConnectionStatus::Disconnected;
                     }
                     Err(e) => {
-                        // Churn normal du swarm (sources mortes, timeouts, file pleine) -> debug ;
-                        // seules les anomalies d'intégrité restent en warn.
+                        // Variación normal del enjambre (fuentes caídas, tiempos de espera, cola llena) -> debug;
+                        // solo las anomalías de integridad permanecen en warn.
                         match e.reason {
                             PeerFailureReason::HashMismatch
                             | PeerFailureReason::InvalidRange
@@ -632,19 +632,19 @@ impl PeerSessionManager {
                     }
                 }
 
-                // Cleanup session and free in-flight blocks
+                // Limpiar sesión y liberar bloques en vuelo
                 let (final_snapshot, outcome_hash, queued_deadline) = {
                     let mut g = inner_clone.lock().await;
                     g.in_flight_blocks.retain(|b| b.peer_id != address_str);
 
                     if let Some(mut session) = g.sessions.remove(&address_str) {
-                        // eMule `DS_ONQUEUE` survives ANY non-terminal
-                        // disconnect (`BaseClient.cpp:1126-1135` : seuls
-                        // DS_CONNECTED/DS_REQHASHSET → deadsource, les autres
-                        // états — ONQUEUE compris — restent en file logique).
-                        // L'entrée `queued_peers` n'est donc supprimée que
-                        // pour les issues qui changent l'état logique :
-                        // FNF → source rejetée, NNP → DS_NONEEDEDPARTS.
+                        // `DS_ONQUEUE` de eMule sobrevive a CUALQUIER desconexión
+                        // no terminal (`BaseClient.cpp:1126-1135`: solo
+                        // DS_CONNECTED/DS_REQHASHSET → deadsource, los demás
+                        // estados — incluido ONQUEUE — permanecen en la cola lógica).
+                        // La entrada `queued_peers` solo se elimina, por tanto,
+                        // para resultados que cambian el estado lógico:
+                        // FNF → fuente rechazada, NNP → DS_NONEEDEDPARTS.
                         let terminal = matches!(
                             failure_reason,
                             Some(
@@ -664,10 +664,10 @@ impl PeerSessionManager {
                         session.snapshot.last_error = err_msg.clone();
                         session.snapshot.failure_reason = failure_reason;
                         g.last_session = Some(session.snapshot.clone());
-                        // After an A4AF socket swap the session served another
-                        // file — the outcome belongs to the file actually
-                        // requested last (eMule `RemoveSource` on `m_reqfile`),
-                        // not the originally-dialed one.
+                        // Tras un intercambio de socket A4AF la sesión sirvió a otro
+                        // archivo — el resultado pertenece al archivo solicitado
+                        // en último lugar (`RemoveSource` de eMule en `m_reqfile`),
+                        // no al marcado originalmente.
                         let outcome = session.snapshot.file_hash.clone();
                         (Some(session.snapshot), outcome, deadline)
                     } else {
@@ -679,7 +679,7 @@ impl PeerSessionManager {
                     connection::emit_event(&event_tx_clone, &seq_clone, &snap);
                 }
 
-                // Update SQLite PeerSource record (cooldown, fail_count, status)
+                // Actualizar registro PeerSource en SQLite (enfriamiento, fail_count, estado)
                 {
                     let mut dl_svc = downloads.lock().await;
                     let now_ms = std::time::SystemTime::now()
@@ -688,9 +688,9 @@ impl PeerSessionManager {
                         .as_millis() as i64;
                     let outcome_hash = outcome_hash.as_deref().unwrap_or(&file_hash_str);
 
-                    // Real consecutive-failure count (the UPDATE increments it on
-                    // Failed) so the backoff actually escalates instead of being
-                    // stuck at the first step.
+                    // Recuento real de fallos consecutivos (el UPDATE lo incrementa en
+                    // Failed) para que el retroceso aumente efectivamente en lugar de quedarse
+                    // atascado en el primer paso.
                     let next_fail_count = dl_svc
                         .list_peer_sources(outcome_hash)
                         .unwrap_or_default()
@@ -702,9 +702,9 @@ impl PeerSessionManager {
                     let (new_status, new_cooldown) = if let Some(reason) = failure_reason {
                         match reason {
                             PeerFailureReason::FileNotFound => (PeerSourceStatus::Rejected, None),
-                            // eMule "No Needed Parts" (DS_NONEEDEDPARTS) : la
-                            // source est conservée et redemandée au cycle
-                            // doublé `FILEREASKTIME * 2` = 58 min
+                            // "No Needed Parts" de eMule (DS_NONEEDEDPARTS): la
+                            // fuente se conserva y se vuelve a pedir en el ciclo
+                            // duplicado `FILEREASKTIME * 2` = 58 min
                             // (`DownloadClient.cpp:1888`, `PartFile.cpp:2276`).
                             PeerFailureReason::NoNeededParts => {
                                 (PeerSourceStatus::Allowed, Some(now_ms + 58 * 60 * 1000))
@@ -718,9 +718,9 @@ impl PeerSessionManager {
                                 });
 
                                 if is_queue_disconnect || queued_deadline.is_some() {
-                                    // Standard eMule queue behavior: the TCP socket closed (idle timeout or post-request) while in queue.
-                                    // We remain logically on queue and allow re-ask promptly (within 3 minutes,
-                                    // or when the UDP reask window opens) instead of penalizing with long cooldowns.
+                                    // Comportamiento estándar de cola de eMule: el socket TCP se cerró (tiempo de espera o post-petición) estando en cola.
+                                    // Permanecemos lógicamente en cola y permitimos reconsultar con prontitud (dentro de 3 minutos,
+                                    // o cuando se abra la ventana de reconsulta UDP) en lugar de penalizar con enfriamientos prolongados.
                                     let soft_reask_deadline = now_ms + 180_000; // 3 minutes
                                     let effective_deadline = queued_deadline
                                         .map(|dl| dl.min(soft_reask_deadline).max(now_ms + QUEUE_LOSS_REDIAL_FLOOR_MS))
@@ -768,12 +768,12 @@ impl PeerSessionManager {
         Ok(initial_snapshot)
     }
 
-    /// Adopts an accepted inbound connection that resulted from a LowID
-    /// server callback (`OP_CALLBACKREQUEST`). The peer has already sent
-    /// `OP_HELLO` and received our `OP_HELLOANSWER`; this runs the client-role
-    /// status/queue/transfer pipeline on it.
-    /// `source_address` is the stored peer-source key (`lowid:<id>`) used for
-    /// status bookkeeping, distinct from the real socket `peer_addr`.
+    /// Adopta una conexión entrante aceptada originada por una devolución
+    /// de llamada de servidor LowID (`OP_CALLBACKREQUEST`). El par ya ha enviado
+    /// `OP_HELLO` y recibido nuestro `OP_HELLOANSWER`; esto ejecuta la canalización de
+    /// estado/cola/transferencia en rol de cliente sobre ella.
+    /// `source_address` es la clave de fuente de par almacenada (`lowid:<id>`) utilizada
+    /// para la contabilidad de estado, distinta de la `peer_addr` real del socket.
     #[allow(clippy::too_many_arguments)]
     pub async fn accept_callback(
         &self,
@@ -898,8 +898,8 @@ impl PeerSessionManager {
                     session.snapshot.last_error = err_msg.clone();
                     session.snapshot.failure_reason = failure_reason;
                     g.last_session = Some(session.snapshot.clone());
-                    // Post-A4AF : l'issue s'écrit sur le fichier servi en
-                    // dernier (`m_reqfile` eMule), pas sur le hash dialé.
+                    // Post-A4AF: el resultado se registra en el archivo servido en
+                    // último lugar (`m_reqfile` de eMule), no en el hash marcado.
                     let outcome = session.snapshot.file_hash.clone();
                     (Some(session.snapshot), outcome)
                 } else {
@@ -911,7 +911,7 @@ impl PeerSessionManager {
                 connection::emit_event(&event_tx_clone, &seq_clone, &snap);
             }
 
-            // Update the `lowid:<id>` peer-source record.
+            // Actualizar el registro peer-source `lowid:<id>`.
             {
                 let mut dl_svc = downloads.lock().await;
                 let now_ms = std::time::SystemTime::now()
@@ -931,8 +931,8 @@ impl PeerSessionManager {
                 let (new_status, new_cooldown) = if let Some(reason) = failure_reason {
                     match reason {
                         PeerFailureReason::FileNotFound => (PeerSourceStatus::Rejected, None),
-                        // eMule DS_NONEEDEDPARTS : source conservée, reask
-                        // doublé `FILEREASKTIME * 2` = 58 min.
+                        // DS_NONEEDEDPARTS de eMule: fuente conservada, reconsulta
+                        // duplicada `FILEREASKTIME * 2` = 58 min.
                         PeerFailureReason::NoNeededParts => {
                             (PeerSourceStatus::Allowed, Some(now_ms + 58 * 60 * 1000))
                         }
@@ -977,7 +977,7 @@ impl PeerSessionManager {
         Ok(initial_snapshot)
     }
 
-    /// Disconnects an active peer session by address and aborts in-flight operations.
+    /// Desconecta una sesión de par activa por dirección y cancela las operaciones en vuelo.
     pub async fn disconnect_peer(
         &self,
         address: Option<&str>,
@@ -1011,8 +1011,8 @@ impl PeerSessionManager {
         }
     }
 
-    /// Insère une session factice pour les tests — la tâche associée est
-    /// un pending sans socket ; `abort_handle` la termine proprement.
+    /// Inserta una sesión ficticia para pruebas — la tarea asociada es
+    /// un pending sin socket; `abort_handle` la finaliza limpiamente.
     #[cfg(test)]
     pub async fn insert_test_session(&self, snapshot: PeerSessionSnapshot) {
         let key = snapshot
@@ -1030,7 +1030,7 @@ impl PeerSessionManager {
         );
     }
 
-    /// Returns a single session snapshot for backward compatibility.
+    /// Devuelve una instantánea de sesión individual para compatibilidad hacia atrás.
     pub async fn snapshot(&self) -> PeerSessionSnapshot {
         let g = self.inner.lock().await;
         if let Some(s) = g.sessions.values().next() {
@@ -1042,7 +1042,7 @@ impl PeerSessionManager {
         }
     }
 
-    /// Returns the aggregated swarm snapshot, optionally filtered by file hash.
+    /// Devuelve la instantánea de enjambre agregada, opcionalmente filtrada por hash de archivo.
     pub async fn swarm_snapshot(&self, file_hash: Option<&str>) -> SwarmStatusSnapshot {
         let g = self.inner.lock().await;
         let peers: Vec<PeerSessionSnapshot> = g
@@ -1080,9 +1080,9 @@ impl PeerSessionManager {
         }
     }
 
-    /// Byte ranges of blocks currently requested but not yet received for a
-    /// file (eMule `requestedblocks_list` — painted yellow on the status
-    /// bar). Empty when the file has no active session.
+    /// Rangos de bytes de bloques actualmente solicitados pero aún no recibidos para un
+    /// archivo (`requestedblocks_list` de eMule — pintados en amarillo en la barra de
+    /// estado). Vacío cuando el archivo no tiene ninguna sesión activa.
     pub(crate) fn pending_ranges_locked(g: &SwarmInnerState, file_hash: &str) -> Vec<(u64, u64)> {
         g.in_flight_blocks
             .iter()
@@ -1095,9 +1095,9 @@ impl PeerSessionManager {
             .collect()
     }
 
-    /// Non-blocking variant for sync emit paths (`broadcast_download_update`
-    /// runs without async context): returns empty when the swarm state is
-    /// contended — the next event refreshes it.
+    /// Variante no bloqueante para rutas de emisión síncronas (`broadcast_download_update`
+    /// se ejecuta sin contexto asíncrono): devuelve vacío cuando el estado del enjambre
+    /// presenta contención — el siguiente evento lo refrescará.
     pub fn try_pending_ranges(&self, file_hash: &str) -> Vec<(u64, u64)> {
         self.inner
             .try_lock()
@@ -1105,13 +1105,13 @@ impl PeerSessionManager {
             .unwrap_or_default()
     }
 
-    /// Async variant for RPC handlers (`downloads.get`).
+    /// Variante asíncrona para manejadores RPC (`downloads.get`).
     pub async fn pending_ranges_for_file(&self, file_hash: &str) -> Vec<(u64, u64)> {
         let g = self.inner.lock().await;
         Self::pending_ranges_locked(&g, file_hash)
     }
 
-    /// All in-flight ranges grouped by file hash — one lock for
+    /// Todos los rangos en vuelo agrupados por hash de archivo — un único bloqueo para
     /// `downloads.list`.
     pub async fn pending_ranges_by_file(&self) -> HashMap<String, Vec<(u64, u64)>> {
         let g = self.inner.lock().await;
@@ -1128,7 +1128,7 @@ impl PeerSessionManager {
         out
     }
 
-    /// Clears any cached sessions and in-flight blocks.
+    /// Limpia cualquier sesión en caché y bloques en vuelo.
     pub async fn clear(&self) {
         let mut g = self.inner.lock().await;
         for (_, session) in g.sessions.drain() {
@@ -1161,8 +1161,8 @@ mod tests {
         }
     }
 
-    /// eMule `UDPReaskForDownload` — le ping ne part que quand la socket est
-    /// morte : l'état `DS_ONQUEUE` vient de `queued_peers`, pas de la session.
+    /// `UDPReaskForDownload` de eMule — el ping solo sale cuando el socket está
+    /// muerto: el estado `DS_ONQUEUE` procede de `queued_peers`, no de la sesión.
     #[tokio::test]
     async fn queued_udp_targets_come_from_logical_queue_state() {
         let mgr = manager();
@@ -1183,8 +1183,8 @@ mod tests {
         assert_eq!(targets[0].connected_at_unix_ms, Some(1_000));
     }
 
-    /// Session TCP vivante → `!(socket && socket->IsConnected())` : eMule
-    /// n'émettrait pas le ping, la cible est exclue.
+    /// Sesión TCP activa → `!(socket && socket->IsConnected())`: eMule
+    /// no emitiría el ping, el objetivo queda excluido.
     #[tokio::test]
     async fn queued_udp_targets_excluded_while_session_alive() {
         let mgr = manager();
@@ -1210,7 +1210,7 @@ mod tests {
         assert!(mgr.queued_udp_targets().await.is_empty());
     }
 
-    /// `GetUDPVersion() == 0` → pas de ping (eMule exige une version UDP).
+    /// `GetUDPVersion() == 0` → sin ping (eMule exige una versión UDP).
     #[tokio::test]
     async fn queued_udp_targets_requires_udp_version() {
         let mgr = manager();
@@ -1223,9 +1223,9 @@ mod tests {
         assert!(mgr.queued_udp_targets().await.is_empty());
     }
 
-    /// eMule `m_bReaskPending` (`DownloadClient.cpp:193`) : le différé se
-    /// pose une fois sur l'entrée `queued_peers` du pair (clé `ip:port`),
-    /// pousse la deadline, puis est consommé par `take_reask_pending`
+    /// `m_bReaskPending` de eMule (`DownloadClient.cpp:193`): el aplazamiento se
+    /// aplica una sola vez sobre la entrada `queued_peers` del par (clave `ip:port`),
+    /// pospone el límite de tiempo y luego es consumido por `take_reask_pending`
     /// (`ConnectionEstablished`, `BaseClient.cpp:1552`).
     #[tokio::test]
     async fn reask_pending_defer_and_consume() {
@@ -1238,14 +1238,14 @@ mod tests {
                 .insert(PEER.to_string(), queue_entry(&file_hash));
         }
 
-        // Jamais sollicité ou mauvais hash → pas de différé
-        // (`GetLastAskedTime() > 0` exige un cycle de file déjà vécu).
+        // Nunca solicitado o hash erróneo → sin aplazamiento
+        // (`GetLastAskedTime() > 0` exige haber pasado ya por un ciclo de cola).
         assert!(
             !mgr.defer_reask_for_queued_peer(ip, &"ff".repeat(16), 5_000)
                 .await
         );
 
-        // Premier différé → flag posé, deadline poussée.
+        // Primer aplazamiento → indicador establecido, límite pospuesto.
         assert!(mgr.defer_reask_for_queued_peer(ip, &file_hash, 9_999).await);
         {
             let g = mgr.inner.lock().await;
@@ -1254,20 +1254,20 @@ mod tests {
             assert_eq!(q.next_tcp_reask_unix_ms, Some(9_999));
         }
 
-        // `!m_bReaskPending` — le différé ne se repose pas : le cycle
-        // suivant procède normalement.
+        // `!m_bReaskPending` — el aplazamiento no se repite: el ciclo
+        // siguiente procede con normalidad.
         assert!(!mgr.defer_reask_for_queued_peer(ip, &file_hash, 9_999).await);
 
-        // Consommation à la connexion entrante du pair.
+        // Consumo al recibir la conexión entrante del par.
         let taken = mgr.take_reask_pending(ip).await.expect("pending entry");
         assert_eq!(taken.file_hash, file_hash);
         assert!(!mgr.inner.lock().await.queued_peers[PEER].reask_pending);
-        // Le flag est consumé — un second take ne renvoie rien.
+        // El indicador se ha consumido — una segunda llamada devuelve None.
         assert!(mgr.take_reask_pending(ip).await.is_none());
     }
 
-    /// Entrée dont la deadline de re-ask est dépassée depuis plus de deux
-    /// cycles → purgée à la lecture (source morte sans re-queue).
+    /// Entrada cuyo límite de reconsulta ha vencido hace más de dos
+    /// ciclos → purgada durante la lectura (fuente caída sin vuelta a la cola).
     #[tokio::test]
     async fn queued_udp_targets_prunes_long_expired_entries() {
         let mgr = manager();

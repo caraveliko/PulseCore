@@ -16,7 +16,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     let file_hash = [0x33; 16];
     let file_hash_hex = hex::encode(file_hash);
 
-    // 1. Spawn controlled eD2K test peer sharing a 5-part file with parts 0, 2, 4 available
+    // 1. Iniciar par de prueba eD2K controlado que comparte un archivo de 5 partes con las partes 0, 2, 4 disponibles
     let test_peer = Ed2kTestPeer::bind(TestPeerMode::Nominal)
         .await
         .expect("bind test peer");
@@ -30,7 +30,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     let peer_addr = test_peer.local_addr();
     let _peer_handle = test_peer.spawn();
 
-    // 2. Spawn test daemon
+    // 2. Iniciar daemon de prueba
     let (daemon_addr, token, _data_dir, temp_dir) = spawn_test_daemon_with_temp_dir("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
     let ws_url = format!("ws://{daemon_addr}/rpc");
 
@@ -39,7 +39,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 3. Authenticate with daemon
+    // 3. Autenticar con el daemon
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -58,7 +58,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     let resp_val: Value = serde_json::from_str(&resp_hello.to_string()).unwrap();
     assert!(resp_val["result"]["daemonVersion"].is_string());
 
-    // 4. Add eD2K download link (5 parts = 48,640,000 bytes)
+    // 4. Añadir enlace de descarga eD2K (5 partes = 48.640.000 bytes)
     let ed2k_link = format!("ed2k://|file|test_discovery.bin|48640000|{file_hash_hex}|/");
     let req_add = json!({
         "jsonrpc": "2.0",
@@ -76,8 +76,8 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
 
     let mut add_resp_opt = None;
     let mut initial_event_opt = None;
-    // Le serveur multiplexe réponses et events broadcast (event.downloadAdded,
-    // event.downloadUpdated) via select! : lire jusqu'à avoir les deux attendus.
+    // El servidor multiplexa respuestas y eventos de difusión (event.downloadAdded,
+    // event.downloadUpdated) mediante select!: leer hasta tener los dos esperados.
     for _ in 0..16 {
         if add_resp_opt.is_some() && initial_event_opt.is_some() {
             break;
@@ -102,7 +102,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     assert_eq!(initial_event["params"]["download"]["sourceCount"], 0);
     assert_eq!(initial_event["params"]["download"]["receivedBytes"], 0);
 
-    // 5. Verify the .part file on disk exists and has 0 bytes written (AllocationPolicy::None)
+    // 5. Verificar que el archivo .part en disco exista y tenga 0 bytes escritos (AllocationPolicy::None)
     let part_file_path = temp_dir.path().join(format!("{download_id}.part"));
     let size_before = std::fs::metadata(&part_file_path)
         .map(|m| m.len())
@@ -112,7 +112,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
         ".part file must have 0 bytes initially with AllocationPolicy::None"
     );
 
-    // 6. Call ed2k.probeSource to probe peer availability over loopback
+    // 6. Invocar ed2k.probeSource para sondear la disponibilidad del par sobre loopback
     let req_probe = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -130,7 +130,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     let mut probe_resp_opt = None;
     let mut update_event_opt = None;
 
-    // Read responses/events (could arrive in either order: response vs broadcast event)
+    // Leer respuestas/eventos (podrían llegar en cualquier orden: respuesta vs evento de difusión)
     for _ in 0..16 {
         if probe_resp_opt.is_some() && update_event_opt.is_some() {
             break;
@@ -144,21 +144,21 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
         }
     }
 
-    // 7. Verify probe result
+    // 7. Verificar el resultado del sondeo
     let probe_resp = probe_resp_opt.expect("probe response not received");
     assert_eq!(probe_resp["result"]["success"], true);
     assert_eq!(probe_resp["result"]["sourceCount"], 1);
     assert_eq!(probe_resp["result"]["partCount"], 5);
     assert_eq!(probe_resp["result"]["availableParts"], json!([0, 2, 4]));
 
-    // 8. Verify broadcast update event
+    // 8. Verificar evento de actualización de difusión
     let update_event = update_event_opt.expect("downloadUpdated event not received");
     let dl_event = &update_event["params"]["download"];
     assert_eq!(dl_event["sourceCount"], 1);
     assert_eq!(dl_event["receivedBytes"], 0);
     assert_eq!(dl_event["status"], "queued");
 
-    // 9. CRITICAL INVARIANCE: Verify strictly ZERO writes to the .part file
+    // 9. INVARIANTE CRÍTICA: Verificar estrictamente CERO escrituras en el archivo .part
     let size_after = std::fs::metadata(&part_file_path)
         .map(|m| m.len())
         .unwrap_or(0);
@@ -167,7 +167,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
         "CRITICAL: .part file must NOT have any data written during availability probing!"
     );
 
-    // 10. Verify downloads.get returns updated sourceCount = 1 and 0 bytes received
+    // 10. Verificar que downloads.get devuelva sourceCount = 1 actualizado y 0 bytes recibidos
     let req_get = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -187,7 +187,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     assert_eq!(get_val["result"]["receivedBytes"], 0);
     assert_eq!(get_val["result"]["status"], "queued");
 
-    // 11. Verify non-loopback address is strictly rejected
+    // 11. Verificar que una dirección que no sea de loopback sea estrictamente rechazada
     let req_forbidden = json!({
         "jsonrpc": "2.0",
         "id": 5,

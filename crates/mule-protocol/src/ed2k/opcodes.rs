@@ -4,389 +4,390 @@
 //! Códigos de operación históricos (opcodes) para eD2K, extensiones de eMule y cargas útiles comprimidas.
 
 // ---------------------------------------------------------------------------
-// Standard eD2K Opcodes (Protocol 0xE3)
+// Códigos de operación estándar de eD2K (protocolo 0xE3)
 // ---------------------------------------------------------------------------
 
-/// Handshake initialization packet (`0x01`).
+/// Paquete de inicialización del saludo (`0x01`).
 pub const OP_HELLO: u8 = 0x01;
-/// Client login request to server (`0x01`).
+/// Petición de inicio de sesión del cliente al servidor (`0x01`).
 pub const OP_LOGINREQUEST: u8 = 0x01;
 
-/// Server rejects the last client command (`0x05`, empty payload).
+/// El servidor rechaza la última orden del cliente (`0x05`, carga útil vacía).
 ///
-/// eMule `Opcodes.h` `OP_REJECT` — sent e.g. when a command uses the wrong
-/// protocol (uncompressed packet to a compression-only server) or when the
-/// server refuses the login. `ServerSocket.cpp` only logs it; the server
-/// typically closes the socket itself right after.
+/// `OP_REJECT` de `Opcodes.h` de eMule — enviado p. ej. cuando una orden usa el protocolo
+/// incorrecto (paquete sin comprimir a un servidor que solo admite compresión) o cuando el
+/// servidor rechaza el inicio de sesión. `ServerSocket.cpp` únicamente lo registra; el servidor
+/// suele cerrar el socket él mismo justo después.
 pub const OP_REJECT: u8 = 0x05;
 
-/// Server status response with user and file counts (`0x34`, legacy `0x14`).
+/// Respuesta de estado del servidor con recuentos de usuarios y ficheros (`0x34`, heredado `0x14`).
 pub const OP_SERVERSTATUS: u8 = 0x34;
-/// Legacy server status response opcode (`0x14`).
+/// Código de operación de respuesta de estado de servidor heredado (`0x14`).
 pub const OP_SERVERSTATUS_LEGACY: u8 = 0x14;
 
-/// Server identification and metadata (`0x41`).
+/// Identificación y metadatos del servidor (`0x41`).
 pub const OP_SERVERIDENT: u8 = 0x41;
 
-/// Server message containing server greetings or notice text (`0x38`).
+/// Mensaje del servidor que contiene saludos o texto de aviso (`0x38`).
 pub const OP_SERVERMESSAGE: u8 = 0x38;
 
-/// Server assigns client ID and TCP flags (`0x40`).
+/// El servidor asigna el ID de cliente y los indicadores TCP (`0x40`).
 pub const OP_IDCHANGE: u8 = 0x40;
 
-/// Search request sent by client to server (`0x16`).
+/// Petición de búsqueda enviada por el cliente al servidor (`0x16`).
 pub const OP_SEARCHREQUEST: u8 = 0x16;
 
-/// Search result sent by server to client (`0x33`).
+/// Resultado de búsqueda enviado por el servidor al cliente (`0x33`).
 pub const OP_SEARCH_RESULT: u8 = 0x33;
 
-/// Get sources request sent by client to server for a file (`0x19`).
+/// Petición de obtención de fuentes enviada por el cliente al servidor para un fichero (`0x19`).
 pub const OP_GETSOURCES: u8 = 0x19;
 
-/// Get sources request with obfuscation sent by client to server (`0x23`).
+/// Petición de obtención de fuentes con ofuscación enviada por el cliente al servidor (`0x23`).
 pub const OP_GETSOURCES_OBFU: u8 = 0x23;
 
-/// Found sources response sent by server to client (`0x42`).
+/// Respuesta con fuentes encontradas enviada por el servidor al cliente (`0x42`).
 pub const OP_FOUNDSOURCES: u8 = 0x42;
 
-/// Found sources response with obfuscation settings and optional user hashes (`0x44`).
+/// Respuesta con fuentes encontradas con ajustes de ofuscación y hashes de usuario opcionales (`0x44`).
 pub const OP_FOUNDSOURCES_OBFU: u8 = 0x44;
 
-/// Handshake response packet (`0x4C`).
+/// Paquete de respuesta al saludo (`0x4C`).
 pub const OP_HELLO_ANSWER: u8 = 0x4C;
-/// Alias for OP_HELLO_ANSWER (`0x4C`).
+/// Alias de OP_HELLO_ANSWER (`0x4C`).
 pub const OP_HELLOANSWER: u8 = 0x4C;
 
-/// Announce shared files to server (`0x15`).
+/// Anuncio de ficheros compartidos al servidor (`0x15`).
 pub const OP_OFFERFILES: u8 = 0x15;
 
-/// Ask the server to relay a connection request to a LowID client (`0x1C`).
+/// Solicita al servidor retransmitir una petición de conexión a un cliente LowID (`0x1C`).
 pub const OP_CALLBACKREQUEST: u8 = 0x1C;
 
-/// Server-relayed callback notification to the LowID target (`0x35`).
+/// Notificación de callback retransmitida por el servidor al destino LowID (`0x35`).
 pub const OP_CALLBACKREQUESTED: u8 = 0x35;
 
-/// Server failed to relay a callback request (`0x36`).
+/// Fallo del servidor al retransmitir una petición de callback (`0x36`).
 pub const OP_CALLBACK_FAIL: u8 = 0x36;
 
-/// Data block transfer packet (`0x46`).
+/// Paquete de transferencia de bloque de datos (`0x46`).
 pub const OP_SENDINGPART: u8 = 0x46;
 
-/// Canonical eMule request for block ranges in a part (`0x47`).
+/// Petición canónica de eMule para rangos de bloques en una parte (`0x47`).
 pub const OP_REQUESTPARTS_EMULE: u8 = 0x47;
 
-/// Legacy set requested file hash (`0x47`).
+/// Asignación heredada del hash de fichero solicitado (`0x47`).
 pub const OP_SETREQFILEID: u8 = 0x47;
 
-/// Response indicating requested file is not shared (`0x48`).
+/// Respuesta que indica que el fichero solicitado no está compartido (`0x48`).
 pub const OP_FILEREQANSNOFILE: u8 = 0x48;
 
-/// Request parts availability bitfield — legacy eDonkey2000 (`0x49`).
-/// In eMule 0.72a this wire value is `OP_END_OF_DOWNLOAD`; the two are
-/// disambiguated by `Ed2kCompatibilityProfile`.
+/// Petición de mapa de bits de disponibilidad de partes — eDonkey2000 heredado (`0x49`).
+/// En eMule 0.72a este valor en cable es `OP_END_OF_DOWNLOAD`; ambos se
+/// desambiguan mediante `Ed2kCompatibilityProfile`.
 pub const OP_FILESTATUSREQ: u8 = 0x49;
 
-/// eMule end-of-download notification (`0x49`) — `<hash16>`; the uploader
-/// removes the client from its upload queue (`ListenSocket.cpp:537`).
-/// Same wire value as legacy `OP_FILESTATUSREQ` — never both under one
+/// Notificación de fin de descarga de eMule (`0x49`) — `<hash16>`; el subidor
+/// retira al cliente de su cola de subida (`ListenSocket.cpp:537`).
+/// Mismo valor en cable que `OP_FILESTATUSREQ` heredado — nunca coinciden ambos bajo un mismo
 /// `Ed2kCompatibilityProfile`.
 pub const OP_END_OF_DOWNLOAD: u8 = 0x49;
 
-/// Request specific block ranges in a part — legacy eDonkey2000 (`0x4B`).
-/// In eMule 0.72a this wire value is `OP_ASKSHAREDFILESANSWER`.
+/// Petición de rangos de bloques específicos en una parte — eDonkey2000 heredado (`0x4B`).
+/// En eMule 0.72a este valor en cable es `OP_ASKSHAREDFILESANSWER`.
 pub const OP_REQUESTPARTS: u8 = 0x4B;
 
-/// eMule client-ID change notification (`0x4D`) —
+/// Notificación de cambio de ID de cliente de eMule (`0x4D`) —
 /// `<u32 newUserID><u32 newServerIP>` (`ListenSocket.cpp:590`).
-/// Legacy eDonkey2000 used this wire value for `OP_END_OF_DOWNLOAD`.
+/// eDonkey2000 heredado utilizaba este valor en cable para `OP_END_OF_DOWNLOAD`.
 pub const OP_CHANGE_CLIENT_ID: u8 = 0x4D;
 
-/// Canonical eMule set requested file hash / file status request (`0x4F`).
+/// Asignación canónica de eMule del hash de fichero solicitado / petición de estado de fichero (`0x4F`).
 pub const OP_SETREQFILEID_EMULE: u8 = 0x4F;
 
-/// Parts availability bitfield response (`0x50`).
+/// Respuesta con mapa de bits de disponibilidad de partes (`0x50`).
 pub const OP_FILESTATUS: u8 = 0x50;
 
-/// Request hashset for multi-part file (`0x51`).
+/// Petición de conjunto de hashes (hashset) para fichero multipartición (`0x51`).
 pub const OP_HASHSETREQUEST: u8 = 0x51;
 
-/// Hashset payload response (`0x52`).
+/// Respuesta con carga útil del conjunto de hashes (hashset) (`0x52`).
 pub const OP_HASHSETANSWER: u8 = 0x52;
 
-/// Request entry into upload queue (`0x54`).
+/// Petición de entrada en la cola de subida (`0x54`).
 pub const OP_STARTUPLOADREQ: u8 = 0x54;
 
-/// Accept upload request and allocate slot (`0x55`).
+/// Aceptación de petición de subida y asignación de slot (`0x55`).
 pub const OP_ACCEPTUPLOADREQ: u8 = 0x55;
 
-/// Cancel transfer or drop from queue (`0x56`).
+/// Cancelación de transferencia o expulsión de la cola (`0x56`).
 pub const OP_CANCELTRANSFER: u8 = 0x56;
 
-/// Signal client no longer needs parts (`0x57`).
+/// Señal de que el cliente ya no necesita partes (`0x57`).
 pub const OP_OUTOFPARTS: u8 = 0x57;
 
-/// Request filename by hash (`0x58`).
+/// Petición de nombre de fichero por hash (`0x58`).
 pub const OP_REQFILENAME: u8 = 0x58;
 
-/// Filename response (`0x59`).
+/// Respuesta con nombre de fichero (`0x59`).
 pub const OP_REQFILENAME_ANSWER: u8 = 0x59;
 
-/// Queue ranking response in upload queue (`0x60`).
+/// Respuesta de posición en la cola de subida (`0x60`).
 pub const OP_QUEUERANKING: u8 = 0x60;
 
-/// Peer shared-files browse request — full list (`0x4A`, empty payload,
-/// eMule `ListenSocket.cpp:651` `OP_ASKSHAREDFILES`). Always on PR_ED2K.
+/// Petición de exploración de ficheros compartidos del par — lista completa (`0x4A`, carga útil vacía,
+/// `ListenSocket.cpp:651` de eMule `OP_ASKSHAREDFILES`). Siempre en PR_ED2K.
 pub const OP_ASKSHAREDFILES: u8 = 0x4A;
 
-/// Peer shared-files browse answer (`0x4B`): `<u32 count><offered entries>`.
-/// Shares the legacy eDonkey `OP_REQUESTPARTS` wire value — eMule separates
-/// them by direction: this answer only flows share-host → browser, while
-/// `OP_REQUESTPARTS` only flows downloader → uploader on PR_ED2K.
+/// Respuesta a la exploración de ficheros compartidos del par (`0x4B`): `<u32 count><entradas ofrecidas>`.
+/// Comparte el valor en cable con el `OP_REQUESTPARTS` de eDonkey heredado — eMule los separa
+/// por dirección: esta respuesta solo viaja de anfitrión de compartidos → explorador, mientras
+/// que `OP_REQUESTPARTS` solo viaja de descargador → subidor en PR_ED2K.
 pub const OP_ASKSHAREDFILESANSWER: u8 = 0x4B;
 
-/// Shared directories request (`0x5D`, empty payload).
+/// Petición de directorios compartidos (`0x5D`, carga útil vacía).
 pub const OP_ASKSHAREDDIRS: u8 = 0x5D;
 
-/// Files-in-directory request (`0x5E`): `<u16 len><dir utf8>`; the dir is a
-/// pseudo name (eMule `GetPseudoDirName` — never the real path).
+/// Petición de ficheros en directorio (`0x5E`): `<u16 len><dir utf8>`; el directorio es un
+/// nombre simulado (`GetPseudoDirName` de eMule — nunca la ruta real).
 pub const OP_ASKSHAREDFILESDIR: u8 = 0x5E;
 
-/// Shared directories answer (`0x5F`): `<u32 count>(<u16 len><dir utf8>)*`.
+/// Respuesta de directorios compartidos (`0x5F`): `<u32 count>(<u16 len><dir utf8>)*`.
 pub const OP_ASKSHAREDDIRSANS: u8 = 0x5F;
 
-/// Files-in-directory answer (`0x60`):
-/// `<u16 len><dir utf8><u32 count><offered entries>` — always PR_ED2K.
-/// Shares the `OP_QUEUERANKING` wire value, which is only used on PR_EMULE.
+/// Respuesta de ficheros en directorio (`0x60`):
+/// `<u16 len><dir utf8><u32 count><entradas ofrecidas>` — siempre PR_ED2K.
+/// Comparte el valor en cable con `OP_QUEUERANKING`, que solo se utiliza en PR_EMULE.
 pub const OP_ASKSHAREDFILESDIRANS: u8 = 0x60;
 
-/// Access-denied answer (`0x61`, empty payload) — always PR_ED2K.
-/// Shares the `OP_FILEDESC` wire value, which is only used on PR_EMULE.
+/// Respuesta de acceso denegado (`0x61`, carga útil vacía) — siempre PR_ED2K.
+/// Comparte el valor en cable con `OP_FILEDESC`, que solo se utiliza en PR_EMULE.
 pub const OP_ASKSHAREDDENIEDANS: u8 = 0x61;
 
-/// Server list pushed by the connected server (`0x32`).
-/// Payload: `u8 count` + `count` × (`u32 ip` + `u16 port`).
+/// Lista de servidores enviada por el servidor conectado (`0x32`).
+/// Carga útil: `u8 count` + `count` × (`u32 ip` + `u16 port`).
 pub const OP_SERVERLIST: u8 = 0x32;
 
 // ---------------------------------------------------------------------------
-// Server UDP Opcodes (Protocol 0xE3 over UDP, eMule UDPSocket)
+// ---------------------------------------------------------------------------
+// Códigos de operación UDP del servidor (protocolo 0xE3 sobre UDP, UDPSocket de eMule)
 // ---------------------------------------------------------------------------
 
-/// Global search request, extended tag form (`0x90`):
-/// `<u32 tag_count><CTag CT_SERVER_UDPSEARCH_FLAGS>` + search expression.
+/// Petición de búsqueda global, formato extendido de etiquetas (`0x90`):
+/// `<u32 tag_count><CTag CT_SERVER_UDPSEARCH_FLAGS>` + expresión de búsqueda.
 pub const OP_GLOBSEARCHREQ3: u8 = 0x90;
-/// Global search request (`0x92`): raw search expression, same payload as
-/// `OP_SEARCHREQUEST` (eMule reuses the search packet verbatim).
+/// Petición de búsqueda global (`0x92`): expresión de búsqueda sin procesar, misma carga útil que
+/// `OP_SEARCHREQUEST` (eMule reutiliza el paquete de búsqueda tal cual).
 pub const OP_GLOBSEARCHREQ2: u8 = 0x92;
-/// Global sources request with file size (`0x94`): `hash16 + u32 size`.
+/// Petición de fuentes global con tamaño de fichero (`0x94`): `hash16 + u32 size`.
 pub const OP_GLOBGETSOURCES2: u8 = 0x94;
-/// Global search request, legacy form (`0x98`): raw search expression.
+/// Petición de búsqueda global, formato heredado (`0x98`): expresión de búsqueda sin procesar.
 pub const OP_GLOBSEARCHREQ: u8 = 0x98;
-/// Server statistics request (`0x96`, empty payload).
+/// Petición de estadísticas del servidor (`0x96`, carga útil vacía).
 pub const OP_GLOBSERVSTATREQ: u8 = 0x96;
-/// Server statistics response (`0x97`): `u32 users + u32 files`.
+/// Respuesta de estadísticas del servidor (`0x97`): `u32 users + u32 files`.
 pub const OP_GLOBSERVSTATRES: u8 = 0x97;
-/// Global search result (`0x99`): search result file entries.
+/// Resultado de búsqueda global (`0x99`): entradas de ficheros resultantes de la búsqueda.
 pub const OP_GLOBSEARCHRES: u8 = 0x99;
-/// Global found sources response (`0x9B`): repeated
+/// Respuesta global de fuentes encontradas (`0x9B`): repetido
 /// `hash16 + u8 count + count` × (`u32 ip` + `u16 port`).
 pub const OP_GLOBFOUNDSOURCES: u8 = 0x9B;
 
 // ---------------------------------------------------------------------------
-// Client-to-Client UDP Opcodes (Protocol 0xC5, eMule ClientUDPSocket)
+// Códigos de operación UDP de cliente a cliente (protocolo 0xC5, ClientUDPSocket de eMule)
 // ---------------------------------------------------------------------------
 
-/// Keep-alive / re-request sent over UDP to a queued source (`0x90`).
-/// Payload: `<HASH 16>` (+ optional extended info for UDP version > 2).
+/// Mantenimiento de conexión / repetición de petición enviada por UDP a una fuente en cola (`0x90`).
+/// Carga útil: `<HASH 16>` (+ información extendida opcional para versión UDP > 2).
 pub const OP_REASKFILEPING: u8 = 0x90;
 
-/// UDP answer carrying the queue rank (`0x91`).
-/// Payload: `[u16 part_status_count + bitfield]` (UDP ver > 3) + `u16 rank`.
+/// Respuesta UDP que transporta el rango en la cola (`0x91`).
+/// Carga útil: `[u16 part_status_count + bitfield]` (versión UDP > 3) + `u16 rank`.
 pub const OP_REASKACK: u8 = 0x91;
 
-/// UDP answer: the requested file is not shared (`0x92`, empty payload).
+/// Respuesta UDP: el fichero solicitado no está compartido (`0x92`, carga útil vacía).
 pub const OP_FILENOTFOUND: u8 = 0x92;
 
-/// UDP answer: the remote upload queue is full (`0x93`, empty payload).
+/// Respuesta UDP: la cola de subida remota está llena (`0x93`, carga útil vacía).
 pub const OP_QUEUEFULL: u8 = 0x93;
 
-/// UDP callback re-request relayed through a Kad buddy (`0x94`).
+/// Repetición de petición de callback UDP retransmitida a través de un buddy de Kad (`0x94`).
 pub const OP_REASKCALLBACKUDP: u8 = 0x94;
-/// UDP direct callback request (`0x95`, eMule `OP_DIRECTCALLBACKREQ`):
-/// `<tcp_port u16><userhash 16><connect_options u8>` — sent to a
-/// Kad-firewalled peer asking it to open an outbound TCP connection.
+/// Petición de callback directo UDP (`0x95`, `OP_DIRECTCALLBACKREQ` de eMule):
+/// `<tcp_port u16><userhash 16><connect_options u8>` — enviada a un par tras
+/// cortafuegos en Kad solicitándole abrir una conexión TCP saliente.
 pub const OP_DIRECTCALLBACKREQ: u8 = 0x95;
 
-/// Buddy-relayed callback notification over the buddy TCP link (`0x99`):
+/// Notificación de callback retransmitida por buddy a través del enlace TCP de buddy (`0x99`):
 /// `[buddy_id:16][file_id:16][requester_ip:4][requester_tcp:2]`.
 pub const OP_CALLBACK: u8 = 0x99;
-/// TCP form of the buddy-relayed re-request (`0x9A`):
+/// Formato TCP de la repetición de petición retransmitida por buddy (`0x9A`):
 /// `[requester_ip:4][requester_udp:2][file_id:16][partstatus][complete_src:2]`.
 pub const OP_REASKCALLBACKTCP: u8 = 0x9A;
-/// Buddy link keep-alive ping (`0x9F`, empty payload).
+/// Ping de mantenimiento de conexión del enlace de buddy (`0x9F`, carga útil vacía).
 pub const OP_BUDDYPING: u8 = 0x9F;
-/// Buddy link keep-alive pong (`0xA0`, empty payload).
+/// Pong de mantenimiento de conexión del enlace de buddy (`0xA0`, carga útil vacía).
 pub const OP_BUDDYPONG: u8 = 0xA0;
 
 // ---------------------------------------------------------------------------
-// Extended eMule Opcodes (Protocol 0xC5)
+// Códigos de operación extendidos de eMule (protocolo 0xC5)
 // ---------------------------------------------------------------------------
 
-/// Extended eMule handshake capabilities exchange (`0x01`).
+/// Intercambio de capacidades del saludo extendido de eMule (`0x01`).
 pub const OP_EMULE_INFO: u8 = 0x01;
-/// Canonical alias for `OP_EMULE_INFO`.
+/// Alias canónico de `OP_EMULE_INFO`.
 pub const OP_EMULEINFO: u8 = OP_EMULE_INFO;
 
-/// Extended eMule handshake capabilities answer (`0x02`).
+/// Respuesta de capacidades del saludo extendido de eMule (`0x02`).
 pub const OP_EMULE_INFO_ANSWER: u8 = 0x02;
-/// Canonical alias for `OP_EMULE_INFO_ANSWER`.
+/// Alias canónico de `OP_EMULE_INFO_ANSWER`.
 pub const OP_EMULEINFOANSWER: u8 = OP_EMULE_INFO_ANSWER;
 
-/// Request AICH part recovery data (`0x9B`, eMule 0.72a `OP_AICHREQUEST`,
+/// Petición de datos de recuperación de parte AICH (`0x9B`, eMule 0.72a `OP_AICHREQUEST`,
 /// `opcodes.h:272`): `<HASH 16><uint16 part><AICH master hash 20>`.
 pub const OP_AICH_REQUEST: u8 = 0x9B;
 
-/// AICH recovery data response (`0x9C`, eMule `OP_AICHANSWER`,
-/// `opcodes.h:273`): `<HASH 16><uint16><HASH 20><data>` — bare hash on failure.
+/// Respuesta de datos de recuperación AICH (`0x9C`, eMule `OP_AICHANSWER`,
+/// `opcodes.h:273`): `<HASH 16><uint16><HASH 20><data>` — solo el hash en caso de fallo.
 pub const OP_AICH_ANSWER: u8 = 0x9C;
 
-/// Request AICH master (root) hash of a file (`0x9E`, eMule
-/// `OP_AICHFILEHASHREQ`, `opcodes.h:275`). Deprecated upstream in favor of
-/// `FileIdentifier` (`OP_MULTIPACKET_EXT2` / `OP_HASHSETREQUEST2`), still
-/// served by 0.72a.
+/// Petición del hash maestro (raíz) AICH de un fichero (`0x9E`, `OP_AICHFILEHASHREQ` de eMule,
+/// `opcodes.h:275`). Obsoleta en origen en favor de
+/// `FileIdentifier` (`OP_MULTIPACKET_EXT2` / `OP_HASHSETREQUEST2`), aún
+/// atendida por 0.72a.
 pub const OP_AICHFILEHASHREQ: u8 = 0x9E;
 
-/// AICH master hash answer (`0x9D`, eMule `OP_AICHFILEHASHANS`,
+/// Respuesta de hash maestro AICH (`0x9D`, `OP_AICHFILEHASHANS` de eMule,
 /// `opcodes.h:274`): `<HASH 16><AICH root 20>`.
 pub const OP_AICHFILEHASHRES: u8 = 0x9D;
 
-/// Request sources from peer (SX1 - legacy, `0x81`).
+/// Petición de fuentes al par (SX1 - heredado, `0x81`).
 pub const OP_REQUESTSOURCES: u8 = 0x81;
 
-/// Answer sources to peer (SX1 - legacy, `0x82`).
+/// Respuesta de fuentes al par (SX1 - heredado, `0x82`).
 pub const OP_ANSWERSOURCES: u8 = 0x82;
 
-/// Request sources from peer (SX2, `0x83`).
+/// Petición de fuentes al par (SX2, `0x83`).
 pub const OP_REQUESTSOURCES2: u8 = 0x83;
 
-/// Answer sources to peer (SX2, `0x84`).
+/// Respuesta de fuentes al par (SX2, `0x84`).
 pub const OP_ANSWERSOURCES2: u8 = 0x84;
 
-/// Public Key exchange for Secure User Identification (`0x85`).
+/// Intercambio de clave pública para identificación segura de usuario (`0x85`).
 pub const OP_PUBLICKEY: u8 = 0x85;
 
-/// Signature exchange for Secure User Identification (`0x86`).
+/// Intercambio de firma para identificación segura de usuario (`0x86`).
 pub const OP_SIGNATURE: u8 = 0x86;
 
-/// Secure User Identification State (`0x87`).
+/// Estado de la identificación segura de usuario (`0x87`).
 pub const OP_SECIDENTSTATE: u8 = 0x87;
 
-/// Kad UDP firewall check request (`0xA7`, sent over PR_EMULE after the TCP
-/// hello). Payload: `u16 intern_kad_port` + `u16 extern_kad_port` +
-/// `u32 udp_verify_key` (eMule `SendFirewallCheckUDPRequest`).
+/// Petición de comprobación de cortafuegos UDP de Kad (`0xA7`, enviada por PR_EMULE tras el
+/// hello TCP). Carga útil: `u16 intern_kad_port` + `u16 extern_kad_port` +
+/// `u32 udp_verify_key` (`SendFirewallCheckUDPRequest` de eMule).
 pub const OP_FWCHECKUDPREQ: u8 = 0xA7;
 
-/// Kad firewall TCP-check acknowledgement (`0xA8`, eMule `OP_KAD_FWTCPCHECK_ACK`).
+/// Acuse de recibo de comprobación TCP de cortafuegos Kad (`0xA8`, `OP_KAD_FWTCPCHECK_ACK` de eMule).
 pub const OP_KAD_FWTCPCHECK_ACK: u8 = 0xA8;
 
-/// Public-IP query (`0x97`, PR_EMULE): empty payload — the peer asks us
-/// which IP we see it at (eMule `OP_PUBLICIP_REQ`). Shares its wire value
-/// with `OP_GLOBSERVSTATRES` on the server UDP channel.
+/// Consulta de IP pública (`0x97`, PR_EMULE): carga útil vacía — el par nos pregunta
+/// en qué IP lo vemos (`OP_PUBLICIP_REQ` de eMule). Comparte su valor en cable
+/// con `OP_GLOBSERVSTATRES` en el canal UDP del servidor.
 pub const OP_PUBLICIP_REQ: u8 = 0x97;
 
-/// Public-IP answer (`0x98`, PR_EMULE): `<u32 ip>` — the requester's IP
-/// as seen from our socket (eMule `OP_PUBLICIP_ANSWER`). Shares its wire
-/// value with `OP_GLOBSEARCHREQ` on the server UDP channel.
+/// Respuesta de IP pública (`0x98`, PR_EMULE): `<u32 ip>` — la IP del solicitante
+/// vista desde nuestro socket (`OP_PUBLICIP_ANSWER` de eMule). Comparte su valor
+/// en cable con `OP_GLOBSEARCHREQ` en el canal UDP del servidor.
 pub const OP_PUBLICIP_ANSWER: u8 = 0x98;
 
-// eMule 0.72a extended opcodes (PR_EMULE `0xC5`, TCP)
+// Códigos de operación extendidos de eMule 0.72a (PR_EMULE `0xC5`, TCP)
 
-/// Peer chat message (`0x4E`): `<len u16><message bytes>` (eMule `OP_MESSAGE`).
+/// Mensaje de chat entre pares (`0x4E`): `<len u16><bytes del mensaje>` (`OP_MESSAGE` de eMule).
 pub const OP_MESSAGE: u8 = 0x4E;
 
-/// Upload slot change notification (`0x5B`): `<HASH 16>` (eMule `OP_CHANGE_SLOT`).
+/// Notificación de cambio de slot de subida (`0x5B`): `<HASH 16>` (`OP_CHANGE_SLOT` de eMule).
 pub const OP_CHANGE_SLOT: u8 = 0x5B;
 
-/// Legacy queue rank report (`0x5C`): `<rank u32>` (eMule `OP_QUEUERANK`).
+/// Informe de posición en cola heredado (`0x5C`): `<rank u32>` (`OP_QUEUERANK` de eMule).
 pub const OP_QUEUERANK: u8 = 0x5C;
 
-/// File rating/comment (`0x61`): `<rating u8><len u16><desc>` (eMule `OP_FILEDESC`).
+/// Valoración/comentario de fichero (`0x61`): `<rating u8><len u16><desc>` (`OP_FILEDESC` de eMule).
 pub const OP_FILEDESC: u8 = 0x61;
 
-/// Grouped file request (`0x92`, deprecated upstream): `<HASH 16>` + sub-opcodes
-/// (eMule `OP_MULTIPACKET`).
+/// Petición de ficheros agrupada (`0x92`, obsoleta en origen): `<HASH 16>` + subcódigos de operación
+/// (`OP_MULTIPACKET` de eMule).
 pub const OP_MULTIPACKET: u8 = 0x92;
 
-/// Grouped file request answer (`0x93`, deprecated upstream): `<HASH 16>` +
-/// answer sub-opcodes (eMule `OP_MULTIPACKETANSWER`).
+/// Respuesta a petición de ficheros agrupada (`0x93`, obsoleta en origen): `<HASH 16>` +
+/// subcódigos de operación de respuesta (`OP_MULTIPACKETANSWER` de eMule).
 pub const OP_MULTIPACKETANSWER: u8 = 0x93;
 
-/// Peer cache source query (`0x94`, defunct upstream — decoded as opaque).
+/// Consulta de fuentes en caché de pares (`0x94`, en desuso en origen — decodificada como opaca).
 pub const OP_PEERCACHE_QUERY: u8 = 0x94;
-/// Peer cache answer (`0x95`, defunct upstream — decoded as opaque).
+/// Respuesta de caché de pares (`0x95`, en desuso en origen — decodificada como opaca).
 pub const OP_PEERCACHE_ANSWER: u8 = 0x95;
-/// Peer cache acknowledgement (`0x96`, defunct upstream — decoded as opaque).
+/// Acuse de recibo de caché de pares (`0x96`, en desuso en origen — decodificada como opaca).
 pub const OP_PEERCACHE_ACK: u8 = 0x96;
 
-/// Grouped file request with 64-bit file size (`0xA4`, deprecated upstream):
-/// `<HASH 16><size u64>` + sub-opcodes (eMule `OP_MULTIPACKET_EXT`).
+/// Petición de ficheros agrupada con tamaño de 64 bits (`0xA4`, obsoleta en origen):
+/// `<HASH 16><size u64>` + subcódigos de operación (`OP_MULTIPACKET_EXT` de eMule).
 pub const OP_MULTIPACKET_EXT: u8 = 0xA4;
 
-/// Chat anti-spam CAPTCHA request (`0xA5`): `<tag_count u8><tags><BMP bitmap>`
-/// (eMule `OP_CHATCAPTCHAREQ`).
+/// Petición de CAPTCHA antispam en el chat (`0xA5`): `<tag_count u8><tags><mapa de bits BMP>`
+/// (`OP_CHATCAPTCHAREQ` de eMule).
 pub const OP_CHATCAPTCHAREQ: u8 = 0xA5;
 
-/// Chat CAPTCHA result (`0xA6`): `<status u8>` — 0 solved, 1 failed
-/// (eMule `OP_CHATCAPTCHARES`).
+/// Resultado de CAPTCHA de chat (`0xA6`): `<status u8>` — 0 resuelto, 1 fallido
+/// (`OP_CHATCAPTCHARES` de eMule).
 pub const OP_CHATCAPTCHARES: u8 = 0xA6;
 
-/// Grouped file request with `FileIdentifier` (`0xA9`):
-/// `<FileIdentifier>` + sub-opcodes (eMule `OP_MULTIPACKET_EXT2`, `opcodes.h:286`).
+/// Petición de ficheros agrupada con `FileIdentifier` (`0xA9`):
+/// `<FileIdentifier>` + subcódigos de operación (`OP_MULTIPACKET_EXT2` de eMule, `opcodes.h:286`).
 pub const OP_MULTIPACKET_EXT2: u8 = 0xA9;
 
-/// Grouped file request answer with `FileIdentifier` (`0xB0`):
-/// `<FileIdentifier>` + answer sub-opcodes (eMule `OP_MULTIPACKETANSWER_EXT2`,
+/// Respuesta a petición de ficheros agrupada con `FileIdentifier` (`0xB0`):
+/// `<FileIdentifier>` + subcódigos de operación de respuesta (`OP_MULTIPACKETANSWER_EXT2` de eMule,
 /// `opcodes.h:287`).
 pub const OP_MULTIPACKETANSWER_EXT2: u8 = 0xB0;
 
-/// Hashset request with `FileIdentifier` (`0xB1`):
-/// `<FileIdentifier><options u8>` — bit0 = MD4 set, bit1 = AICH set
-/// (eMule `OP_HASHSETREQUEST2`, `opcodes.h:288`).
+/// Petición de conjunto de hashes con `FileIdentifier` (`0xB1`):
+/// `<FileIdentifier><options u8>` — bit0 = conjunto MD4, bit1 = conjunto AICH
+/// (`OP_HASHSETREQUEST2` de eMule, `opcodes.h:288`).
 pub const OP_HASHSETREQUEST2: u8 = 0xB1;
 
-/// Hashset answer with `FileIdentifier` (`0xB2`):
+/// Respuesta de conjunto de hashes con `FileIdentifier` (`0xB2`):
 /// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`
-/// (eMule `OP_HASHSETANSWER2`, `opcodes.h:289`).
+/// (`OP_HASHSETANSWER2` de eMule, `opcodes.h:289`).
 pub const OP_HASHSETANSWER2: u8 = 0xB2;
 
-/// TCP connection test (`0xFE`, eMule `OP_PORTTEST`): `<status u8>`,
-/// eMule answers `0x12`.
+/// Prueba de conexión TCP (`0xFE`, `OP_PORTTEST` de eMule): `<status u8>`,
+/// eMule responde `0x12`.
 pub const OP_PORTTEST: u8 = 0xFE;
 
 // ---------------------------------------------------------------------------
-// Compressed Protocol Opcodes (Protocol 0xD4)
+// Códigos de operación de protocolo comprimido (protocolo 0xD4)
 // ---------------------------------------------------------------------------
 
-/// Compressed data block payload (`0x40`).
+/// Carga útil de bloque de datos comprimido (`0x40`).
 pub const OP_COMPRESSEDPART: u8 = 0x40;
 
 // ---------------------------------------------------------------------------
-// 64-bit (large file) transfer opcodes — eMule `*_I64` variants.
-// Wire layout replaces u32 offsets with u64 (opcodes.h).
+// Códigos de operación de transferencia de 64 bits (ficheros grandes) — variantes `*_I64` de eMule.
+// La disposición en cable sustituye desplazamientos u32 por u64 (opcodes.h).
 // ---------------------------------------------------------------------------
 
-/// Compressed data block with 64-bit start offset (`0xA1`,
+/// Bloque de datos comprimido con desplazamiento inicial de 64 bits (`0xA1`,
 /// `<HASH 16><von 8><size 4><data size>`).
 pub const OP_COMPRESSEDPART_I64: u8 = 0xA1;
 
-/// Uncompressed data block with 64-bit offsets (`0xA2`,
+/// Bloque de datos sin comprimir con desplazamientos de 64 bits (`0xA2`,
 /// `<HASH 16><von 8><bis 8><data von-bis>`).
 pub const OP_SENDINGPART_I64: u8 = 0xA2;
 
-/// Block request with 64-bit offsets (`0xA3`,
+/// Petición de bloque con desplazamientos de 64 bits (`0xA3`,
 /// `<HASH 16><von[3] 8*3><bis[3] 8*3>`).
 pub const OP_REQUESTPARTS_I64: u8 = 0xA3;
 
-/// Returns a human-readable symbolic name for an opcode under a given protocol.
+/// Devuelve un nombre simbólico legible para humanos para un código de operación bajo un protocolo dado.
 pub fn opcode_name(protocol: u8, opcode: u8) -> &'static str {
     match protocol {
         super::protocol::PR_ED2K => match opcode {

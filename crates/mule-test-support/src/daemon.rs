@@ -15,13 +15,13 @@ use mule_daemon::{
     create_router, AppState, DaemonConfig, DirectoryLock, DownloadService, WorkDirMode,
 };
 
-/// Démarre un daemon de test en mémoire avec le mode workdir par défaut de
-/// [`DaemonConfig::new`]. Retourne `(adresse, token, workdir temporaire)`.
+/// Inicia un daemon de prueba en memoria con el modo workdir por defecto de
+/// [`DaemonConfig::new`]. Devuelve `(dirección, token, workdir temporal)`.
 pub async fn spawn_test_daemon(token: &str) -> (SocketAddr, String, TempDir) {
     spawn_test_daemon_inner(token, None, None).await
 }
 
-/// Variante de [`spawn_test_daemon`] imposant explicitement le mode workdir.
+/// Variante de [`spawn_test_daemon`] que impone explícitamente el modo workdir.
 pub async fn spawn_test_daemon_with_mode(
     token: &str,
     mode: WorkDirMode,
@@ -29,9 +29,9 @@ pub async fn spawn_test_daemon_with_mode(
     spawn_test_daemon_inner(token, Some(mode), None).await
 }
 
-/// Variante dont le répertoire temporaire des parts est un `TempDir` distinct
-/// (utile pour observer les écritures de fichiers `.part`).
-/// Retourne `(adresse, token, workdir, répertoire temporaire)`.
+/// Variante cuyo directorio temporal de partes es un `TempDir` diferenciado
+/// (útil para observar las escrituras de archivos `.part`).
+/// Devuelve `(dirección, token, workdir, directorio temporal)`.
 pub async fn spawn_test_daemon_with_temp_dir(
     token: &str,
 ) -> (SocketAddr, String, TempDir, TempDir) {
@@ -71,8 +71,8 @@ async fn spawn_test_daemon_inner(
     (addr, token, dir)
 }
 
-/// Daemon de test persistant : base SQLite sur disque + verrou exclusif du
-/// répertoire de travail (reproduit le cycle de vie réel du daemon).
+/// Daemon de prueba persistente: base SQLite en disco + bloqueo exclusivo del
+/// directorio de trabajo (reproduce el ciclo de vida real del daemon).
 pub struct RunningDaemon {
     pub addr: SocketAddr,
     pub state: AppState,
@@ -82,8 +82,8 @@ pub struct RunningDaemon {
 }
 
 impl RunningDaemon {
-    /// Acquiert le verrou du workdir puis démarre le serveur RPC sur une
-    /// adresse loopback éphemère.
+    /// Adquiere el bloqueo del workdir e inicia el servidor RPC en una
+    /// dirección loopback efímera.
     pub async fn start(workdir: PathBuf, token: &str) -> Self {
         let lock = DirectoryLock::acquire(&workdir).expect("acquires exclusive directory lock");
         let db_path = workdir.join("mule.db");
@@ -112,7 +112,7 @@ impl RunningDaemon {
         }
     }
 
-    /// Arrête les tâches du daemon puis la tâche du serveur HTTP.
+    /// Detiene las tareas del daemon y después la tarea del servidor HTTP.
     pub async fn stop(self) {
         self.state.abort_all_tasks().await;
         self.server_handle.abort();

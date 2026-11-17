@@ -330,7 +330,7 @@ fn test_decode_file_status_req() {
     assert!(matches!(default_msg, Ed2kMessage::Raw(_)));
 }
 
-/// Décode un fixture du répertoire `malformed/` et renvoie l'erreur attendue.
+/// Decodifica un fixture del directorio `malformed/` y devuelve el error esperado.
 fn decode_malformed(fixture: &str) -> Ed2kParseError {
     let path = fixtures_root().join("malformed").join(fixture);
     let bytes = fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));

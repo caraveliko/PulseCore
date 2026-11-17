@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use super::environment::{ReferenceKind, Tier3Environment};
 
-/// Error conditions encountered during Tier 3 orchestration.
+/// Condiciones de error encontradas durante la orquestación de Tier 3.
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)]
 pub enum Tier3HarnessError {
@@ -36,18 +36,18 @@ pub enum Tier3HarnessError {
     Io(#[from] std::io::Error),
 }
 
-/// RAII Guard ensuring immediate kill & reap of the reference child process upon scope exit or panic,
-/// as well as restoration of host registry settings on Windows.
+/// Guardia RAII que garantiza la terminación inmediata del proceso hijo de referencia al salir del ámbito o producirse un pánico,
+/// así como la restauración de la configuración del registro del anfitrión en Windows.
 #[derive(Debug)]
 pub struct Tier3ProcessGuard {
     child: Option<Child>,
-    /// Nom de l'image du processus de référence (ex. `emule.exe`, `amuled.exe`)
-    /// utilisé par le filet de sécurité `taskkill /IM`.
+    /// Nombre de la imagen del proceso de referencia (ej. `emule.exe`, `amuled.exe`)
+    /// utilizado por la red de seguridad `taskkill /IM`.
     #[cfg(windows)]
     image_name: String,
-    /// `true` si la clé `UsePublicUserDirectories` a été forcée (eMule) et doit
-    /// être restaurée/supprimée au teardown. `false` pour aMule, qui n'a aucun
-    /// concept de répertoires utilisateur publics.
+    /// `true` si la clave `UsePublicUserDirectories` fue forzada (eMule) y debe
+    /// restaurarse o eliminarse en la desconexión. `false` para aMule, que no tiene
+    /// concepto de directorios de usuario públicos.
     #[cfg(windows)]
     manage_registry: bool,
     #[cfg(windows)]
@@ -79,7 +79,7 @@ impl Tier3ProcessGuard {
         Self { child: Some(child) }
     }
 
-    /// Terminates the child process explicitly and restores host settings.
+    /// Termina el proceso hijo explícitamente y restaura la configuración del anfitrión.
     pub fn terminate(&mut self) {
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
@@ -138,11 +138,11 @@ impl Drop for Tier3ProcessGuard {
     }
 }
 
-/// Validates external binary existence and SHA-256 cryptographic identity.
+/// Valida la existencia del binario externo y su identidad criptográfica SHA-256.
 pub struct Tier3BinaryValidator;
 
 impl Tier3BinaryValidator {
-    /// Computes the SHA-256 of the binary at `path` and compares it to `expected_sha256` if provided.
+    /// Calcula el SHA-256 del binario en `path` y lo compara con `expected_sha256` si se proporciona.
     pub fn validate(
         path: &Path,
         expected_sha256: Option<&str>,
@@ -168,7 +168,7 @@ impl Tier3BinaryValidator {
     }
 }
 
-/// Primary orchestrator for running an external reference binary against eMuleRust.
+/// Orquestador principal para ejecutar un binario de referencia externo contra eMuleRust.
 #[allow(dead_code)]
 pub struct Tier3Harness {
     environment: Tier3Environment,
@@ -192,16 +192,16 @@ impl Tier3Harness {
     ) -> Result<Self, Tier3HarnessError> {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tcp_port);
 
-        // Mechanical loopback pre-check
+        // Comprobación mecánica previa de bucle local (loopback)
         if !addr.ip().is_loopback() {
             return Err(Tier3HarnessError::NonLoopbackAddress(addr));
         }
 
         let binary_sha256 = Tier3BinaryValidator::validate(&binary_path, expected_sha256)?;
 
-        // Dérive la famille du binaire de référence depuis le nom de l'exécutable :
-        // les binaires `amule*` (amuled, amulegui…) partagent le même layout de
-        // configuration `amule.conf`, distinct du `preferences.ini` d'eMule.
+        // Deriva la familia del binario de referencia a partir del nombre del ejecutable:
+        // los binarios `amule*` (amuled, amulegui…) comparten la misma disposición de
+        // configuración `amule.conf`, distinta de `preferences.ini` de eMule.
         let kind = binary_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -226,12 +226,12 @@ impl Tier3Harness {
         })
     }
 
-    /// La famille du binaire de référence épinglé.
+    /// La familia del binario de referencia fijado.
     pub fn kind(&self) -> ReferenceKind {
         self.kind
     }
 
-    /// Mechanical assertion that the harness target is strictly on local loopback.
+    /// Aserción mecánica de que el objetivo del arnés está estrictamente en loopback local.
     pub fn assert_loopback_confinement(&self) {
         assert!(
             self.loopback_addr.ip().is_loopback(),
@@ -240,7 +240,7 @@ impl Tier3Harness {
         );
     }
 
-    /// Spawns the reference binary within the isolated ephemeral environment.
+    /// Genera el binario de referencia dentro del entorno efímero aislado.
     pub fn spawn_reference_process(
         &mut self,
         extra_args: &[&str],
@@ -254,10 +254,10 @@ impl Tier3Harness {
             .to_string_lossy()
             .into_owned();
 
-        // Le staging du binaire dans le sandbox est spécifique à eMule : il
-        // force `GetAppDir()` à résoudre vers le workdir éphémère. aMule a
-        // besoin de ses DLLs adjacentes (~60 fichiers dans `bin/`) — on le
-        // lance donc en place, l'isolation passant par `-c <config_dir>`.
+        // La preparación del binario en el entorno aislado es específica de eMule: fuerza
+        // a `GetAppDir()` a resolverse hacia el directorio de trabajo efímero. aMule necesita
+        // sus DLLs adyacentes (~60 archivos en `bin/`) — por lo que se ejecuta in situ,
+        // realizándose el aislamiento mediante `-c <config_dir>`.
         let spawn_path = match self.kind {
             ReferenceKind::Emule => {
                 let staged_bin = self.environment.work_path().join(&exe_name);
@@ -265,7 +265,7 @@ impl Tier3Harness {
                     fs::copy(&self.binary_path, &staged_bin)?;
                 }
 
-                // Also mirror adjacent lang/ resources if present to avoid localization dialogs
+                // Reflejar también los recursos lang/ adyacentes si existen para evitar diálogos de localización
                 if let Some(parent) = self.binary_path.parent() {
                     let src_lang = parent.join("lang");
                     let dst_lang = self.environment.work_path().join("lang");
@@ -283,18 +283,18 @@ impl Tier3Harness {
             ReferenceKind::Amule => self.binary_path.clone(),
         };
 
-        // Neutralisation du registre — eMule uniquement (aMule n'utilise pas
-        // `UsePublicUserDirectories` ; son isolation est portée par `-c`).
+        // Neutralización del registro — solo eMule (aMule no utiliza
+        // `UsePublicUserDirectories`; su aislamiento se gestiona mediante `-c`).
         #[cfg(windows)]
         let (registry_existed, previous_registry_val) = if self.kind == ReferenceKind::Emule {
-            // Terminate any orphan emule instance so single-instance lock does not exit early
+            // Terminar cualquier instancia huérfana de emule para que el bloqueo de instancia única no falle
             let _ = Command::new("taskkill")
                 .args(["/IM", &exe_name, "/F"])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status();
 
-            // Query existing value if any
+            // Consultar el valor existente si lo hubiera
             let query_out = Command::new("reg")
                 .args([
                     "query",
@@ -332,7 +332,7 @@ impl Tier3Harness {
 
             (existed, val)
         } else {
-            // aMule : aucun registre à neutraliser — l'isolation porte sur `-c`.
+            // aMule: sin registro que neutralizar — el aislamiento se basa en `-c`.
             (false, None)
         };
 
@@ -343,12 +343,12 @@ impl Tier3Harness {
             .stderr(Stdio::piped());
 
         if self.kind == ReferenceKind::Amule {
-            // `-c <dir>` pointe aMule vers le `amule.conf` neutralisé du sandbox.
+            // `-c <dir>` apunta aMule hacia el `amule.conf` neutralizado del entorno de pruebas.
             cmd.arg("-c").arg(self.environment.config_dir());
         }
         cmd.args(extra_args);
 
-        // Under Windows or Wine, ensure environment points to isolated temp config
+        // En Windows o Wine, asegurarse de que el entorno apunte a la configuración temporal aislada
         cmd.env("EMULE_CONFIG_DIR", self.environment.config_dir());
 
         let child = cmd
@@ -372,12 +372,12 @@ impl Tier3Harness {
         Ok(())
     }
 
-    /// The verified SHA-256 hash of the reference executable.
+    /// El hash SHA-256 verificado del ejecutable de referencia.
     pub fn binary_sha256(&self) -> &str {
         &self.binary_sha256
     }
 
-    /// Truncated redacted hash for safe public logs and divergence reports.
+    /// Hash truncado y redactado para registros públicos seguros e informes de divergencia.
     pub fn binary_sha256_redacted(&self) -> String {
         if self.binary_sha256.len() >= 12 {
             format!("{}...", &self.binary_sha256[..12])
@@ -386,17 +386,17 @@ impl Tier3Harness {
         }
     }
 
-    /// The isolated ephemeral environment.
+    /// El entorno efímero aislado.
     pub fn environment(&self) -> &Tier3Environment {
         &self.environment
     }
 
-    /// The target loopback socket address.
+    /// La dirección de socket loopback de destino.
     pub fn loopback_addr(&self) -> SocketAddr {
         self.loopback_addr
     }
 
-    /// Checks whether the child process is still running or has exited.
+    /// Comprueba si el proceso hijo continúa en ejecución o ha terminado.
     pub fn is_child_running(&mut self) -> bool {
         if let Some(ref mut guard) = self.process_guard {
             if let Some(ref mut child) = guard.child {
@@ -416,14 +416,14 @@ impl Tier3Harness {
         false
     }
 
-    /// Returns the process ID of the child process if running.
+    /// Devuelve el identificador de proceso (PID) del proceso hijo si está en ejecución.
     pub fn child_pid(&self) -> Option<u32> {
         self.process_guard
             .as_ref()
             .and_then(|g| g.child.as_ref().map(|c| c.id()))
     }
 
-    /// Explicitly shuts down the reference child process.
+    /// Cierra explícitamente el proceso hijo de referencia.
     pub fn shutdown(&mut self) {
         if let Some(mut guard) = self.process_guard.take() {
             guard.terminate();
@@ -431,13 +431,13 @@ impl Tier3Harness {
     }
 }
 
-/// Helper function to compute SHA-256 hex string using standard Rust types.
+/// Función auxiliar para calcular la cadena hexadecimal SHA-256 usando tipos estándar de Rust.
 fn compute_sha256_hex(data: &[u8]) -> String {
-    // Uses standard SHA-256 implementation matching common::sha256 or crate hash
+    // Utiliza la implementación estándar de SHA-256 coincidente con common::sha256
     use std::fmt::Write;
-    // We can use a deterministic byte reduction or SHA-256 if available.
-    // In mule-protocol tests, we can compute sha256 or delegate to sha2 crate if available.
-    // Let's implement SHA-256 or use standard FIPS 180-4 implementation from common.
+    // Podemos usar una reducción de bytes determinista o SHA-256 si está disponible.
+    // En pruebas de mule-protocol, calculamos sha256 directamente.
+    // Implementación estándar FIPS 180-4.
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
@@ -448,7 +448,7 @@ fn compute_sha256_hex(data: &[u8]) -> String {
     hex
 }
 
-/// Minimal self-contained FIPS 180-4 SHA-256 hasher for zero-dependency test verification.
+/// Generador de hash SHA-256 FIPS 180-4 mínimo e independiente para verificación de pruebas sin dependencias externas.
 struct Sha256 {
     state: [u32; 8],
     count: u64,

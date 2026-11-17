@@ -14,7 +14,7 @@ use mule_core::model::{EpisodeItem, MediaItem};
 const VIDEO_EXTENSIONS: &[&str] = &[
     ".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts",
 ];
-/// Pause entre deux requêtes d'enrichissement externe (en ms) pour respecter les limites de débit.
+/// Pausa entre dos peticiones de enriquecimiento externo (en ms) para respetar los límites de tasa.
 const METADATA_ENRICH_THROTTLE_MS: u64 = 80;
 
 fn is_video_file(path: &Path) -> bool {
@@ -22,7 +22,7 @@ fn is_video_file(path: &Path) -> bool {
     VIDEO_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
 }
 
-/// Extract tmdb_id from folder name like "Abigail (2024) [tmdbid-1111873]"
+/// Extrae tmdb_id del nombre de carpeta como "Abigail (2024) [tmdbid-1111873]"
 fn extract_tmdb_id(name: &str) -> Option<u64> {
     let lower = name.to_lowercase();
     for needle in &["tmdbid-", "tmdb-", "tmdbid=", "tmdb="] {
@@ -40,7 +40,7 @@ fn extract_tmdb_id(name: &str) -> Option<u64> {
     None
 }
 
-/// Extract tvdb_id from folder name like "The Simpsons () [tvdbid-71663]"
+/// Extrae tvdb_id del nombre de carpeta como "The Simpsons () [tvdbid-71663]"
 fn extract_tvdb_id(name: &str) -> Option<u64> {
     let lower = name.to_lowercase();
     for needle in &["tvdbid-", "tvdb-", "tvdbid=", "tvdb="] {
@@ -58,12 +58,12 @@ fn extract_tvdb_id(name: &str) -> Option<u64> {
     None
 }
 
-/// Clean title by removing leading (tag)/[tag] and trailing (YYYY), [tmdbid-XXX], [tvdbid-XXX], etc.
+/// Limpia el título eliminando (tag)/[tag] iniciales y (YYYY), [tmdbid-XXX], [tvdbid-XXX], etc. finales.
 fn clean_folder_title(name: &str) -> String {
     clean_movie_title(name)
 }
 
-/// Extract season number from directory name like "Season 01", "Temporada 2", "Season 3"
+/// Extrae el número de temporada del nombre de directorio como "Season 01", "Temporada 2", "Season 3"
 pub fn extract_season_from_folder(name: &str) -> Option<u32> {
     let lower = name.to_lowercase();
     for prefix in &["season", "temporada", "temp", "s"] {
@@ -81,14 +81,14 @@ pub fn extract_season_from_folder(name: &str) -> Option<u32> {
     None
 }
 
-/// Extract (season, episode) from filename and optional folder season hint.
-/// Handles Unicode characters gracefully and avoids picking up unrelated 's' letters in show titles.
+/// Extrae (temporada, episodio) a partir del nombre de archivo y la pista opcional de temporada de la carpeta.
+/// Gestiona caracteres Unicode adecuadamente y evita capturar letras 's' no relacionadas en títulos de series.
 pub fn extract_season_episode(folder_season: Option<u32>, filename: &str) -> Option<(u32, u32)> {
     let lower = filename.to_lowercase();
     let chars: Vec<char> = lower.chars().collect();
     let n = chars.len();
 
-    // 1. Scan for S(\d+)E(\d+) or S(\d+)[._-]E(\d+)
+    // 1. Escanear en busca de S(\d+)E(\d+) o S(\d+)[._-]E(\d+)
     let mut i = 0;
     while i < n {
         let is_s_boundary = i == 0 || !chars[i - 1].is_alphanumeric();
@@ -125,7 +125,7 @@ pub fn extract_season_episode(folder_season: Option<u32>, filename: &str) -> Opt
         i += 1;
     }
 
-    // 2. Scan for (\d{1,2})x(\d{1,3}) e.g. "1x05", "02x08"
+    // 2. Escanear en busca de (\d{1,2})x(\d{1,3}) ej.: "1x05", "02x08"
     i = 0;
     while i < n {
         if chars[i] == 'x' {
@@ -155,7 +155,7 @@ pub fn extract_season_episode(folder_season: Option<u32>, filename: &str) -> Opt
         i += 1;
     }
 
-    // 3. Fallback: if folder season is known, check for "Episodio X", "Episode X", "Capitulo X", "Cap.X"
+    // 3. Respaldo: si se conoce la temporada de la carpeta, comprobar "Episodio X", "Episode X", "Capitulo X", "Cap.X"
     if let Some(s) = folder_season {
         for marker in &["episodio", "episode", "capitulo", "cap"] {
             if let Some(pos) = lower.find(marker) {
@@ -210,7 +210,7 @@ fn scan_filesystem_blocking(
                 let folder_year = extract_year(&folder_name);
                 let clean_title = clean_folder_title(&folder_name);
 
-                // Find largest video file inside the movie folder (avoids small sample/trailer files)
+                // Hallar el archivo de vídeo más grande dentro de la carpeta de la película (evita archivos pequeños de muestra/tráiler)
                 let mut best_video_file: Option<(PathBuf, u64)> = None;
                 if let Ok(files) = std::fs::read_dir(&path) {
                     for f in files.flatten() {
@@ -306,7 +306,7 @@ fn scan_filesystem_blocking(
 pub struct DiskScanner;
 
 impl DiskScanner {
-    /// Scan movies and series directories on disk (`spawn_blocking`) and synchronize database in batch
+    /// Escanea directorios de películas y series en disco (`spawn_blocking`) y sincroniza la base de datos en lote
     pub async fn scan_all(state: &AppState) -> Value {
         let now = now_ms();
         let movies_root = state.config.movies_dir.clone();
@@ -314,7 +314,7 @@ impl DiskScanner {
         let movies_root_str = movies_root.to_string_lossy().to_string();
         let series_root_str = series_root.to_string_lossy().to_string();
 
-        // 1. Parcourir le NAS / système de fichiers dans un thread dédié sans bloquer Tokio
+        // 1. Recorrer el NAS / sistema de archivos en un hilo dedicado sin bloquear Tokio
         let (scanned_movies, scanned_series) = tokio::task::spawn_blocking(move || {
             scan_filesystem_blocking(movies_root, series_root)
         })
@@ -325,7 +325,7 @@ impl DiskScanner {
         let mut episodes_scanned = 0usize;
         let mut updated = 0usize;
 
-        // 2. Synchronisation groupée en base SQLite (un seul verrouillage pour l'ensemble du scan)
+        // 2. Sincronización agrupada en la base SQLite (un único bloqueo para el escaneo completo)
         {
             let mut dl_svc = state.downloads.lock().await;
             let db = dl_svc.db_mut();
@@ -520,7 +520,7 @@ impl DiskScanner {
             }
         }
 
-        // 3. Automatically run metadata enrichment pass on any items missing posters, overview or episodes
+        // 3. Ejecutar automáticamente un pase de enriquecimiento de metadatos en elementos sin póster, sinopsis o lista de episodios
         let enriched = Self::enrich_library(state).await;
 
         json!({
@@ -531,7 +531,7 @@ impl DiskScanner {
         })
     }
 
-    /// Enriches all library items that have missing poster_path, overview, or missing episode list
+    /// Enriquece todos los elementos de la biblioteca a los que les falte poster_path, overview o la lista de episodios
     pub async fn enrich_library(state: &AppState) -> usize {
         let (items_to_enrich, show_episodes_map) = {
             let dl_svc = state.downloads.lock().await;

@@ -27,50 +27,50 @@ use super::packet::{
 };
 use super::session::Ed2kSessionError;
 
-/// Standard size of an eD2K part in bytes (9,500 KiB = 9,728,000 bytes).
+/// Tamaño estándar de una parte eD2K en bytes (9.500 KiB = 9.728.000 bytes).
 pub const ED2K_PART_SIZE: usize = crate::limits::ED2K_PART_SIZE;
 
-/// Standard size of an eD2K transfer block in bytes (180 KiB = 184,320 bytes).
+/// Tamaño estándar de un bloque de transferencia eD2K en bytes (180 KiB = 184.320 bytes).
 pub const ED2K_BLOCK_SIZE: usize = crate::limits::ED2K_BLOCK_SIZE;
 
-/// Maximum number of block ranges allowed per standard eD2K request packet (3).
+/// Número máximo de rangos de bloques permitidos por paquete de petición eD2K estándar (3).
 pub const MAX_REQUEST_RANGES_PER_PACKET: usize = 3;
 
-/// eMule end-game threshold: when the remaining download fits in a single
-/// request batch (≈ 3 blocks), a block already in-flight on *another* peer
-/// may be requested in parallel so the file finishes at the speed of the
-/// fastest source (`CPartFile::GetNextRequestedBlock` duplicates the last
-/// chunks near completion).
+/// Umbral de fin de descarga (end-game) de eMule: cuando la descarga restante cabe en un
+/// único lote de petición (≈ 3 bloques), un bloque que ya está en vuelo en *otro* par
+/// puede solicitarse en paralelo para que el archivo termine a la velocidad de la
+/// fuente más rápida (`CPartFile::GetNextRequestedBlock` duplica los últimos
+/// fragmentos cerca de la finalización).
 const ENDGAME_REMAINING_BYTES: u64 =
     ED2K_BLOCK_SIZE as u64 * MAX_REQUEST_RANGES_PER_PACKET as u64;
 
-/// Maximum concurrent in-flight assignments allowed for the same block range
-/// during end-game (the first arriving copy wins; the duplicate is discarded).
+/// Número máximo de asignaciones simultáneas en vuelo permitidas para el mismo rango de bloque
+/// durante el fin de descarga (la primera copia que llega gana; el duplicado se descarta).
 const MAX_INFLIGHT_PER_BLOCK: usize = 2;
 
-/// Deterministic download sequencer and block request planner for an active eD2K peer.
+/// Secuenciador determinista de descargas y planificador de peticiones de bloques para un par eD2K activo.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kDownloadSequencer {
     file_hash: [u8; 16],
     file_size: u64,
     total_parts: u16,
     status: Ed2kFileStatus,
-    /// eMule preview mode: the first and last parts are requested before all
-    /// others so the file can be previewed while downloading
-    /// (`CPartFile` gives them `PR_VERYHIGH` when preview is enabled).
+    /// Modo de vista previa de eMule: la primera y la última parte se solicitan antes que todas
+    /// las demás para poder previsualizar el archivo durante la descarga
+    /// (`CPartFile` les asigna `PR_VERYHIGH` cuando la vista previa está activada).
     preview_priority: bool,
-    /// Swarm-healing hint (eMuleRust extension): `part_scarcity[i]` = number
-    /// of *known sources* offering part `i` across the whole swarm. When set,
-    /// part selection prefers the rarest parts first (then least-received),
-    /// so the daemon becomes a rescue source for parts about to disappear
-    /// from the swarm. `None` keeps the plain eMule progress-first strategy.
+    /// Pista de recuperación del enjambre (extensión de eMuleRust): `part_scarcity[i]` = número
+    /// de *fuentes conocidas* que ofrecen la parte `i` en todo el enjambre. Si se establece,
+    /// la selección de partes prefiere primero las partes más raras (luego las menos recibidas),
+    /// convirtiendo al daemon en fuente de rescate para partes a punto de desaparecer
+    /// del enjambre. `None` mantiene la estrategia estándar de eMule por progreso.
     part_scarcity: Option<Vec<u32>>,
-    /// Custom end-game remaining bytes threshold (defaults to ENDGAME_REMAINING_BYTES if None).
+    /// Umbral personalizado de bytes restantes para fin de descarga (por defecto ENDGAME_REMAINING_BYTES si es None).
     endgame_threshold: Option<u64>,
 }
 
 impl Ed2kDownloadSequencer {
-    /// Creates a new `Ed2kDownloadSequencer` from a known file hash, file size, and validated `Ed2kFileStatus`.
+    /// Crea un nuevo `Ed2kDownloadSequencer` a partir de un hash de archivo conocido, el tamaño del archivo y un `Ed2kFileStatus` validado.
     pub fn new(
         file_hash: [u8; 16],
         file_size: u64,
@@ -99,22 +99,22 @@ impl Ed2kDownloadSequencer {
         })
     }
 
-    /// Sets a custom remaining bytes threshold for entering end-game mode.
+    /// Establece un umbral personalizado de bytes restantes para entrar en el modo de fin de descarga.
     pub fn with_endgame_threshold(mut self, bytes: u64) -> Self {
         self.endgame_threshold = Some(bytes);
         self
     }
 
-    /// Enables the eMule preview part priority: the first and last parts are
-    /// planned before all others (used for previewable media files).
+    /// Activa la prioridad de partes de vista previa de eMule: la primera y la última parte se
+    /// planifican antes que todas las demás (usado para archivos multimedia previsualizables).
     pub fn with_preview_priority(mut self, enabled: bool) -> Self {
         self.preview_priority = enabled;
         self
     }
 
-    /// Installs the per-part swarm scarcity counts used by the swarm-healing
-    /// strategy (`part_scarcity[i]` = sources offering part `i`). Vectors
-    /// whose length differs from `total_parts` are ignored.
+    /// Instala los recuentos de escasez en el enjambre por parte utilizados por la estrategia de
+    /// recuperación del enjambre (`part_scarcity[i]` = fuentes que ofrecen la parte `i`). Los vectores
+    /// cuya longitud difiera de `total_parts` se ignoran.
     pub fn with_part_scarcity(mut self, counts: Vec<u32>) -> Self {
         if counts.len() == self.total_parts as usize {
             self.part_scarcity = Some(counts);
@@ -122,7 +122,7 @@ impl Ed2kDownloadSequencer {
         self
     }
 
-    /// Creates a sequencer from the result of a file status request.
+    /// Crea un secuenciador a partir del resultado de una petición de estado de archivo.
     pub fn from_file_status_result(
         file_hash: [u8; 16],
         file_size: u64,
@@ -135,31 +135,31 @@ impl Ed2kDownloadSequencer {
         }
     }
 
-    /// Returns the 16-byte MD4 file hash.
+    /// Devuelve el hash MD4 de 16 bytes del archivo.
     #[inline]
     pub fn file_hash(&self) -> [u8; 16] {
         self.file_hash
     }
 
-    /// Returns the total file size in bytes.
+    /// Devuelve el tamaño total del archivo en bytes.
     #[inline]
     pub fn file_size(&self) -> u64 {
         self.file_size
     }
 
-    /// Returns the total number of parts in this file.
+    /// Devuelve el número total de partes de este archivo.
     #[inline]
     pub fn total_parts(&self) -> u16 {
         self.total_parts
     }
 
-    /// Reference to the underlying `Ed2kFileStatus`.
+    /// Referencia al `Ed2kFileStatus` subyacente.
     #[inline]
     pub fn status(&self) -> &Ed2kFileStatus {
         &self.status
     }
 
-    /// Returns true if the remote peer has the specified part index available.
+    /// Devuelve true si el par remoto tiene disponible el índice de parte especificado.
     pub fn is_part_available(&self, part_index: u16) -> bool {
         if part_index >= self.total_parts {
             return false;
@@ -171,19 +171,19 @@ impl Ed2kDownloadSequencer {
         }
     }
 
-    /// Returns a list of all part indices available from this remote source.
+    /// Devuelve una lista de todos los índices de partes disponibles de esta fuente remota.
     pub fn available_parts(&self) -> Vec<u16> {
         (0..self.total_parts)
             .filter(|&p| self.is_part_available(p))
             .collect()
     }
 
-    /// Returns the first available part index in ascending order, if any.
+    /// Devuelve el primer índice de parte disponible en orden ascendente, si lo hay.
     pub fn select_first_available_part(&self) -> Option<u16> {
         (0..self.total_parts).find(|&p| self.is_part_available(p))
     }
 
-    /// Selects and validates an explicit part index for download.
+    /// Selecciona y valida un índice de parte explícito para la descarga.
     pub fn select_part(&self, part_index: u16) -> Result<u16, Ed2kSequencerError> {
         if part_index >= self.total_parts {
             return Err(Ed2kSequencerError::PartIndexOutOfBounds {
@@ -200,7 +200,7 @@ impl Ed2kDownloadSequencer {
         Ok(part_index)
     }
 
-    /// Returns the half-open byte bounds `[start, end)` for a given part index.
+    /// Devuelve los límites de bytes semiabiertos `[start, end)` para un índice de parte dado.
     pub fn part_byte_bounds(&self, part_index: u16) -> Result<(u64, u64), Ed2kSequencerError> {
         if part_index >= self.total_parts {
             return Err(Ed2kSequencerError::PartIndexOutOfBounds {
@@ -213,7 +213,7 @@ impl Ed2kDownloadSequencer {
         Ok((start, end))
     }
 
-    /// Plans the sequence of block ranges ($\le 184\,320$ bytes each) for a selected part.
+    /// Planifica la secuencia de rangos de bloques ($\le 184\,320$ bytes cada uno) para una parte seleccionada.
     pub fn plan_part_blocks(
         &self,
         part_index: u16,
@@ -240,8 +240,8 @@ impl Ed2kDownloadSequencer {
         Ok(blocks)
     }
 
-    /// 64-bit variant of `plan_part_blocks` for files larger than 4 GiB —
-    /// offsets past `u32::MAX` are preserved instead of being truncated.
+    /// Variante de 64 bits de `plan_part_blocks` para archivos mayores de 4 GiB:
+    /// los desplazamientos que superan `u32::MAX` se conservan en lugar de truncarse.
     pub fn plan_part_blocks64(
         &self,
         part_index: u16,
@@ -260,8 +260,8 @@ impl Ed2kDownloadSequencer {
         Ok(blocks)
     }
 
-    /// Validates an arbitrary 64-bit block range `[start, end)` against all
-    /// protocol and file invariants (same rules as `validate_block_range`).
+    /// Valida un rango de bloques arbitrario de 64 bits `[start, end)` frente a todos
+    /// los invariantes de protocolo y archivo (mismas reglas que `validate_block_range`).
     pub fn validate_block_range64(
         &self,
         start: u64,
@@ -313,8 +313,8 @@ impl Ed2kDownloadSequencer {
         Ok(Ed2kBlockRange64::new(start, end))
     }
 
-    /// Constructs a validated `Ed2kRequestPartsI64` (`OP_REQUESTPARTS_I64`)
-    /// message from 1 to 3 64-bit block ranges.
+    /// Construye un mensaje `Ed2kRequestPartsI64` (`OP_REQUESTPARTS_I64`) validado
+    /// a partir de 1 a 3 rangos de bloques de 64 bits.
     pub fn build_request_parts_i64(
         &self,
         ranges: &[Ed2kBlockRange64],
@@ -337,15 +337,15 @@ impl Ed2kDownloadSequencer {
         })
     }
 
-    /// 64-bit variant of `plan_next_block_for_peer` — required for downloads
-    /// whose blocks extend past the 4 GiB boundary.
+    /// Variante de 64 bits de `plan_next_block_for_peer`: necesaria para descargas
+    /// cuyos bloques sobrepasan el límite de 4 GiB.
     ///
-    /// Part selection follows the eMule "rarest/progress-first" strategy:
-    /// instead of always draining the lowest part index (which concentrates
-    /// the whole swarm on the same chunks), the peer is assigned to the
-    /// needed part it offers that currently has the *fewest* completed
-    /// bytes. Ties resolve to the lowest index. This spreads sources across
-    /// distinct parts like `CPartFile::GetNextRequestedBlock` does.
+    /// La selección de partes sigue la estrategia de eMule "más rara/progreso primero":
+    /// en lugar de agotar siempre el índice de parte más bajo (lo que concentra a todo
+    /// el enjambre en los mismos fragmentos), se asigna al par la parte necesaria que
+    /// ofrece y que actualmente tiene la *menor* cantidad de bytes completados.
+    /// Los empates se resuelven a favor del índice más bajo. Esto distribuye las fuentes
+    /// entre diferentes partes tal como hace `CPartFile::GetNextRequestedBlock`.
     pub fn plan_next_block_for_peer64(
         &self,
         peer_id: &str,
@@ -353,8 +353,8 @@ impl Ed2kDownloadSequencer {
         in_flight_blocks: &[InFlightBlock],
         now_unix_ms: i64,
     ) -> Result<Option<(u16, Ed2kBlockRange64)>, Ed2kSequencerError> {
-        // eMule preview: the first and last parts are served first so the
-        // file can be opened while downloading (`PR_VERYHIGH` on edges).
+        // Vista previa de eMule: la primera y la última parte se sirven primero para que el
+        // archivo pueda abrirse durante la descarga (`PR_VERYHIGH` en los extremos).
         if self.preview_priority {
             let last = self.total_parts - 1;
             for edge in [0u16, last] {
@@ -369,9 +369,9 @@ impl Ed2kDownloadSequencer {
             }
         }
 
-        // Swarm healing: when per-part scarcity counts are known, parts
-        // offered by the fewest sources are selected first (rescue priority),
-        // then least-received. Otherwise plain eMule progress-first.
+        // Recuperación del enjambre: cuando se conocen los recuentos de escasez por parte, las partes
+        // ofrecidas por menos fuentes se seleccionan primero (prioridad de rescate),
+        // luego las menos recibidas. Si no, progreso primero estándar de eMule.
         let scarcity_of = |p: u16| -> u32 {
             self.part_scarcity
                 .as_ref()
@@ -385,7 +385,7 @@ impl Ed2kDownloadSequencer {
                 continue;
             }
 
-            // Received bytes already covering this part (progress metric).
+            // Bytes recibidos que ya cubren esta parte (métrica de progreso).
             let (part_start, part_end) = self.part_byte_bounds(part_idx)?;
             let received_in_part: u64 = completed_ranges
                 .iter()
@@ -422,17 +422,15 @@ impl Ed2kDownloadSequencer {
         self.endgame_block64(peer_id, completed_ranges, in_flight_blocks, now_unix_ms)
     }
 
-    /// Plans up to `max_blocks` disjoint block ranges for a peer in a single
-    /// pass — eMule `CreateBlockRequests` + `SendBlockRequests` semantics:
-    /// one `OP_REQUESTPARTS` packet carries up to
-    /// [`MAX_REQUEST_RANGES_PER_PACKET`] ranges so several blocks stay in
-    /// flight per source instead of round-tripping one at a time.
+    /// Planifica hasta `max_blocks` rangos de bloques disjuntos para un par en una sola pasada: semántica
+    /// de `CreateBlockRequests` + `SendBlockRequests` de eMule: un paquete `OP_REQUESTPARTS` transporta
+    /// hasta [`MAX_REQUEST_RANGES_PER_PACKET`] rangos para que varios bloques permanezcan en vuelo por
+    /// fuente en lugar de realizar ida y vuelta de uno en uno.
     ///
-    /// The returned ranges are treated as already assigned: the caller is
-    /// expected to register them in `in_flight_blocks` before planning again.
-    /// Selection order follows `plan_next_block_for_peer64` (preview edges,
-    /// scarcity/progress-first); end-game duplicates are intentionally not
-    /// batched — they remain a single-range fallback.
+    /// Los rangos devueltos se tratan como ya asignados: se espera que quien llama los registre
+    /// en `in_flight_blocks` antes de planificar de nuevo. El orden de selección sigue
+    /// `plan_next_block_for_peer64` (extremos de vista previa, escasez/progreso primero); los duplicados de
+    /// fin de descarga no se procesan en lote intencionadamente: quedan como respaldo de un solo rango.
     pub fn plan_next_blocks_for_peer64(
         &self,
         peer_id: &str,
@@ -442,8 +440,8 @@ impl Ed2kDownloadSequencer {
         max_blocks: usize,
     ) -> Result<Vec<(u16, Ed2kBlockRange64)>, Ed2kSequencerError> {
         let mut planned: Vec<(u16, Ed2kBlockRange64)> = Vec::new();
-        // Shadow list: real in-flight blocks plus the ranges already reserved
-        // by this pass so no range is planned twice.
+        // Lista oculta de seguimiento: bloques en vuelo reales más los rangos ya reservados
+        // por esta pasada para no planificar ningún rango dos veces.
         let mut shadow: Vec<InFlightBlock> = in_flight_blocks.to_vec();
         while planned.len() < max_blocks {
             match self.plan_next_block_for_peer64(
@@ -459,17 +457,16 @@ impl Ed2kDownloadSequencer {
                         block.start,
                         block.end,
                         now_unix_ms,
-                        i64::MAX - now_unix_ms, // never expires inside a pass
+                        i64::MAX - now_unix_ms, // nunca expira dentro de una pasada
                     ));
                     planned.push((part_idx, block));
                 }
                 None => break,
             }
-            // End-game duplicates must not be batched into one request:
-            // `plan_next_block_for_peer64` falls back to `endgame_block64`
-            // only when nothing else is free — detect that case by checking
-            // whether the block it returned was already in flight on another
-            // peer, and stop batching there.
+            // Los duplicados de fin de descarga no deben agruparse en una sola petición:
+            // `plan_next_block_for_peer64` recurre a `endgame_block64` solo cuando no hay nada más libre;
+            // detecta ese caso comprobando si el bloque devuelto ya estaba en vuelo en otro par,
+            // y detiene la agrupación en lote allí.
             if let Some((_, block)) = planned.last() {
                 if in_flight_blocks.iter().any(|ifb| {
                     !ifb.is_expired(now_unix_ms)
@@ -483,11 +480,11 @@ impl Ed2kDownloadSequencer {
         Ok(planned)
     }
 
-    /// eMule end-game fallback: when fewer than `ENDGAME_REMAINING_BYTES`
-    /// remain, allows requesting a block already in-flight on a *different*
-    /// peer (max `MAX_INFLIGHT_PER_BLOCK` concurrent assignments per block).
-    /// Returns `None` outside end-game, when every missing block is already
-    /// doubly assigned, or when the only pending copies belong to this peer.
+    /// Mecanismo de respaldo de fin de descarga de eMule: cuando quedan menos de `ENDGAME_REMAINING_BYTES`,
+    /// permite solicitar un bloque que ya está en vuelo en un par *diferente* (máximo de
+    /// `MAX_INFLIGHT_PER_BLOCK` asignaciones simultáneas por bloque). Devuelve `None` fuera del
+    /// fin de descarga, cuando todos los bloques faltantes ya están doblemente asignados, o cuando
+    /// las únicas copias pendientes pertenecen a este par.
     fn endgame_block64(
         &self,
         peer_id: &str,
@@ -533,9 +530,8 @@ impl Ed2kDownloadSequencer {
         Ok(None)
     }
 
-    /// Returns the first missing, non-in-flight block inside `part_idx`,
-    /// or `None` if the part is complete, fully in-flight, or not offered
-    /// by this peer.
+    /// Devuelve el primer bloque faltante que no esté en vuelo dentro de `part_idx`,
+    /// o `None` si la parte está completa, totalmente en vuelo o no la ofrece este par.
     fn next_free_block_in_part64(
         &self,
         part_idx: u16,
@@ -548,7 +544,7 @@ impl Ed2kDownloadSequencer {
             if Self::is_range_in_list(block.start, block.end, completed_ranges) {
                 continue;
             }
-            // Clip block forward and backward past any completed ranges covering its boundaries
+            // Recorta el bloque hacia adelante y hacia atrás superando los rangos completados que cubran sus límites
             for &(s, e) in completed_ranges {
                 if s <= block.start && e > block.start {
                     block.start = e.min(block.end);
@@ -570,8 +566,8 @@ impl Ed2kDownloadSequencer {
         Ok(None)
     }
 
-    /// Plans the sequence of block ranges for a part, filtering out any blocks
-    /// that are already fully covered by the given completed ranges.
+    /// Planifica la secuencia de rangos de bloques para una parte, filtrando los bloques
+    /// que ya estén totalmente cubiertos por los rangos completados dados.
     pub fn plan_missing_blocks(
         &self,
         part_index: u16,
@@ -589,7 +585,7 @@ impl Ed2kDownloadSequencer {
         Ok(missing)
     }
 
-    /// Helper to test if half-open byte range `[start, end)` is completely covered by a list of ranges.
+    /// Función auxiliar para comprobar si el rango semiabierto de bytes `[start, end)` está completamente cubierto por una lista de rangos.
     pub fn is_range_in_list(start: u64, end: u64, ranges: &[(u64, u64)]) -> bool {
         if start >= end {
             return true;
@@ -616,7 +612,7 @@ impl Ed2kDownloadSequencer {
         curr >= end
     }
 
-    /// Validates an arbitrary block range `[start, end)` against all protocol and file invariants.
+    /// Valida un rango de bloques arbitrario `[start, end)` frente a todos los invariantes de protocolo y archivo.
     pub fn validate_block_range(
         &self,
         start: u64,
@@ -674,7 +670,7 @@ impl Ed2kDownloadSequencer {
         })
     }
 
-    /// Constructs a validated `Ed2kRequestParts` message from 1 to 3 block ranges.
+    /// Construye un mensaje `Ed2kRequestParts` validado a partir de 1 a 3 rangos de bloques.
     pub fn build_request_parts(
         &self,
         ranges: &[Ed2kBlockRange],
@@ -696,7 +692,7 @@ impl Ed2kDownloadSequencer {
         Ok(Ed2kRequestParts::multi(self.file_hash, ranges.to_vec()))
     }
 
-    /// Constructs and encodes an `OP_REQUESTPARTS_EMULE` (`0x47`) wire packet without transmitting it.
+    /// Construye y codifica un paquete de cable `OP_REQUESTPARTS_EMULE` (`0x47`) sin transmitirlo.
     pub fn build_request_packet(
         &self,
         ranges: &[Ed2kBlockRange],
@@ -708,8 +704,8 @@ impl Ed2kDownloadSequencer {
             .map_err(|e| Ed2kSequencerError::Encode(e.to_string()))
     }
 
-    /// Validates an incoming `Ed2kSendingPart` block against file hash, data length,
-    /// block length limit, and part boundaries.
+    /// Valida un bloque `Ed2kSendingPart` entrante frente al hash del archivo, longitud de datos,
+    /// límite de longitud del bloque y límites de parte.
     pub fn validate_sending_part(
         &self,
         part: &Ed2kSendingPart,
@@ -732,11 +728,10 @@ impl Ed2kDownloadSequencer {
         self.validate_block_range(part.start_offset as u64, part.end_offset as u64)
     }
 
-    /// Plans the next unassigned and uncompleted block range for a specific peer.
+    /// Planifica el siguiente rango de bloques no asignado y no completado para un par específico.
     ///
-    /// Same rarest/progress-first part selection as
-    /// `plan_next_block_for_peer64`: the peer is assigned to the needed part
-    /// it offers with the fewest completed bytes (ties → lowest index).
+    /// Misma selección de partes más rara/progreso primero que `plan_next_block_for_peer64`: se asigna
+    /// al par la parte necesaria que ofrece con la menor cantidad de bytes completados (empates → índice más bajo).
     pub fn plan_next_block_for_peer(
         &self,
         peer_id: &str,
@@ -807,7 +802,7 @@ impl Ed2kDownloadSequencer {
         self.endgame_block(peer_id, completed_ranges, in_flight_blocks, now_unix_ms)
     }
 
-    /// 32-bit variant of `endgame_block64`.
+    /// Variante de 32 bits de `endgame_block64`.
     fn endgame_block(
         &self,
         peer_id: &str,
@@ -855,7 +850,7 @@ impl Ed2kDownloadSequencer {
         Ok(None)
     }
 
-    /// 32-bit variant of `next_free_block_in_part64`.
+    /// Variante de 32 bits de `next_free_block_in_part64`.
     fn next_free_block_in_part(
         &self,
         part_idx: u16,

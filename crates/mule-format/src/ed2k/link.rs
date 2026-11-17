@@ -12,7 +12,7 @@ const MAX_LINK_LENGTH: usize = 8192;
 const MAX_SOURCES_COUNT: usize = 256;
 const MAX_PART_HASHES_COUNT: usize = 65536;
 
-/// Parsed eD2K file link (`ed2k://|file|...`).
+/// Enlace de archivo eD2K analizado (`ed2k://|file|...`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kFileLink {
     pub file_name: String,
@@ -26,14 +26,14 @@ pub struct Ed2kFileLink {
 }
 
 impl Ed2kFileLink {
-    /// Parses an eD2K link string with defensive limits.
+    /// Analiza una cadena de enlace eD2K con límites defensivos.
     pub fn parse(input: &str) -> Result<Self, FormatError> {
         let trimmed = input.trim();
         if trimmed.len() > MAX_LINK_LENGTH {
             return Err(FormatError::InputTooLarge(trimmed.len()));
         }
 
-        // Must start with ed2k://
+        // Debe comenzar con ed2k://
         let lower = trimmed.to_ascii_lowercase();
         if !lower.starts_with("ed2k://") {
             return Err(FormatError::InvalidLink(
@@ -41,21 +41,21 @@ impl Ed2kFileLink {
             ));
         }
 
-        let content = &trimmed[7..]; // Strip scheme
+        let content = &trimmed[7..]; // Descartar prefijo del esquema
         if !content.starts_with('|') {
             return Err(FormatError::InvalidLink(
                 "Expected '|' separator after scheme".to_string(),
             ));
         }
 
-        // Split into main sections separated by "/|"
-        // e.g. "|file|name|size|hash|h=...|/|sources,ip:port|/"
+        // Dividir en secciones principales separadas por "/|"
+        // p. ej. "|file|name|size|hash|h=...|/|sources,ip:port|/"
         let sections: Vec<&str> = content.split("/|").collect();
         let main_section = sections[0];
 
-        // Process main file section
+        // Procesar sección principal del archivo
         let tokens: Vec<&str> = main_section.split('|').collect();
-        // tokens[0] is empty because content started with '|'
+        // tokens[0] está vacío porque el contenido comenzaba con '|'
         if tokens.len() < 5 {
             return Err(FormatError::InvalidLink(
                 "Insufficient fields in file section".to_string(),
@@ -69,7 +69,7 @@ impl Ed2kFileLink {
             )));
         }
 
-        // Decode percent-encoded filename, handling UTF-8, Latin-1 fallback, and Mojibake repair
+        // Decodificar nombre de archivo codificado en por ciento, manejando UTF-8, respaldo Latin-1 y reparación de Mojibake
         let raw_name = tokens[2];
         let decoded_bytes: Vec<u8> = percent_encoding::percent_decode_str(raw_name).collect();
         let file_name = match String::from_utf8(decoded_bytes.clone()) {
@@ -95,7 +95,7 @@ impl Ed2kFileLink {
         let mut web_sources = Vec::new();
         let mut unknown_fields = Vec::new();
 
-        // Optional parameters before trailing "/"
+        // Parámetros opcionales antes de la barra final "/"
         for &token in &tokens[5..] {
             let item = token.trim_end_matches('/');
             if item.is_empty() {
@@ -131,7 +131,7 @@ impl Ed2kFileLink {
             }
         }
 
-        // Secondary sections: e.g. "sources,IP:PORT,HOST:PORT|/"
+        // Secciones secundarias: p. ej. "sources,IP:PORT,HOST:PORT|/"
         let mut peer_sources = Vec::new();
         for &extra_section in &sections[1..] {
             let cleaned = extra_section.trim_end_matches('/').trim_end_matches('|');
@@ -160,7 +160,7 @@ impl Ed2kFileLink {
         })
     }
 
-    /// Creates a new eD2K file link with validated size and filename.
+    /// Crea un nuevo enlace de archivo eD2K con tamaño y nombre de archivo validados.
     pub fn create(
         file_name: impl Into<String>,
         size: u64,
@@ -188,7 +188,7 @@ impl Ed2kFileLink {
         })
     }
 
-    /// Sanitizes delimiter characters ('|' and '/') for URI serialization.
+    /// Sanea caracteres delimitadores ('|' y '/') para serialización en URI.
     pub fn sanitize_filename(name: &str) -> String {
         let mut out = String::with_capacity(name.len() + 8);
         for c in name.chars() {
@@ -202,7 +202,7 @@ impl Ed2kFileLink {
         out
     }
 
-    /// Formats the struct back into a valid canonical `ed2k://` link.
+    /// Formatea la estructura de vuelta a un enlace canónico `ed2k://` válido.
     pub fn to_link_string(&self) -> String {
         let safe_name = Self::sanitize_filename(&self.file_name);
         let mut s = format!(
@@ -252,7 +252,7 @@ impl fmt::Display for Ed2kFileLink {
     }
 }
 
-/// Fix Latin-1 / UTF-8 Mojibake in strings (e.g. "La cabaÃ±a" -> "La cabaña")
+/// Corrige Mojibake de Latin-1 / UTF-8 en cadenas (p. ej. "La cabaÃ±a" -> "La cabaña")
 pub fn fix_mojibake(s: &str) -> String {
     if !s.contains('Ã') && !s.contains('Â') {
         return s.to_string();

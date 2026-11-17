@@ -16,7 +16,7 @@ async fn test_kad_bootstrap_and_find_node_flow() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // 1. Start daemon Kad UDP
+    // 1. Iniciar Kad UDP en el daemon
     let _bound_addr = state
         .kad
         .udp()
@@ -24,7 +24,7 @@ async fn test_kad_bootstrap_and_find_node_flow() {
         .await
         .expect("start kad udp");
 
-    // 2. Start mock bootstrap peer
+    // 2. Iniciar par de arranque simulado
     let mock_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind mock peer");
@@ -80,22 +80,22 @@ async fn test_kad_bootstrap_and_find_node_flow() {
         }
     });
 
-    // 3. Trigger bootstrap
+    // 3. Activar arranque (bootstrap)
     let imported = state
         .kad
         .bootstrap_from_node(&mock_addr.ip().to_string(), mock_addr.port())
         .await
         .expect("bootstrap should succeed");
 
-    // eMule 0.72a insère le nœud répondeur lui-même dans la routing table en
-    // plus des contacts listés dans BOOTSTRAP_RES → 2 contacts importés.
+    // eMule 0.72a inserta el propio nodo respondedor en la tabla de enrutamiento además
+    // de los contactos listados en BOOTSTRAP_RES → 2 contactos importados.
     assert_eq!(imported, 2);
 
     let status = state.kad.get_status().await;
     assert_eq!(status.total_contacts, 2);
     assert_eq!(status.db_contacts_count, 2);
 
-    // 4. Trigger Find Node
+    // 4. Activar Find Node
     let target_key = KadId([0x99u8; 16]);
     let closest = state
         .kad
@@ -107,10 +107,10 @@ async fn test_kad_bootstrap_and_find_node_flow() {
     mock_task.await.expect("mock finishes");
 }
 
-/// eMule `CKademlia::Process` + `s_liBootstrapList` : tant que la table de
-/// routage est vide, la boucle de drain retente les candidats appris via
-/// les handshakes eD2K (~2 s entre essais). Avant ce mécanisme, un timeout
-/// sur le premier candidat laissait Kad mort avec 0 contact.
+/// `CKademlia::Process` + `s_liBootstrapList` de eMule: mientras la tabla de
+/// enrutamiento esté vacía, el bucle de drenaje reintenta los candidatos aprendidos a través de
+/// los saludos eD2K (~2 s entre intentos). Antes de este mecanismo, un tiempo de espera agotado
+/// en el primer candidato dejaba a Kad inactivo con 0 contactos.
 #[tokio::test]
 async fn test_bootstrap_drain_retries_candidates_until_success() {
     use std::net::Ipv4Addr;
@@ -129,7 +129,7 @@ async fn test_bootstrap_drain_retries_candidates_until_success() {
         .await
         .expect("start kad udp");
 
-    // Candidat A : socket ouvert mais ne répond jamais → timeout 3 s.
+    // Candidato A: socket abierto pero nunca responde → tiempo de espera agotado en 3 s.
     let dead_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind dead peer");
@@ -141,7 +141,7 @@ async fn test_bootstrap_drain_retries_candidates_until_success() {
         }
     });
 
-    // Candidat B : répond un BootstrapRes avec un contact.
+    // Candidato B: responde un BootstrapRes con un contacto.
     let live_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind live peer");
@@ -165,28 +165,28 @@ async fn test_bootstrap_drain_retries_candidates_until_success() {
         }
     });
 
-    // Enregistre A : envoi immédiat → timeout (~3 s), A reste en file.
+    // Registra A: envío inmediato → tiempo de espera agotado (~3 s), A permanece en cola.
     state
         .kad
         .maybe_bootstrap_from_peer(Ipv4Addr::LOCALHOST, dead_addr.port(), false, 8)
         .await;
     assert_eq!(state.kad.pending_bootstrap_candidates().await, 1);
 
-    // Enregistre B : en file, envoi immédiat bloqué par le throttle 10 s.
+    // Registra B: en cola, envío inmediato bloqueado por la limitación de 10 s.
     state
         .kad
         .maybe_bootstrap_from_peer(Ipv4Addr::LOCALHOST, live_addr.port(), false, 8)
         .await;
     assert_eq!(state.kad.pending_bootstrap_candidates().await, 2);
 
-    // Un pair Kad v1 (pré-0.47a) n'est jamais candidat.
+    // Un par Kad v1 (anterior a 0.47a) nunca es candidato.
     state
         .kad
         .maybe_bootstrap_from_peer(Ipv4Addr::LOCALHOST, dead_addr.port(), false, 1)
         .await;
     assert_eq!(state.kad.pending_bootstrap_candidates().await, 2);
 
-    // La maintenance draine la file : A retenté (timeout) puis B → succès.
+    // El mantenimiento drena la cola: A reintentado (tiempo agotado) luego B → éxito.
     let cancel = state.network_policy.cancellation_token();
     let _maintenance = state.kad.start_background_maintenance(cancel.clone());
 

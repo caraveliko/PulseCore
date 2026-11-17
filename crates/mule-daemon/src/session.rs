@@ -60,7 +60,7 @@ impl DaemonSession {
         file.write_all(json.as_bytes())?;
         // 2. Ensure data is flushed and synced to disk
         file.sync_all()?;
-        // 3. Close the file handle before renaming
+        // 3. Cierra el descriptor de archivo antes de renombrar
         drop(file);
 
         // 4. Atomically replace target file with retries for Windows sharing violations

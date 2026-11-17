@@ -8,15 +8,15 @@
 //!
 //! El bit 11 (CAPTCHA de chat) permanece a 0: la respuesta CAPTCHA no está implementada.
 
-/// Construit le mot `CT_EMULE_MISCOPTIONS2` d'un hello eMule.
+/// Construye la palabra `CT_EMULE_MISCOPTIONS2` de un hello de eMule.
 ///
-/// - `tcp_low_id` : vrai quand l'identité eD2K courante est un LowID
+/// - `tcp_low_id`: verdadero cuando la identidad eD2K actual es un LowID
 ///   (`client_id < 0x0100_0000`), proxy local de `theApp.IsFirewalled()` /
-///   `CKademlia::IsFirewalled()` côté TCP.
-/// - `udp_verified_open` : vrai quand le testeur de pare-feu UDP Kad a vérifié
-///   que l'UDP entrant est joignable (`verified && status == Open` —
-///   équivalent `!IsFirewalledUDP(true) && IsVerified()`, full-cone NAT).
-///   Combiné au LowID, arme le bit 12 « DirectUDPCallback » comme
+///   `CKademlia::IsFirewalled()` del lado TCP.
+/// - `udp_verified_open`: verdadero cuando el comprobador de cortafuegos UDP Kad ha verificado
+///   que el UDP entrante es accesible (`verified && status == Open` —
+///   equivalente a `!IsFirewalledUDP(true) && IsVerified()`, NAT full-cone).
+///   Combinado con LowID, arma el bit 12 «DirectUDPCallback» como
 ///   `GetMyConnectOptions(true, true)`.
 pub(crate) fn misc_options2(
     tcp_low_id: bool,
@@ -58,14 +58,14 @@ mod tests {
 
     #[test]
     fn direct_callback_requires_lowid_and_verified_udp() {
-        // TCP injoignable + UDP vérifié ouvert → bit 12 (eMule GetMyConnectOptions).
+        // TCP inaccesible + UDP verificado abierto → bit 12 (GetMyConnectOptions de eMule).
         assert_ne!(
             misc_options2(true, true, false, false) & (1 << 12),
             0
         );
-        // UDP non vérifié ou fermé → pas de bit 12.
+        // UDP no verificado o cerrado → sin bit 12.
         assert_eq!(misc_options2(true, false, false, false) & (1 << 12), 0);
-        // UDP ouvert mais TCP joignable → pas de bit 12.
+        // UDP abierto pero TCP accesible → sin bit 12.
         assert_eq!(misc_options2(false, true, false, false) & (1 << 12), 0);
     }
 

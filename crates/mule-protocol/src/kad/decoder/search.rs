@@ -729,7 +729,7 @@ pub fn decode_search_keyword_req(
     // eMule `Process_KADEMLIA2_SEARCH_KEY_REQ` (`KademliaUDPListener.cpp:1057`):
     // bit 15 of start_pos flags a restrictive search-expression tree; the
     // remaining bits are the pagination offset. Any trailing bytes are the
-    // serialized `SSearchTerm` expression (kept raw for the caller).
+    // expresión `SSearchTerm` serializada (mantenida en bruto para el llamador).
     let raw_start = payload.get_u16_le();
     let restrictive = (raw_start & 0x8000) != 0;
     let start_pos = raw_start & 0x7FFF;
@@ -1056,7 +1056,7 @@ fn read_note_taglist(
 
 /// Decodes a persisted note tag-list blob (`[tag_count:u8][tags]`), the exact
 /// fragment `read_note_taglist` consumes. Returns `None` on malformed data —
-/// used to rehydrate the notes index from storage.
+/// usado para rehidratar el índice de notas desde el almacenamiento.
 pub fn decode_note_tags_blob(
     blob: &[u8],
 ) -> Option<(

@@ -7,16 +7,16 @@ use super::types::Ed2kSequencerError;
 use super::Ed2kDownloadSequencer;
 use crate::ed2k::packet::{Ed2kBlockRange, Ed2kSendingPart};
 
-/// Maximum allowable in-memory sink allocation (512 MiB) to prevent OOM denial-of-service.
+/// Asignación máxima admisible del sumidero en memoria (512 MiB) para evitar la denegación de servicio por falta de memoria (OOM).
 pub const MAX_MEMORY_SINK_SIZE: u64 = 512 * 1024 * 1024;
 
-/// In-memory sink for assembled eD2K block data.
+/// Sumidero en memoria para datos de bloques eD2K ensamblados.
 ///
-/// Invariants:
-/// - Exact pre-allocated buffer matching the total file size.
-/// - Validates every incoming block against the active `Ed2kDownloadSequencer`.
-/// - Rejects duplicate receptions of the same block range (`Ed2kSequencerError::DuplicateBlock`).
-/// - Rejects block ranges crossing part boundaries (`Ed2kSequencerError::CrossPartBoundary`).
+/// Invariantes:
+/// - Búfer preasignado exacto que coincide con el tamaño total del archivo.
+/// - Valida cada bloque entrante frente al `Ed2kDownloadSequencer` activo.
+/// - Rechaza recepciones duplicadas del mismo rango de bloque (`Ed2kSequencerError::DuplicateBlock`).
+/// - Rechaza rangos de bloques que crucen límites de partes (`Ed2kSequencerError::CrossPartBoundary`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kBlockSink {
     file_size: u64,
@@ -25,8 +25,8 @@ pub struct Ed2kBlockSink {
 }
 
 impl Ed2kBlockSink {
-    /// Creates a new zero-initialized `Ed2kBlockSink` for a given file size.
-    /// Panics if `file_size > MAX_MEMORY_SINK_SIZE`.
+    /// Crea un nuevo `Ed2kBlockSink` inicializado a cero para un tamaño de archivo dado.
+    /// Entra en pánico si `file_size > MAX_MEMORY_SINK_SIZE`.
     pub fn new(file_size: u64) -> Self {
         assert!(
             file_size <= MAX_MEMORY_SINK_SIZE,
@@ -41,7 +41,7 @@ impl Ed2kBlockSink {
         }
     }
 
-    /// Safely attempts to create an `Ed2kBlockSink`, returning an error if `file_size` exceeds limit.
+    /// Intenta crear de forma segura un `Ed2kBlockSink`, devolviendo un error si `file_size` supera el límite.
     pub fn try_new(file_size: u64) -> Result<Self, String> {
         if file_size > MAX_MEMORY_SINK_SIZE {
             return Err(format!(
@@ -55,30 +55,30 @@ impl Ed2kBlockSink {
         })
     }
 
-    /// Returns the total file size in bytes.
+    /// Devuelve el tamaño total del archivo en bytes.
     #[inline]
     pub fn file_size(&self) -> u64 {
         self.file_size
     }
 
-    /// Returns the underlying byte buffer.
+    /// Devuelve el búfer de bytes subyacente.
     #[inline]
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
     }
 
-    /// Returns the list of successfully written byte ranges `[start, end)`.
+    /// Devuelve la lista de rangos de bytes escritos con éxito `[start, end)`.
     #[inline]
     pub fn received_ranges(&self) -> &[(u64, u64)] {
         &self.received_ranges
     }
 
-    /// Returns true if the half-open byte range `[start, end)` is completely covered by received slices.
+    /// Devuelve verdadero si el rango de bytes semiabierto `[start, end)` está completamente cubierto por fragmentos recibidos.
     pub fn is_range_covered(&self, start: u64, end: u64) -> bool {
         Ed2kDownloadSequencer::is_range_in_list(start, end, &self.received_ranges)
     }
 
-    /// Returns true if a block range `[start, end)` has already been received or is fully covered.
+    /// Devuelve verdadero si un rango de bloque `[start, end)` ya se ha recibido o está completamente cubierto.
     pub fn has_range(&self, start: u64, end: u64) -> bool {
         if self
             .received_ranges
@@ -90,14 +90,14 @@ impl Ed2kBlockSink {
         self.is_range_covered(start, end)
     }
 
-    /// Returns true if any byte in `[start, end)` overlaps already received ranges.
+    /// Devuelve verdadero si algún byte en `[start, end)` se solapa con rangos ya recibidos.
     pub fn has_overlap(&self, start: u64, end: u64) -> bool {
         self.received_ranges
             .iter()
             .any(|&(s, e)| s < end && start < e)
     }
 
-    /// Returns the total number of bytes received and written so far.
+    /// Devuelve el número total de bytes recibidos y escritos hasta ahora.
     pub fn received_bytes_count(&self) -> usize {
         self.received_ranges
             .iter()
@@ -105,7 +105,7 @@ impl Ed2kBlockSink {
             .sum()
     }
 
-    /// Validates and writes an incoming `Ed2kSendingPart` into the sink.
+    /// Valida y escribe un `Ed2kSendingPart` entrante en el sumidero.
     pub fn write_block(
         &mut self,
         sequencer: &Ed2kDownloadSequencer,

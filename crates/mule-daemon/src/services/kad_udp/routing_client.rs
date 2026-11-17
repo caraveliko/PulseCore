@@ -17,7 +17,7 @@ use super::KadUdpService;
 use mule_protocol::ed2k::packed::pack_kad_datagram;
 
 impl KadUdpService {
-    /// Sends a Kad Ping to target address and awaits Pong response within timeout.
+    /// Envía un ping Kad a la dirección de destino y espera la respuesta Pong dentro del tiempo de espera.
     pub async fn ping(&self, target: SocketAddr) -> Result<(KadPong, Duration), String> {
         let socket = {
             let inner = self.inner.read().await;
@@ -69,8 +69,8 @@ impl KadUdpService {
                 let inner = self.inner.read().await;
                 let mut inf = inner.in_flight.lock().await;
                 inf.remove(&tx_id);
-                // Timeout de sondage Kad = churn routinier (nœuds morts),
-                // pas une anomalie — eMule ne le montre qu'en verbose.
+                // Tiempo de espera de sondeo Kad = rotación rutinaria de nodos (nodos inactivos),
+                // no una anomalía — eMule solo lo muestra en modo detallado (verbose).
                 tracing::debug!("Kad Ping to node {} timed out after {}s (tx_id={})", log_peer_addr(target), KAD_TRANSACTION_TIMEOUT_SECS, tx_id);
                 Err(format!("Kad ping to {target} timed out after {KAD_TRANSACTION_TIMEOUT_SECS}s"))
             }
@@ -90,7 +90,7 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Bootstrap request to target address and awaits response with contacts.
+    /// Envía una solicitud Kad2 Bootstrap a la dirección de destino y espera la respuesta con contactos.
     pub async fn send_bootstrap(&self, target: SocketAddr) -> Result<Vec<KadContact>, String> {
         let socket = {
             let inner = self.inner.read().await;
@@ -156,9 +156,9 @@ impl KadUdpService {
                             .as_millis() as u64;
 
                         let mut contacts = Vec::with_capacity(boot_res.contacts.len() + 1);
-                        // eMule inserts the responding node itself into the
-                        // routing table (BOOTSTRAP_RES header = its KadID and
-                        // TCP port; the UDP port is the socket we reached it on).
+                        // eMule inserta el propio nodo que responde en la
+                        // tabla de enrutamiento (encabezado BOOTSTRAP_RES = su KadID y
+                        // puerto TCP; el puerto UDP es el socket en el que lo alcanzamos).
                         if let IpAddr::V4(responder_ip) = target.ip() {
                             contacts.push(KadContact {
                                 kad_id: mule_core::kad::KadId(boot_res.kad_id),
@@ -200,7 +200,7 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Find Node request to target address and awaits nearest contacts.
+    /// Envía una solicitud Kad2 Find Node a la dirección de destino y espera los contactos más cercanos.
     pub async fn send_find_node(
         &self,
         target: SocketAddr,

@@ -29,7 +29,7 @@ fn test_parse_link_with_url_encoding_and_spaces() {
 
 #[test]
 fn test_parse_link_with_aich_and_sources() {
-    // 32 chars base32 = 20 bytes SHA1
+    // 32 caracteres base32 = 20 bytes SHA1
     let link_str = "ed2k://|file|sample.dat|9728000|0123456789abcdef0123456789abcdef|h=OBTXIKUQC6F7E4424IWSU5V5MOMN2WZA|/|sources,192.168.1.50:39735,node.network.org:39735|/";
     let link = Ed2kFileLink::parse(link_str).unwrap();
 
@@ -62,19 +62,19 @@ fn test_parse_link_with_web_sources() {
 
 #[test]
 fn test_malformed_links_rejected() {
-    // Missing ed2k://
+    // Falta ed2k://
     assert!(matches!(
         Ed2kFileLink::parse("http://|file|test|10|0123456789abcdef0123456789abcdef|/").unwrap_err(),
         FormatError::InvalidLink(_)
     ));
 
-    // Invalid hash length
+    // Longitud de hash no válida
     assert!(matches!(
         Ed2kFileLink::parse("ed2k://|file|test|10|invalid_hash|/").unwrap_err(),
         FormatError::InvalidEd2kHashString(_)
     ));
 
-    // Empty file name
+    // Nombre de archivo vacío
     assert!(matches!(
         Ed2kFileLink::parse("ed2k://|file||10|0123456789abcdef0123456789abcdef|/").unwrap_err(),
         FormatError::InvalidLink(_)

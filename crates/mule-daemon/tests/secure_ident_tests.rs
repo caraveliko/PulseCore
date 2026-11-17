@@ -22,7 +22,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
     let (state, _dir, hash) = share_state("test_token_secure_ident", "secure_shared_data.bin", 18874368, &vec![0x5Au8; 18874368], "41d6cfe0d16ae931b73c59d7e0c089c1").await;
     let mut authenticated = true;
 
-    // 1. Start listener
+    // 1. Iniciar oyente
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -35,7 +35,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
         .unwrap()
         .to_string();
 
-    // 2. Connect client and perform standard OP_HELLO
+    // 2. Conectar cliente y realizar OP_HELLO estándar
     let mut client_socket = TcpStream::connect(&listen_addr_str).await.unwrap();
     let mut read_buf = bytes::BytesMut::with_capacity(65536);
     let mut raw_buf = [0u8; 8192];
@@ -73,7 +73,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
         }
     }
 
-    // 3. Send OP_PUBLICKEY (80 bytes key material)
+    // 3. Enviar OP_PUBLICKEY (80 bytes de material de clave)
     let mock_pubkey = vec![0x99u8; 80];
     let pubkey_msg = Ed2kPublicKey {
         key_bytes: bytes::Bytes::from(mock_pubkey.clone()),
@@ -86,7 +86,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
     out.extend_from_slice(&pk_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 4. Expect OP_SECIDENTSTATE (Challenge = 1)
+    // 4. Esperar OP_SECIDENTSTATE (Desafío = 1)
     let mut received_sec_challenge = false;
     while !received_sec_challenge {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -104,7 +104,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
         }
     }
 
-    // 5. Send OP_SIGNATURE
+    // 5. Enviar OP_SIGNATURE
     let sig_msg = Ed2kSignature {
         signature_bytes: bytes::Bytes::from(vec![0xEEu8; 64]),
     };
@@ -116,9 +116,9 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
     out.extend_from_slice(&sig_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 6. Expect OP_SECIDENTSTATE (Rejected = 0)
-    // Security lock: real RSA verification is not implemented yet (v0.1.9-A1),
-    // so every signature is rejected and never grants credit_multiplier.
+    // 6. Esperar OP_SECIDENTSTATE (Rechazado = 0)
+    // Bloqueo de seguridad: la verificación RSA real aún no está implementada (v0.1.9-A1),
+    // por lo que cada firma se rechaza y nunca otorga credit_multiplier.
     let mut received_auth_ok = false;
     while !received_auth_ok {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -139,7 +139,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
         }
     }
 
-    // 7. Request parts on authenticated peer
+    // 7. Solicitar partes en el par autenticado
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
     let req_parts = Ed2kRequestParts {
         file_hash: hash_bytes,
@@ -156,7 +156,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
     out.extend_from_slice(&rp_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 8. Expect OP_SENDINGPART
+    // 8. Esperar OP_SENDINGPART
     let mut received_part = false;
     while !received_part {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
@@ -170,7 +170,7 @@ async fn test_inbound_secure_ident_handshake_and_authentication() {
         }
     }
 
-    // 9. Verify no credit record was persisted (signature was rejected)
+    // 9. Verificar que no se haya persistido ningún registro de créditos (la firma fue rechazada)
     let pk_hash = hex::encode(Md4::digest(&mock_pubkey));
     let credit_opt = state
         .downloads
@@ -197,7 +197,7 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
     let (state, _dir, hash) = share_state("test_token_secure_ident", "secure_shared_data.bin", 18874368, &vec![0x5Au8; 18874368], "41d6cfe0d16ae931b73c59d7e0c089c1").await;
     let mut authenticated = true;
 
-    // Daemon's own public key DER = the challenger key the peer must sign over.
+    // DER de la clave pública del propio daemon = clave del retador sobre la cual el par debe firmar.
     let daemon_pubkey_der = {
         let id = state.identity.lock().await;
         id.public_key_bytes().to_vec()
@@ -215,7 +215,7 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
         .unwrap()
         .to_string();
 
-    // Real RSA-384 peer identity.
+    // Identidad de par RSA-384 real.
     let peer_key = rsa::RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 384).unwrap();
     use rsa::pkcs1::EncodeRsaPublicKey;
     let peer_pubkey_der = rsa::RsaPublicKey::from(&peer_key)
@@ -262,7 +262,7 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
         }
     }
 
-    // Send real public key.
+    // Enviar clave pública real.
     let pk_pkt = encoder
         .encode_public_key(&Ed2kPublicKey {
             key_bytes: bytes::Bytes::from(peer_pubkey_der.clone()),
@@ -275,7 +275,7 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
     out.extend_from_slice(&pk_pkt.payload);
     client.write_all(&out).await.unwrap();
 
-    // Receive challenge.
+    // Recibir desafío.
     let mut challenge = None;
     while challenge.is_none() {
         let n = client.read(&mut raw_buf).await.unwrap();
@@ -292,7 +292,7 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
         }
     }
 
-    // Sign V1 payload: challenger_pubkey || challenge_le.
+    // Firmar carga útil V1: challenger_pubkey || challenge_le.
     let payload = mule_crypto::legacy_sui::build_sui_signing_payload(
         mule_crypto::legacy_sui::SecureIdentVersion::V1,
         &daemon_pubkey_der,
@@ -316,8 +316,8 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
     out.extend_from_slice(&sig_pkt.payload);
     client.write_all(&out).await.unwrap();
 
-    // eMule sends no reply on success: observable proof is that a credit record
-    // is created for the verified pubkey and uploads are credited to it.
+    // eMule no envía respuesta en caso de éxito: la prueba observable es que se crea un registro de crédito
+    // para la clave pública verificada y las subidas se acreditan a ella.
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
     let rp_pkt = encoder
         .encode_request_parts(&Ed2kRequestParts {
@@ -371,18 +371,18 @@ async fn test_credit_weighted_queue_priority() {
     let (state, _dir, hash) = share_state("test_token_secure_ident", "secure_shared_data.bin", 18874368, &vec![0x5Au8; 18874368], "41d6cfe0d16ae931b73c59d7e0c089c1").await;
     let mut authenticated = true;
 
-    // Multi-slot uploads (MAX_ACTIVE_UPLOADS) would grant client 1 an active
-    // slot instead of a queue rank — cap at 1 active slot for this test.
+    // Las subidas multiranura (MAX_ACTIVE_UPLOADS) otorgarían al cliente 1 una ranura activa
+    // en lugar de una posición en la cola — limitar a 1 ranura activa para esta prueba.
     state.inbound_listener.upload_manager().set_max_active(1);
 
     let hash_bytes: [u8; 16] = hex::decode(&hash).unwrap().try_into().unwrap();
 
-    // Pre-populate credits for high-credit peer
+    // Rellenar previamente créditos para el par con créditos altos
     let high_credit_pubkey = vec![0x11u8; 80];
     let high_credit_hash = hex::encode(Md4::digest(&high_credit_pubkey));
     {
         let mut dls = state.downloads.lock().await;
-        // Peer gave us 100 MB of downloads, so multiplier is 10.0x
+        // El par nos dio 100 MB de descargas, por lo que el multiplicador es 10.0x
         dls.record_credit_download(
             &high_credit_hash,
             &hex::encode(&high_credit_pubkey),
@@ -391,7 +391,7 @@ async fn test_credit_weighted_queue_priority() {
         .unwrap();
     }
 
-    // Start listener
+    // Iniciar oyente
     let start_resp = handle_request(
         &state,
         make_req(1, "listener.start", Some(json!({ "port": 0 }))),
@@ -407,7 +407,7 @@ async fn test_credit_weighted_queue_priority() {
     let codec = PacketCodec::new();
     let encoder = Ed2kEncoder::default();
 
-    // 1. Client 0 connects and takes the 1 active upload slot
+    // 1. El cliente 0 se conecta y toma la única ranura de subida activa
     let mut client0 = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello0 = Ed2kHello {
         user_hash: [0x00u8; 16],
@@ -455,7 +455,7 @@ async fn test_credit_weighted_queue_priority() {
     out.extend_from_slice(&rp_pkt0.payload);
     client0.write_all(&out).await.unwrap();
 
-    // Verify client 0 is active
+    // Verificar que el cliente 0 esté activo
     let mut c0_active = false;
     while !c0_active {
         let n = client0.read(&mut raw_buf).await.unwrap();
@@ -468,7 +468,7 @@ async fn test_credit_weighted_queue_priority() {
         }
     }
 
-    // 2. Client 1 (Uncredited, multiplier 1.0x) connects and joins queue
+    // 2. El cliente 1 (sin créditos, multiplicador 1.0x) se conecta y se une a la cola
     let mut client1 = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello1 = Ed2kHello {
         user_hash: [0x11u8; 16],
@@ -515,14 +515,14 @@ async fn test_credit_weighted_queue_priority() {
     out.extend_from_slice(&rp_pkt1.payload);
     client1.write_all(&out).await.unwrap();
 
-    // Client 1 gets queue ranking 1
+    // El cliente 1 obtiene la posición 1 en la cola
     let mut c1_rank = 0;
     while c1_rank == 0 {
         let n = client1.read(&mut raw_buf).await.unwrap();
         read_buf1.extend_from_slice(&raw_buf[..n]);
         while let Ok(Some(pkt)) = codec.decode(&mut read_buf1) {
             if pkt.protocol == mule_protocol::ed2k::PR_EMULE && pkt.opcode == OP_QUEUERANKING {
-                // eMule SendRankingInfo : [u16 rank][10 zeros], PR_EMULE.
+                // SendRankingInfo de eMule: [u16 rank][10 ceros], PR_EMULE.
                 c1_rank = u16::from_le_bytes(pkt.payload[0..2].try_into().unwrap()) as u32;
                 break;
             }
@@ -530,7 +530,7 @@ async fn test_credit_weighted_queue_priority() {
     }
     assert_eq!(c1_rank, 1);
 
-    // 3. Client 2 (High credit 10.0x) connects with OP_PUBLICKEY and joins queue
+    // 3. El cliente 2 (crédito alto 10.0x) se conecta con OP_PUBLICKEY y se une a la cola
     let mut client2 = TcpStream::connect(&listen_addr_str).await.unwrap();
     let hello2 = Ed2kHello {
         user_hash: [0x22u8; 16],
@@ -562,7 +562,7 @@ async fn test_credit_weighted_queue_priority() {
         }
     }
 
-    // Authenticate client 2 with high credit public key
+    // Autenticar al cliente 2 con clave pública de créditos altos
     let pubkey_msg2 = Ed2kPublicKey {
         key_bytes: bytes::Bytes::from(high_credit_pubkey.clone()),
     };
@@ -574,7 +574,7 @@ async fn test_credit_weighted_queue_priority() {
     out.extend_from_slice(&pk_pkt2.payload);
     client2.write_all(&out).await.unwrap();
 
-    // Read SecIdentState challenge and answer with Signature
+    // Leer el desafío de SecIdentState y responder con Signature
     let mut got_sec_st = false;
     while !got_sec_st {
         let n = client2.read(&mut raw_buf).await.unwrap();
@@ -598,7 +598,7 @@ async fn test_credit_weighted_queue_priority() {
     out.extend_from_slice(&sig_pkt2.payload);
     client2.write_all(&out).await.unwrap();
 
-    // Now request parts on client 2 -> due to 10x credit multiplier, client 2 gets superior rank 1
+    // Ahora solicitar partes en el cliente 2 -> debido al multiplicador de crédito 10x, el cliente 2 obtiene el rango superior 1
     let req_parts2 = Ed2kRequestParts {
         file_hash: hash_bytes,
         ranges: vec![mule_protocol::ed2k::Ed2kBlockRange {
@@ -625,8 +625,8 @@ async fn test_credit_weighted_queue_priority() {
             }
         }
     }
-    // Credit multiplier is only granted after real RSA SUI verification (v0.1.9-A1);
-    // until then every peer queues at 1.0x, so client 2 stays behind client 1.
+    // El multiplicador de crédito solo se concede tras la verificación RSA SUI real (v0.1.9-A1);
+    // hasta entonces cada par hace cola a 1.0x, por lo que el cliente 2 permanece detrás del cliente 1.
     assert_eq!(
         c2_rank, 2,
         "Unverified peer must not earn credit multiplier priority"
@@ -649,7 +649,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // The file must exist as a download (not just a share) for sources.connect.
+    // El archivo debe existir como descarga (no solo como recurso compartido) para sources.connect.
     let link = format!("ed2k://|file|outbound_sui.bin|9728001|{hash}|/");
     let resp = handle_request(
         &state,
@@ -660,8 +660,8 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
     .unwrap();
     assert!(resp.error.is_none());
 
-    // Mock eMule peer: RSA-384 identity, sends OP_PUBLICKEY + OP_SECIDENTSTATE
-    // challenge (state=2 → expects our pubkey then signature).
+    // Par simulado de eMule: identidad RSA-384, envía OP_PUBLICKEY + desafío
+    // OP_SECIDENTSTATE (state=2 → espera nuestra clave pública y luego la firma).
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let peer_addr = listener.local_addr().unwrap();
 
@@ -684,7 +684,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
         let mut out = Vec::new();
         let mut ed2k_pkts = 0usize;
 
-        // 1. Wait for OP_HELLO
+        // 1. Esperar OP_HELLO
         let mut got_hello = false;
         while !got_hello {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -697,7 +697,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
             }
         }
 
-        // 2. Send HELLO_ANSWER + OP_PUBLICKEY + OP_SECIDENTSTATE(state=2)
+        // 2. Enviar HELLO_ANSWER + OP_PUBLICKEY + OP_SECIDENTSTATE(state=2)
         let ha = encoder
             .encode_hello_answer(&Ed2kHelloAnswer {
                 user_hash: [0x66u8; 16],
@@ -715,9 +715,9 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
         out.extend_from_slice(&ha.payload);
         socket.write_all(&out).await.unwrap();
 
-        // Wait until the daemon proceeds past the handshake (first ED2K packet
-        // such as OP_REQFILENAME) before issuing the SUI exchange — a real
-        // eMule challenger also acts post-handshake.
+        // Esperar a que el daemon avance más allá del protocolo de enlace (primer paquete
+        // ED2K como OP_REQFILENAME) antes de emitir el intercambio SUI — un retador
+        // eMule real también actúa tras el protocolo de enlace.
         let mut daemon_moved_on = false;
         while !daemon_moved_on {
             let n = socket.read(&mut raw_buf).await.unwrap();
@@ -753,8 +753,8 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
         out.extend_from_slice(&st_pkt.payload);
         socket.write_all(&out).await.unwrap();
 
-        // 3. Loop: answer file-status req, capture daemon OP_PUBLICKEY +
-        //    OP_SIGNATURE, accept upload, serve one part.
+        // 3. Bucle: responder petición de estado de archivo, capturar OP_PUBLICKEY +
+        //    OP_SIGNATURE del daemon, aceptar subida, servir una parte.
         let mut daemon_pubkey: Option<Vec<u8>> = None;
         let mut daemon_sig: Option<Vec<u8>> = None;
         let mut sent_filestatus = false;
@@ -815,7 +815,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
                         socket.write_all(&out).await.unwrap();
                     }
                     if pkt.opcode == 0x47 || pkt.opcode == 0x58 {
-                        // OP_REQUESTPARTS / EMULE variant → send a small part
+                        // OP_REQUESTPARTS / variante EMULE → enviar una parte pequeña
                         let sp = encoder
                             .encode_sending_part(&mule_protocol::ed2k::Ed2kSendingPart::new(
                                 hash_bytes,
@@ -840,7 +840,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
         (daemon_pubkey, daemon_sig)
     });
 
-    // Connect outbound to the mock peer.
+    // Conectar saliente al par simulado.
     let req = make_req(
         1,
         "sources.connect",
@@ -859,8 +859,8 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
     let daemon_pubkey = daemon_pubkey.expect("Daemon must send OP_PUBLICKEY on state=2 challenge");
     let daemon_sig = daemon_sig.expect("Daemon must send OP_SIGNATURE answering the challenge");
 
-    // The signature must verify against the peer's pubkey over
-    // `peer_pubkey || challenge_le` and must have been made by OUR key.
+    // La firma debe verificarse contra la clave pública del par sobre
+    // `peer_pubkey || challenge_le` y debe haber sido creada con NUESTRA clave.
     let payload = mule_crypto::legacy_sui::build_sui_signing_payload(
         mule_crypto::legacy_sui::SecureIdentVersion::V1,
         &peer_pub_der,
@@ -874,7 +874,7 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
     mule_crypto::legacy_sui::verify_sui_signature(&daemon_pubkey_parsed, &payload, &daemon_sig)
         .expect("Daemon signature must verify under its own public key");
 
-    // The pubkey sent must be the daemon's actual identity key.
+    // La clave pública enviada debe ser la clave de identidad real del daemon.
     let daemon_real_pub = {
         let id = state.identity.lock().await;
         id.public_key_bytes().to_vec()
@@ -882,10 +882,10 @@ async fn test_outbound_secure_ident_answers_peer_challenge() {
     assert_eq!(daemon_pubkey, daemon_real_pub);
 }
 
-/// Outbound verifier role: when the peer announces SecIdent support in its
-/// HELLO_ANSWER (MiscOptions1 bits 16-19), the daemon issues an
-/// OP_SECIDENTSTATE challenge after the handshake — mirroring eMule
-/// `InfoPacketsReceived` / `SendSecIdentStatePacket` (state=2 = need key+sig).
+/// Rol de verificador saliente: cuando el par anuncia soporte SecIdent en su
+/// HELLO_ANSWER (MiscOptions1 bits 16-19), el demonio emite un
+/// desafío OP_SECIDENTSTATE tras el saludo — replicando eMule
+/// `InfoPacketsReceived` / `SendSecIdentStatePacket` (state=2 = necesita clave+firma).
 #[tokio::test]
 async fn test_outbound_secure_ident_challenges_peer_when_advertised() {
     let (state, _dir, hash) = share_state("test_token_secure_ident", "secure_shared_data.bin", 18874368, &vec![0x5Au8; 18874368], "41d6cfe0d16ae931b73c59d7e0c089c1").await;
@@ -1217,7 +1217,7 @@ async fn test_inbound_sui_tier1_malformed_replay_and_wrong_challenge() {
         "verified peer must have a credit record"
     );
 
-    // E. Replay: a second signature from the same IP is flood-rejected.
+    // E. Reproducción: una segunda firma desde la misma IP se rechaza por saturación.
     send_frame(&mut client, sp2.protocol, sp2.opcode, &sp2.payload).await;
     assert_eq!(
         read_state(&mut client, &mut read_buf, &mut raw_buf, &codec, &decoder).await,

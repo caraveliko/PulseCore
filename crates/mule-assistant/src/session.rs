@@ -29,62 +29,62 @@ use crate::llm::{ChatMessage, LlmBackend, Role, ToolCall, ToolSchema};
 use crate::policy;
 use crate::tools_bridge;
 
-/// Events émis par la session vers le transport (REPL, WebSocket) —
-/// sérialisés tels quels en notifications `assistant.event` côté WS.
+/// Eventos emitidos por la sesión hacia el transporte (REPL, WebSocket):
+/// serializados tal cual en notificaciones `assistant.event` en el WS.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AssistantEvent {
-    /// Fragment de texte généré par le modèle (streaming).
+    /// Fragmento de texto generado por el modelo (streaming).
     Token {
-        /// Fragment reçu.
+        /// Fragmento recibido.
         content: String,
     },
-    /// Début d'exécution d'un outil — émis immédiatement après
-    /// validation, sans attendre la fin de l'appel RPC.
+    /// Inicio de ejecución de una herramienta: emitido inmediatamente tras
+    /// la validación, sin esperar al fin de la llamada RPC.
     ToolStart {
-        /// Nom de l'outil.
+        /// Nombre de la herramienta.
         name: String,
-        /// Arguments exacts transmis au daemon.
+        /// Argumentos exactos transmitidos al daemon.
         args: Value,
     },
-    /// Résultat complet d'un outil (le modèle reçoit la version tronquée).
+    /// Resultado completo de una herramienta (el modelo recibe la versión truncada).
     ToolResult {
-        /// Nom de l'outil.
+        /// Nombre de la herramienta.
         name: String,
-        /// Vrai si l'appel a échoué ou a été refusé/annulé.
+        /// Verdadero si la llamada falló o fue rechazada/cancelada.
         is_error: bool,
-        /// Contenu intégral du résultat.
+        /// Contenido íntegro del resultado.
         content: String,
     },
-    /// Réponse textuelle finale du tour.
+    /// Respuesta textual final del turno.
     Final {
-        /// Réponse complète (après assemblage des tokens).
+        /// Respuesta completa (tras ensamblar los tokens).
         content: String,
     },
-    /// Information de fin de tour sans réponse (limite de rounds…).
+    /// Información de fin de turno sin respuesta (límite de rondas…).
     Notice {
-        /// Message explicatif.
+        /// Mensaje explicativo.
         message: String,
     },
-    /// Erreur fatale du tour (backend, daemon).
+    /// Error fatal del turno (backend, daemon).
     Error {
-        /// Message d'erreur.
+        /// Mensaje de error.
         message: String,
     },
 }
 
-/// Demande de confirmation remontée au transport : l'utilisateur tranche
-/// sur les arguments exacts de l'appel.
+/// Solicitud de confirmación remitida al transporte: el usuario decide
+/// sobre los argumentos exactos de la llamada.
 pub struct ConfirmRequest {
-    /// Appel proposé par le modèle (nom + arguments affichés tels quels).
+    /// Llamada propuesta por el modelo (nombre + argumentos mostrados tal cual).
     pub call: ToolCall,
-    /// Canal de réponse : `true` = exécuter, `false`/`closed` = refuser.
+    /// Canal de respuesta: `true` = ejecutar, `false`/`closed` = rechazar.
     pub respond: oneshot::Sender<bool>,
 }
 
-/// Session de conversation : historique, outils visibles et client
-/// daemon. Une session = un historique ; le transport (REPL/WS) ne fait
-/// qu'acheminer entrées, events et confirmations.
+/// Sesión de conversación: historial, herramientas visibles y cliente
+/// del daemon. Una sesión = un historial; el transporte (REPL/WS) solo
+/// encamina entradas, eventos y confirmaciones.
 pub struct Session {
     daemon: DaemonClient,
     backend: Box<dyn LlmBackend>,
@@ -95,9 +95,9 @@ pub struct Session {
 }
 
 impl Session {
-    /// Connexion au daemon puis construction de la surface d'outils :
-    /// les capacités sont lues via `system.status` (le `system.hello`
-    /// interne de `DaemonClient` ne conserve pas sa réponse).
+    /// Conexión al daemon y posterior construcción de la superficie de herramientas:
+    /// las capacidades se leen mediante `system.status` (el `system.hello`
+    /// interno de `DaemonClient` no conserva su respuesta).
     pub async fn connect(
         backend: Box<dyn LlmBackend>,
         config: AssistantConfig,
@@ -127,15 +127,15 @@ impl Session {
         })
     }
 
-    /// Nombre d'outils actuellement présentés au modèle (diagnostic).
+    /// Cantidad de herramientas presentadas actualmente al modelo (diagnóstico).
     pub fn visible_tool_count(&self) -> usize {
         self.tools.len()
     }
 
-    /// Bouche les `tool_calls` restés sans résultat après annulation
-    /// d'un tour : les APIs exigent un message `tool` par appel demandé,
-    /// sinon l'historique garderait des appels pendants que le modèle
-    /// pourrait rejouer ou rejeter.
+    /// Sella los `tool_calls` que quedaron sin resultado tras la cancelación
+    /// de un turno: las API exigen un mensaje `tool` por cada llamada solicitada;
+    /// de lo contrario, el historial conservaría llamadas pendientes que el modelo
+    /// podría reproducir o rechazar.
     pub fn seal_cancelled_turn(&mut self) {
         let Some(idx) = self
             .history
@@ -144,8 +144,8 @@ impl Session {
         else {
             return;
         };
-        // Exécution séquentielle : les messages Tool postérieurs comptent
-        // les appels déjà répondus, le reste est pendant.
+        // Ejecución secuencial: los mensajes Tool posteriores contabilizan
+        // las llamadas ya respondidas; el resto queda pendiente.
         let answered = self.history[idx + 1..]
             .iter()
             .filter(|m| m.role == Role::Tool)
@@ -162,8 +162,8 @@ impl Session {
         }
     }
 
-    /// Rafraîchit capacités et outils visibles — à appeler après une
-    /// reconnexion ou un changement de flavor du daemon.
+    /// Actualiza las capacidades y herramientas visibles; llamar tras una
+    /// reconexión o cambio de variante (flavor) del daemon.
     pub async fn refresh_capabilities(&mut self) {
         self.capabilities = fetch_capabilities(&self.daemon).await;
         self.tools = policy::visible_tools(self.config.tool_profile, &self.capabilities)
@@ -172,11 +172,11 @@ impl Session {
             .collect();
     }
 
-    /// Un tour utilisateur complet, borné par `config.max_tool_rounds`.
+    /// Un turno de usuario completo, acotado por `config.max_tool_rounds`.
     ///
-    /// `events` reçoit tokens, débuts/fins d'outils et réponse finale ;
-    /// `confirms` reçoit les demandes de confirmation — sans répondeur
-    /// (canal fermé), tout outil à confirmer est refusé (défaut sûr).
+    /// `events` recibe tokens, inicios/fines de herramientas y respuesta final;
+    /// `confirms` recibe las solicitudes de confirmación: sin respondedor
+    /// (canal cerrado), cualquier herramienta por confirmar se rechaza (por defecto seguro).
     pub async fn user_turn(
         &mut self,
         input: &str,
@@ -210,8 +210,8 @@ impl Session {
                 );
             }
 
-            // Historique : le message assistant complet AVANT les
-            // résultats d'outils (exigence des APIs natives).
+            // Historial: el mensaje del asistente completo ANTES de los
+            // resultados de herramientas (requisito de las API nativas).
             self.history.push(ChatMessage::assistant(&turn));
 
             if turn.tool_calls.is_empty() {
@@ -235,22 +235,22 @@ impl Session {
         Ok(())
     }
 
-    /// Exécute un appel d'outil : validation policy, confirmation
-    /// éventuelle, RPC daemon, puis empile le résultat dans l'historique.
+    /// Ejecuta una llamada a herramienta: validación de política, confirmación
+    /// eventual, RPC al daemon y apilado del resultado en el historial.
     async fn execute_one_call(
         &mut self,
         call: ToolCall,
         events: &mpsc::UnboundedSender<AssistantEvent>,
         confirms: &mpsc::Sender<ConfirmRequest>,
     ) {
-        // Validation revérifiée juste avant exécution.
+        // Validación recomprobada justo antes de la ejecución.
         if let Err(e) = policy::check_call(self.config.tool_profile, &self.capabilities, &call.name)
         {
             self.push_tool_outcome(&call.name, true, &e.to_string(), events);
             return;
         }
 
-        // Confirmation utilisateur sur les arguments exacts.
+        // Confirmación del usuario sobre los argumentos exactos.
         if policy::requires_confirmation(&call.name) {
             let (tx, rx) = oneshot::channel();
             if confirms
@@ -302,14 +302,14 @@ impl Session {
             content: full_text,
         });
 
-        // Le modèle reçoit la version compactée/tronquée.
+        // El modelo recibe la versión compactada/truncada.
         let compacted = tools_bridge::compact_tool_result(&result, self.config.tool_result_max_chars);
         self.history.push(ChatMessage::tool(&call.name, compacted));
     }
 
-    /// Empile un résultat d'outil refusé/annulé et émet l'event
-    /// correspondant — le modèle voit le refus comme un résultat, la
-    /// boucle ne casse pas.
+    /// Apila un resultado de herramienta rechazado/cancelado y emite el evento
+    /// correspondiente: el modelo ve el rechazo como un resultado, el bucle
+    /// no se rompe.
     fn push_tool_outcome(
         &mut self,
         tool_name: &str,
@@ -326,9 +326,9 @@ impl Session {
     }
 }
 
-/// Lit les capacités du daemon via `system.status` — en cas d'échec,
-/// ensemble vide (les outils à capacité requise seront masqués, défaut
-/// sûr) et warning tracé.
+/// Lee las capacidades del daemon mediante `system.status`: en caso de fallo,
+/// conjunto vacío (las herramientas con capacidad requerida se ocultarán, por
+/// defecto seguro) y aviso registrado.
 async fn fetch_capabilities(daemon: &DaemonClient) -> Vec<String> {
     match daemon.call("system.status", json!({})).await {
         Ok(res) => res

@@ -6,7 +6,7 @@
 use mule_daemon::rpc::types::JsonRpcRequest;
 use serde_json::{json, Value};
 
-/// Construit une `JsonRpcRequest` d'id numérique `id` pour `method`.
+/// Construye una `JsonRpcRequest` con id numérico `id` para `method`.
 pub fn make_req(id: u64, method: &str, params: Option<Value>) -> JsonRpcRequest {
     JsonRpcRequest {
         jsonrpc: "2.0".to_string(),

@@ -62,14 +62,14 @@ async fn recv_json(
     }
 }
 
-/// Cycle complet : hello mauvais jeton → erreur ; hello bon jeton →
-/// serverInfo ; chat → events jusqu'à `assistant.turnEnd`.
+/// Ciclo completo: hello mal token → error; hello buen token →
+/// serverInfo; chat → eventos hasta `assistant.turnEnd`.
 #[tokio::test]
 async fn test_ws_chat_flow() {
     let h = start_ws_server().await;
     let (mut ws, _) = connect_async(&h.ws_url).await.unwrap();
 
-    // Mauvais jeton → erreur.
+    // Token incorrecto → error.
     ws.send(Message::Text(
         json!({"id":1,"method":"assistant.hello","params":{"token":"bad"}})
             .to_string()
@@ -80,7 +80,7 @@ async fn test_ws_chat_flow() {
     let resp = recv_json(&mut ws).await;
     assert!(resp.get("error").is_some());
 
-    // Sans auth → refus.
+    // Sin autenticación → rechazo.
     ws.send(Message::Text(
         json!({"id":2,"method":"assistant.chat","params":{"text":"salut"}})
             .to_string()
@@ -91,7 +91,7 @@ async fn test_ws_chat_flow() {
     let resp = recv_json(&mut ws).await;
     assert!(resp.get("error").is_some());
 
-    // Bon jeton → serverInfo + nombre d'outils.
+    // Token correcto → serverInfo + cantidad de herramientas.
     ws.send(Message::Text(
         json!({"id":3,"method":"assistant.hello","params":{"token":TOKEN}})
             .to_string()
@@ -102,7 +102,7 @@ async fn test_ws_chat_flow() {
     let resp = recv_json(&mut ws).await;
     assert!(resp["result"]["tools"].as_u64().unwrap() > 0);
 
-    // Chat → accepted puis events jusqu'à turnEnd avec Final "pong".
+    // Chat → accepted y después eventos hasta turnEnd con Final "pong".
     ws.send(Message::Text(
         json!({"id":4,"method":"assistant.chat","params":{"text":"ping"}})
             .to_string()
@@ -138,7 +138,7 @@ async fn test_ws_chat_flow() {
     assert!(saw_turn_end, "turnEnd attendu");
 }
 
-/// Bind non loopback : `serve_ws` refuse de démarrer.
+/// Enlace (bind) no local: `serve_ws` rechaza iniciarse.
 #[tokio::test]
 async fn test_ws_bind_rejects_non_loopback() {
     let (addr, token, _dir) = spawn_test_daemon(TOKEN).await;
@@ -154,7 +154,7 @@ async fn test_ws_bind_rejects_non_loopback() {
     .await
     .unwrap();
 
-    // Bind sur une adresse non loopback → refus de configuration.
+    // Enlace en una dirección no local → rechazo de configuración.
     let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
     let res = serve_ws(listener, session, TOKEN.to_string()).await;
     assert!(res.is_err());

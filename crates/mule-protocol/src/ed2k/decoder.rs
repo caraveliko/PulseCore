@@ -55,21 +55,21 @@ pub use transfers::{
     decode_sending_part_i64,
 };
 
-/// Read-only wire decoder for eD2K protocol frames.
+/// Decodificador de red de solo lectura para tramas del protocolo eD2K.
 #[derive(Debug, Clone)]
 pub struct Ed2kDecoder {
-    /// Safety limits and resource bounds.
+    /// Límites de seguridad y fronteras de recursos.
     pub limits: Ed2kLimits,
-    /// Active compatibility profile for wire opcode and layout disambiguation.
+    /// Perfil de compatibilidad activo para la desambiguación de códigos de operación en cable y su disposición.
     pub profile: Ed2kCompatibilityProfile,
-    /// Negotiated `ExtendedRequestsVersion` of the remote peer
-    /// (eMule `m_byExtendedRequestsVer`, exchanged via `OP_EMULEINFO`).
+    /// `ExtendedRequestsVersion` negociada con el par remoto
+    /// (`m_byExtendedRequestsVer` de eMule, intercambiada mediante `OP_EMULEINFO`).
     ///
-    /// Drives deterministic parsing of the `OP_REQFILENAME` (`0x58`)
-    /// sub-request ext info inside `MULTIPACKET*` bodies:
-    /// `0` = absent, `1` = part-status bitfield, `>=2` = bitfield + complete
-    /// sources count. Defaults to `2` (eMule 0.72a capability); set to `0` to
-    /// decode captures from peers that did not negotiate extended requests.
+    /// Guía el análisis sintáctico determinista de la información extendida de la subpetición
+    /// `OP_REQFILENAME` (`0x58`) dentro de cuerpos `MULTIPACKET*`:
+    /// `0` = ausente, `1` = mapa de bits de estado de partes, `>=2` = mapa de bits + recuento
+    /// de fuentes completas. Por defecto es `2` (capacidad de eMule 0.72a); establecer a `0` para
+    /// decodificar capturas de pares que no negociaron peticiones extendidas.
     pub extended_requests_version: u8,
 }
 
@@ -84,12 +84,12 @@ impl Default for Ed2kDecoder {
 }
 
 impl Ed2kDecoder {
-    /// Creates a new decoder with default limits and default profile (`Emule072a`).
+    /// Crea un nuevo decodificador con límites y perfil predeterminados (`Emule072a`).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates a new decoder with an explicit compatibility profile and default limits.
+    /// Crea un nuevo decodificador con un perfil de compatibilidad explícito y límites predeterminados.
     pub fn with_profile(profile: Ed2kCompatibilityProfile) -> Self {
         Self {
             limits: Ed2kLimits::default(),
@@ -98,7 +98,7 @@ impl Ed2kDecoder {
         }
     }
 
-    /// Creates a new decoder with customized limits and default profile.
+    /// Crea un nuevo decodificador con límites personalizados y perfil predeterminado.
     pub fn with_limits(limits: Ed2kLimits) -> Self {
         Self {
             limits,
@@ -107,7 +107,7 @@ impl Ed2kDecoder {
         }
     }
 
-    /// Creates a new decoder with customized limits and an explicit compatibility profile.
+    /// Crea un nuevo decodificador con límites personalizados y un perfil de compatibilidad explícito.
     pub fn with_limits_and_profile(limits: Ed2kLimits, profile: Ed2kCompatibilityProfile) -> Self {
         Self {
             limits,
@@ -116,19 +116,19 @@ impl Ed2kDecoder {
         }
     }
 
-    /// Sets the negotiated `ExtendedRequestsVersion` used for `MULTIPACKET*`
-    /// ext-info parsing (`0`, `1` or `2`).
+    /// Establece la `ExtendedRequestsVersion` negociada utilizada para el análisis
+    /// sintáctico de información extendida `MULTIPACKET*` (`0`, `1` o `2`).
     pub fn with_extended_requests_version(mut self, version: u8) -> Self {
         self.extended_requests_version = version;
         self
     }
 
-    /// Decodes a framed byte slice into a typed `Ed2kMessage`.
+    /// Decodifica un fragmento de bytes entramado en un `Ed2kMessage` tipado.
     pub fn decode(&self, src: &[u8]) -> Result<Ed2kMessage, Ed2kParseError> {
         self.decode_packet(src)
     }
 
-    /// Decodes a framed byte slice into a typed `Ed2kMessage`.
+    /// Decodifica un fragmento de bytes entramado en un `Ed2kMessage` tipado.
     pub fn decode_packet(&self, src: &[u8]) -> Result<Ed2kMessage, Ed2kParseError> {
         if src.len() < HEADER_SIZE + 1 {
             return Err(Ed2kParseError::new(
@@ -457,7 +457,7 @@ impl Ed2kDecoder {
         }
     }
 
-    /// Decodes a pre-framed `RawPacket` into an `Ed2kMessage`.
+    /// Decodifica un `RawPacket` pre-entramado en un `Ed2kMessage`.
     pub fn decode_raw_packet(&self, packet: &RawPacket) -> Result<Ed2kMessage, Ed2kParseError> {
         if packet.protocol == PR_EMULE_COMPRESSED {
             return Err(Ed2kParseError::new(
@@ -834,7 +834,7 @@ impl Ed2kDecoder {
         }
     }
 
-    /// Decodes an `OP_HELLO` payload.
+    /// Decodifica una carga útil `OP_HELLO`.
     pub fn decode_hello(
         &self,
         protocol: u8,
@@ -845,7 +845,7 @@ impl Ed2kDecoder {
         decode_hello(&self.limits, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_HELLO_ANSWER` payload.
+    /// Decodifica una carga útil `OP_HELLO_ANSWER`.
     pub fn decode_hello_answer(
         &self,
         protocol: u8,
@@ -856,7 +856,7 @@ impl Ed2kDecoder {
         decode_hello_answer(&self.limits, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_EMULE_INFO` (`0xC5 0x01`) payload.
+    /// Decodifica una carga útil `OP_EMULE_INFO` (`0xC5 0x01`).
     pub fn decode_emule_info(
         &self,
         protocol: u8,
@@ -867,7 +867,7 @@ impl Ed2kDecoder {
         decode_emule_info(&self.limits, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes a file status request payload using the decoder's configured profile.
+    /// Decodifica una carga útil de petición de estado de fichero usando el perfil configurado del decodificador.
     pub fn decode_file_status_req(
         &self,
         protocol: u8,
@@ -884,7 +884,7 @@ impl Ed2kDecoder {
         )
     }
 
-    /// Decodes a file status request payload with an explicit compatibility profile.
+    /// Decodifica una carga útil de petición de estado de fichero con un perfil de compatibilidad explícito.
     pub fn decode_file_status_req_with_profile(
         &self,
         profile: Ed2kCompatibilityProfile,
@@ -896,7 +896,7 @@ impl Ed2kDecoder {
         decode_file_status_req_with_profile(profile, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_FILESTATUS` payload.
+    /// Decodifica una carga útil `OP_FILESTATUS`.
     pub fn decode_file_status(
         &self,
         protocol: u8,
@@ -907,7 +907,7 @@ impl Ed2kDecoder {
         decode_file_status(&self.limits, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_FILEREQANSNOFILE` (`0x48`) payload (16 bytes file hash).
+    /// Decodifica una carga útil `OP_FILEREQANSNOFILE` (`0x48`) (hash de fichero de 16 bytes).
     pub fn decode_file_req_ans_no_file(
         &self,
         protocol: u8,
@@ -918,7 +918,7 @@ impl Ed2kDecoder {
         decode_file_req_ans_no_file(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_REQUESTPARTS` payload using the decoder's configured profile.
+    /// Decodifica una carga útil `OP_REQUESTPARTS` usando el perfil configurado del decodificador.
     pub fn decode_request_parts(
         &self,
         protocol: u8,
@@ -929,7 +929,7 @@ impl Ed2kDecoder {
         self.decode_request_parts_with_profile(self.profile, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes a request parts payload according to an explicit `Ed2kCompatibilityProfile`.
+    /// Decodifica una carga útil de petición de partes según un `Ed2kCompatibilityProfile` explícito.
     pub fn decode_request_parts_with_profile(
         &self,
         profile: Ed2kCompatibilityProfile,
@@ -941,7 +941,7 @@ impl Ed2kDecoder {
         decode_request_parts_with_profile(profile, protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_SENDINGPART` (`0x46`) payload.
+    /// Decodifica una carga útil `OP_SENDINGPART` (`0x46`).
     pub fn decode_sending_part(
         &self,
         protocol: u8,
@@ -952,7 +952,7 @@ impl Ed2kDecoder {
         decode_sending_part(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_HASHSETREQUEST` (`0x51`) payload.
+    /// Decodifica una carga útil `OP_HASHSETREQUEST` (`0x51`).
     pub fn decode_hashset_request(
         &self,
         protocol: u8,
@@ -963,7 +963,7 @@ impl Ed2kDecoder {
         decode_hashset_request(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_HASHSETANSWER` (`0x52`) payload.
+    /// Decodifica una carga útil `OP_HASHSETANSWER` (`0x52`).
     pub fn decode_hashset_answer(
         &self,
         protocol: u8,
@@ -974,8 +974,8 @@ impl Ed2kDecoder {
         decode_hashset_answer(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_HASHSETREQUEST2` (`0xB1`, eMule protocol) payload:
-    /// `<FileIdentifier><options u8>`.
+    /// Decodifica una carga útil `OP_HASHSETREQUEST2` (`0xB1`, protocolo eMule):
+    /// `<FileIdentifier><opciones u8>`.
     pub fn decode_hashset_request2(
         &self,
         protocol: u8,
@@ -986,8 +986,8 @@ impl Ed2kDecoder {
         decode_hashset_request2(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_HASHSETANSWER2` (`0xB2`, eMule protocol) payload:
-    /// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`.
+    /// Decodifica una carga útil `OP_HASHSETANSWER2` (`0xB2`, protocolo eMule):
+    /// `<FileIdentifier><opciones u8>[<conjunto md4>][<conjunto aich>]`.
     pub fn decode_hashset_answer2(
         &self,
         protocol: u8,
@@ -998,7 +998,7 @@ impl Ed2kDecoder {
         decode_hashset_answer2(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_QUEUERANK` (`0x5C`) payload: `<rank u32>`.
+    /// Decodifica una carga útil `OP_QUEUERANK` (`0x5C`): `<rango u32>`.
     pub fn decode_queue_rank(
         &self,
         protocol: u8,
@@ -1009,8 +1009,8 @@ impl Ed2kDecoder {
         decode_queue_rank(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_QUEUERANKING` (`0x60`) payload: exactly 12 bytes,
-    /// `<rank u16><10 reserved>` (`ProcessEmuleQueueRank`, eMule 0.72a).
+    /// Decodifica una carga útil `OP_QUEUERANKING` (`0x60`): exactamente 12 bytes,
+    /// `<rango u16><10 reservados>` (`ProcessEmuleQueueRank`, eMule 0.72a).
     pub fn decode_queue_ranking(
         &self,
         protocol: u8,
@@ -1021,7 +1021,7 @@ impl Ed2kDecoder {
         decode_queue_ranking(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_AICHFILEHASHREQ` (eMule `0x9E`) payload.
+    /// Decodifica una carga útil `OP_AICHFILEHASHREQ` (eMule `0x9E`).
     pub fn decode_aich_file_hash_req(
         &self,
         protocol: u8,
@@ -1032,7 +1032,7 @@ impl Ed2kDecoder {
         decode_aich_file_hash_req(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_AICHFILEHASHANS` (eMule `0x9D`) payload.
+    /// Decodifica una carga útil `OP_AICHFILEHASHANS` (eMule `0x9D`).
     pub fn decode_aich_file_hash_res(
         &self,
         protocol: u8,
@@ -1043,7 +1043,7 @@ impl Ed2kDecoder {
         decode_aich_file_hash_res(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_AICHREQUEST` (eMule `0x9B`) payload.
+    /// Decodifica una carga útil `OP_AICHREQUEST` (eMule `0x9B`).
     pub fn decode_aich_request(
         &self,
         protocol: u8,
@@ -1054,7 +1054,7 @@ impl Ed2kDecoder {
         decode_aich_request(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_AICHANSWER` (eMule `0x9C`) payload.
+    /// Decodifica una carga útil `OP_AICHANSWER` (eMule `0x9C`).
     pub fn decode_aich_answer(
         &self,
         protocol: u8,
@@ -1065,7 +1065,7 @@ impl Ed2kDecoder {
         decode_aich_answer(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_PUBLICKEY` (`0x85`) payload.
+    /// Decodifica una carga útil `OP_PUBLICKEY` (`0x85`).
     pub fn decode_public_key(
         &self,
         protocol: u8,
@@ -1076,7 +1076,7 @@ impl Ed2kDecoder {
         decode_public_key(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_SIGNATURE` (`0x86`) payload.
+    /// Decodifica una carga útil `OP_SIGNATURE` (`0x86`).
     pub fn decode_signature(
         &self,
         protocol: u8,
@@ -1087,7 +1087,7 @@ impl Ed2kDecoder {
         decode_signature(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an `OP_SECIDENTSTATE` (`0x87`) payload.
+    /// Decodifica una carga útil `OP_SECIDENTSTATE` (`0x87`).
     pub fn decode_secident_state(
         &self,
         protocol: u8,
@@ -1098,7 +1098,7 @@ impl Ed2kDecoder {
         decode_secident_state(protocol, opcode, payload, base_offset)
     }
 
-    /// Decodes an incoming Source Exchange request (`OP_REQUESTSOURCES` or `OP_REQUESTSOURCES2`).
+    /// Decodifica una petición entrante de Source Exchange (`OP_REQUESTSOURCES` u `OP_REQUESTSOURCES2`).
     pub fn decode_request_sources(
         &self,
         protocol: u8,
@@ -1108,7 +1108,7 @@ impl Ed2kDecoder {
         super::source_exchange::decode_request_sources(protocol, opcode, payload)
     }
 
-    /// Decodes an incoming Source Exchange response (`OP_ANSWERSOURCES` or `OP_ANSWERSOURCES2`).
+    /// Decodifica una respuesta entrante de Source Exchange (`OP_ANSWERSOURCES` u `OP_ANSWERSOURCES2`).
     pub fn decode_answer_sources(
         &self,
         protocol: u8,

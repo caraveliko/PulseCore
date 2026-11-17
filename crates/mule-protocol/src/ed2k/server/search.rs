@@ -10,21 +10,21 @@ use crate::ed2k::protocol::PR_ED2K;
 use crate::ed2k::tags::{Ed2kTag, TagName, TagValue, TAG_SPECIAL_FILESIZE, TAG_SPECIAL_NAME};
 use crate::framing::RawPacket;
 
-/// Request to search files on an eD2K server (`OP_SEARCHREQUEST` = `0x16`).
+/// Petición para buscar archivos en un servidor eD2K (`OP_SEARCHREQUEST` = `0x16`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchQuery {
-    /// Text search query string.
+    /// Cadena de texto de consulta de búsqueda.
     pub term: String,
-    /// Optional minimum file size filter in bytes.
+    /// Filtro opcional de tamaño mínimo de archivo en bytes.
     pub min_size: Option<u64>,
-    /// Optional maximum file size filter in bytes.
+    /// Filtro opcional de tamaño máximo de archivo en bytes.
     pub max_size: Option<u64>,
-    /// Optional file extension / format filter (e.g. "iso", "zip").
+    /// Filtro opcional de extensión / formato de archivo (p. ej., "iso", "zip").
     pub extension: Option<String>,
 }
 
 impl SearchQuery {
-    /// Creates a simple search query by keyword.
+    /// Crea una consulta de búsqueda simple por palabra clave.
     pub fn new(term: impl Into<String>) -> Self {
         Self {
             term: term.into(),
@@ -34,7 +34,7 @@ impl SearchQuery {
         }
     }
 
-    /// Encodes the search request into a `RawPacket` as a canonical eD2K Query Tree.
+    /// Codifica la petición de búsqueda en un `RawPacket` como un árbol de consultas canónico de eD2K.
     pub fn encode(&self, limits: &Ed2kLimits) -> Result<RawPacket, Ed2kEncodeError> {
         let term_bytes = self.term.as_bytes();
         if term_bytes.len() > limits.max_string_bytes {
@@ -48,13 +48,13 @@ impl SearchQuery {
             ));
         }
 
-        // 1. Encode term leaf: 0x01 (EDONKEY_SEARCH_NAME) + u16 len + term bytes
+        // 1. Codificar la hoja del término: 0x01 (EDONKEY_SEARCH_NAME) + longitud u16 + bytes del término
         let mut term_leaf = Vec::with_capacity(3 + term_bytes.len());
         term_leaf.push(0x01);
         term_leaf.extend_from_slice(&(term_bytes.len() as u16).to_le_bytes());
         term_leaf.extend_from_slice(term_bytes);
 
-        // 2. Prepare filter leaves
+        // 2. Preparar hojas de filtro
         let mut filter_leaves = Vec::new();
 
         if let Some(min) = self.min_size {
@@ -90,7 +90,7 @@ impl SearchQuery {
             filter_leaves.push(leaf);
         }
 
-        // 3. Assemble binary tree in preorder traversal:
+        // 3. Ensamblar árbol binario en recorrido en preorden:
         let mut current_tree = term_leaf;
         for filter in filter_leaves {
             let mut new_tree = Vec::with_capacity(2 + current_tree.len() + filter.len());
@@ -118,26 +118,26 @@ impl SearchQuery {
     }
 }
 
-/// A single file result returned by the server search.
+/// Un único resultado de archivo devuelto por la búsqueda del servidor.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResultFile {
-    /// 16-byte file hash.
+    /// Hash de archivo de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Client ID of the publisher or 0.
+    /// ID de cliente del publicador o 0.
     pub client_id: u32,
-    /// Client port of the publisher or 0.
+    /// Puerto de cliente del publicador o 0.
     pub client_port: u16,
-    /// File tags (Name, Size, Sources count, etc.).
+    /// Etiquetas de archivo (nombre, tamaño, recuento de fuentes, etc.).
     pub tags: Vec<Ed2kTag>,
 }
 
 impl SearchResultFile {
-    /// Helper to extract filename from tags.
+    /// Auxiliar para extraer el nombre de archivo de las etiquetas.
     pub fn name(&self) -> Option<String> {
         crate::ed2k::tags::special_string_tag(&self.tags, TAG_SPECIAL_NAME)
     }
 
-    /// Helper to extract file size in bytes from tags.
+    /// Auxiliar para extraer el tamaño del archivo en bytes de las etiquetas.
     pub fn size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match (&t.name, &t.value) {
             (TagName::Id(TAG_SPECIAL_FILESIZE), TagValue::UInt32(v)) => Some(*v as u64),
@@ -146,7 +146,7 @@ impl SearchResultFile {
         })
     }
 
-    /// Helper to extract source count from tags.
+    /// Auxiliar para extraer el recuento de fuentes de las etiquetas.
     pub fn source_count(&self) -> Option<u32> {
         self.tags.iter().find_map(|t| {
             let is_source_tag = match &t.name {
@@ -174,9 +174,9 @@ impl SearchResultFile {
     }
 }
 
-/// Search result packet payload (`OP_SEARCH_RESULT` = `0x33`).
+/// Carga útil del paquete de resultados de búsqueda (`OP_SEARCH_RESULT` = `0x33`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
-    /// List of matched files.
+    /// Lista de archivos coincidentes.
     pub files: Vec<SearchResultFile>,
 }

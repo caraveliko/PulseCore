@@ -6,110 +6,110 @@
 use super::error::{Ed2kErrorKind, Ed2kParseError};
 use super::limits::Ed2kLimits;
 
-/// Tag data types.
+/// Tipos de datos de etiquetas.
 pub const TAGTYPE_HASH: u8 = 0x01;
-/// String tag type (2-byte length + UTF-8/ASCII bytes).
+/// Tipo de etiqueta de cadena (longitud de 2 bytes + bytes UTF-8/ASCII).
 pub const TAGTYPE_STRING: u8 = 0x02;
-/// 32-bit unsigned integer tag type.
+/// Tipo de etiqueta de entero sin signo de 32 bits.
 pub const TAGTYPE_UINT32: u8 = 0x03;
-/// 32-bit floating point tag type.
+/// Tipo de etiqueta de punto flotante de 32 bits.
 pub const TAGTYPE_FLOAT32: u8 = 0x04;
-/// Boolean tag type (1 byte, historical 0x05).
+/// Tipo de etiqueta booleana (1 byte, histórico 0x05).
 pub const TAGTYPE_BOOL: u8 = 0x05;
-/// Boolean array tag type (1 byte, historical 0x06).
+/// Tipo de etiqueta de array booleano (1 byte, histórico 0x06).
 pub const TAGTYPE_BOOLARRAY: u8 = 0x06;
-/// Raw byte blob tag type (4-byte length + bytes).
+/// Tipo de etiqueta de blob de bytes sin procesar (longitud de 4 bytes + bytes).
 pub const TAGTYPE_BLOB: u8 = 0x07;
-/// 16-bit unsigned integer tag type.
+/// Tipo de etiqueta de entero sin signo de 16 bits.
 pub const TAGTYPE_UINT16: u8 = 0x08;
-/// 8-bit unsigned integer tag type.
+/// Tipo de etiqueta de entero sin signo de 8 bits.
 pub const TAGTYPE_UINT8: u8 = 0x09;
-/// Byte-sized blob tag type (1-byte length + bytes).
+/// Tipo de etiqueta de blob del tamaño de un byte (longitud de 1 byte + bytes).
 pub const TAGTYPE_BSOB: u8 = 0x0A;
-/// 64-bit unsigned integer tag type.
+/// Tipo de etiqueta de entero sin signo de 64 bits.
 pub const TAGTYPE_UINT64: u8 = 0x0B;
-/// Fixed-length string tag type base (TAGTYPE_STR1 = 0x11, len = tag_type - 0x10).
+/// Base del tipo de etiqueta de cadena de longitud fija (TAGTYPE_STR1 = 0x11, longitud = tag_type - 0x10).
 pub const TAGTYPE_STR1: u8 = 0x11;
 
-/// Standard special tag IDs (when tag name length is 1).
+/// Identificadores de etiquetas especiales estándar (cuando la longitud del nombre de etiqueta es 1).
 pub const TAG_SPECIAL_NAME: u8 = 0x01;
-/// Standard special file size tag ID.
+/// Identificador de etiqueta especial estándar de tamaño de fichero.
 pub const TAG_SPECIAL_FILESIZE: u8 = 0x02;
-/// Standard special file type tag ID.
+/// Identificador de etiqueta especial estándar de tipo de fichero.
 pub const TAG_SPECIAL_FILETYPE: u8 = 0x03;
-/// High 32 bits of the file size for large files (`FT_FILESIZE_HI`, `0x3A`).
+/// 32 bits superiores del tamaño de fichero para ficheros grandes (`FT_FILESIZE_HI`, `0x3A`).
 pub const TAG_SPECIAL_FILESIZE_HI: u8 = 0x3A;
-/// Standard special port tag ID (`0x0F` = 15).
+/// Identificador de etiqueta especial estándar de puerto (`0x0F` = 15).
 pub const TAG_SPECIAL_PORT: u8 = 0x0F;
-/// Standard special version tag ID (`0x11` = 17).
+/// Identificador de etiqueta especial estándar de versión (`0x11` = 17).
 pub const TAG_SPECIAL_VERSION: u8 = 0x11;
-/// Canonical eD2K / eMule server flags tag ID (`0x20` = 32, CT_SERVER_FLAGS).
+/// Identificador de etiqueta especial canónico de indicadores de servidor eD2K / eMule (`0x20` = 32, CT_SERVER_FLAGS).
 pub const TAG_SPECIAL_SERVER_FLAGS: u8 = 0x20;
-/// Standard special eMule version tag ID (`0x5A` = 90, SO_EMULEVERSION).
+/// Identificador de etiqueta especial estándar de versión de eMule (`0x5A` = 90, SO_EMULEVERSION).
 pub const TAG_SPECIAL_EMULE_VERSION: u8 = 0x5A;
-/// Standard special miscellaneous options 1 tag ID (historical 0x5B).
+/// Identificador de etiqueta especial estándar de opciones misceláneas 1 (histórico 0x5B).
 pub const TAG_SPECIAL_MISCOPTIONS1: u8 = 0x5B;
-/// Standard special miscellaneous options 2 tag ID (historical 0x5C).
+/// Identificador de etiqueta especial estándar de opciones misceláneas 2 (histórico 0x5C).
 pub const TAG_SPECIAL_MISCOPTIONS2: u8 = 0x5C;
-/// Canonical eMule UDP ports tag ID (`0xF9` = 249).
+/// Identificador de etiqueta canónico de puertos UDP de eMule (`0xF9` = 249).
 pub const TAG_SPECIAL_EMULE_UDPPORTS: u8 = 0xF9;
-/// Canonical eMule miscellaneous options 1 tag ID (`0xFA` = 250).
+/// Identificador de etiqueta canónico de opciones misceláneas 1 de eMule (`0xFA` = 250).
 pub const TAG_SPECIAL_EMULE_MISCOPTIONS1: u8 = 0xFA;
-/// Canonical eMule version tag ID for server login (`0xFB` = 251, CT_EMULE_VERSION).
+/// Identificador de etiqueta canónico de versión de eMule para inicio de sesión en servidor (`0xFB` = 251, CT_EMULE_VERSION).
 pub const TAG_SPECIAL_CT_EMULE_VERSION: u8 = 0xFB;
-/// Canonical eMule UDP options / flags tag ID (`0xFB` = 251).
+/// Identificador de etiqueta canónico de opciones / indicadores UDP de eMule (`0xFB` = 251).
 pub const TAG_SPECIAL_EMULE_UDPOPTIONS: u8 = 0xFB;
-/// Standard special UDP options / port tag ID (alias to 0xFB).
+/// Identificador de etiqueta especial estándar de opciones / puerto UDP (alias de 0xFB).
 pub const TAG_SPECIAL_UDPOPTIONS: u8 = 0xFB;
-/// Canonical eMule miscellaneous options 2 tag ID (`0xFE` = 254).
+/// Identificador de etiqueta canónico de opciones misceláneas 2 de eMule (`0xFE` = 254).
 pub const TAG_SPECIAL_EMULE_MISCOPTIONS2: u8 = 0xFE;
-/// Canonical eMule extension compression tag ID (`0x20` = 32).
+/// Identificador de etiqueta canónico de extensión de compresión de eMule (`0x20` = 32).
 pub const TAG_SPECIAL_EMULE_EXT_COMPRESSION: u8 = 0x20;
-/// Canonical eMule extension UDP version tag ID (`0x21` = 33).
+/// Identificador de etiqueta canónico de extensión de versión UDP de eMule (`0x21` = 33).
 pub const TAG_SPECIAL_EMULE_EXT_UDPVER: u8 = 0x21;
-/// Canonical eMule extension UDP port tag ID (`0x22` = 34).
+/// Identificador de etiqueta canónico de extensión de puerto UDP de eMule (`0x22` = 34).
 pub const TAG_SPECIAL_EMULE_EXT_UDPPORT: u8 = 0x22;
-/// Canonical eMule extension source exchange tag ID (`0x23` = 35).
+/// Identificador de etiqueta canónico de extensión de intercambio de fuentes de eMule (`0x23` = 35).
 pub const TAG_SPECIAL_EMULE_EXT_SOURCEEXCHANGE: u8 = 0x23;
-/// Canonical eMule extension comments tag ID (`0x24` = 36).
+/// Identificador de etiqueta canónico de extensión de comentarios de eMule (`0x24` = 36).
 pub const TAG_SPECIAL_EMULE_EXT_COMMENTS: u8 = 0x24;
-/// Canonical eMule extension extended requests tag ID (`0x25` = 37).
+/// Identificador de etiqueta canónico de extensión de peticiones extendidas de eMule (`0x25` = 37).
 pub const TAG_SPECIAL_EMULE_EXT_EXTENDEDREQUEST: u8 = 0x25;
-/// Canonical eMule extension compatible client tag ID (`0x26` = 38, `ET_COMPATIBLECLIENT`).
+/// Identificador de etiqueta canónico de extensión de cliente compatible de eMule (`0x26` = 38, `ET_COMPATIBLECLIENT`).
 pub const TAG_SPECIAL_EMULE_EXT_COMPATIBLECLIENT: u8 = 0x26;
-/// Canonical eMule extension feature flags tag ID (`0x27` = 39, `ET_FEATURES`).
+/// Identificador de etiqueta canónico de extensión de indicadores de características de eMule (`0x27` = 39, `ET_FEATURES`).
 pub const TAG_SPECIAL_EMULE_EXT_FEATURES: u8 = 0x27;
 
-/// Server capability flag: Zlib TCP compression supported.
+/// Indicador de capacidad del servidor: soporte de compresión TCP con Zlib.
 pub const SRVCAP_ZLIB: u32 = 0x0001;
-/// Server capability flag: Client sends IP in login.
+/// Indicador de capacidad del servidor: el cliente envía la IP en el inicio de sesión.
 pub const SRVCAP_IP_IN_LOGIN: u32 = 0x0002;
-/// Server capability flag: Auxiliary port support.
+/// Indicador de capacidad del servidor: soporte de puerto auxiliar.
 pub const SRVCAP_AUXPORT: u32 = 0x0004;
-/// Server capability flag: Modern tag format supported.
+/// Indicador de capacidad del servidor: soporte de formato moderno de etiquetas.
 pub const SRVCAP_NEWTAGS: u32 = 0x0008;
-/// Server capability flag: Unicode character support.
+/// Indicador de capacidad del servidor: soporte de caracteres Unicode.
 pub const SRVCAP_UNICODE: u32 = 0x0010;
-/// Server capability flag: Files larger than 4 GiB supported.
+/// Indicador de capacidad del servidor: soporte de ficheros mayores de 4 GiB.
 pub const SRVCAP_LARGEFILES: u32 = 0x0100;
-/// Server capability flag: Cryptographic obfuscation supported.
+/// Indicador de capacidad del servidor: soporte de ofuscación criptográfica.
 pub const SRVCAP_SUPPORTCRYPT: u32 = 0x0200;
-/// Server capability flag: Cryptographic obfuscation requested.
+/// Indicador de capacidad del servidor: ofuscación criptográfica solicitada.
 pub const SRVCAP_REQUESTCRYPT: u32 = 0x0400;
-/// Server capability flag: Cryptographic obfuscation required.
+/// Indicador de capacidad del servidor: ofuscación criptográfica requerida.
 pub const SRVCAP_REQUIRECRYPT: u32 = 0x0800;
 
-/// Tag name identifier: either a 1-byte special ID or a textual string.
+/// Identificador de nombre de etiqueta: o bien un ID especial de 1 byte o una cadena de texto.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagName {
-    /// Special 1-byte standardized tag identifier.
+    /// Identificador de etiqueta estandarizado especial de 1 byte.
     Id(u8),
-    /// Textual tag name string.
+    /// Cadena de texto con el nombre de la etiqueta.
     Text(String),
 }
 
 impl TagName {
-    /// Returns a human-readable display string for this tag name.
+    /// Devuelve una cadena legible para visualización de este nombre de etiqueta.
     pub fn display_name(&self) -> String {
         match self {
             Self::Id(id) => match *id {
@@ -142,59 +142,59 @@ impl TagName {
     }
 }
 
-/// Parsed typed value of an eD2K tag.
+/// Valor tipado analizado de una etiqueta eD2K.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TagValue {
-    /// 16-byte MD4 hash.
+    /// Hash MD4 de 16 bytes.
     Hash([u8; 16]),
-    /// UTF-8 or decoded string.
+    /// Cadena UTF-8 o decodificada.
     String(String),
-    /// 32-bit unsigned integer.
+    /// Entero sin signo de 32 bits.
     UInt32(u32),
-    /// 32-bit floating point.
+    /// Punto flotante de 32 bits.
     Float32(f32),
-    /// Boolean flag.
+    /// Indicador booleano.
     Bool(bool),
-    /// Byte buffer blob.
+    /// Blob de búfer de bytes.
     Blob(Vec<u8>),
-    /// 16-bit unsigned integer.
+    /// Entero sin signo de 16 bits.
     UInt16(u16),
-    /// 8-bit unsigned integer.
+    /// Entero sin signo de 8 bits.
     UInt8(u8),
-    /// 64-bit unsigned integer.
+    /// Entero sin signo de 64 bits.
     UInt64(u64),
 }
 
-/// A fully typed eD2K tag.
+/// Una etiqueta eD2K totalmente tipada.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ed2kTag {
-    /// Tag identifier or name.
+    /// Identificador o nombre de la etiqueta.
     pub name: TagName,
-    /// Typed tag payload value.
+    /// Valor de carga útil de la etiqueta tipado.
     pub value: TagValue,
 }
 
-/// Raw representation of an unknown or unrecognized tag to ensure no data loss.
+/// Representación sin procesar de una etiqueta desconocida o no reconocida para garantizar que no se pierdan datos.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawTag {
-    /// Raw type byte.
+    /// Byte de tipo sin procesar.
     pub tag_type: u8,
-    /// Tag identifier or name.
+    /// Identificador o nombre de la etiqueta.
     pub name: TagName,
-    /// Unparsed raw payload bytes.
+    /// Bytes de carga útil sin procesar no analizados.
     pub raw_bytes: Vec<u8>,
 }
 
-/// Finds a recognized tag in `tags` by its display name (e.g. `"Nick"`).
+/// Busca una etiqueta reconocida en `tags` por su nombre de visualización (p. ej. `"Nick"`).
 ///
-/// Single implementation shared by `Ed2kHello`, `Ed2kHelloAnswer`,
-/// `Ed2kEmuleInfo` and `Ed2kPeerInfo` `find_tag` accessors.
+/// Implementación única compartida por los accesores `find_tag` de `Ed2kHello`, `Ed2kHelloAnswer`,
+/// `Ed2kEmuleInfo` y `Ed2kPeerInfo`.
 pub fn find_tag_by_name<'a>(tags: &'a [Ed2kTag], display_name: &str) -> Option<&'a Ed2kTag> {
     tags.iter().find(|t| t.name.display_name() == display_name)
 }
 
-/// Extracts the string payload of a special (numeric-id) tag such as
-/// `TAG_SPECIAL_NAME`; `None` when absent or when the payload is not a string.
+/// Extrae la carga útil de cadena de una etiqueta especial (con identificador numérico) como
+/// `TAG_SPECIAL_NAME`; `None` cuando está ausente o cuando la carga útil no es una cadena.
 pub fn special_string_tag(tags: &[Ed2kTag], tag_id: u8) -> Option<String> {
     tags.iter().find_map(|t| match (&t.name, &t.value) {
         (TagName::Id(id), TagValue::String(s)) if *id == tag_id => Some(s.clone()),
@@ -202,7 +202,7 @@ pub fn special_string_tag(tags: &[Ed2kTag], tag_id: u8) -> Option<String> {
     })
 }
 
-/// Helper reader for safe tag extraction from a byte slice.
+/// Lector auxiliar para la extracción segura de etiquetas de un fragmento de bytes.
 pub struct TagReader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -211,7 +211,7 @@ pub struct TagReader<'a> {
 }
 
 impl<'a> TagReader<'a> {
-    /// Creates a new `TagReader` starting at `offset`.
+    /// Crea un nuevo `TagReader` comenzando en `offset`.
     pub fn new(buf: &'a [u8], offset: usize, protocol: u8, opcode: Option<u8>) -> Self {
         Self {
             buf,
@@ -221,31 +221,31 @@ impl<'a> TagReader<'a> {
         }
     }
 
-    /// Returns the current read position offset.
+    /// Devuelve el desplazamiento de posición de lectura actual.
     #[inline]
     pub fn pos(&self) -> usize {
         self.pos
     }
 
-    /// Returns the protocol byte this reader was created for.
+    /// Devuelve el byte de protocolo para el que se creó este lector.
     #[inline]
     pub fn protocol(&self) -> u8 {
         self.protocol
     }
 
-    /// Returns the opcode context this reader was created for, if any.
+    /// Devuelve el contexto del código de operación para el que se creó este lector, si existe.
     #[inline]
     pub fn opcode(&self) -> Option<u8> {
         self.opcode
     }
 
-    /// Returns the number of remaining bytes.
+    /// Devuelve el número de bytes restantes.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.buf.len().saturating_sub(self.pos)
     }
 
-    /// Reads exactly `n` bytes from the buffer.
+    /// Lee exactamente `n` bytes del búfer.
     pub fn read_bytes(
         &mut self,
         n: usize,
@@ -269,18 +269,18 @@ impl<'a> TagReader<'a> {
         Ok(&self.buf[start..self.pos])
     }
 
-    /// Peeks at the next byte without advancing the reader.
+    /// Echa un vistazo al siguiente byte sin avanzar el lector.
     pub fn peek_u8(&self) -> Option<u8> {
         self.buf.get(self.pos).copied()
     }
 
-    /// Reads a single byte.
+    /// Lee un solo byte.
     pub fn read_u8(&mut self, context: &'static str) -> Result<u8, Ed2kParseError> {
         let bytes = self.read_bytes(1, context)?;
         Ok(bytes[0])
     }
 
-    /// Reads exactly `N` bytes into a fixed-size array.
+    /// Lee exactamente `N` bytes en un array de tamaño fijo.
     fn read_arr<const N: usize>(&mut self, context: &'static str) -> Result<[u8; N], Ed2kParseError> {
         let bytes = self.read_bytes(N, context)?;
         let mut arr = [0u8; N];
@@ -288,32 +288,32 @@ impl<'a> TagReader<'a> {
         Ok(arr)
     }
 
-    /// Reads a little-endian 16-bit unsigned integer.
+    /// Lee un entero sin signo de 16 bits en little-endian.
     pub fn read_u16_le(&mut self, context: &'static str) -> Result<u16, Ed2kParseError> {
         Ok(u16::from_le_bytes(self.read_arr(context)?))
     }
 
-    /// Reads a little-endian 32-bit unsigned integer.
+    /// Lee un entero sin signo de 32 bits en little-endian.
     pub fn read_u32_le(&mut self, context: &'static str) -> Result<u32, Ed2kParseError> {
         Ok(u32::from_le_bytes(self.read_arr(context)?))
     }
 
-    /// Reads a little-endian 64-bit unsigned integer.
+    /// Lee un entero sin signo de 64 bits en little-endian.
     pub fn read_u64_le(&mut self, context: &'static str) -> Result<u64, Ed2kParseError> {
         Ok(u64::from_le_bytes(self.read_arr(context)?))
     }
 
-    /// Reads a little-endian 32-bit float.
+    /// Lee un flotante de 32 bits en little-endian.
     pub fn read_f32_le(&mut self, context: &'static str) -> Result<f32, Ed2kParseError> {
         Ok(f32::from_le_bytes(self.read_arr(context)?))
     }
 
-    /// Reads a 16-byte MD4 hash.
+    /// Lee un hash MD4 de 16 bytes.
     pub fn read_hash(&mut self, context: &'static str) -> Result<[u8; 16], Ed2kParseError> {
         self.read_arr(context)
     }
 
-    /// Reads a length-prefixed string (16-bit LE length + UTF-8/lossy bytes), enforcing `max_string_bytes`.
+    /// Lee una cadena prefijada por su longitud (longitud LE de 16 bits + bytes UTF-8/con pérdidas), aplicando `max_string_bytes`.
     pub fn read_string(
         &mut self,
         max_string_bytes: usize,
@@ -336,7 +336,7 @@ impl<'a> TagReader<'a> {
         Ok(String::from_utf8_lossy(raw).into_owned())
     }
 
-    /// Reads a tag name (length 1 = special ID, length > 1 = string).
+    /// Lee un nombre de etiqueta (longitud 1 = ID especial, longitud > 1 = cadena).
     pub fn read_tag_name(&mut self, max_string_bytes: usize) -> Result<TagName, Ed2kParseError> {
         let name_len = self.read_u16_le("tag_name_len")? as usize;
         if name_len == 1 {
@@ -361,10 +361,10 @@ impl<'a> TagReader<'a> {
         }
     }
 
-    /// Parses a single tag from the input stream.
+    /// Analiza una sola etiqueta del flujo de entrada.
     ///
-    /// If the tag type is unknown, it returns `Ok((None, Some(raw_tag)))`.
-    /// If recognized, it returns `Ok((Some(ed2k_tag), None))`.
+    /// Si el tipo de etiqueta es desconocido, devuelve `Ok((None, Some(raw_tag)))`.
+    /// Si es reconocido, devuelve `Ok((Some(ed2k_tag), None))`.
     pub fn read_tag(
         &mut self,
         limits: &Ed2kLimits,
@@ -507,7 +507,7 @@ impl<'a> TagReader<'a> {
                 ))
             }
             unknown => {
-                // Return as a RawTag if length cannot be resolved or if invalid
+                // Devuelve como un RawTag si la longitud no se puede resolver o si no es válido
                 Err(Ed2kParseError::new(
                     self.protocol,
                     self.opcode,

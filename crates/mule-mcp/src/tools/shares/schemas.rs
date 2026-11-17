@@ -7,7 +7,7 @@ use crate::protocol::ToolDefinition;
 use crate::tools::{obj_schema, prop};
 use serde_json::json;
 
-/// Returns the schema definitions for all share/source/network tools.
+/// Devuelve las definiciones de esquema para todas las herramientas de compartidos/fuentes/red.
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {

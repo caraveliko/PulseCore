@@ -9,23 +9,23 @@ use std::time::{Duration, Instant};
 
 use mule_network_policy::SocketPermit;
 
-/// Maximum active peer connections per file hash (hard safety ceiling).
+/// Máximo de conexiones activas de pares por hash de archivo (límite de seguridad estricto).
 pub const MAX_PEERS_PER_DOWNLOAD: usize = 400;
 
-/// Maximum active peer connections across the entire daemon.
+/// Máximo de conexiones activas de pares en todo el daemon.
 pub const MAX_GLOBAL_PEERS: usize = 500;
 
-/// Maximum read buffer capacity for incoming peer data (256 KiB) to prevent OOM.
+/// Capacidad máxima del búfer de lectura para datos entrantes del par (256 KiB) para evitar OOM.
 pub const MAX_PEER_READ_BUFFER_SIZE: usize = 256 * 1024;
 
-/// Intervalle minimal entre deux `DownloadUpdated`/`PeerSessionUpdated`
-/// émis pour un même fichier par le hot path de transfert : les sessions
-/// multiples d'un download partagent un budget d'émission (la
-/// sérialisation JSON du snapshot — `parts` + `pending_ranges` — est le
-/// coût dominant par événement, payé à chaque session sinon).
+/// Intervalo mínimo entre dos eventos `DownloadUpdated`/`PeerSessionUpdated`
+/// emitidos para un mismo archivo por la ruta rápida de transferencia: las sesiones
+/// múltiples de una descarga comparten un presupuesto de emisión (la
+/// serialización JSON de la instantánea — `parts` + `pending_ranges` — es el
+/// coste dominante por evento, que de otro modo se pagaría en cada sesión).
 pub(crate) const DOWNLOAD_EVENT_INTERVAL: Duration = Duration::from_secs(1);
 
-/// Configurable granular timeouts for eD2K peer connections.
+/// Tiempos de espera granulares configurables para conexiones de pares eD2K.
 #[derive(Debug, Clone, Copy)]
 pub struct PeerTimeouts {
     pub connect_timeout: Duration,
@@ -42,21 +42,21 @@ impl Default for PeerTimeouts {
             connect_timeout: Duration::from_secs(10),
             handshake_timeout: Duration::from_secs(8),
             status_timeout: Duration::from_secs(20),
-            // eMule `CClientReqSocket::CheckTimeOut` (`ListenSocket.cpp:120`)
-            // kills the socket after `CONNECTION_TIMEOUT` (40 s,
-            // `Opcodes.h:64`) without ANY send or receive — the queued state
-            // survives logically (`DS_ONQUEUE` with `socket == NULL`).
+            // `CClientReqSocket::CheckTimeOut` de eMule (`ListenSocket.cpp:120`)
+            // cierra el socket tras `CONNECTION_TIMEOUT` (40 s,
+            // `Opcodes.h:64`) sin NINGÚN envío o recepción — el estado en cola
+            // sobrevive lógicamente (`DS_ONQUEUE` con `socket == NULL`).
             queue_timeout: Duration::from_secs(40),
-            // eMule DOWNLOADTIMEOUT is ~100 s (measured from
-            // `m_dwLastBlockReceived`) — a slower cap drops trickle sources.
+            // DOWNLOADTIMEOUT de eMule es ~100 s (medido desde
+            // `m_dwLastBlockReceived`) — un límite más lento descarta fuentes lentas por goteo.
             first_data_timeout: Duration::from_secs(100),
             inactivity_timeout: Duration::from_secs(100),
         }
     }
 }
 
-/// Computes the exponential backoff cooldown in milliseconds based on fail_count.
-/// Formule: min(1_200_000, 2^(fail_count - 1) * 60_000) (1m, 2m, 4m, 8m... max 20 min)
+/// Calcula el tiempo de enfriamiento con retroceso exponencial en milisegundos según fail_count.
+/// Fórmula: min(1_200_000, 2^(fail_count - 1) * 60_000) (1m, 2m, 4m, 8m... máx 20 min)
 pub fn calculate_backoff_cooldown_ms(fail_count: u32) -> i64 {
     if fail_count == 0 {
         return 0;
@@ -67,26 +67,26 @@ pub fn calculate_backoff_cooldown_ms(fail_count: u32) -> i64 {
     (base * factor).min(1_200_000)
 }
 
-/// Current lifecycle status of an eD2K peer connection.
+/// Estado actual del ciclo de vida de una conexión de par eD2K.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PeerConnectionStatus {
-    /// No peer connection active.
+    /// Ninguna conexión de par activa.
     Disconnected,
-    /// TCP socket connect in progress.
+    /// Conexión de socket TCP en curso.
     Connecting,
-    /// Handshake (OP_HELLO / OP_HELLO_ANSWER) in progress.
+    /// Apretón de manos (OP_HELLO / OP_HELLO_ANSWER) en curso.
     Handshaking,
-    /// Queued on remote peer (OP_QUEUERANKING / waiting for upload slot).
+    /// En cola en el par remoto (OP_QUEUERANKING / esperando ranura de subida).
     Queued,
-    /// Active block downloading (OP_REQUESTPARTS / OP_SENDINGPART).
+    /// Descarga activa de bloques (OP_REQUESTPARTS / OP_SENDINGPART).
     Transferring,
-    /// Teardown in progress.
+    /// Desmantelamiento en curso.
     Disconnecting,
 }
 
 impl PeerConnectionStatus {
-    /// String representation.
+    /// Representación en cadena.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Disconnected => "disconnected",
@@ -99,42 +99,42 @@ impl PeerConnectionStatus {
     }
 }
 
-/// Snapshot of an individual eD2K peer session.
+/// Instantánea de una sesión individual de par eD2K.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerSessionSnapshot {
-    /// Current connection status.
+    /// Estado actual de la conexión.
     pub status: PeerConnectionStatus,
-    /// Target file hash in hex.
+    /// Hash del archivo de destino en hexadecimal.
     pub file_hash: Option<String>,
-    /// Remote peer address ("ip:port").
+    /// Dirección del par remoto ("ip:puerto").
     pub peer_address: Option<String>,
-    /// Currently requested part index, if transferring.
+    /// Índice de la parte solicitada actualmente, si está en transferencia.
     pub current_part: Option<u16>,
-    /// Transfer speed estimate in bytes/second.
+    /// Estimación de velocidad de transferencia en bytes/segundo.
     pub transfer_rate_bps: u64,
-    /// Total bytes received in this session.
+    /// Bytes totales recibidos en esta sesión.
     pub transferred_bytes: u64,
-    /// Queue rank reported by remote peer.
+    /// Posición en cola informada por el par remoto.
     pub queue_rank: Option<u32>,
-    /// eMule `m_bRemoteQueueFull` — set by `OP_QUEUEFULL` (UDP reask),
-    /// cleared by `OP_REASKACK`. Sources flagged remote-queue-full are
-    /// purged first when the source list overflows (eMule 80 % rule).
+    /// `m_bRemoteQueueFull` de eMule — establecido por `OP_QUEUEFULL` (re-ask UDP),
+    /// limpiado por `OP_REASKACK`. Las fuentes marcadas con cola remota llena se
+    /// purgan primero cuando la lista de fuentes desborda (regla del 80 % de eMule).
     #[serde(default)]
     pub remote_queue_full: bool,
-    /// Last error message or failure reason.
+    /// Último mensaje de error o motivo de fallo.
     pub last_error: Option<String>,
-    /// Normalized failure reason, if failed.
+    /// Motivo de fallo normalizado, si ha fallado.
     pub failure_reason: Option<PeerFailureReason>,
-    /// Timestamp when connection completed (unix ms).
+    /// Marca de tiempo de conexión completada (unix ms).
     pub connected_at_unix_ms: Option<i64>,
-    /// Next scheduled TCP file re-ask while queued (unix ms) — eMule
-    /// `GetTimeUntilReask()` anchor (`DS_ONQUEUE` + `FILEREASKTIME`).
-    /// The coordinator uses it to fire the UDP re-ask inside eMule's
-    /// `(1 s, 2 min)` window before the TCP re-ask (`PartFile.cpp:2291`).
+    /// Próximo plazo programado de repetición de petición TCP mientras está en cola (unix ms) — ancla
+    /// de `GetTimeUntilReask()` de eMule (`DS_ONQUEUE` + `FILEREASKTIME`).
+    /// El coordinador lo utiliza para disparar el re-ask UDP dentro de la
+    /// ventana de `(1 s, 2 min)` de eMule antes del re-ask TCP (`PartFile.cpp:2291`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_tcp_reask_unix_ms: Option<i64>,
-    /// Whether this peer session is using encrypted protocol obfuscation.
+    /// Indica si esta sesión de par está utilizando ofuscación de protocolo cifrada.
     #[serde(default)]
     pub obfuscated: bool,
 }
@@ -159,76 +159,76 @@ impl Default for PeerSessionSnapshot {
     }
 }
 
-/// Aggregated swarm status for a specific file or globally.
+/// Estado agregado del enjambre para un archivo específico o globalmente.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SwarmStatusSnapshot {
-    /// Target file hash if filtered by file.
+    /// Hash del archivo de destino si se filtra por archivo.
     pub file_hash: Option<String>,
-    /// Total active peer connections.
+    /// Conexiones activas totales de pares.
     pub active_peer_count: usize,
-    /// Active individual peer sessions.
+    /// Sesiones individuales activas de pares.
     pub peers: Vec<PeerSessionSnapshot>,
-    /// All active non-expired in-flight block ranges.
+    /// Todos los rangos de bloques en vuelo activos no expirados.
     pub in_flight_blocks: Vec<InFlightBlock>,
 }
 
 pub(crate) struct PeerSessionHandle {
     pub snapshot: PeerSessionSnapshot,
     pub abort_handle: tokio::task::AbortHandle,
-    /// Outbound-connect permit; `None` for sessions adopted from the inbound
-    /// listener (LowID callback), which are accounted by the listener itself.
+    /// Permiso de conexión saliente; `None` para sesiones adoptadas desde el oyente
+    /// entrante (callback LowID), las cuales son contabilizadas por el propio oyente.
     pub _permit: Option<SocketPermit>,
 }
 
 pub(crate) struct SwarmInnerState {
-    /// Active sessions indexed by peer address ("ip:port").
+    /// Sesiones activas indexadas por dirección del par ("ip:puerto").
     pub sessions: HashMap<String, PeerSessionHandle>,
-    /// Active in-flight blocks allocated to peers.
+    /// Bloques activos en vuelo asignados a pares.
     pub in_flight_blocks: Vec<InFlightBlock>,
-    /// Most recent peer session snapshot (active or disconnected), preserved for inspections.
+    /// Instantánea de sesión de par más reciente (activa o desconectada), preservada para inspecciones.
     pub last_session: Option<PeerSessionSnapshot>,
-    /// Maximum active peer connections per file hash.
+    /// Conexiones activas máximas de pares por hash de archivo.
     pub max_peers_per_download: usize,
-    /// Maximum active peer connections across the entire daemon.
+    /// Máximo de conexiones activas de pares en todo el daemon.
     pub max_global_peers: usize,
-    /// Peer UDP endpoints learned from handshakes:
-    /// `"ip:tcp_port"` → `(eMule UDP port, client UDP version)`.
+    /// Puntos de conexión UDP del par aprendidos de los apretones de manos:
+    /// `"ip:puerto_tcp"` → `(puerto UDP de eMule, versión UDP del cliente)`.
     pub peer_udp: HashMap<String, (u16, u8)>,
-    /// Peers logically queued on us being queued on them — eMule
-    /// `DS_ONQUEUE` survives socket death (`socket == NULL`): this map
-    /// keeps the queue state (deadline of next re-ask) after the TCP
-    /// session ends, so `OP_REASKFILEPING` can fire in the eMule window.
-    /// `"ip:tcp_port"` → `QueuedPeerState`.
+    /// Pares lógicamente encolados en nosotros mientras estamos encolados en ellos — `DS_ONQUEUE`
+    /// de eMule sobrevive al cierre del socket (`socket == NULL`): este mapa
+    /// mantiene el estado de cola (plazo del próximo re-ask) tras finalizar la sesión
+    /// TCP, para que `OP_REASKFILEPING` pueda dispararse en la ventana de eMule.
+    /// `"ip:puerto_tcp"` → `QueuedPeerState`.
     pub queued_peers: HashMap<String, QueuedPeerState>,
-    /// Dernier événement de transfert émis par fichier — `sync_transfer_rates`
-    /// coalesce les updates à [`DOWNLOAD_EVENT_INTERVAL`] par fichier.
+    /// Último evento de transferencia emitido por archivo — `sync_transfer_rates`
+    /// combina las actualizaciones a [`DOWNLOAD_EVENT_INTERVAL`] por archivo.
     pub last_download_event: HashMap<String, Instant>,
 }
 
-/// Logical queue state surviving the TCP session — eMule `DS_ONQUEUE`
-/// with a dead socket (`DownloadClient.cpp:1326-1344` handles `!socket`).
+/// Estado de cola lógico que sobrevive a la sesión TCP — `DS_ONQUEUE` de eMule
+/// con un socket cerrado (`DownloadClient.cpp:1326-1344` gestiona `!socket`).
 #[derive(Debug, Clone)]
 pub struct QueuedPeerState {
-    /// File hash the peer was queued for.
+    /// Hash del archivo para el que el par estaba en cola.
     pub file_hash: String,
-    /// Last TCP connection attempt — eMule `GetLastTriedToConnectTime()`
-    /// (UDP ping requires it ≥ 20 min old, `PartFile.cpp:2294`).
+    /// Último intento de conexión TCP — `GetLastTriedToConnectTime()` de eMule
+    /// (el ping UDP requiere que tenga ≥ 20 min de antigüedad, `PartFile.cpp:2294`).
     pub connected_at_unix_ms: Option<i64>,
-    /// Next re-ask deadline (`GetTimeUntilReask()` = FILEREASKTIME from
-    /// last ask) — the UDP ping fires inside its final 2-minute window.
+    /// Próximo plazo de repetición de petición (`GetTimeUntilReask()` = FILEREASKTIME desde
+    /// la última petición) — el ping UDP se dispara dentro de su ventana final de 2 minutos.
     pub next_tcp_reask_unix_ms: Option<i64>,
-    /// eMule `m_bReaskPending` (`DownloadClient.cpp:193`) : le re-ask TCP
-    /// de ce pair LowID a été différé d'un cycle parce qu'il attend dans
-    /// notre file d'upload — il nous joindra à son propre re-ask. Consommé
-    /// quand le pair nous contacte (`ConnectionEstablished`,
+    /// `m_bReaskPending` de eMule (`DownloadClient.cpp:193`): la repetición de petición TCP
+    /// de este par LowID se pospuso un ciclo porque está esperando en
+    /// nuestra cola de subida — nos contactará en su propia repetición de petición. Consumido
+    /// cuando el par nos contacta (`ConnectionEstablished`,
     /// `BaseClient.cpp:1552`).
     pub reask_pending: bool,
 }
 
 impl SwarmInnerState {
-    /// Vérifie les quotas swarm (global + par fichier) et l'absence d'une
-    /// session déjà ouverte — partagé par `connect` et `accept_callback`.
+    /// Comprueba las cuotas del enjambre (global + por archivo) y la ausencia de una
+    /// sesión ya abierta — compartido por `connect` y `accept_callback`.
     pub(crate) fn check_session_slot(
         &self,
         file_hash: &str,

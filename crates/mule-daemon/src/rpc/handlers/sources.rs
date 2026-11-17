@@ -38,7 +38,7 @@ pub async fn handle_sources_add_manual(
         JsonRpcError::invalid_params(&format!("Invalid socket address format '{address}': {e}"))
     })?;
 
-    // Check against IP filter
+    // Comprobar con el filtro IP
     let filter = state.network_policy.ip_filter();
     let is_filtered = filter.check_ip(addr.ip()).is_some();
 
@@ -131,12 +131,12 @@ pub async fn handle_sources_connect(
         .or_else(|| params["crypt_options"].as_u64())
         .map(|v| v as u8);
 
-    // Check if network is disabled (Kill Switch)
+    // Comprobar si la red está deshabilitada (Kill Switch)
     if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
         return Err(JsonRpcError::business("Network is disabled by Kill Switch"));
     }
 
-    // Check IP Filter
+    // Comprobar el filtro IP
     let filter = state.network_policy.ip_filter();
     if filter.check_ip(addr.ip()).is_some() {
         let ip_u32 = match addr {
@@ -176,7 +176,7 @@ pub async fn handle_sources_connect(
         )));
     }
 
-    // Check Cooldown unless force is true
+    // Comprobar el enfriamiento (cooldown) a menos que force sea true
     let force = params["force"].as_bool().unwrap_or(false);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -201,7 +201,7 @@ pub async fn handle_sources_connect(
             let _ = dl_svc.reset_peer_source_cooldown(hash_str, address);
         }
 
-        // Ensure source exists in persistence
+        // Asegurar que la fuente exista en persistencia
         let ip_u32 = match addr {
             std::net::SocketAddr::V4(v4) => u32::from_be_bytes(v4.ip().octets()),
             _ => 0,
@@ -230,7 +230,7 @@ pub async fn handle_sources_connect(
         let _ = dl_svc.upsert_peer_sources(hash_str, &[init_src]);
     }
 
-    // Look up target peer source capabilities from database
+    // Consultar las capacidades de la fuente del par objetivo desde la base de datos
     let (target_user_hash, peer_crypt_options) = {
         let dl_svc = state.downloads.lock().await;
         if let Ok(sources) = dl_svc.list_peer_sources(hash_str) {
@@ -252,7 +252,7 @@ pub async fn handle_sources_connect(
         ));
     }
 
-    // Request TCP connect permit from NetworkPolicyManager
+    // Solicitar permiso de conexión TCP a NetworkPolicyManager
     let permit = state
         .network_policy
         .request_tcp_connect(addr, mule_network_policy::ConnectionPurpose::Ed2kPeer)
@@ -286,7 +286,7 @@ pub async fn handle_sources_connect(
         }
     };
 
-    // Start single controlled peer session
+    // Iniciar sesión de par única y controlada
     state
         .peer_session
         .connect(
@@ -347,7 +347,7 @@ pub async fn handle_sources_status(
         .and_then(|p| p["fileHash"].as_str().or_else(|| p["hash"].as_str()));
     let swarm_snap = state.peer_session.swarm_snapshot(file_hash).await;
 
-    // If specific file or swarm is requested, return full swarm object
+    // Si se solicita un archivo o enjambre específico, devolver el objeto de enjambre completo
     if params
         .as_ref()
         .map(|p| p.get("fileHash").is_some() || p.get("swarm").is_some())
@@ -355,7 +355,7 @@ pub async fn handle_sources_status(
     {
         Ok(crate::rpc::handlers::json_value(&swarm_snap))
     } else {
-        // Return first active peer snapshot or disconnected for legacy single peer callers, but augmented with swarm fields
+        // Devolver la instantánea del primer par activo o desconectado para invocadores heredados de un solo par, pero ampliada con campos de enjambre
         let mut val = crate::rpc::handlers::json_value(&state.peer_session.snapshot().await);
         if let Value::Object(ref mut map) = val {
             map.insert(

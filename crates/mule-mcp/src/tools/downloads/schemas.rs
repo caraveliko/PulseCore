@@ -7,7 +7,7 @@ use crate::protocol::ToolDefinition;
 use crate::tools::{obj_schema, prop};
 use serde_json::json;
 
-/// Returns tool definitions for download and category management.
+/// Devuelve las definiciones de herramientas para la gestión de descargas y categorías.
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {

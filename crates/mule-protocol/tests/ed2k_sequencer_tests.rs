@@ -920,7 +920,7 @@ fn endgame_sequencer(file_size: u64) -> Ed2kDownloadSequencer {
 #[test]
 fn test_endgame_allows_duplicate_block_from_other_peer() {
     // Single block remaining (≤ ENDGAME_REMAINING_BYTES = 3 blocks) already
-    // in-flight on peer A. Peer B must receive a duplicate request for the
+    // en vuelo en el par A. El par B debe recibir una solicitud duplicada para el
     // same block — the fastest source wins the last chunk.
     let file_size = ED2K_BLOCK_SIZE as u64;
     let seq = endgame_sequencer(file_size);
@@ -1092,7 +1092,7 @@ fn test_plan_next_blocks_returns_disjoint_batch() {
         .plan_next_blocks_for_peer64("peerA", &[], &[], 1_000, 6)
         .unwrap();
     assert_eq!(planned.len(), 6, "six disjoint blocks must be planned");
-    // All disjoint and within the part.
+    // Todos disjuntos y dentro de la parte.
     for (i, (_, a)) in planned.iter().enumerate() {
         for (_, b) in planned.iter().skip(i + 1) {
             assert!(
@@ -1161,7 +1161,7 @@ fn test_plan_next_blocks_self_shadow_no_duplicates() {
 #[test]
 fn test_plan_next_blocks_endgame_single_duplicate_only() {
     // End-game: one block remaining already in-flight on peerA — a batch may
-    // duplicate that one block for peerB but must not invent more duplicates.
+    // duplica ese bloque para peerB pero no debe inventar más duplicados.
     let file_size = ED2K_BLOCK_SIZE as u64;
     let seq = endgame_sequencer(file_size);
     let in_flight = vec![InFlightBlock::new("peerA".into(), 0, 0, file_size, 0, 30_000)];

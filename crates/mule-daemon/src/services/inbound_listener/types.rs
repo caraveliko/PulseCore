@@ -16,32 +16,32 @@ use crate::services::downloads::DownloadService;
 use crate::services::upload_queue::UploadManager;
 use mule_network_policy::NetworkPolicyManager;
 
-/// Maximum concurrent inbound connections from a single IP (anti-flood).
-/// Note : le plafond global inbound n'est pas une constante — il suit le
-/// budget `max_active_peer_connections` (live), comme eMule où toutes les
-/// connexions pairs comptent dans `maxconnections`.
+/// Conexiones entrantes simultáneas máximas desde una sola IP (anti-inundación).
+/// Nota: el límite global entrante no es una constante — sigue el
+/// presupuesto `max_active_peer_connections` (en vivo), como en eMule donde todas las
+/// conexiones de pares cuentan en `maxconnections`.
 pub const MAX_INBOUND_PER_IP: usize = 5;
 
-/// Maximum buffer size for inbound connection framing (256 KiB) to prevent OOM.
+/// Tamaño máximo de búfer para el entramado de conexiones entrantes (256 KiB) para evitar OOM.
 pub const MAX_READ_BUFFER_SIZE: usize = 256 * 1024;
 
-/// Snapshot of the Inbound Listener service state.
+/// Instantánea del estado del servicio receptor de conexiones entrantes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct InboundListenerSnapshot {
-    /// Whether the TCP listener is currently running.
+    /// Indica si el receptor TCP está actualmente en ejecución.
     pub is_listening: bool,
-    /// Listening socket address if active.
+    /// Dirección del socket de escucha si está activo.
     pub listen_address: Option<String>,
-    /// Number of active uploads currently transferring.
+    /// Número de subidas activas que transfieren actualmente.
     pub active_uploads: usize,
-    /// Number of queued peers waiting for an upload slot.
+    /// Número de pares en cola esperando una ranura de subida.
     pub queued_uploads: usize,
-    /// Current upload rate in bytes per second.
+    /// Velocidad de subida actual en bytes por segundo.
     pub upload_rate_bps: u64,
 }
 
-/// Inbound eD2K TCP Listener service state.
+/// Estado del servicio receptor TCP eD2K entrante.
 #[derive(Clone)]
 pub struct InboundListenerService {
     pub(crate) network_policy: Arc<NetworkPolicyManager>,
@@ -50,57 +50,57 @@ pub struct InboundListenerService {
     pub(crate) is_running: Arc<AtomicBool>,
     pub(crate) listen_addr: Arc<Mutex<Option<SocketAddr>>>,
     pub(crate) listener_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    /// Local eD2K user hash — mutable à chaud : `identityRotationHours`
-    /// régénère l'identité sans redémarrer le listener.
+    /// User hash eD2K local — modificable en caliente: `identityRotationHours`
+    /// regenera la identidad sin reiniciar el oyente.
     pub(crate) user_hash: std::sync::Arc<std::sync::RwLock<[u8; 16]>>,
-    /// Local RSA-384 public key DER (PKCS#1) used as challenger key in SUI
-    /// payloads. `None` when the daemon has no usable identity (e.g. quarantined
-    /// cryptkey.dat): challenges must not be issued without it. Mutable à
-    /// chaud pour suivre la rotation d'identité.
+    /// DER de clave pública RSA-384 local (PKCS#1) usada como clave del desafiador en cargas
+    /// útiles SUI. `None` cuando el daemon no tiene identidad utilizable (p. ej. cryptkey.dat
+    /// en cuarentena): no se deben emitir desafíos sin ella. Modificable en
+    /// caliente para seguir la rotación de identidad.
     pub(crate) sui_pubkey_der: std::sync::Arc<std::sync::RwLock<Option<Vec<u8>>>>,
-    /// Mode « paranoid » (propre à eMuleRust) : n'accorde de slot d'upload
-    /// qu'aux pairs obfusqués ET dont la signature SUI a été vérifiée.
+    /// Modo «paranoico» (propio de eMuleRust): solo concede ranuras de subida
+    /// a pares ofuscados Y cuya firma SUI haya sido verificada.
     pub(crate) paranoid_mode: Arc<AtomicBool>,
-    /// Local identity (private key access) for answering inbound peer
-    /// challenges — the peer signs our key, we sign its key.
+    /// Identidad local (acceso a clave privada) para responder a desafíos de pares
+    /// entrantes — el par firma nuestra clave, nosotros firmamos su clave.
     pub(crate) identity: Option<Arc<Mutex<crate::services::IdentityService>>>,
-    /// Anti-flood: IP of the last processed signature (eMule `sigIP`).
+    /// Anti-inundación: IP de la última firma procesada (`sigIP` de eMule).
     pub(crate) last_sig_ip: Arc<Mutex<Option<IpAddr>>>,
-    /// Shared SUI anomaly counters (identity.status `sui` object).
+    /// Contadores de anomalías SUI compartidos (objeto `sui` en identity.status).
     pub(crate) sui_stats: Arc<SuiStats>,
     pub(crate) active_conns: Arc<Mutex<HashMap<IpAddr, usize>>>,
     pub(crate) obfuscation_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) obfuscation_required: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) obfuscation_padding_max: u8,
-    /// Peer session manager for adopting inbound connections that answer a
-    /// pending LowID callback (`OP_CALLBACKREQUEST` relayed by the server).
+    /// Gestor de sesiones de pares para adoptar conexiones entrantes que responden a
+    /// una devolución LowID pendiente (`OP_CALLBACKREQUEST` retransmitido por el servidor).
     pub(crate) peer_session:
         Arc<std::sync::RwLock<Option<crate::services::peer_session::PeerSessionManager>>>,
-    /// Server session manager — provides our HighID `client_id`/server info
-    /// when adopting callback connections.
+    /// Gestor de sesiones de servidor — proporciona nuestra información de HighID `client_id`/servidor
+    /// al adoptar conexiones de callback.
     pub(crate) server_session:
         Arc<std::sync::RwLock<Option<crate::services::server_session::ServerSessionManager>>>,
 
-    /// Client UDP service — used to record inbound clients' announced UDP
-    /// versions for correctly-shaped `OP_REASKACK` replies.
+    /// Servicio UDP de cliente — usado para registrar las versiones UDP anunciadas por clientes
+    /// entrantes para respuestas `OP_REASKACK` correctamente conformadas.
     pub(crate) client_udp:
         Arc<std::sync::RwLock<Option<crate::services::client_udp::ClientUdpService>>>,
 
-    /// Kad UDP service — answers `OP_FWCHECKUDPREQ` by emitting
-    /// `KADEMLIA2_FIREWALLUDP` probe datagrams on the shared UDP socket.
+    /// Servicio UDP de Kad — responde a `OP_FWCHECKUDPREQ` emitiendo datagramas de
+    /// sondeo `KADEMLIA2_FIREWALLUDP` en el socket UDP compartido.
     pub(crate) kad_udp:
         Arc<std::sync::RwLock<Option<Arc<crate::services::kad_udp::KadUdpService>>>>,
 
-    /// Kad service — inbound peers advertising a Kad UDP port can seed a
-    /// routing-table bootstrap (eMule "bootstrap from clients").
+    /// Servicio Kad — los pares entrantes que anuncian un puerto UDP Kad pueden sembrar
+    /// un arranque de la tabla de enrutamiento ("bootstrap from clients" de eMule).
     pub(crate) kad: Arc<std::sync::RwLock<Option<Arc<crate::services::kad::KadService>>>>,
 
-    /// Our Kad UDP port, announced in `CT_EMULE_UDPPORTS` (high word) and in
-    /// `OP_EMULEINFO` `ET_UDPPORT` on inbound handshake answers.
+    /// Nuestro puerto UDP de Kad, anunciado en `CT_EMULE_UDPPORTS` (palabra alta) y en
+    /// `OP_EMULEINFO` `ET_UDPPORT` en respuestas de apretón de manos entrantes.
     pub(crate) kad_udp_port: u16,
 
-    /// Source Exchange partagé (policy + journaux de throttle eMule
-    /// `SetLastSrcReqTime`/`GetLastAskedForSources`) — injecté par `AppState`.
+    /// Source Exchange compartido (política + registros de limitación de tasa de eMule
+    /// `SetLastSrcReqTime`/`GetLastAskedForSources`) — inyectado por `AppState`.
     pub(crate) sx_env: std::sync::Arc<
         std::sync::RwLock<Option<crate::services::peer_session::source_exchange::SxEnv>>,
     >,

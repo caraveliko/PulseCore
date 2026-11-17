@@ -31,13 +31,13 @@ const ALPHA_QUERY: usize = 3;
 /// m_mapPossible)` (`Search.cpp:172`).
 const SEARCH_SEED_CONTACTS: usize = 50;
 
-/// Iteratively queries `find_node` toward `target` starting from the closest
-/// known contacts, until no closer unqueried contact remains or the early
-/// convergence criterion (eMule `SEARCHTOLERANCE`) is met.
+/// Consulta iterativamente `find_node` hacia `target` partiendo de los contactos
+/// conocidos más cercanos, hasta que no quede ningún contacto sin consultar más cercano
+/// o se cumpla el criterio de convergencia temprana (`SEARCHTOLERANCE` de eMule).
 ///
-/// Returns the converged candidate pool sorted by XOR distance to `target`
-/// (closest first). Responsive contacts are marked seen/verified in the
-/// routing table; unresponsive ones accumulate failures and may be evicted.
+/// Devuelve el conjunto convergente de candidatos ordenado por distancia XOR a `target`
+/// (los más cercanos primero). Los contactos que responden se marcan como vistos/verificados en la
+/// tabla de enrutamiento; los que no responden acumulan fallos y pueden ser desalojados.
 pub async fn converge_closest_contacts(
     target: &KadId,
     routing_table: &Mutex<KBucketTable>,
@@ -48,7 +48,7 @@ pub async fn converge_closest_contacts(
 ) -> Vec<KadContact> {
     let initial_closest = {
         let table = routing_table.lock().await;
-        // eMule `CSearch::Go` seeds with `GetClosestTo(3, target, distance,
+        // `CSearch::Go` de eMule inicializa con `GetClosestTo(3, target, distance,
         // 50, m_mapPossible)` (`Search.cpp:172`).
         table.find_closest_verified(target, SEARCH_SEED_CONTACTS)
     };
@@ -136,11 +136,11 @@ pub async fn converge_closest_contacts(
                     }
                 };
                 if policy_allowed && ip_filter.check_ip(IpAddr::V4(c.ip)).is_none() {
-                    // eMule semantics: a contact learned from a routing
-                    // response is *not* IP-verified — verification requires
-                    // it answering one of our requests (mark_seen) or the
-                    // HELLO_RES_ACK handshake. Keep it unverified; it may
-                    // still be queried and promoted on response.
+                    // Semántica de eMule: un contacto aprendido de una respuesta de
+                    // enrutamiento *no* está verificado por IP — la verificación requiere
+                    // que responda a una de nuestras solicitudes (mark_seen) o el
+                    // saludo HELLO_RES_ACK. Mantenerlo no verificado; todavía puede
+                    // ser consultado y promovido al responder.
                     new_contacts.push(c);
                 }
             }

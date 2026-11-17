@@ -59,8 +59,8 @@ pub fn create_router(state: AppState) -> Router {
             axum::routing::get(crate::rpc::torznab::handle_torznab),
         );
 
-    // If an explicit web_dir is passed and contains index.html, serve from disk (for hot reloading/dev).
-    // Otherwise fallback seamlessly to embedded web assets compiled into the binary.
+    // Si se pasa un web_dir explícito y contiene index.html, servir desde disco (para recarga en caliente/desarrollo).
+    // De lo contrario, recurrir de forma transparente a los activos web embebidos compilados en el binario.
     let disk_web_dir = state
         .config
         .web_dir
@@ -94,7 +94,7 @@ pub fn is_loopback_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Vérifie qu'une adresse IP appartient au loopback ou au réseau privé local (RFC1918 / Link-Local / ULA).
+/// Comprueba que una dirección IP pertenezca a loopback o a la red privada local (RFC1918 / Link-Local / ULA).
 pub fn is_trusted_lan_or_loopback_ip(ip: IpAddr) -> bool {
     let canonical = match ip {
         IpAddr::V4(v4) => IpAddr::V4(v4),
@@ -113,14 +113,14 @@ pub fn is_trusted_lan_or_loopback_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Vérifie que l'en-tête `Host` correspond à une adresse IP locale/LAN ou un nom d'hôte local
-/// (protection contre les attaques par DNS Rebinding depuis un navigateur).
+/// Comprueba que la cabecera `Host` corresponda a una dirección IP local/LAN o a un nombre de host local
+/// (protección contra ataques de reconexión DNS / DNS Rebinding desde un navegador).
 pub fn is_allowed_host_header(host_header: &str) -> bool {
     let host = host_header.trim();
     if host.is_empty() {
         return true;
     }
-    // Gestion IPv6 entre crochets `[::1]:4660`
+    // Gestión de IPv6 entre corchetes `[::1]:4660`
     let host_only = if let Some(rest) = host.strip_prefix('[') {
         rest.split(']').next().unwrap_or("")
     } else {
@@ -130,7 +130,7 @@ pub fn is_allowed_host_header(host_header: &str) -> bool {
     if lower.is_empty() || lower == "localhost" || lower.ends_with(".local") || lower.ends_with(".lan") || lower.ends_with(".home") {
         return true;
     }
-    // Autoriser les noms d'hôtes locaux courts sans domaine public (ex: "raspberry", "raspberrypi")
+    // Permitir nombres de host locales cortos sin dominio público (ej.: "raspberry", "raspberrypi")
     if !lower.contains('.') {
         return true;
     }
@@ -140,8 +140,8 @@ pub fn is_allowed_host_header(host_header: &str) -> bool {
     false
 }
 
-/// Vérifie que l'en-tête `Origin` (envoyé par les navigateurs lors des requêtes POST / WebSocket)
-/// provient bien de l'interface locale/LAN et non d'un site web externe malveillant (CSRF / CSWSH).
+/// Comprueba que la cabecera `Origin` (enviada por los navegadores en peticiones POST / WebSocket)
+/// provenga de la interfaz local/LAN y no de un sitio web externo malicioso (CSRF / CSWSH).
 pub fn is_allowed_origin_header(origin_header: &str) -> bool {
     let origin = origin_header.trim();
     if origin.is_empty() || origin == "null" || origin.starts_with("file://") {
@@ -158,7 +158,7 @@ pub fn is_allowed_origin_header(origin_header: &str) -> bool {
 }
 
 async fn control_plane_security_guard(mut req: Request, next: Next) -> impl IntoResponse {
-    // 1. Isolation IP : refuser toute connexion provenant d'Internet hors LAN/Loopback
+    // 1. Aislamiento IP: rechazar cualquier conexión procedente de Internet fuera de LAN/Loopback
     let client_ip = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -179,7 +179,7 @@ async fn control_plane_security_guard(mut req: Request, next: Next) -> impl Into
             .into_response();
     }
 
-    // 2. Protection anti-DNS Rebinding sur l'en-tête Host
+    // 2. Protección anti-DNS Rebinding en la cabecera Host
     if let Some(host_val) = req
         .headers()
         .get(header::HOST)
@@ -199,7 +199,7 @@ async fn control_plane_security_guard(mut req: Request, next: Next) -> impl Into
         }
     }
 
-    // 3. Protection anti-CSRF / Cross-Site WebSocket Hijacking sur l'en-tête Origin
+    // 3. Protección anti-CSRF / Cross-Site WebSocket Hijacking en la cabecera Origin
     if let Some(origin_val) = req
         .headers()
         .get(header::ORIGIN)
@@ -329,7 +329,7 @@ async fn handle_http_rpc(
     let client_ip = ext_ip
         .map(|e| e.0 .0)
         .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
-    // Vérification du jeton Bearer si fourni, ou accès LAN/Loopback déjà validé par `control_plane_security_guard`.
+    // Verificación del token Bearer si se proporciona, o acceso LAN/Loopback ya validado por `control_plane_security_guard`.
     let expected = state.config.auth_token.as_str();
     let mut is_authenticated = if expected.is_empty() {
         !(state.has_webui_password() && !is_loopback_ip(client_ip))
@@ -395,10 +395,10 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-/// Maps a notification method name to its subscription topic, so clients
-/// can opt into a subset of the broadcast stream via `events.subscribe`.
-/// `None` = topic-less event that is always forwarded (e.g. snapshotRequired).
-/// Delegates to `DaemonEvent::topic` — the single source of truth.
+/// Asocia el nombre de un método de notificación con su tema (topic) de suscripción,
+/// de modo que los clientes puedan suscribirse a un subconjunto del flujo de difusión mediante `events.subscribe`.
+/// `None` = evento sin tema que siempre se retransmite (ej.: snapshotRequired).
+/// Delega en `DaemonEvent::topic` — la única fuente de verdad.
 fn event_topic(method: &str) -> Option<&'static str> {
     crate::services::DaemonEvent::Custom {
         method: method.to_string(),
@@ -414,19 +414,19 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         state.config.auth_token.is_empty(),
     ));
 
-    // Per-session topic filter: `None` = forward everything (default, for
-    // backward compatibility with clients that never call events.subscribe
-    // with topics).
+    // Filtro de temas por sesión: `None` = retransmitir todo (predeterminado, para
+    // compatibilidad con versiones anteriores de clientes que nunca llaman a events.subscribe
+    // con temas).
     let topics = std::sync::Arc::new(tokio::sync::RwLock::<
         Option<std::collections::HashSet<String>>,
     >::new(None));
 
-    // Outbound message queue so spawned request handlers can send responses concurrently
+    // Cola de mensajes salientes para que los manejadores de peticiones lanzados puedan enviar respuestas simultáneamente
     let (tx_out, mut rx_out) = tokio::sync::mpsc::channel::<Message>(128);
 
     loop {
         tokio::select! {
-            // Outbound message from spawned tasks or broadcast
+            // Mensaje saliente de tareas secundarias o difusión
             out_msg = rx_out.recv() => {
                 match out_msg {
                     Some(msg) => {
@@ -437,18 +437,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     None => break,
                 }
             }
-            // Incoming client message
+            // Mensaje entrante del cliente
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         let parsed: Result<JsonRpcRequest, _> = serde_json::from_str(&text);
                         match parsed {
                             Ok(req) => {
-                                // Session-scoped subscription handled here, not
-                                // in handle_request, because it mutates this
-                                // connection's own event filter. Only honored
-                                // once authenticated — otherwise falls through
-                                // to handle_request which answers auth_failed.
+                                // Suscripción de ámbito de sesión gestionada aquí, no
+                                // en handle_request, porque muta el filtro de eventos de esta
+                                // propia conexión. Solo se atiende una vez autenticado
+                                // — de lo contrario continúa hacia handle_request que responde auth_failed.
                                 if req.method == "events.subscribe"
                                     && is_authenticated
                                         .load(std::sync::atomic::Ordering::SeqCst)
@@ -515,7 +514,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     _ => {}
                 }
             }
-            // Outgoing broadcast events (forwarded only to authenticated sessions)
+            // Eventos de difusión salientes (retransmitidos solo a sesiones autenticadas)
             event = rx_events.recv() => {
                 match event {
                     Ok(event_json) => {
@@ -538,9 +537,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                        // This client fell behind: events were dropped. Ask it to
-                        // resynchronize via a full snapshot instead of pretending
-                        // the stream is continuous.
+                        // Este cliente se retrasó: se descartaron eventos. Pedirle que
+                        // se resincronice mediante una instantánea completa en lugar de fingir
+                        // que el flujo es continuo.
                         if is_authenticated.load(std::sync::atomic::Ordering::SeqCst) {
                             let notif = JsonRpcNotification::new(
                                 "event.snapshotRequired",
@@ -573,7 +572,7 @@ mod tests {
         assert!(is_trusted_lan_or_loopback_ip(
             "172.20.0.10".parse().unwrap()
         ));
-        // Les adresses IP publiques Internet doivent être refusées
+        // Las direcciones IP públicas de Internet deben ser rechazadas
         assert!(!is_trusted_lan_or_loopback_ip("8.8.8.8".parse().unwrap()));
         assert!(!is_trusted_lan_or_loopback_ip(
             "203.0.113.99".parse().unwrap()
@@ -587,7 +586,7 @@ mod tests {
         assert!(is_allowed_host_header("192.168.1.166:4660"));
         assert!(is_allowed_host_header("raspberry:4660"));
         assert!(is_allowed_host_header("raspberry.local:4660"));
-        // Les domaines externes de DNS Rebinding doivent être bloqués
+        // Los dominios externos de DNS Rebinding deben ser bloqueados
         assert!(!is_allowed_host_header("evil-rebind.attacker.com:4660"));
         assert!(!is_allowed_host_header("example.org"));
     }

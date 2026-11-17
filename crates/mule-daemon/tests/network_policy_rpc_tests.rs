@@ -48,7 +48,7 @@ async fn test_network_get_and_set_policy_rpc() {
     let (state, _dir) = rpc_state("policy_test_token_123");
     let mut authenticated = true;
 
-    // 1. network.getPolicy initial
+    // 1. network.getPolicy inicial
     let req = make_req(10, "network.getPolicy", None);
     let resp = handle_request(&state, req, &mut authenticated)
         .await
@@ -62,7 +62,7 @@ async fn test_network_get_and_set_policy_rpc() {
     assert_eq!(res["activeConnections"]["listeners"], 0);
     assert_eq!(res["budgets"]["max_active_peer_connections"], 500);
 
-    // 2. network.setProfile to public-ed2k-preview
+    // 2. network.setProfile a public-ed2k-preview
     let set_req = make_req(
         11,
         "network.setProfile",
@@ -75,7 +75,7 @@ async fn test_network_get_and_set_policy_rpc() {
     let res = resp.result.unwrap();
     assert_eq!(res["profile"], "public-ed2k-preview");
 
-    // 3. network.setProfile with invalid name
+    // 3. network.setProfile con nombre no válido
     let invalid_req = make_req(
         12,
         "network.setProfile",
@@ -117,7 +117,7 @@ async fn test_network_kill_switch_and_audit_log_rpc() {
     assert_eq!(res["success"], true);
     assert_eq!(res["state"], "disabled");
 
-    // Verify policy query reflects disabled
+    // Verificar que la consulta de directiva refleje el estado deshabilitado (disabled)
     let get_req = make_req(21, "network.getPolicy", None);
     let resp = handle_request(&state, get_req, &mut authenticated)
         .await

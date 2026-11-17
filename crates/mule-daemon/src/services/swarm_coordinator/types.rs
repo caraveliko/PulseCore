@@ -8,77 +8,77 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-/// Interval between coordinator evaluation ticks.
+/// Intervalo entre ciclos de evaluación del coordinador.
 pub const COORDINATOR_TICK_INTERVAL: Duration = Duration::from_secs(3);
 
-/// eMule `SERVERREASKTIME` (Opcodes.h) : délai minimal entre deux requêtes
-/// TCP de sources (OP_GETSOURCES) pour un même fichier.
+/// `SERVERREASKTIME` de eMule (Opcodes.h): retraso mínimo entre dos peticiones
+/// TCP de fuentes (OP_GETSOURCES) para un mismo archivo.
 pub const SERVER_REASK_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
-/// eMule `UDPSERVERREASKTIME` (Opcodes.h) : délai minimal entre deux
-/// requêtes UDP de sources (OP_GLOBGETSOURCES) pour un même fichier.
-/// eMule cadence ce canal via un compteur global (`m_lastudpsearchtime`)
-/// en itérant tous les fichiers ; la cadence par fichier est équivalente.
+/// `UDPSERVERREASKTIME` de eMule (Opcodes.h): retraso mínimo entre dos
+/// peticiones UDP de fuentes (OP_GLOBGETSOURCES) para un mismo archivo.
+/// eMule acompasa este canal mediante un contador global (`m_lastudpsearchtime`)
+/// iterando sobre todos los archivos; la cadencia por archivo es equivalente.
 pub const UDP_SERVER_REASK_INTERVAL: Duration = Duration::from_secs(30 * 60);
 
-/// eMule `KADEMLIAREASKTIME` (Opcodes.h) : base du backoff de recherche de
-/// sources Kad. L'échéance réelle est `now + KADEMLIA_REASK_INTERVAL *
-/// total_searches` (`m_TotalSearchesKad`, plafonné à `KAD_MAX_TOTAL_SEARCHES`).
+/// `KADEMLIAREASKTIME` de eMule (Opcodes.h): base del retroceso de búsqueda de
+/// fuentes Kad. El plazo real es `now + KADEMLIA_REASK_INTERVAL *
+/// total_searches` (`m_TotalSearchesKad`, limitado a `KAD_MAX_TOTAL_SEARCHES`).
 pub const KADEMLIA_REASK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
-/// eMule `KADEMLIAASKTIME` (Opcodes.h) : espacement minimal entre deux
-/// démarrages de recherche de sources Kad, tous fichiers confondus
+/// `KADEMLIAASKTIME` de eMule (Opcodes.h): espaciado mínimo entre dos
+/// inicios de búsqueda de fuentes Kad, considerando todos los archivos
 /// (`CDownloadQueue::DoKademliaFileRequest`).
 pub const KADEMLIA_ASK_INTERVAL: Duration = Duration::from_secs(1);
 
-/// eMule `KADEMLIATOTALFILE` (Opcodes.h) : nombre maximal de recherches de
-/// sources Kad simultanées (`CKademlia::GetTotalFile()`).
+/// `KADEMLIATOTALFILE` de eMule (Opcodes.h): número máximo de búsquedas de
+/// fuentes Kad simultáneas (`CKademlia::GetTotalFile()`).
 pub const KAD_MAX_FILE_SEARCHES: usize = 5;
 
-/// eMule plafond de `m_TotalSearchesKad` (PartFile.cpp) : le backoff Kad
-/// cesse de croître après 7 recherches (≈ 7 h entre réinterrogations).
+/// Límite máximo de `m_TotalSearchesKad` de eMule (PartFile.cpp): el retroceso de Kad
+/// deja de crecer tras 7 búsquedas (≈ 7 h entre repeticiones de consulta).
 pub const KAD_MAX_TOTAL_SEARCHES: u32 = 7;
 
-/// eMule `MAX_SOURCES_FILE_SOFT` (Opcodes.h) : borne absolue du seuil de
-/// réinterrogation TCP (`CPartFile::GetMaxSourcePerFileSoft`).
+/// `MAX_SOURCES_FILE_SOFT` de eMule (Opcodes.h): límite absoluto del umbral de
+/// repetición de consulta TCP (`CPartFile::GetMaxSourcePerFileSoft`).
 pub const MAX_SOURCES_FILE_SOFT: usize = 750;
 
-/// eMule `MAX_SOURCES_FILE_UDP` (Opcodes.h) : borne absolue du seuil de
-/// réinterrogation UDP/Kad (`CPartFile::GetMaxSourcePerFileUDP`).
+/// `MAX_SOURCES_FILE_UDP` de eMule (Opcodes.h): límite absoluto del umbral de
+/// repetición de consulta UDP/Kad (`CPartFile::GetMaxSourcePerFileUDP`).
 pub const MAX_SOURCES_FILE_UDP: usize = 50;
 
-/// Maximum number of new peer connections to initiate per file per tick
-/// (anti-burst par fichier). Pacing lissé pour préserver les routeurs grand public.
+/// Número máximo de nuevas conexiones de pares a iniciar por archivo por ciclo
+/// (anti-ráfaga por archivo). Ritmo suavizado para preservar los rúteres domésticos.
 pub const MAX_CONNECT_PER_TICK: usize = 12;
 
-/// Maximum number of total new peer connections to initiate across all active files per tick
-/// (anti-burst global : max 24 connexions / 3s ≈ 8 conn/s).
+/// Número máximo de nuevas conexiones totales de pares a iniciar entre todos los archivos activos por ciclo
+/// (anti-ráfaga global: máx 24 conexiones / 3 s ≈ 8 conn/s).
 pub const MAX_GLOBAL_CONNECT_PER_TICK: usize = 24;
 
-/// Interval between periodic system heartbeats (60 seconds).
+/// Intervalo entre latidos periódicos del sistema (60 segundos).
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Minimum delay between two automatic server (re)connect attempts.
+/// Retraso mínimo entre dos intentos automáticos de (re)conexión al servidor.
 pub const SERVER_RECONNECT_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Per-address backoff before retrying a server that failed to connect.
+/// Retroceso por dirección antes de reintentar un servidor cuya conexión falló.
 pub const SERVER_FAIL_COOLDOWN: Duration = Duration::from_secs(300);
 
-/// Minimum interval between excess-source purge passes per file
-/// (eMule `CPartFile::Process` slow timers run every ~30-60s).
+/// Intervalo mínimo entre pasadas de purga de exceso de fuentes por archivo
+/// (los temporizadores lentos de `CPartFile::Process` de eMule se ejecutan cada ~30-60 s).
 pub const SOURCE_PURGE_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Full A4AF rebalance cadence (eMule `ProcessA4AFClients` ~8 min).
-/// Event-driven NNP swaps still run on every tick.
+/// Cadencia completa de reequilibrio A4AF (~8 min en `ProcessA4AFClients` de eMule).
+/// Los intercambios NNP dirigidos por eventos aún se ejecutan en cada ciclo.
 pub const A4AF_FULL_INTERVAL: Duration = Duration::from_secs(8 * 60);
 
-/// Interval without receiving any bytes and without active peers before an active download is considered stalled (10 min).
+/// Intervalo sin recibir ningún byte y sin pares activos antes de que una descarga activa se considere estancada (10 min).
 pub const SMART_QUEUE_STALL_TIMEOUT: Duration = Duration::from_secs(600);
 
-/// Duration an inactive/stalled download is placed in rotation cooldown before being re-evaluated for active slots (3 min).
+/// Duración durante la cual una descarga inactiva/estancada se coloca en enfriamiento de rotación antes de reevaluarla para ranuras activas (3 min).
 pub const SMART_QUEUE_ROTATION_COOLDOWN: Duration = Duration::from_secs(180);
 
-/// Activity tracker for smart queue rotation and stall detection.
+/// Rastreador de actividad para rotación inteligente de cola y detección de estancamiento.
 #[derive(Debug, Clone)]
 pub struct DownloadActivityTracker {
     pub last_received_bytes: u64,
@@ -87,44 +87,44 @@ pub struct DownloadActivityTracker {
     pub cooldown_until: Option<Instant>,
 }
 
-/// eMule `CPartFile::GetMaxSourcePerFileSoft` : seuil de réinterrogation
-/// TCP des sources — 90 % du plafond du fichier, borné à
+/// `CPartFile::GetMaxSourcePerFileSoft` de eMule: umbral de repetición de consulta
+/// TCP de fuentes — 90 % del límite del archivo, acotado a
 /// `MAX_SOURCES_FILE_SOFT`.
 pub(crate) fn max_source_per_file_soft(max_sources: usize) -> usize {
     (max_sources * 9 / 10).min(MAX_SOURCES_FILE_SOFT)
 }
 
-/// eMule `CPartFile::GetMaxSourcePerFileUDP` : seuil de réinterrogation
-/// UDP/Kad — 75 % du plafond du fichier, borné à `MAX_SOURCES_FILE_UDP`.
+/// `CPartFile::GetMaxSourcePerFileUDP` de eMule: umbral de repetición de consulta
+/// UDP/Kad — 75 % del límite del archivo, acotado a `MAX_SOURCES_FILE_UDP`.
 pub(crate) fn max_source_per_file_udp(max_sources: usize) -> usize {
     (max_sources * 3 / 4).min(MAX_SOURCES_FILE_UDP)
 }
 
-/// Plafonds de connexions pairs lus à chaud par le coordinateur.
+/// Límites de conexiones de pares leídos en caliente por el coordinador.
 ///
-/// eMule n'a pas de quota par fichier : chaque fichier connecte ses
-/// sources jusqu'à `max_peers_per_file` (`maxsourceperfile`, ou
-/// `FT_MAXSOURCES` quand le `.part.met` le précise), la limite globale
-/// `max_global_peers` jouant le rôle de `maxconnections`
-/// (`CListenSocket::TooManySockets`). `min_peers_per_file` ne sert qu'au
-/// rebalance A4AF (`ProcessA4AFClients`).
+/// eMule no tiene cuota por archivo: cada archivo conecta sus
+/// fuentes hasta `max_peers_per_file` (`maxsourceperfile`, o
+/// `FT_MAXSOURCES` cuando el `.part.met` lo especifica), desempeñando el límite global
+/// `max_global_peers` el rol de `maxconnections`
+/// (`CListenSocket::TooManySockets`). `min_peers_per_file` solo sirve para el
+/// reequilibrio A4AF (`ProcessA4AFClients`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SwarmLimits {
-    /// Plafond global de connexions pairs actives (eMule `maxconnections`).
+    /// Límite global de conexiones activas de pares (`maxconnections` de eMule).
     pub max_global_peers: usize,
-    /// Plafond de sources connectées par fichier (eMule `maxsourceperfile`).
+    /// Límite de fuentes conectadas por archivo (`maxsourceperfile` de eMule).
     pub max_peers_per_file: usize,
-    /// Seuil de famine déclenchant un swap A4AF (extension eMuleRust).
+    /// Umbral de inanición que dispara un intercambio A4AF (extensión eMuleRust).
     pub min_peers_per_file: usize,
 }
 
-/// État d'un fichier consommé par le rebalance A4AF
-/// (eMule `ProcessA4AFClients`) : poids de priorité et pairs actifs.
+/// Estado de un archivo consumido por el reequilibrio A4AF
+/// (`ProcessA4AFClients` de eMule): peso de prioridad y pares activos.
 pub(crate) struct A4afFileState {
     pub file_hash: String,
-    /// Poids eMule : Low=1, Normal=2, High=4, Release=8.
+    /// Peso de eMule: Low=1, Normal=2, High=4, Release=8.
     pub priority_weight: u32,
-    /// Nombre de sessions pair actives du fichier.
+    /// Número de sesiones activas de pares del archivo.
     pub current_active_peers: usize,
 }
 
@@ -139,11 +139,11 @@ impl A4afFileState {
             "low" => 1,
             "high" => 4,
             "release" => 8,
-            // eMule `PR_AUTO` — `CPartFile::UpdateAutoDownPriority` : le
-            // poids effectif dépend du nombre de sources connues
-            // (`GetSourceCount`) : plus de 100 → low, plus de 20 → normal,
-            // sinon → high. Recalculé à chaque tick du coordinateur comme
-            // eMule le fait dans `CPartFile::Process`.
+            // `PR_AUTO` de eMule — `CPartFile::UpdateAutoDownPriority`: el
+            // peso efectivo depende del número de fuentes conocidas
+            // (`GetSourceCount`): más de 100 → low, más de 20 → normal,
+            // si no → high. Recalculado en cada ciclo del coordinador como
+            // hace eMule en `CPartFile::Process`.
             "auto" => {
                 if source_count > 100 {
                     1
@@ -163,46 +163,46 @@ impl A4afFileState {
     }
 }
 
-/// État de recherche de sources Kad d'un fichier — équivalent eMule
-/// `m_LastSearchTimeKad` + `m_TotalSearchesKad` (PartFile.h).
+/// Estado de búsqueda de fuentes Kad de un archivo — equivalente en eMule
+/// a `m_LastSearchTimeKad` + `m_TotalSearchesKad` (PartFile.h).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct KadSourceSearchState {
-    /// Échéance absolue avant laquelle aucune nouvelle recherche Kad n'est
-    /// lancée pour ce fichier (`now + KADEMLIA_REASK_INTERVAL *
-    /// total_searches` au moment du départ).
+    /// Plazo absoluto antes del cual no se inicia ninguna nueva búsqueda Kad
+    /// para este archivo (`now + KADEMLIA_REASK_INTERVAL *
+    /// total_searches` en el momento del inicio).
     pub next_reask: Instant,
-    /// Nombre de recherches Kad déjà lancées pour ce fichier
-    /// (eMule `m_TotalSearchesKad`, ≤ `KAD_MAX_TOTAL_SEARCHES`).
+    /// Número de búsquedas Kad ya iniciadas para este archivo
+    /// (`m_TotalSearchesKad` de eMule, ≤ `KAD_MAX_TOTAL_SEARCHES`).
     pub total_searches: u32,
 }
 
-/// Swarm coordinator orchestrating peer connections and background downloads.
+/// Coordinador de enjambre que orquesta conexiones de pares y descargas en segundo plano.
 pub struct SwarmCoordinator {
     pub(crate) state: AppState,
-    /// Dernière requête TCP de sources par fichier (eMule `m_LastSearchTime`).
+    /// Última petición TCP de fuentes por archivo (`m_LastSearchTime` de eMule).
     pub(crate) last_source_query_tcp: HashMap<String, Instant>,
-    /// Dernière requête UDP de sources par fichier (eMule cycle
-    /// `m_lastudpsearchtime` ramené à une cadence par fichier).
+    /// Última petición UDP de fuentes por archivo (ciclo de eMule
+    /// `m_lastudpsearchtime` reducido a una cadencia por archivo).
     pub(crate) last_source_query_udp: HashMap<String, Instant>,
-    /// État de recherche Kad par fichier (eMule `m_LastSearchTimeKad` +
-    /// `m_TotalSearchesKad`).
+    /// Estado de búsqueda Kad por archivo (`m_LastSearchTimeKad` +
+    /// `m_TotalSearchesKad` de eMule).
     pub(crate) kad_source_search: HashMap<String, KadSourceSearchState>,
-    /// Horodatage du dernier démarrage de recherche Kad, tous fichiers
-    /// confondus (eMule `m_lastkademliafilerequest` — `KADEMLIAASKTIME`).
+    /// Marca de tiempo del último inicio de búsqueda Kad, entre todos los archivos
+    /// combinados (`m_lastkademliafilerequest` de eMule — `KADEMLIAASKTIME`).
     pub(crate) last_kad_file_request: Instant,
     pub(crate) last_heartbeat: Instant,
-    /// Last connect attempt per server address (failover backoff).
+    /// Último intento de conexión por dirección de servidor (retroceso de conmutación por error).
     pub(crate) server_attempts: HashMap<String, Instant>,
-    /// Last time an automatic server connect was attempted.
+    /// Última vez que se intentó una conexión automática al servidor.
     pub(crate) last_server_reconnect: Option<Instant>,
-    /// Server address that was connected before the last drop (excluded
-    /// from the immediate failover pick).
+    /// Dirección del servidor que estaba conectado antes de la última caída (excluido
+    /// de la selección inmediata de conmutación por error).
     pub(crate) last_connected_server: Option<String>,
-    /// Last excess-source purge pass per file hash (eMule 80% rule).
+    /// Última pasada de purga por exceso de fuentes por hash de archivo (regla del 80 % de eMule).
     pub(crate) last_source_purge: HashMap<String, Instant>,
-    /// Last full A4AF rebalance pass (~8 min eMule cadence).
+    /// Última pasada de reequilibrio completo A4AF (cadencia de ~8 min de eMule).
     pub(crate) last_a4af_full: Instant,
-    /// Tracking for smart download concurrency, rotation, and stall cooldowns.
+    /// Seguimiento de concurrencia inteligente de descargas, rotación y enfriamientos por atasco.
     pub(crate) download_trackers: HashMap<Uuid, DownloadActivityTracker>,
 }
 
@@ -210,8 +210,8 @@ pub struct SwarmCoordinator {
 mod tests {
     use super::*;
 
-    /// eMule `CPartFile::UpdateAutoDownPriority` : la priorité « auto »
-    /// dépend du nombre de sources connues — ≤20 → high (4), 21..=100
+    /// `CPartFile::UpdateAutoDownPriority` de eMule: la prioridad «auto»
+    /// depende del número de fuentes conocidas — ≤20 → high (4), 21..=100
     /// → normal (2), >100 → low (1).
     #[test]
     fn a4af_auto_priority_weight_thresholds() {
@@ -233,7 +233,7 @@ mod tests {
         }
     }
 
-    /// Une priorité manuelle ignore toujours le compte de sources.
+    /// Una prioridad manual siempre ignora el recuento de fuentes.
     #[test]
     fn a4af_manual_priority_ignores_source_count() {
         for (prio, expected) in [("low", 1u32), ("normal", 2), ("high", 4), ("release", 8)] {

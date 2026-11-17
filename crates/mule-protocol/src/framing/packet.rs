@@ -8,19 +8,19 @@ use bytes::Bytes;
 use crate::error::FramingError;
 use crate::limits::HEADER_SIZE;
 
-/// A raw eD2K wire packet containing protocol byte, opcode byte, and unparsed payload.
+/// Un paquete de cable eD2K sin procesar que contiene el byte de protocolo, el byte de código de operación y la carga útil sin analizar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawPacket {
-    /// Protocol magic byte (e.g. 0xE3, 0xC5, 0xD4).
+    /// Byte mágico del protocolo (p. ej., 0xE3, 0xC5, 0xD4).
     pub protocol: u8,
-    /// Operation code byte.
+    /// Byte de código de operación.
     pub opcode: u8,
-    /// Unparsed payload data.
+    /// Datos de carga útil sin analizar.
     pub payload: Bytes,
 }
 
 impl RawPacket {
-    /// Creates a new `RawPacket`.
+    /// Crea un nuevo `RawPacket`.
     pub fn new(protocol: u8, opcode: u8, payload: Bytes) -> Self {
         Self {
             protocol,
@@ -29,7 +29,7 @@ impl RawPacket {
         }
     }
 
-    /// Creates a new `RawPacket` from a vector of bytes.
+    /// Crea un nuevo `RawPacket` a partir de un vector de bytes.
     pub fn with_vec(protocol: u8, opcode: u8, vec: Vec<u8>) -> Self {
         Self {
             protocol,
@@ -38,7 +38,7 @@ impl RawPacket {
         }
     }
 
-    /// Creates a packet with an empty payload.
+    /// Crea un paquete con una carga útil vacía.
     pub fn empty(protocol: u8, opcode: u8) -> Self {
         Self {
             protocol,
@@ -47,25 +47,25 @@ impl RawPacket {
         }
     }
 
-    /// Returns the length of the payload in bytes.
+    /// Devuelve la longitud de la carga útil en bytes.
     #[inline]
     pub fn payload_len(&self) -> usize {
         self.payload.len()
     }
 
-    /// Returns the eD2K frame length (1 byte for opcode + payload length).
+    /// Devuelve la longitud de la trama eD2K (1 byte para el código de operación + longitud de carga útil).
     #[inline]
     pub fn frame_len(&self) -> usize {
         1 + self.payload.len()
     }
 
-    /// Returns the total wire size (5 header bytes + opcode byte + payload length).
+    /// Devuelve el tamaño total en cable (5 bytes de cabecera + byte de código de operación + longitud de carga útil).
     #[inline]
     pub fn total_wire_len(&self) -> usize {
         HEADER_SIZE + self.frame_len()
     }
 
-    /// Validates that the packet size does not violate frame limits.
+    /// Valida que el tamaño del paquete no viole los límites de trama.
     pub fn validate_size(&self, max_frame_bytes: usize) -> Result<(), FramingError> {
         let flen = self.frame_len();
         if flen > max_frame_bytes {

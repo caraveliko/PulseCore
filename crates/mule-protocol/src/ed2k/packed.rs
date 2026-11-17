@@ -12,28 +12,28 @@
 
 use std::io::Read;
 
-/// eMule `Packet::UnPackPacket` default cap for **peer** packets
-/// (`uMaxDecompressedSize = 50000u`). Server packets use 250 KB upstream;
-/// callers pick the bound via `unpack_payload`'s argument.
+/// Límite por defecto de `Packet::UnPackPacket` de eMule para paquetes entre **pares**
+/// (`uMaxDecompressedSize = 50000u`). Los paquetes de servidor usan 250 KB en origen;
+/// los llamantes eligen el límite mediante el argumento de `unpack_payload`.
 pub const PACKED_PEER_MAX_DECOMPRESSED: usize = 50_000;
 
-/// eMule emits `ANSWERSOURCES`/`ANSWERSOURCES2` compressed when the packet
-/// exceeds this size (`KnownFile.cpp:1149`, `PartFile.cpp:3708` —
-/// `result->size > 354`, where `size` counts opcode + payload).
+/// eMule emite `ANSWERSOURCES`/`ANSWERSOURCES2` comprimidos cuando el paquete
+/// supera este tamaño (`KnownFile.cpp:1149`, `PartFile.cpp:3708` —
+/// `result->size > 354`, donde `size` cuenta el código de operación + carga útil).
 pub const PACK_SRCINFO_MIN_SIZE: usize = 354;
 
-/// eMule `CKademliaUDPListener::SendPacket` packs any Kad UDP payload
-/// (datagram minus the 2-byte `[proto][opcode]` header) larger than this
+/// `CKademliaUDPListener::SendPacket` de eMule empaqueta cualquier carga útil UDP de Kad
+/// (datagrama menos la cabecera de 2 bytes `[proto][opcode]`) mayor que esto
 /// (`KademliaUDPListener.cpp:1875/1891/1904` — `uLenData > 200`).
 pub const KAD_UDP_PACK_MIN_SIZE: usize = 200;
 
-/// eMule `ClientUDPSocket` inflate cap for `OP_KADEMLIAPACKEDPROT`
-/// (`ClientUDPSocket.cpp:93` — retry loop bounded by `nNewSize < 250000`).
+/// Límite de descompresión de `ClientUDPSocket` de eMule para `OP_KADEMLIAPACKEDPROT`
+/// (`ClientUDPSocket.cpp:93` — bucle de reintento acotado por `nNewSize < 250000`).
 pub const PACKED_KAD_UDP_MAX_DECOMPRESSED: usize = 250_000;
 
-/// Compresses `payload` with zlib at `Z_BEST_COMPRESSION` and returns the
-/// compressed stream **only when strictly smaller** than the input —
-/// eMule sends the packet uncompressed otherwise (`Packets.cpp:204-211`).
+/// Comprime `payload` con zlib en `Z_BEST_COMPRESSION` y devuelve el flujo
+/// comprimido **únicamente cuando es estrictamente menor** que la entrada —
+/// en caso contrario, eMule envía el paquete sin comprimir (`Packets.cpp:204-211`).
 pub fn pack_payload(payload: &[u8]) -> Option<Vec<u8>> {
     let compressed = {
         let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
@@ -44,26 +44,26 @@ pub fn pack_payload(payload: &[u8]) -> Option<Vec<u8>> {
     (compressed.len() < payload.len()).then_some(compressed)
 }
 
-/// Inflates a packed payload with a hard decompressed-size cap, mirroring
-/// `Packet::UnPackPacket(uMaxDecompressedSize)`. Returns `None` on
-/// truncated, corrupt or oversized data.
+/// Descomprime una carga útil empaquetada con un límite estricto de tamaño descomprimido, reflejando
+/// `Packet::UnPackPacket(uMaxDecompressedSize)`. Devuelve `None` en datos
+/// truncados, corruptos o de tamaño excesivo.
 pub fn unpack_payload(payload: &[u8], max_decompressed: usize) -> Option<Vec<u8>> {
     let mut decoder = flate2::read::ZlibDecoder::new(payload).take(max_decompressed as u64 + 1);
     let mut out = Vec::new();
     decoder.read_to_end(&mut out).ok()?;
-    // eMule accepts a valid zlib stream even when it inflates to zero
-    // bytes (`size = unpackedsize` — the packet is dispatched empty).
+    // eMule acepta un flujo zlib válido incluso cuando se descomprime a cero
+    // bytes (`size = unpackedsize` — el paquete se despacha vacío).
     if out.len() > max_decompressed {
         return None;
     }
     Some(out)
 }
 
-/// Unpacks a `PR_EMULE_COMPRESSED` (`0xD4`) frame into the packet eMule's
-/// dispatchers see: same opcode, inflated payload, protocol re-tagged
-/// `PR_EMULE` (`Packets.cpp:240` — packed non-Kad packets always land in
-/// the EMULEPROT branch). Returns `None` unchanged-protocol packets or
-/// when inflation fails.
+/// Desempaqueta una trama `PR_EMULE_COMPRESSED` (`0xD4`) en el paquete que ven los
+/// despachadores de eMule: mismo código de operación, carga útil descomprimida, protocolo reetiquetado como
+/// `PR_EMULE` (`Packets.cpp:240` — los paquetes empaquetados que no son de Kad siempre van a
+/// la rama EMULEPROT). Devuelve `None` en paquetes con protocolo sin cambios o
+/// cuando la descompresión falla.
 pub fn unpack_packet(
     packet: &crate::framing::RawPacket,
     max_decompressed: usize,
@@ -79,11 +79,11 @@ pub fn unpack_packet(
     })
 }
 
-/// Socket-level normalization mirroring `CEMSocket::ProcessPacket` /
-/// `Packet::UnPackPacket`: passes `packet` through unchanged unless its
-/// protocol is `PR_EMULE_COMPRESSED`, in which case the payload is inflated
-/// and the packet re-tagged `PR_EMULE`. Returns `None` when a packed payload
-/// is corrupt or exceeds `max_decompressed` — the caller drops the packet.
+/// Normalización a nivel de socket que refleja `CEMSocket::ProcessPacket` /
+/// `Packet::UnPackPacket`: deja pasar `packet` sin cambios salvo que su
+/// protocolo sea `PR_EMULE_COMPRESSED`, en cuyo caso se descomprime la carga útil
+/// y se reetiqueta el paquete como `PR_EMULE`. Devuelve `None` cuando una carga útil empaquetada
+/// está corrupta o excede `max_decompressed` — el llamante descarta el paquete.
 pub fn unpack_owned(
     packet: crate::framing::RawPacket,
     max_decompressed: usize,
@@ -94,12 +94,12 @@ pub fn unpack_owned(
     unpack_packet(&packet, max_decompressed)
 }
 
-/// Returns the packet to put on the wire: re-framed as `PR_EMULE_COMPRESSED`
-/// (`0xD4`) when `packet.frame_len()` (opcode + payload, like eMule's
-/// `result->size`) exceeds `pack_min` **and** zlib compression strictly
-/// shrinks the payload — the `Packet::PackPacket` gate applied by
-/// `CreateSrcInfoPacket` on `OP_ANSWERSOURCES{,2}`. Otherwise returns the
-/// packet unchanged.
+/// Devuelve el paquete a enviar por cable: reentramado como `PR_EMULE_COMPRESSED`
+/// (`0xD4`) cuando `packet.frame_len()` (código de operación + carga útil, al igual que
+/// `result->size` de eMule) supera `pack_min` **y** la compresión zlib reduce
+/// estrictamente la carga útil — la condición de paso de `Packet::PackPacket` aplicada por
+/// `CreateSrcInfoPacket` en `OP_ANSWERSOURCES{,2}`. En caso contrario, devuelve el
+/// paquete sin cambios.
 #[must_use]
 pub fn maybe_pack(
     packet: &crate::framing::RawPacket,
@@ -117,12 +117,12 @@ pub fn maybe_pack(
     packet.clone()
 }
 
-/// Packs a Kad UDP datagram `[proto][opcode][payload]` the way
-/// `CKademliaUDPListener::SendPacket` does: when the payload exceeds
-/// `KAD_UDP_PACK_MIN_SIZE` and zlib strictly shrinks it, the datagram is
-/// re-emitted as `[PR_KADEMLIA_PACKED (0xE5)][opcode][zlib stream]`.
-/// Anything else — non-Kad protocol, small payload, incompressible data —
-/// is returned unchanged (borrowed, no copy).
+/// Empaqueta un datagrama UDP de Kad `[proto][opcode][payload]` del mismo modo
+/// que lo hace `CKademliaUDPListener::SendPacket`: cuando la carga útil supera
+/// `KAD_UDP_PACK_MIN_SIZE` y zlib la reduce estrictamente, el datagrama se
+/// reemite como `[PR_KADEMLIA_PACKED (0xE5)][opcode][flujo zlib]`.
+/// Cualquier otra cosa — protocolo no Kad, carga útil pequeña, datos no comprimibles —
+/// se devuelve sin cambios (prestada, sin copia).
 pub fn pack_kad_datagram(datagram: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     use super::super::kad::opcodes::{PR_KADEMLIA, PR_KADEMLIA_PACKED};
     if datagram.len() > 2
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn pack_unpack_roundtrip() {
-        // Repetitive data compresses well below the threshold.
+        // Los datos repetitivos se comprimen muy por debajo del umbral.
         let payload = vec![b'A'; 400];
         let packed = pack_payload(&payload).expect("should pack");
         assert!(packed.len() < payload.len());
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn pack_rejects_incompressible_data() {
-        // High-entropy input stays uncompressed, like eMule.
+        // La entrada de alta entropía permanece sin comprimir, al igual que en eMule.
         let mut payload = Vec::with_capacity(300);
         let mut s: u32 = 0x1234_5678;
         for _ in 0..300 {
@@ -170,12 +170,12 @@ mod tests {
 
     #[test]
     fn unpack_enforces_cap() {
-        // ~300 KB of zeros → a few hundred compressed bytes (bomb shape).
+        // ~300 KB de ceros → unos pocos cientos de bytes comprimidos (patrón de bomba de descompresión).
         let big = vec![0u8; 300_000];
         let packed = pack_payload(&big).expect("zeros compress");
         assert!(unpack_payload(&packed, PACKED_PEER_MAX_DECOMPRESSED).is_none());
         assert!(unpack_payload(&packed, 250_000).is_none());
-        // At the inflated size the same data must pass.
+        // Con el tamaño descomprimido, los mismos datos deben pasar.
         assert_eq!(unpack_payload(&packed, 300_000).unwrap().len(), 300_000);
     }
 
@@ -185,7 +185,7 @@ mod tests {
         let mut packed = pack_payload(&vec![b'x'; 400]).unwrap();
         packed.truncate(packed.len() - 2);
         assert!(unpack_payload(&packed, PACKED_PEER_MAX_DECOMPRESSED).is_none());
-        // A 1-byte payload can't shrink — never emitted packed.
+        // Una carga útil de 1 byte no puede reducirse — nunca se emite empaquetada.
         assert!(pack_payload(&[0xAA]).is_none());
     }
 
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(unpacked.protocol, PR_EMULE);
         assert_eq!(unpacked.opcode, 0x99);
         assert_eq!(&*unpacked.payload, &*body);
-        // Non-packed packets pass through untouched.
+        // Los paquetes no empaquetados pasan intactos.
         let plain = crate::framing::RawPacket {
             protocol: PR_EMULE,
             opcode: 0x99,
@@ -211,7 +211,7 @@ mod tests {
         let same = unpack_owned(plain, PACKED_PEER_MAX_DECOMPRESSED).unwrap();
         assert_eq!(same.protocol, PR_EMULE);
         assert_eq!(&*same.payload, &*body);
-        // Corrupt packed packet is dropped, not dispatched.
+        // Un paquete empaquetado corrupto se descarta, no se despacha.
         let bad = crate::framing::RawPacket {
             protocol: PR_EMULE_COMPRESSED,
             opcode: 0x99,
@@ -228,10 +228,10 @@ mod tests {
             opcode: 0x98,
             payload: payload.into(),
         };
-        // Below the 354 gate: never packed, even if compressible.
+        // Por debajo del umbral 354: nunca se empaqueta, incluso si es comprimible.
         let small = mk(vec![b'z'; 200]);
         assert_eq!(maybe_pack(&small, PACK_SRCINFO_MIN_SIZE).protocol, PR_EMULE);
-        // Big + compressible: packed and inflates back identically.
+        // Grande + comprimible: se empaqueta y se descomprime de forma idéntica.
         let big = mk(vec![b'z'; 2_000]);
         let packed = maybe_pack(&big, PACK_SRCINFO_MIN_SIZE);
         assert_eq!(packed.protocol, PR_EMULE_COMPRESSED);
@@ -239,7 +239,7 @@ mod tests {
         let restored = unpack_owned(packed, PACKED_PEER_MAX_DECOMPRESSED).unwrap();
         assert_eq!(restored.protocol, PR_EMULE);
         assert_eq!(&*restored.payload, &vec![b'z'; 2_000][..]);
-        // Big but incompressible: stays uncompressed.
+        // Grande pero no comprimible: permanece sin comprimir.
         let mut noise = Vec::with_capacity(2_000);
         let mut s: u32 = 0xDEAD_BEEF;
         for _ in 0..2_000 {
@@ -254,27 +254,27 @@ mod tests {
     fn pack_kad_datagram_retags_packed_prot() {
         use super::super::protocol::PR_EMULE;
         use crate::kad::opcodes::{PR_KADEMLIA, PR_KADEMLIA_PACKED};
-        // Datagramme Kad compressible > 200 octets de payload → 0xE5.
+        // Datagrama Kad comprimible > 200 bytes de carga útil → 0xE5.
         let mut dgram = vec![PR_KADEMLIA, 0x3B];
         dgram.extend_from_slice(&vec![0xAA; 500]);
         let packed = pack_kad_datagram(&dgram);
         assert_eq!(packed[0], PR_KADEMLIA_PACKED);
         assert_eq!(packed[1], 0x3B);
         assert!(packed.len() < dgram.len());
-        // …et il s'inflate de nouveau à l'identique.
+        // …y se descomprime de nuevo idénticamente.
         assert_eq!(
             unpack_payload(&packed[2..], PACKED_KAD_UDP_MAX_DECOMPRESSED)
                 .unwrap()
                 .len(),
             500
         );
-        // Petit datagramme → inchangé (emprunté, pas de copie).
+        // Datagrama pequeño → sin cambios (prestado, sin copia).
         let small = vec![PR_KADEMLIA, 0x10, 0x00];
         assert!(matches!(
             pack_kad_datagram(&small),
             std::borrow::Cow::Borrowed(_)
         ));
-        // Proto non-Kad jamais packé.
+        // Protocolo no Kad nunca se empaqueta.
         let mut not_kad = vec![PR_EMULE, 0x99];
         not_kad.extend_from_slice(&vec![0xAA; 500]);
         assert_eq!(pack_kad_datagram(&not_kad)[0], PR_EMULE);

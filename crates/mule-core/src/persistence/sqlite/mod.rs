@@ -30,20 +30,20 @@ pub mod servers;
 pub mod shares;
 pub mod sources;
 
-/// Délai d'attente d'un verrou SQLite avant `SQLITE_BUSY` — sous
-/// contention disque (AV, checkpoints WAL) une écriture ne doit pas
-/// échouer immédiatement.
+/// Tiempo de espera de un bloqueo SQLite antes de `SQLITE_BUSY` — bajo
+/// contienda de disco (antivirus, puntos de control WAL), una escritura no debe
+/// fallar inmediatamente.
 const SQLITE_BUSY_TIMEOUT_MS: i64 = 5_000;
-/// Taille du cache de pages SQLite (négatif = Kio) — 2 Mio (profil mémoire minimal pour embarqué/RPi).
+/// Tamaño de la caché de páginas SQLite (negativo = KiB) — 2 MiB (perfil de memoria mínimo para embebido/RPi).
 const SQLITE_CACHE_SIZE_KIB: i64 = -2_048;
-/// Seuil d'auto-checkpoint du journal WAL en pages (~2 Mio à 4 Kio/page)
-/// — borne la relecture WAL au chargement et l'ampleur d'un checkpoint pour limiter l'usure Flash/SSD et la RAM du journal.
+/// Umbral de punto de control automático del diario WAL en páginas (~2 MiB a 4 KiB/página)
+/// — acota la relectura WAL en la carga y la magnitud de un punto de control para limitar el desgaste de Flash/SSD y la RAM del diario.
 const SQLITE_WAL_AUTOCHECKPOINT_PAGES: i64 = 500;
-/// Taille maximale de memory-mapped I/O pour SQLite (4 Mio) — réduit l'espace d'adressage virtuel
-/// et l'empreinte résidente (RSS) sous Linux/aarch64 sans impacter la vitesse des requêtes locales.
+/// Tamaño máximo de E/S proyectada en memoria (mmap) para SQLite (4 MiB) — reduce el espacio de direccionamiento virtual
+/// y la huella residente (RSS) en Linux/aarch64 sin perjudicar la velocidad de las consultas locales.
 const SQLITE_MMAP_SIZE_BYTES: i64 = 4_194_304;
 
-/// Database persistence manager for mule-core.
+/// Gestor de persistencia de base de datos para mule-core.
 pub struct Database {
     conn: Connection,
 }
@@ -55,11 +55,11 @@ impl std::fmt::Debug for Database {
 }
 
 impl Database {
-    /// Opens or creates a SQLite database in WAL mode.
+    /// Abre o crea una base de datos SQLite en modo WAL.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, CoreError> {
         let conn = Connection::open(path)?;
 
-        // Enable WAL mode for high performance and durability against crashes
+        // Activa el modo WAL para alto rendimiento y durabilidad frente a caídas
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "busy_timeout", SQLITE_BUSY_TIMEOUT_MS)?;
@@ -73,7 +73,7 @@ impl Database {
         Ok(db)
     }
 
-    /// In-memory database helper for tests.
+    /// Auxiliar de base de datos en memoria para pruebas.
     pub fn open_in_memory() -> Result<Self, CoreError> {
         let conn = Connection::open_in_memory()?;
         let db = Self { conn };
@@ -85,9 +85,9 @@ impl Database {
         schema::init_schema(&self.conn)
     }
 
-    // ── Settings ────────────────────────────────────────────────────────────
+    // ── Ajustes ─────────────────────────────────────────────────────────────
 
-    /// Gets a setting value by key.
+    /// Obtiene el valor de un ajuste por clave.
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, CoreError> {
         let mut stmt = self
             .conn
@@ -101,7 +101,7 @@ impl Database {
         }
     }
 
-    /// Sets or replaces a setting value.
+    /// Establece o sustituye el valor de un ajuste.
     pub fn set_setting(&mut self, key: &str, value: &str) -> Result<(), CoreError> {
         self.conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
@@ -110,7 +110,7 @@ impl Database {
         Ok(())
     }
 
-    /// Removes a setting by key.
+    /// Elimina un ajuste por clave.
     pub fn remove_setting(&mut self, key: &str) -> Result<bool, CoreError> {
         let rows = self
             .conn
@@ -131,14 +131,14 @@ impl Database {
         Ok(out)
     }
 
-    // ── Downloads ───────────────────────────────────────────────────────────
+    // ── Descargas ───────────────────────────────────────────────────────────
 
-    /// Saves a new download record.
+    /// Guarda un nuevo registro de descarga.
     pub fn insert_download(&mut self, dl: &Download) -> Result<(), CoreError> {
         downloads::insert_download(&mut self.conn, dl)
     }
 
-    /// Persists the trusted AICH root hash for a download.
+    /// Persiste el hash raíz AICH de confianza para una descarga.
     pub fn update_aich_root(
         &mut self,
         download_id: &Uuid,
@@ -147,9 +147,9 @@ impl Database {
         downloads::update_aich_root(&mut self.conn, download_id, aich_root)
     }
 
-    /// Atomically replaces received ranges for a download in a single transaction.
-    /// Points de compaction/éviction uniquement — le hot path de réception
-    /// utilise [`Self::append_received_range`].
+    /// Sustituye atómicamente los rangos recibidos para una descarga en una sola transacción.
+    /// Puntos de compactación/desalojo exclusivamente — la ruta crítica de recepción
+    /// utiliza [`Self::append_received_range`].
     pub fn sync_received_ranges(
         &mut self,
         download_id: &Uuid,
@@ -158,8 +158,8 @@ impl Database {
         downloads::sync_received_ranges(&mut self.conn, download_id, ranges)
     }
 
-    /// Persiste une range nouvellement reçue en O(1) (upsert, pas de
-    /// DELETE+INSERT global) — voir [`downloads::append_received_range`].
+    /// Persiste un rango recién recibido en O(1) (upsert, sin
+    /// DELETE+INSERT global) — ver [`downloads::append_received_range`].
     pub fn append_received_range(
         &mut self,
         download_id: &Uuid,
@@ -169,12 +169,12 @@ impl Database {
         downloads::append_received_range(&mut self.conn, download_id, start, end)
     }
 
-    /// Loads the stored RangeSet for a download.
+    /// Carga el RangeSet almacenado para una descarga.
     pub fn load_received_ranges(&self, download_id: &Uuid) -> Result<RangeSet, CoreError> {
         downloads::load_received_ranges(&self.conn, download_id)
     }
 
-    /// Records that a part has been verified.
+    /// Registra que una parte ha sido verificada.
     pub fn mark_part_verified(
         &mut self,
         download_id: &Uuid,
@@ -183,7 +183,7 @@ impl Database {
         downloads::mark_part_verified(&mut self.conn, download_id, part_index)
     }
 
-    /// Unmarks a part upon corruption detection.
+    /// Desmarca una parte tras detectar corrupción.
     pub fn unmark_part_verified(
         &mut self,
         download_id: &Uuid,
@@ -192,12 +192,12 @@ impl Database {
         downloads::unmark_part_verified(&mut self.conn, download_id, part_index)
     }
 
-    /// Retrieves all verified part indexes.
+    /// Recupera todos los índices de partes verificadas.
     pub fn get_verified_parts(&self, download_id: &Uuid) -> Result<Vec<u32>, CoreError> {
         downloads::get_verified_parts(&self.conn, download_id)
     }
 
-    /// Stores the per-part MD4 hashset for a file (keyed by lowercase hex ed2k hash).
+    /// Almacena el conjunto de hashes MD4 por parte para un archivo (indexado por el hash eD2K hexadecimal en minúsculas).
     pub fn store_part_hashes(
         &mut self,
         file_hash: &str,
@@ -206,17 +206,17 @@ impl Database {
         downloads::store_part_hashes(&mut self.conn, file_hash, part_hashes)
     }
 
-    /// Loads the per-part MD4 hashset for a file, ordered by part index.
+    /// Carga el conjunto de hashes MD4 por parte para un archivo, ordenado por índice de parte.
     pub fn get_part_hashes(&self, file_hash: &str) -> Result<Vec<[u8; 16]>, CoreError> {
         downloads::get_part_hashes(&self.conn, file_hash)
     }
 
-    /// Deletes the stored per-part hashset for a file.
+    /// Elimina el conjunto de hashes por parte almacenado para un archivo.
     pub fn delete_part_hashes(&mut self, file_hash: &str) -> Result<(), CoreError> {
         downloads::delete_part_hashes(&mut self.conn, file_hash)
     }
 
-    /// Updates status of a download.
+    /// Actualiza el estado de una descarga.
     pub fn update_status(
         &mut self,
         download_id: &Uuid,
@@ -225,7 +225,7 @@ impl Database {
         downloads::update_status(&mut self.conn, download_id, status)
     }
 
-    /// Persists the per-download priority ("low" | "normal" | "high").
+    /// Persiste la prioridad por descarga ("low" | "normal" | "high").
     pub fn update_priority(
         &mut self,
         download_id: &Uuid,
@@ -234,8 +234,8 @@ impl Database {
         downloads::update_priority(&mut self.conn, download_id, priority)
     }
 
-    /// Persists the per-file source limit (eMule FT_MAXSOURCES).
-    /// `None` restores the global default limit.
+    /// Persiste el límite de fuentes por archivo (`FT_MAXSOURCES` de eMule).
+    /// `None` restaura el límite predeterminado global.
     pub fn update_max_sources(
         &mut self,
         download_id: &Uuid,
@@ -244,17 +244,17 @@ impl Database {
         downloads::update_max_sources(&mut self.conn, download_id, max_sources)
     }
 
-    /// Retrieves all persisted downloads from the database.
+    /// Recupera todas las descargas persistidas desde la base de datos.
     pub fn get_all_downloads(&self) -> Result<Vec<Download>, CoreError> {
         downloads::get_all_downloads(&self.conn)
     }
 
-    /// Deletes a download record and its associated ranges and verified parts.
+    /// Elimina un registro de descarga y sus rangos y partes verificadas asociados.
     pub fn delete_download(&mut self, download_id: &Uuid) -> Result<bool, CoreError> {
         downloads::delete_download(&mut self.conn, download_id)
     }
 
-    /// Updates the target finalization path of a download.
+    /// Actualiza la ruta de finalización objetivo de una descarga.
     pub fn update_target_path(
         &mut self,
         download_id: &Uuid,
@@ -263,8 +263,8 @@ impl Database {
         downloads::update_target_path(&mut self.conn, download_id, target_path)
     }
 
-    /// Renames a download: updates `display_name` and the derived
-    /// `target_path` (finalization writes under the new name).
+    /// Cambia el nombre de una descarga: actualiza `display_name` y la
+    /// `target_path` derivada (la finalización escribe con el nuevo nombre).
     pub fn update_download_name_and_target(
         &mut self,
         download_id: &Uuid,
@@ -279,66 +279,66 @@ impl Database {
         )
     }
 
-    // ── Download History ────────────────────────────────────────────────────
+    // ── Historial de descargas ────────────────────────────────────────────────────
 
-    /// Inserts a new history record and returns the generated row ID.
+    /// Inserta un nuevo registro de historial y devuelve el ID de fila generado.
     pub fn insert_history_entry(&mut self, entry: &HistoryEntry) -> Result<i64, CoreError> {
         history::insert_history_entry(&mut self.conn, entry)
     }
 
-    /// Queries history entries matching the given filter.
+    /// Consulta entradas de historial que coinciden con el filtro indicado.
     pub fn query_history(&self, filter: &HistoryFilter) -> Result<Vec<HistoryEntry>, CoreError> {
         history::query_history(&self.conn, filter)
     }
 
-    /// Aggregates historical statistics across time windows (Session, 24h, 7d, Lifetime).
+    /// Agrega estadísticas históricas a través de ventanas de tiempo (sesión, 24 h, 7 d, histórico total).
     pub fn get_history_stats(&self, session_start_unix_ms: i64) -> Result<HistoryStats, CoreError> {
         history::get_history_stats(&self.conn, session_start_unix_ms)
     }
 
-    /// Deletes all history records.
+    /// Elimina todos los registros de historial.
     pub fn clear_history(&mut self) -> Result<usize, CoreError> {
         history::clear_history(&mut self.conn)
     }
 
-    /// Prunes history records older than the specified retention days.
+    /// Purga los registros de historial con una antigüedad superior a los días de retención especificados.
     pub fn apply_retention_policy(&mut self, retention_days: u32) -> Result<usize, CoreError> {
         history::apply_retention_policy(&mut self.conn, retention_days)
     }
 
-    // ── Categories ──────────────────────────────────────────────────────────
+    // ── Categorías ──────────────────────────────────────────────────────────
 
-    /// Retrieves all categories ordered by sort_order ascending, then created_at ascending.
+    /// Recupera todas las categorías ordenadas por sort_order ascendente y después created_at ascendente.
     pub fn get_categories(&self) -> Result<Vec<DownloadCategory>, CoreError> {
         categories::get_categories(&self.conn)
     }
 
-    /// Retrieves a category by its ID.
+    /// Recupera una categoría por su ID.
     pub fn get_category(&self, id: &str) -> Result<Option<DownloadCategory>, CoreError> {
         categories::get_category(&self.conn, id)
     }
 
-    /// Inserts a new category.
+    /// Inserta una nueva categoría.
     pub fn insert_category(&mut self, cat: &DownloadCategory) -> Result<(), CoreError> {
         categories::insert_category(&mut self.conn, cat)
     }
 
-    /// Updates an existing category.
+    /// Actualiza una categoría existente.
     pub fn update_category(&mut self, cat: &DownloadCategory) -> Result<bool, CoreError> {
         categories::update_category(&mut self.conn, cat)
     }
 
-    /// Deletes a category and atomically reassigns all affected downloads to NULL.
+    /// Elimina una categoría y reasigna atómicamente a NULL todas las descargas afectadas.
     pub fn delete_category(&mut self, id: &str) -> Result<usize, CoreError> {
         categories::delete_category(&mut self.conn, id)
     }
 
-    /// Reorders categories based on the provided ordered list of category IDs.
+    /// Reordena las categorías basándose en la lista ordenada de ID de categoría proporcionada.
     pub fn reorder_categories(&mut self, category_ids: &[String]) -> Result<(), CoreError> {
         categories::reorder_categories(&mut self.conn, category_ids)
     }
 
-    /// Sets or clears the category assigned to a download.
+    /// Asigna o desasigna la categoría vinculada a una descarga.
     pub fn set_download_category(
         &mut self,
         download_id: &Uuid,
@@ -347,36 +347,36 @@ impl Database {
         categories::set_download_category(&mut self.conn, download_id, category_id)
     }
 
-    // ── Servers ─────────────────────────────────────────────────────────────
+    // ── Servidores ─────────────────────────────────────────────────────────────
 
-    /// Upserts a batch of eD2K servers.
+    /// Inserta o actualiza un lote de servidores eD2K.
     pub fn upsert_servers(&mut self, servers: &[Ed2kServer]) -> Result<usize, CoreError> {
         servers::upsert_servers(&mut self.conn, servers)
     }
 
-    /// Lists all persisted eD2K servers ordered by preference DESC, name ASC.
+    /// Lista todos los servidores eD2K persistidos ordenados por preference DESC, name ASC.
     pub fn list_servers(&self) -> Result<Vec<Ed2kServer>, CoreError> {
         servers::list_servers(&self.conn)
     }
 
-    /// Updates the enabled/disabled state of a server.
+    /// Actualiza el estado habilitado/deshabilitado de un servidor.
     pub fn set_server_enabled(&mut self, address: &str, enabled: bool) -> Result<bool, CoreError> {
         servers::set_server_enabled(&mut self.conn, address, enabled)
     }
 
-    /// Deletes a server from SQLite by address ("ip:port").
+    /// Elimina un servidor de SQLite por dirección ("ip:port").
     pub fn delete_server(&mut self, address: &str) -> Result<bool, CoreError> {
         servers::delete_server(&mut self.conn, address)
     }
 
-    /// Removes all servers from SQLite.
+    /// Elimina todos los servidores de SQLite.
     pub fn clear_servers(&mut self) -> Result<usize, CoreError> {
         servers::clear_servers(&mut self.conn)
     }
 
-    // ── Peer Sources Registry ───────────────────────────────────────────────
+    // ── Registro de fuentes de pares ───────────────────────────────────────────────
 
-    /// Upserts a batch of peer sources for a given file hash.
+    /// Inserta o actualiza un lote de fuentes de pares para un hash de archivo dado.
     pub fn upsert_peer_sources(
         &mut self,
         file_hash: &str,
@@ -385,12 +385,12 @@ impl Database {
         sources::upsert_peer_sources(&mut self.conn, file_hash, sources)
     }
 
-    /// Lists all persisted peer sources for a given file hash.
+    /// Lista todas las fuentes de pares persistidas para un hash de archivo dado.
     pub fn list_peer_sources(&self, file_hash: &str) -> Result<Vec<PeerSource>, CoreError> {
         sources::list_peer_sources(&self.conn, file_hash)
     }
 
-    /// Updates the status, fail_count, last_error and optional cooldown of a peer source.
+    /// Actualiza el estado, fail_count, last_error y enfriamiento opcional de una fuente de par.
     pub fn update_peer_source_status(
         &mut self,
         file_hash: &str,
@@ -409,7 +409,7 @@ impl Database {
         )
     }
 
-    /// Updates the learned software name and/or availability bitmask of a peer source.
+    /// Actualiza el nombre de software conocido y/o la máscara de bits de disponibilidad de una fuente de par.
     pub fn update_peer_source_details(
         &mut self,
         file_hash: &str,
@@ -426,7 +426,7 @@ impl Database {
         )
     }
 
-    /// Updates the eD2K server coordinates of a peer source.
+    /// Actualiza las coordenadas de servidor eD2K de una fuente de par.
     pub fn update_peer_source_server(
         &mut self,
         file_hash: &str,
@@ -443,7 +443,7 @@ impl Database {
         )
     }
 
-    /// Resets the cooldown and fail count for a peer source.
+    /// Restablece el enfriamiento y el recuento de fallos de una fuente de par.
     pub fn reset_peer_source_cooldown(
         &mut self,
         file_hash: &str,
@@ -452,7 +452,7 @@ impl Database {
         sources::reset_peer_source_cooldown(&mut self.conn, file_hash, address)
     }
 
-    /// Deletes a specific peer source from SQLite.
+    /// Elimina una fuente de par específica de SQLite.
     pub fn delete_peer_source(
         &mut self,
         file_hash: &str,
@@ -461,39 +461,39 @@ impl Database {
         sources::delete_peer_source(&mut self.conn, file_hash, address)
     }
 
-    /// Clears all peer sources for a file hash.
+    /// Elimina todas las fuentes de pares para un hash de archivo.
     pub fn clear_peer_sources(&mut self, file_hash: &str) -> Result<usize, CoreError> {
         sources::clear_peer_sources(&mut self.conn, file_hash)
     }
 
-    // ── Shared Files ────────────────────────────────────────────────────────
+    // ── Archivos compartidos ────────────────────────────────────────────────────────
 
-    /// Upserts a shared file in SQLite.
+    /// Inserta o actualiza un archivo compartido en SQLite.
     pub fn upsert_shared_file(&mut self, file: &SharedFile) -> Result<(), CoreError> {
         shares::upsert_shared_file(&mut self.conn, file)
     }
 
-    /// Upserts a batch of shared files in a single SQLite transaction.
+    /// Inserta o actualiza un lote de archivos compartidos en una sola transacción SQLite.
     pub fn upsert_shared_files_batch(&mut self, files: &[SharedFile]) -> Result<usize, CoreError> {
         shares::upsert_shared_files_batch(&mut self.conn, files)
     }
 
-    /// Lists all shared files in SQLite.
+    /// Lista todos los archivos compartidos en SQLite.
     pub fn list_shared_files(&self) -> Result<Vec<SharedFile>, CoreError> {
         shares::list_shared_files(&self.conn)
     }
 
-    /// Retrieves a specific shared file by hash.
+    /// Recupera un archivo compartido específico por hash.
     pub fn get_shared_file(&self, file_hash: &str) -> Result<Option<SharedFile>, CoreError> {
         shares::get_shared_file(&self.conn, file_hash)
     }
 
-    /// Deletes a shared file entry from SQLite.
+    /// Elimina una entrada de archivo compartido de SQLite.
     pub fn delete_shared_file(&mut self, file_hash: &str) -> Result<bool, CoreError> {
         shares::delete_shared_file(&mut self.conn, file_hash)
     }
 
-    /// Toggles the enabled state of a shared file.
+    /// Alterna el estado habilitado de un archivo compartido.
     pub fn set_shared_file_enabled(
         &mut self,
         file_hash: &str,
@@ -502,7 +502,7 @@ impl Database {
         shares::set_shared_file_enabled(&mut self.conn, file_hash, enabled)
     }
 
-    /// Ajoute `delta` octets au total uploadé persisté d'un fichier partagé.
+    /// Añade `delta` bytes al total subido persistido de un archivo compartido.
     pub fn add_share_uploaded_bytes(
         &mut self,
         file_hash: &str,
@@ -511,14 +511,14 @@ impl Database {
         shares::add_share_uploaded_bytes(&mut self.conn, file_hash, delta)
     }
 
-    /// Totaux uploadés persistés par hash de fichier (clés en minuscules).
+    /// Totales subidos persistidos por hash de archivo (claves en minúsculas).
     pub fn list_share_uploaded_bytes(
         &self,
     ) -> Result<std::collections::HashMap<String, u64>, CoreError> {
         shares::list_share_uploaded_bytes(&self.conn)
     }
 
-    /// Associe (ou retire, `None`) une catégorie à un partage persisté.
+    /// Asocia (o desvincula, `None`) una categoría a un recurso compartido persistido.
     pub fn set_shared_file_category(
         &mut self,
         file_hash: &str,
@@ -527,7 +527,7 @@ impl Database {
         shares::set_shared_file_category(&mut self.conn, file_hash, category_id)
     }
 
-    /// Sets the upload priority (`up_priority`) of a shared file.
+    /// Establece la prioridad de subida (`up_priority`) de un archivo compartido.
     pub fn set_shared_up_priority(
         &mut self,
         file_hash: &str,
@@ -536,7 +536,7 @@ impl Database {
         shares::set_shared_up_priority(&mut self.conn, file_hash, up_priority)
     }
 
-    /// Caches the computed AICH root hash of a shared file.
+    /// Almacena en caché el hash raíz AICH calculado de un archivo compartido.
     pub fn set_shared_aich_root(
         &mut self,
         file_hash: &str,
@@ -545,19 +545,19 @@ impl Database {
         shares::set_shared_aich_root(&mut self.conn, file_hash, aich_root)
     }
 
-    // ── Peer Credits ────────────────────────────────────────────────────────
+    // ── Créditos de pares ────────────────────────────────────────────────────────
 
-    /// Upserts a peer credit record into SQLite.
+    /// Inserta o actualiza un registro de créditos de par en SQLite.
     pub fn upsert_peer_credit(&mut self, credit: &PeerCredit) -> Result<(), CoreError> {
         credits::upsert_peer_credit(&mut self.conn, credit)
     }
 
-    /// Retrieves a peer credit record by public key hash.
+    /// Recupera un registro de créditos de par por hash de clave pública.
     pub fn get_peer_credit(&self, pubkey_hash: &str) -> Result<Option<PeerCredit>, CoreError> {
         credits::get_peer_credit(&self.conn, pubkey_hash)
     }
 
-    /// Increments uploaded bytes counter for a peer credit record.
+    /// Incrementa el contador de bytes subidos para un registro de créditos de par.
     pub fn record_credit_upload(
         &mut self,
         pubkey_hash: &str,
@@ -567,7 +567,7 @@ impl Database {
         credits::record_credit_upload(&mut self.conn, pubkey_hash, pubkey_hex, bytes)
     }
 
-    /// Increments downloaded bytes counter for a peer credit record.
+    /// Incrementa el contador de bytes descargados para un registro de créditos de par.
     pub fn record_credit_download(
         &mut self,
         pubkey_hash: &str,
@@ -577,33 +577,33 @@ impl Database {
         credits::record_credit_download(&mut self.conn, pubkey_hash, pubkey_hex, bytes)
     }
 
-    /// Lists top peer credits.
+    /// Lista los mejores créditos de pares.
     pub fn list_peer_credits(&self, limit: usize) -> Result<Vec<PeerCredit>, CoreError> {
         credits::list_peer_credits(&self.conn, limit)
     }
 
-    // ── Friends ─────────────────────────────────────────────────────────────
+    // ── Amigos ─────────────────────────────────────────────────────────────
 
-    /// Adds or updates a friend (eMule `friends.met` equivalent).
+    /// Añade o actualiza un amigo (equivalente a `friends.met` de eMule).
     pub fn add_friend(&mut self, user_hash: &str, name: &str) -> Result<(), CoreError> {
         friends::add_friend(&mut self.conn, user_hash, name)
     }
 
-    /// Removes a friend by user hash.
+    /// Elimina un amigo por hash de usuario.
     pub fn remove_friend(&mut self, user_hash: &str) -> Result<(), CoreError> {
         friends::remove_friend(&mut self.conn, user_hash)
     }
 
-    /// Lists all friends.
+    /// Lista todos los amigos.
     pub fn list_friends(&self) -> Result<Vec<Friend>, CoreError> {
         friends::list_friends(&self.conn)
     }
 
-    // ── Cancelled files (eMule `m_mapCancelledFiles`) ───────────────────────
+    // ── Archivos cancelados (m_mapCancelledFiles de eMule) ───────────────────────
 
-    /// Local `m_dwCancelledFilesSeed` — lazily generated and persisted,
-    /// like eMule (`Preferences.cpp` writes it into `cancelled.met` only,
-    /// but persisting it in settings keeps every mask reproducible).
+    /// `m_dwCancelledFilesSeed` local — generado perezosamente y persistido,
+    /// al igual que en eMule (`Preferences.cpp` solo lo escribe en `cancelled.met`,
+    /// pero persistirlo en los ajustes mantiene reproducible cada máscara).
     pub fn get_or_create_cancelled_seed(&mut self) -> Result<u32, CoreError> {
         if let Some(raw) = self.get_setting(cancelled::CANCELLED_SEED_KEY)? {
             if let Ok(seed) = raw.parse::<u32>() {
@@ -618,34 +618,34 @@ impl Database {
         Ok(seed)
     }
 
-    /// Records a masked hash under `seed` (idempotent).
+    /// Registra un hash enmascarado bajo `seed` (idempotente).
     pub fn add_cancelled_hash(&mut self, seed: u32, masked_hash_hex: &str) -> Result<(), CoreError> {
         cancelled::add_cancelled_hash(&mut self.conn, seed, masked_hash_hex)
     }
 
-    /// `true` when `masked_hash_hex` exists under `seed`.
+    /// `true` cuando `masked_hash_hex` existe bajo `seed`.
     pub fn is_cancelled_masked(&self, seed: u32, masked_hash_hex: &str) -> Result<bool, CoreError> {
         cancelled::is_cancelled_masked(&self.conn, seed, masked_hash_hex)
     }
 
-    /// All distinct seeds present in the cancelled set.
+    /// Todas las semillas distintas presentes en el conjunto de cancelados.
     pub fn cancelled_seeds(&self) -> Result<Vec<u32>, CoreError> {
         cancelled::distinct_seeds(&self.conn)
     }
 
-    /// Number of stored masked hashes.
+    /// Número de hashes enmascarados almacenados.
     pub fn cancelled_count(&self) -> Result<usize, CoreError> {
         cancelled::cancelled_count(&self.conn)
     }
 
-    // ── Kad Contacts & Routing ──────────────────────────────────────────────
+    // ── Contactos y enrutamiento Kad ──────────────────────────────────────────────
 
-    /// Upserts a Kad contact record.
+    /// Inserta o actualiza un registro de contacto Kad.
     pub fn upsert_kad_contact(&mut self, contact: &KadContact) -> Result<(), CoreError> {
         kad::upsert_kad_contact(&mut self.conn, contact)
     }
 
-    /// Batch upserts Kad contacts in a single transaction.
+    /// Inserta o actualiza en lote contactos Kad en una sola transacción.
     pub fn batch_upsert_kad_contacts(
         &mut self,
         contacts: &[KadContact],
@@ -653,24 +653,24 @@ impl Database {
         kad::batch_upsert_kad_contacts(&mut self.conn, contacts)
     }
 
-    /// Retrieves all Kad contacts up to a given limit.
+    /// Recupera todos los contactos Kad hasta un límite determinado.
     pub fn list_kad_contacts(&self, limit: usize) -> Result<Vec<KadContact>, CoreError> {
         kad::list_kad_contacts(&self.conn, limit)
     }
 
-    /// Counts total Kad contacts stored in SQLite.
+    /// Cuenta el total de contactos Kad almacenados en SQLite.
     pub fn count_kad_contacts(&self) -> Result<usize, CoreError> {
         kad::count_kad_contacts(&self.conn)
     }
 
-    /// Deletes all Kad contacts.
+    /// Elimina todos los contactos Kad.
     pub fn clear_kad_contacts(&mut self) -> Result<usize, CoreError> {
         kad::clear_kad_contacts(&mut self.conn)
     }
 
-    // ── Kad Indexed Sources ─────────────────────────────────────────────────
+    // ── Fuentes indexadas Kad ─────────────────────────────────────────────────
 
-    /// Inserts or replaces a batch of Kad indexed sources.
+    /// Inserta o sustituye un lote de fuentes indexadas Kad.
     pub fn insert_kad_indexed_sources(
         &mut self,
         sources: &[KadIndexedSource],
@@ -678,7 +678,7 @@ impl Database {
         kad::insert_kad_indexed_sources(&mut self.conn, sources)
     }
 
-    /// Retrieves unexpired indexed Kad sources for a given file hash.
+    /// Recupera fuentes Kad indexadas no expiradas para un hash de archivo dado.
     pub fn get_kad_indexed_sources(
         &self,
         file_hash: &[u8; 16],
@@ -688,7 +688,7 @@ impl Database {
         kad::get_kad_indexed_sources(&self.conn, file_hash, max_results, now_unix_ms)
     }
 
-    /// Loads every live indexed Kad source (storage-node rehydration).
+    /// Carga todas las fuentes Kad indexadas activas (rehidratación del nodo de almacenamiento).
     pub fn list_all_kad_indexed_sources(
         &self,
         now_unix_ms: u64,
@@ -697,19 +697,19 @@ impl Database {
         kad::list_all_kad_indexed_sources(&self.conn, now_unix_ms, limit)
     }
 
-    /// Purges expired Kad indexed sources.
+    /// Purga las fuentes indexadas Kad expiradas.
     pub fn purge_expired_kad_sources(&mut self, now_unix_ms: u64) -> Result<usize, CoreError> {
         kad::purge_expired_kad_sources(&mut self.conn, now_unix_ms)
     }
 
-    /// Counts total indexed Kad sources.
+    /// Cuenta el total de fuentes indexadas Kad.
     pub fn count_kad_indexed_sources(&self) -> Result<usize, CoreError> {
         kad::count_kad_indexed_sources(&self.conn)
     }
 
-    // ── Kad Keyword Index ───────────────────────────────────────────────────
+    // ── Índice de palabras clave Kad ───────────────────────────────────────────────────
 
-    /// Inserts or updates Kad keyword index entries in batch.
+    /// Inserta o actualiza en lote entradas del índice de palabras clave Kad.
     pub fn insert_kad_keyword_entries(
         &mut self,
         entries: &[KadKeywordEntry],
@@ -717,7 +717,7 @@ impl Database {
         kad::insert_kad_keyword_entries(&mut self.conn, entries)
     }
 
-    /// Retrieves all active Kad keyword index entries matching a keyword hash.
+    /// Recupera todas las entradas activas del índice de palabras clave Kad que coinciden con un hash de palabra clave.
     pub fn get_kad_keyword_entries(
         &self,
         keyword_hash: &str,
@@ -726,7 +726,7 @@ impl Database {
         kad::get_kad_keyword_entries(&self.conn, keyword_hash, now_unix_ms)
     }
 
-    /// Loads every live Kad keyword entry (storage-node rehydration).
+    /// Carga todas las entradas de palabras clave Kad activas (rehidratación del nodo de almacenamiento).
     pub fn list_all_kad_keyword_entries(
         &self,
         now_unix_ms: u64,
@@ -735,22 +735,22 @@ impl Database {
         kad::list_all_kad_keyword_entries(&self.conn, now_unix_ms, limit)
     }
 
-    /// Purges expired Kad keyword entries.
+    /// Purga las entradas de palabras clave Kad expiradas.
     pub fn purge_expired_kad_keywords(&mut self, now_unix_ms: u64) -> Result<usize, CoreError> {
         kad::purge_expired_kad_keywords(&mut self.conn, now_unix_ms)
     }
 
-    /// Counts total indexed Kad keyword entries.
+    /// Cuenta el total de entradas de palabras clave Kad indexadas.
     pub fn count_kad_keyword_entries(&self) -> Result<usize, CoreError> {
         kad::count_kad_keyword_entries(&self.conn)
     }
 
-    /// Upserts Kad note entries (storage-node role).
+    /// Inserta o actualiza entradas de notas Kad (rol de nodo de almacenamiento).
     pub fn insert_kad_notes(&mut self, notes: &[KadIndexedNote]) -> Result<usize, CoreError> {
         kad::insert_kad_notes(&mut self.conn, notes)
     }
 
-    /// Loads every live Kad note entry for store rehydration.
+    /// Carga todas las entradas de notas Kad activas para rehidratar el almacén.
     pub fn list_all_kad_notes(
         &self,
         now_unix_ms: u64,
@@ -759,12 +759,12 @@ impl Database {
         kad::list_all_kad_notes(&self.conn, now_unix_ms, limit)
     }
 
-    /// Purges expired Kad note entries.
+    /// Purga las entradas de notas Kad expiradas.
     pub fn purge_expired_kad_notes(&mut self, now_unix_ms: u64) -> Result<usize, CoreError> {
         kad::purge_expired_kad_notes(&mut self.conn, now_unix_ms)
     }
 
-    /// Counts total indexed Kad note entries.
+    /// Cuenta el total de entradas de notas Kad indexadas.
     pub fn count_kad_notes(&self) -> Result<usize, CoreError> {
         kad::count_kad_notes(&self.conn)
     }

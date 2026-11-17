@@ -18,7 +18,7 @@ use crate::ed2k::protocol::{PR_ED2K, PR_EMULE, PR_EMULE_COMPRESSED};
 use crate::framing::RawPacket;
 use crate::limits::HEADER_SIZE;
 
-/// Encodes an `Ed2kRequestSources` into a wire `RawPacket`.
+/// Codifica un `Ed2kRequestSources` en un `RawPacket` de cable.
 pub fn encode_request_sources(req: &Ed2kRequestSources) -> Result<RawPacket, Ed2kEncodeError> {
     if req.version >= 2 {
         let mut payload = Vec::with_capacity(19);
@@ -43,7 +43,7 @@ pub fn encode_request_sources(req: &Ed2kRequestSources) -> Result<RawPacket, Ed2
     }
 }
 
-/// Decodes an `Ed2kRequestSources` from incoming packet.
+/// Decodifica un `Ed2kRequestSources` a partir del paquete entrante.
 pub fn decode_request_sources(
     protocol: u8,
     opcode: u8,
@@ -118,20 +118,20 @@ pub fn decode_request_sources(
     }
 }
 
-/// Encodes an `Ed2kAnswerSources` into a wire `RawPacket`.
+/// Codifica un `Ed2kAnswerSources` en un `RawPacket` de cable.
 ///
-/// `is_sx2` selects the envelope like eMule `bIsSX2Packet`
+/// `is_sx2` selecciona la envoltura igual que eMule `bIsSX2Packet`
 /// (`PartFile.cpp:3629-3646`):
 /// - `true` → `OP_ANSWERSOURCES2` (`0x84`): `<version u8><hash16><count u16>`;
-/// - `false` → `OP_ANSWERSOURCES` (`0x82`): `<hash16><count u16>` (no version
-///   byte on the wire).
+/// - `false` → `OP_ANSWERSOURCES` (`0x82`): `<hash16><count u16>` (sin byte de versión
+///   en el cable).
 ///
-/// Each entry is `<ip u32><port u16><server_ip u32><server_port u16>` plus
-/// `<user_hash 16>` when `version >= 2` and `<crypt_options u8>` when
-/// `version >= 4`. For `version < 3` the IP field is written in network byte
-/// order (`htonl`), while v3+ uses the little-endian "hybrid" format
-/// (`PartFile.cpp:3670-3691`). Payloads larger than 354 bytes are zlib
-/// packed (`PackPacket`), matching eMule exactly.
+/// Cada entrada es `<ip u32><port u16><server_ip u32><server_port u16>` más
+/// `<user_hash 16>` cuando `version >= 2` y `<crypt_options u8>` cuando
+/// `version >= 4`. Para `version < 3`, el campo IP se escribe en orden de bytes de red
+/// (`htonl`), mientras que v3+ utiliza el formato "híbrido" en little-endian
+/// (`PartFile.cpp:3670-3691`). Las cargas útiles mayores de 354 bytes se comprimen con zlib
+/// (`PackPacket`), coincidiendo exactamente con eMule.
 pub fn encode_answer_sources(
     ans: &Ed2kAnswerSources,
     is_sx2: bool,
@@ -153,7 +153,7 @@ pub fn encode_answer_sources(
 
     for src in &ans.sources[..source_count] {
         if ans.version < 3 {
-            // SX1 v1/v2: IDs travel in network byte order (`htonl`).
+            // SX1 v1/v2: los IDs viajan en orden de bytes de red (`htonl`).
             raw_buf.extend_from_slice(&src.ip.to_be_bytes());
         } else {
             raw_buf.extend_from_slice(&src.ip_bytes);
@@ -206,7 +206,7 @@ pub fn encode_answer_sources(
     }
 }
 
-/// Decodes an `Ed2kAnswerSources` packet from raw or compressed bytes.
+/// Decodifica un paquete `Ed2kAnswerSources` a partir de bytes sin procesar o comprimidos.
 pub fn decode_answer_sources(
     protocol: u8,
     opcode: u8,
@@ -270,8 +270,7 @@ pub fn decode_answer_sources(
             ));
         }
         let v = data[0];
-        // eMule `AddClientSources`: SX2 packets with an unknown version are
-        // dropped entirely (`PartFile.cpp:3732-3740`).
+        // eMule `AddClientSources`: los paquetes SX2 con una versión desconocida se descartan por completo (`PartFile.cpp:3732-3740`).
         if v == 0 || v > super::types::SOURCE_EXCHANGE2_VERSION {
             return Err(Ed2kParseError::new(
                 protocol,
@@ -304,11 +303,11 @@ pub fn decode_answer_sources(
         h.copy_from_slice(&data[0..16]);
         let cnt = u16::from_le_bytes([data[16], data[17]]);
         let remaining = data.len() - 18;
-        // eMule sniffs the entry size for legacy SX1 packets and drops the
-        // packet when `nCount * entry_size != uDataSize`
-        // (`PartFile.cpp:3777-3827`). 29-byte entries are v4, 28-byte
-        // entries are v3 (hybrid IP, user hash; a pure v2 client is treated
-        // like eMule does for negotiated v3), 12-byte entries are v1.
+        // eMule sondea el tamaño de la entrada para paquetes SX1 heredados y descarta el
+        // paquete cuando `nCount * entry_size != uDataSize`
+        // (`PartFile.cpp:3777-3827`). Las entradas de 29 bytes son v4, las de 28 bytes
+        // son v3 (IP híbrida, hash de usuario; un cliente v2 puro se trata
+        // como hace eMule para v3 negociada), las entradas de 12 bytes son v1.
         let v = if remaining == (cnt as usize) * 29 {
             4
         } else if remaining == (cnt as usize) * 28 {
@@ -337,8 +336,8 @@ pub fn decode_answer_sources(
         _ => 12,
     };
 
-    // eMule requires an exact `count * entry_size` match for SX2 packets
-    // (`PartFile.cpp:3743-3770`); trailing garbage drops the whole packet.
+    // eMule requiere una coincidencia exacta `count * entry_size` para paquetes SX2
+    // (`PartFile.cpp:3743-3770`); la presencia de bytes sobrantes al final descarta el paquete completo.
     let needed_len = cursor + count * entry_size;
     if is_sx2 && data.len() != needed_len {
         return Err(Ed2kParseError::new(
@@ -377,8 +376,8 @@ pub fn decode_answer_sources(
             data[cursor + 2],
             data[cursor + 3],
         ];
-        // SX v1/v2 carry the ID in network byte order (`htonl`); v3+ uses the
-        // little-endian "hybrid" format (`PartFile.cpp:3843`,
+        // SX v1/v2 transportan el ID en orden de bytes de red (`htonl`); v3+ utiliza el
+        // formato "híbrido" en little-endian (`PartFile.cpp:3843`,
         // `dwIDED2K = (uPacketSXVersion < 3) ? dwID : htonl(dwID)`).
         if version < 3 {
             ip_bytes.reverse();

@@ -15,18 +15,18 @@ use super::types::{InFlightTransaction, KadExpectedResponse, KAD_TRANSACTION_TIM
 use super::KadUdpService;
 use mule_protocol::ed2k::packed::pack_kad_datagram;
 
-/// Idle window after the first search-response packet while more batches are
-/// still accepted (eMule streams up to ~300 results in ~50-entry packets).
+/// Ventana de inactividad tras el primer paquete de respuesta de búsqueda mientras
+/// se siguen aceptando más lotes (eMule transmite hasta ~300 resultados en paquetes de ~50 entradas).
 const SEARCH_RESP_IDLE_WINDOW: Duration = Duration::from_millis(350);
-/// Safety caps on the multi-packet collection loop.
+/// Límites de seguridad en el bucle de recolección multipaquete.
 const MAX_SEARCH_COLLECT_PACKETS: usize = 12;
 const MAX_SEARCH_COLLECT_ENTRIES: usize = 300;
 
-/// Collects the follow-up batches of a multi-packet `SEARCH_*_RES` response.
-/// The first packet was already consumed by the caller; eMule nodes stream
-/// the remaining results in subsequent datagrams arriving back-to-back.
-/// Bounded by an idle window, a packet count, and an entry cap — and by the
-/// outer transaction timeout for the first packet.
+/// Recolecta los lotes sucesivos de una respuesta `SEARCH_*_RES` multipaquete.
+/// El primer paquete ya fue consumido por el llamador; los nodos eMule transmiten
+/// los resultados restantes en datagramas posteriores que llegan de forma consecutiva.
+/// Acotado por una ventana de inactividad, un recuento de paquetes y un límite de entradas —
+/// y por el tiempo de espera de transacción externo para el primer paquete.
 async fn collect_search_batches<T>(
     rx: &mut mpsc::UnboundedReceiver<Result<KadMessage, String>>,
     mut acc: Vec<T>,
@@ -48,7 +48,7 @@ async fn collect_search_batches<T>(
 }
 
 impl KadUdpService {
-    /// Sends a Kad2 Search Source request to target address and awaits discovered sources.
+    /// Envía una solicitud Kad2 Search Source a la dirección de destino y espera las fuentes descubiertas.
     pub async fn send_search_sources(
         &self,
         target: SocketAddr,
@@ -106,9 +106,9 @@ impl KadUdpService {
                 let inner = self.inner.read().await;
                 let mut inf = inner.in_flight.lock().await;
                 inf.remove(&tx_id);
-                // eMule ne répond rien quand le nœud n'indexe pas le fichier
-                // (CIndexed::SendValidSourceResult) : le silence vaut « 0 sources »,
-                // ce n'est pas une anomalie — niveau debug, pas warn.
+                // eMule no responde nada cuando el nodo no indexa el archivo
+                // (CIndexed::SendValidSourceResult): el silencio equivale a «0 fuentes»,
+                // no es una anomalía — nivel debug, no warn.
                 tracing::debug!(
                     "Kad SearchSources to node {} timed out after {}s (file={}, tx_id={})",
                     log_peer_addr(target),
@@ -145,12 +145,12 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Publish Source request to target address and awaits status response.
+    /// Envía una solicitud Kad2 Publish Source a la dirección de destino y espera la respuesta de estado.
     ///
-    /// `advertised_ip`/`advertised_udp_port` are our *public* endpoint: indexers
-    /// reject the publish when the announced contact IP differs from the packet
-    /// source (eMule `ProcessPublishSourceRequest`), so the caller resolves the
-    /// observed/HighID address — never the socket bind address behind NAT.
+    /// `advertised_ip`/`advertised_udp_port` representan nuestro extremo *público*: los indexadores
+    /// rechazan la publicación cuando la IP del contacto anunciado difiere del origen del paquete
+    /// (eMule `ProcessPublishSourceRequest`), por lo que el llamador resuelve la dirección
+    /// observada/HighID — nunca la dirección vinculada al socket detrás de NAT.
     pub async fn send_publish_source(
         &self,
         target: SocketAddr,
@@ -224,9 +224,9 @@ impl KadUdpService {
                 let inner = self.inner.read().await;
                 let mut inf = inner.in_flight.lock().await;
                 inf.remove(&tx_id);
-                // eMule only answers PUBLISH_RES when the source entry was
-                // actually stored (out-of-tolerance targets drop silently) —
-                // a timeout here is expected noise, not an anomaly.
+                // eMule solo responde PUBLISH_RES cuando la entrada de fuente fue
+                // realmente almacenada (los destinos fuera de tolerancia se descartan en silencio) —
+                // un tiempo de espera aquí es ruido esperado, no una anomalía.
                 tracing::debug!(
                     "Kad PublishSource to node {} timed out after {}s (tx_id={})",
                     log_peer_addr(target),
@@ -265,7 +265,7 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Search Keyword request and waits for a SearchKeywordRes.
+    /// Envía una solicitud Kad2 Search Keyword y espera un SearchKeywordRes.
     pub async fn send_search_keyword(
         &self,
         target: SocketAddr,
@@ -360,7 +360,7 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Publish Keyword request and waits for a PublishKeywordRes.
+    /// Envía una solicitud Kad2 Publish Keyword y espera un PublishKeywordRes.
     pub async fn send_publish_keyword(
         &self,
         target: SocketAddr,
@@ -414,8 +414,8 @@ impl KadUdpService {
                 let inner = self.inner.read().await;
                 let mut inf = inner.in_flight.lock().await;
                 inf.remove(&tx_id);
-                // Out-of-tolerance nodes silently drop PUBLISH_KEY_REQ —
-                // keep the timeout visible but below WARN noise level.
+                // Los nodos fuera de tolerancia descartan PUBLISH_KEY_REQ en silencio —
+                // mantener el tiempo de espera visible pero por debajo del nivel de ruido WARN.
                 tracing::debug!(
                     "Kad PublishKeyword to node {} timed out after {}s (keyword={}, tx_id={})",
                     log_peer_addr(target),
@@ -455,8 +455,8 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Search Notes request (0x35) and waits for a notes
-    /// response (unified 0x3B or legacy 0x3A).
+    /// Envía una solicitud Kad2 Search Notes (0x35) y espera una respuesta
+    /// de notas (0x3B unificada o 0x3A legada).
     pub async fn send_search_notes(
         &self,
         target: SocketAddr,
@@ -551,8 +551,8 @@ impl KadUdpService {
         }
     }
 
-    /// Sends a Kad2 Publish Notes request (0x45) and waits for the
-    /// shared 0x4B publish response (status byte = indexer load).
+    /// Envía una solicitud Kad2 Publish Notes (0x45) y espera la
+    /// respuesta de publicación 0x4B compartida (byte de estado = carga del indexador).
     pub async fn send_publish_notes(
         &self,
         target: SocketAddr,

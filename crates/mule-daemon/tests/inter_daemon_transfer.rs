@@ -22,36 +22,36 @@ const AUTH_TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef012345
 
 #[tokio::test]
 async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
-    // 1. Prepare isolated directories
+    // 1. Preparar directorios aislados
     let dir_source = tempdir().unwrap();
     let dir_client = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
     let fixture_hash = Ed2kHash::from_hex(FIXTURE_EXACT_ONE_PART.expected_ed2k_hex).unwrap();
 
-    // Generate exact fixture data (9 728 000 bytes)
+    // Generar datos de prueba exactos (9.728.000 bytes)
     let mut pattern_reader = PatternReader::new(&REPEATING_0_TO_255, FIXTURE_FILE_SIZE);
     let mut fixture_data = Vec::with_capacity(FIXTURE_FILE_SIZE as usize);
     pattern_reader.read_to_end(&mut fixture_data).unwrap();
     let fixture_bytes = Bytes::from(fixture_data);
 
-    // 2. Start Source Daemon (Daemon A)
+    // 2. Iniciar daemon de origen (Daemon A)
     let _source_lock = DirectoryLock::acquire(dir_source.path()).unwrap();
     let mut engine = LabSourceEngine::new();
     engine.host_file(fixture_hash.0, "fixture_9728000.bin", fixture_bytes.clone());
     let source_service = LabSourceService::start(engine).await.unwrap();
     let source_addr = source_service.local_addr();
 
-    // 3. Start Client Daemon (Daemon B)
+    // 3. Iniciar daemon de cliente (Daemon B)
     let client_daemon = RunningDaemon::start(dir_client.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr = client_daemon.addr;
 
-    // Connect WebSocket to Client Daemon
+    // Conectar WebSocket al daemon de cliente
     let ws_url = format!("ws://{client_addr}/rpc");
     let (ws_stream, _) = connect_async(&ws_url).await.expect("connects to daemon B");
     let (mut write, mut read) = ws_stream.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -69,7 +69,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let hello_val: Value = serde_json::from_str(resp.to_text().unwrap()).unwrap();
     assert_eq!(hello_val["result"]["protocolVersion"], 1);
 
-    // Subscribe to events
+    // Suscribirse a eventos
     let req_sub = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -82,7 +82,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         .unwrap();
     let _ = read.next().await.unwrap().unwrap();
 
-    // Add ed2k download for the fixture
+    // Añadir descarga ed2k para la prueba
     let ed2k_link = format!(
         "ed2k://|file|fixture_9728000.bin|{}|{}|/",
         FIXTURE_FILE_SIZE, fixture_hash
@@ -101,9 +101,9 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         .await
         .unwrap();
 
-    // Collect response and initial event — le serveur multiplexe réponses et
-    // events broadcast (downloadAdded/downloadUpdated) via select!, sans ordre
-    // garanti : lire jusqu'à avoir les deux attendus.
+    // Recopilar respuesta y evento inicial — el servidor multiplexa respuestas y
+    // eventos de difusión (downloadAdded/downloadUpdated) mediante select!, sin orden
+    // garantizado: leer hasta tener los dos esperados.
     let mut add_val: Option<Value> = None;
     let mut evt_val: Option<Value> = None;
     for _ in 0..16 {
@@ -127,7 +127,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     assert_eq!(add_val["result"]["status"], "queued");
     assert_eq!(evt_val["params"]["download"]["status"], "queued");
 
-    // 4. Attach Source Daemon via lab.addPeerSource
+    // 4. Asociar daemon de origen mediante lab.addPeerSource
     let req_source = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -153,7 +153,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let src_val = src_val.expect("addPeerSource response not received");
     assert_eq!(src_val["result"]["started"], true);
 
-    // 5. Monitor progress until ~50% (at least 4.5 MB), verifying transitions
+    // 5. Monitorizar progreso hasta ~50% (al menos 4,5 MB), verificando transiciones
     let mut saw_waiting_for_sources = false;
     let mut saw_downloading = false;
     let mut received_at_interrupt = 0u64;
@@ -190,15 +190,15 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         received_at_interrupt
     );
 
-    // 6. Abruptly kill Client Daemon (crash simulation)
+    // 6. Finalizar abruptamente el daemon de cliente (simulación de caída)
     drop(write);
     drop(read);
     client_daemon.stop().await;
 
-    // Short pause to ensure socket and lock cleanup on Windows
+    // Pausa corta para asegurar la liberación del socket y cerrojos en Windows
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // 7. Restart Client Daemon on the EXACT SAME workdir!
+    // 7. Reiniciar daemon de cliente en el EXACTO MISMO directorio de trabajo
     let client_daemon_2 = RunningDaemon::start(dir_client.path().to_path_buf(), AUTH_TOKEN).await;
     let client_addr_2 = client_daemon_2.addr;
 
@@ -208,7 +208,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         .expect("reconnects to restarted daemon B");
     let (mut write_2, mut read_2) = ws_stream_2.split();
 
-    // Handshake
+    // Negociación (handshake)
     let req_hello_2 = json!({
         "jsonrpc": "2.0",
         "id": 10,
@@ -226,7 +226,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let hello_val_2: Value = serde_json::from_str(resp.to_text().unwrap()).unwrap();
     assert_eq!(hello_val_2["result"]["protocolVersion"], 1);
 
-    // Verify persisted state via downloads.list
+    // Verificar estado persistido mediante downloads.list
     let req_list = json!({
         "jsonrpc": "2.0",
         "id": 11,
@@ -257,7 +257,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         "Restored receivedBytes ({restored_received}) is >= observed interrupt ({received_at_interrupt}) and < total ({FIXTURE_FILE_SIZE})"
     );
 
-    // Subscribe to events
+    // Suscribirse a eventos
     let req_sub_2 = json!({
         "jsonrpc": "2.0",
         "id": 12,
@@ -270,7 +270,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         .unwrap();
     let _ = read_2.next().await.unwrap().unwrap();
 
-    // 8. Resume transfer by re-attaching source
+    // 8. Reanudar transferencia volviendo a asociar el origen
     let req_resume = json!({
         "jsonrpc": "2.0",
         "id": 13,
@@ -295,7 +295,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     }
     assert!(resume_got, "resume response not received");
 
-    // 9. Collect events through Verifying and Completed
+    // 9. Recopilar eventos hasta Verifying y Completed
     let mut saw_verifying = false;
     let mut saw_completed = false;
 
@@ -326,7 +326,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     assert!(saw_verifying, "Expected verifying state transition");
     assert!(saw_completed, "Expected completed state transition");
 
-    // 10. Verify finalized file on disk
+    // 10. Verificar archivo finalizado en disco
     let finalized_path = client_target_dir.path().join("fixture_9728000.bin");
     assert!(
         finalized_path.exists(),
@@ -345,7 +345,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         "Final eD2K hash must match fixture_exact_one_part exactly"
     );
 
-    // Clean shutdown
+    // Cierre limpio
     client_daemon_2.stop().await;
     source_service.stop();
 }

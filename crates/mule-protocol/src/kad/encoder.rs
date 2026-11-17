@@ -14,7 +14,7 @@ use super::types::*;
 /// Bounded wire packet encoder for Kad UDP packets.
 pub struct KadEncoder;
 
-/// Allocates a buffer pre-filled with the `[PR_KADEMLIA][opcode]` header —
+/// Asigna un búfer prellenado con la cabecera `[PR_KADEMLIA][opcode]` —
 /// shared frame of every Kad UDP encoder below.
 fn kad_buf(opcode: u8, capacity: usize) -> BytesMut {
     let mut buf = BytesMut::with_capacity(capacity);
@@ -138,7 +138,7 @@ impl KadEncoder {
         )
     }
 
-    /// Encodes a Kad2 Hello response packet (same layout as the request).
+    /// Codifica un paquete de respuesta Kad2 Hello (mismo diseño que la solicitud).
     pub fn encode_hello_res(
         kad_id: &KadIdBytes,
         udp_port: u16,
@@ -158,7 +158,7 @@ impl KadEncoder {
 
     /// Encodes a `KADEMLIA2_HELLO_RES_ACK` (0x22): `[kadID 16][tag_count u8]`.
     ///
-    /// Sent after a HELLO_RES that requested it via `TAG_KADMISCOPTIONS` bit 2,
+    /// Enviado tras un HELLO_RES que lo solicitó mediante `TAG_KADMISCOPTIONS` bit 2,
     /// proving our IP is not spoofed (eMule Process_KADEMLIA2_HELLO_RES).
     pub fn encode_hello_res_ack(kad_id: &KadIdBytes) -> Bytes {
         let mut buf = kad_buf(KADEMLIA2_HELLO_RES_ACK, 19);
@@ -288,7 +288,7 @@ impl KadEncoder {
     /// to `MAX_KAD_SEARCH_SOURCES` entries greedily into consecutive
     /// `KADEMLIA2_SEARCH_RES` datagrams, each staying under
     /// `UDP_KAD_MAXFRAGMENT` — IP fragmentation would drop Kad answers.
-    /// Returns at least one packet (possibly with 0 entries when `sources`
+    /// Devuelve al menos un paquete (posiblemente con 0 entradas cuando `sources`
     /// is empty).
     pub fn encode_search_source_res_fragmented(
         target_file_hash: &KadIdBytes,
@@ -351,8 +351,8 @@ impl KadEncoder {
         buf.put_u64_le(file_size);
 
         // 5. TAG_ENCRYPTION (0xF3) -> TAGTYPE_UINT8 (0x09) — eMule
-        //    `GetMyConnectOptions(true, true)` : crypt bits + bit 3
-        //    (direct UDP callback) quand applicable.
+        //    `GetMyConnectOptions(true, true)` : bits de cifrado + bit 3
+        //    (callback UDP directo) cuando sea aplicable.
         buf.put_u8(0x09);
         buf.put_u16_le(1);
         buf.put_u8(0xF3);
@@ -371,9 +371,9 @@ impl KadEncoder {
 
     /// Encodes a Kad2 Search Keyword request packet (0x33).
     /// Official format: `[keyword_hash 16][start_pos u16]` — `start_pos`
-    /// carries the `0x8000` restrictive-search flag when set; an expression
+    /// transporta el indicador `0x8000` de búsqueda restrictiva si está activo; una expresión
     /// tree may follow (not produced by this client, matching eMule's
-    /// requester which only sets the flag).
+    /// solicitante que solo activa el indicador).
     pub fn encode_search_keyword_req(keyword_hash: &KadIdBytes, start_pos: u16) -> Bytes {
         let mut buf = kad_buf(KADEMLIA2_SEARCH_KEYWORD_REQ, 20);
         buf.put_slice(keyword_hash);
@@ -507,8 +507,8 @@ fn encode_search_source_res_refs(
     encode_search_source_res_impl(target_file_hash, sources.len(), sources.iter().copied())
 }
 
-/// Corps commun des réponses `KADEMLIA2_SEARCH_RES` source : tranche la
-/// liste à `MAX_KAD_SEARCH_SOURCES` puis sérialise `[sender 0][hash][count][entries]`.
+/// Cuerpo común de las respuestas `KADEMLIA2_SEARCH_RES` de fuentes: corta la
+/// lista en `MAX_KAD_SEARCH_SOURCES` y luego serializa `[sender 0][hash][count][entries]`.
 fn encode_search_source_res_impl<'a>(
     target_file_hash: &KadIdBytes,
     total: usize,
@@ -545,7 +545,7 @@ fn write_bsob_tag(dst: &mut Vec<u8>, name: u8, data: &[u8]) {
     dst.extend_from_slice(data);
 }
 
-/// Writes `TAG_FILENAME` (0x01) and `TAG_FILESIZE` (0x02) from the entry
+/// Escribe `TAG_FILENAME` (0x01) y `TAG_FILESIZE` (0x02) a partir de la entrada
 /// fields — eMule `WriteTagListInc` emits them before `m_listTag`
 /// (filesize is skipped when zero).
 fn write_kw_field_tags(tmp: &mut Vec<u8>, entry: &KadKeywordEntryWire) -> usize {
@@ -571,7 +571,7 @@ fn write_kw_field_tags(tmp: &mut Vec<u8>, entry: &KadKeywordEntryWire) -> usize 
 }
 
 /// Writes the synthesized minimal tag list (filename/filesize/sources)
-/// used for flat-format entries and as fallback when the stored tag list
+/// utilizado para entradas de formato plano y como reserva si la lista de etiquetas almacenada
 /// fails to re-encode.
 fn write_kw_synth_tags(tmp: &mut Vec<u8>, entry: &KadKeywordEntryWire) {
     write_kw_field_tags(tmp, entry);
@@ -587,7 +587,7 @@ fn write_kw_synth_tags(tmp: &mut Vec<u8>, entry: &KadKeywordEntryWire) {
 ///
 /// Tag list layout (eMule `CEntry::WriteTagListInc` /
 /// `CKeyEntry::WriteTagListWithPublishInfo`):
-/// 1. `TAG_FILENAME` + `TAG_FILESIZE` from the entry fields (the stored
+/// 1. `TAG_FILENAME` + `TAG_FILESIZE` de los campos de la entrada (el almacenado
 ///    tag list — `m_listTag` — never carries them),
 /// 2. the stored publisher tag list verbatim (`TAG_SOURCES` synthesized
 ///    for flat-format entries),
@@ -670,8 +670,8 @@ fn encode_search_keyword_res_refs(
     encode_search_keyword_res_impl(keyword_hash, entries.len(), entries.iter().copied())
 }
 
-/// Corps commun des réponses `KADEMLIA2_SEARCH_RES` keyword : tranche la
-/// liste à `MAX_KAD_SEARCH_KEYWORDS` puis sérialise `[sender 0][hash][count][entries]`.
+/// Cuerpo común de las respuestas `KADEMLIA2_SEARCH_RES` de palabras clave: corta la
+/// lista en `MAX_KAD_SEARCH_KEYWORDS` y luego serializa `[sender 0][hash][count][entries]`.
 fn encode_search_keyword_res_impl<'a>(
     keyword_hash: &KadIdBytes,
     total: usize,
@@ -706,8 +706,8 @@ pub fn encode_search_notes_req_payload(target_file_hash: &KadIdBytes, file_size:
 /// emits: `[sender_id:16][target:16][count:u16]` then per entry
 /// `[source_id:16][tag_count:u8][tags]`.
 ///
-/// Returns `None` when any tag fails the bounded encoder (oversized strings
-/// etc.) — the caller should simply not answer.
+/// Devuelve `None` si alguna etiqueta falla el codificador acotado (cadenas sobredimensionadas,
+/// etc.) — el llamador simplemente no debe responder.
 pub fn encode_search_notes_res(
     sender_id: &KadIdBytes,
     target_file_hash: &KadIdBytes,

@@ -24,12 +24,12 @@ use super::types::{
 use crate::services::downloads::DownloadService;
 use crate::services::obfuscation_stream::ObfuscatedStream;
 
-/// Our announced eMule version encoded for `CT_EMULE_VERSION` —
+/// Versión de eMule anunciada codificada para `CT_EMULE_VERSION` —
 /// `(major<<17)|(minor<<10)|(update<<7)` = eMule 0.72.0
 /// (`BaseClient.cpp` `SendMuleInfoPacket`, `Version.h`: 0.72.0).
 pub(crate) const EMULE_VERSION_TAG: u32 = 72 << 10;
 
-/// `m_uCurVersionShort` = `MAKELONG(minor, major)` — the version byte of
+/// `m_uCurVersionShort` = `MAKELONG(minor, major)` — el byte de versión de
 /// `OP_EMULEINFO`/`OP_EMULEINFOANSWER` (0.72a → 72).
 pub(crate) const EMULE_VERSION_SHORT: u8 = 72;
 
@@ -37,28 +37,28 @@ pub struct HandshakeResult {
     pub stream: ObfuscatedStream<TcpStream>,
     pub peer_supports_sx: bool,
     pub peer_supports_sx2: bool,
-    /// Peer's `m_bySourceExchange1Ver` — SX1 version announced in
-    /// CT_EMULE_MISCOPTIONS1 bits 12-15 or via the `ET_SOURCEEXCHANGE` tag
-    /// of `OP_EMULEINFO` (0 = no usable SX1).
+    /// `m_bySourceExchange1Ver` del par — versión SX1 anunciada en
+    /// los bits 12-15 de CT_EMULE_MISCOPTIONS1 o mediante la etiqueta `ET_SOURCEEXCHANGE`
+    /// de `OP_EMULEINFO` (0 = sin SX1 utilizable).
     pub peer_sx1_version: u8,
     pub peer_supports_aich: bool,
-    /// Peer's `m_bySupportSecIdent` (0 = none, bit0 = v1, bit1 = v2).
+    /// `m_bySupportSecIdent` del par (0 = ninguno, bit0 = v1, bit1 = v2).
     pub peer_sec_ident: u8,
-    /// Peer's announced eMule UDP port (`CT_EMULE_UDPPORTS` low word), if any.
+    /// Puerto UDP de eMule anunciado por el par (palabra baja de `CT_EMULE_UDPPORTS`), si existe.
     pub peer_udp_port: Option<u16>,
-    /// Peer's client UDP protocol version (`m_byUDPVer`, MiscOptions1 bits 24-27).
+    /// Versión del protocolo UDP de cliente del par (`m_byUDPVer`, bits 24-27 de MiscOptions1).
     pub peer_udp_version: u8,
-    /// Peer's extended requests version (`m_byExtendedRequestsVer`,
-    /// MiscOptions1 bits 8-11). 2 = accepts `OP_REQUESTPARTS_I64`.
+    /// Versión de peticiones extendidas del par (`m_byExtendedRequestsVer`,
+    /// bits 8-11 de MiscOptions1). 2 = acepta `OP_REQUESTPARTS_I64`.
     pub peer_ext_req: u8,
-    /// Peer's announced Kad version (MiscOptions2 bits 0-4).
+    /// Versión de Kad anunciada por el par (bits 0-4 de MiscOptions2).
     pub peer_kad_version: u8,
-    /// Multipacket envelope negotiated by the peer
+    /// Envoltorio multipaquete negociado por el par
     /// (`SupportMultiPacket`/`SupportExtMultiPacket`/`SupportsFileIdentifiers`)
-    /// — shapes `SendFileRequest` bundles (`file_request`).
+    /// — da forma a los lotes de `SendFileRequest` (`file_request`).
     pub peer_multipacket: super::source_exchange::MultiPacketLevel,
-    /// `SupportsFileIdentifiers()` — MISCOPTIONS2 bit 13. Gates
-    /// `OP_HASHSETREQUEST2` in place of `OP_HASHSETREQUEST`
+    /// `SupportsFileIdentifiers()` — bit 13 de MISCOPTIONS2. Condiciona
+    /// `OP_HASHSETREQUEST2` en lugar de `OP_HASHSETREQUEST`
     /// (`SendHashSetRequest`, `DownloadClient.cpp:2200`).
     pub peer_file_identifiers: bool,
     pub connected_ms: i64,
@@ -89,7 +89,7 @@ pub(crate) async fn perform_peer_handshake(
     downloads: &Arc<Mutex<DownloadService>>,
     sec_ident_cap: u8,
 ) -> Result<HandshakeResult, PeerError> {
-    // 1. TCP connect with timeout & cancel_token
+    // 1. Conexión TCP con tiempo de espera y cancel_token
     let stream_res = tokio::select! {
         _ = cancel_token.cancelled() => {
             return Err(PeerError::new(PeerFailureReason::KillSwitchAborted, "Cancelled by network policy kill switch"));
@@ -110,7 +110,7 @@ pub(crate) async fn perform_peer_handshake(
         .unwrap_or_default()
         .as_millis() as i64;
 
-    // Obfuscation decision:
+    // Decisión de ofuscación:
     let peer_requires_crypt = (peer_crypt_options & 0x04) != 0;
     let peer_supports_crypt = (peer_crypt_options & 0x01) != 0 || (peer_crypt_options & 0x02) != 0;
 
@@ -178,7 +178,7 @@ pub(crate) async fn perform_peer_handshake(
         ObfuscatedStream::plaintext(tcp_stream)
     };
 
-    // Update status: Handshaking
+    // Actualizar estado: Handshaking
     let handshaking_snapshot = {
         let mut g = inner.lock().await;
         if let Some(session) = g.sessions.get_mut(address_str) {
@@ -194,17 +194,17 @@ pub(crate) async fn perform_peer_handshake(
         emit_event(event_tx, sequence, &snap);
     }
 
-    // 2. Send OP_HELLO
+    // 2. Enviar OP_HELLO
     let encoder = Ed2kEncoder::default();
     let mut tags = Vec::with_capacity(6);
 
-    // Nickname
+    // Apodo
     tags.push(mule_protocol::ed2k::tags::Ed2kTag {
         name: mule_protocol::ed2k::tags::TagName::Id(mule_protocol::ed2k::tags::TAG_SPECIAL_NAME),
         value: mule_protocol::ed2k::tags::TagValue::String(nickname.to_string()),
     });
 
-    // Version
+    // Versión
     tags.push(mule_protocol::ed2k::tags::Ed2kTag {
         name: mule_protocol::ed2k::tags::TagName::Id(
             mule_protocol::ed2k::tags::TAG_SPECIAL_VERSION,
@@ -221,8 +221,8 @@ pub(crate) async fn perform_peer_handshake(
         value: mule_protocol::ed2k::tags::TagValue::UInt32(udp_ports),
     });
 
-    // EmuleVersion — eMule 0.72a (`EMULE_VERSION_TAG`); the tag's high
-    // byte stays 0 (SO_EMULE-compatible software ID).
+    // EmuleVersion — eMule 0.72a (`EMULE_VERSION_TAG`); el byte
+    // alto de la etiqueta permanece en 0 (ID de software compatible con SO_EMULE).
     let emule_ver: u32 = EMULE_VERSION_TAG;
     tags.push(mule_protocol::ed2k::tags::Ed2kTag {
         name: mule_protocol::ed2k::tags::TagName::Id(
@@ -231,12 +231,12 @@ pub(crate) async fn perform_peer_handshake(
         value: mule_protocol::ed2k::tags::TagValue::UInt32(emule_ver),
     });
 
-    // MiscOptions1 — eMule layout (BaseClient.cpp): AICH<<29 | Unicode<<28 |
+    // MiscOptions1 — formato de eMule (BaseClient.cpp): AICH<<29 | Unicode<<28 |
     // UDPVer<<24 | DataComp<<20 | SecIdent<<16 | SrcExch<<12 | ExtReq<<8 |
     // Comments<<4 | NoView<<2 | MultiPkt<<1 | Preview<<0.
-    // SecIdent = 3 (v1+v2) when a usable RSA key is loaded, else 0.
-    // MultiPacket = 1 (comme eMule — OP_MULTIPACKET* est décodé) ;
-    // Preview = 0 : OP_REQUESTPREVIEW/PREVIEWANSWER non implémentés.
+    // SecIdent = 3 (v1+v2) cuando hay una clave RSA utilizable cargada, si no 0.
+    // MultiPacket = 1 (como en eMule — OP_MULTIPACKET* está decodificado);
+    // Preview = 0: OP_REQUESTPREVIEW/PREVIEWANSWER no implementados.
     let misc1: u32 = (1 << 29)
         | (1 << 28)
         | (4 << 24)
@@ -253,16 +253,16 @@ pub(crate) async fn perform_peer_handshake(
         value: mule_protocol::ed2k::tags::TagValue::UInt32(misc1),
     });
 
-    // MiscOptions2 — eMule layout: FileIdent<<13 | DirectUDPCallback<<12 |
+    // MiscOptions2 — formato de eMule: FileIdent<<13 | DirectUDPCallback<<12 |
     // Captcha<<11 | SrcExch2<<10 | CryptReq<<9 | CryptWants<<8 | CryptSup<<7 |
     // ExtMultiPkt<<5 | LargeFiles<<4 | KadVersion<<0. KadVersion = 10
-    // (KADEMLIA_VERSION, eMule 0.72a): adds the v9 AICH keyword-storage
-    // feature (TAG_KADAICHHASHPUB / TAG_KADAICHHASHRESULT). Bit 11
-    // (Captcha) stays 0 — CAPTCHA answers are not implemented.
-    // eMule `BaseClient.cpp:1007` — bit 12 « DirectUDPCallback » annoncé
-    // quand TCP est inatteignable (pas de HighID eD2K) mais l'UDP Kad est
-    // testé ouvert (full-cone NAT) : les pairs peuvent alors nous envoyer
-    // `OP_DIRECTCALLBACKREQ` pour que nous composions vers eux.
+    // (KADEMLIA_VERSION, eMule 0.72a): añade la característica de almacenamiento
+    // de palabras clave AICH de v9 (TAG_KADAICHHASHPUB / TAG_KADAICHHASHRESULT). El bit 11
+    // (Captcha) permanece en 0 — las respuestas de CAPTCHA no están implementadas.
+    // `BaseClient.cpp:1007` de eMule — bit 12 «DirectUDPCallback» anunciado
+    // cuando TCP es inalcanzable (sin HighID eD2K) pero el UDP de Kad está
+    // probado como abierto (NAT de cono completo): los pares pueden entonces enviarnos
+    // `OP_DIRECTCALLBACKREQ` para que conectemos hacia ellos.
     let udp_verified_open = match kad_service {
         Some(kad) => {
             let tracker = kad.udp().firewall_tracker();
@@ -271,8 +271,8 @@ pub(crate) async fn perform_peer_handshake(
         }
         None => false,
     };
-    // FileIdent<<13 = 1 : les codecs FileIdentifier (OP_MULTIPACKET_EXT2,
-    // OP_HASHSET*2) sont implémentés — eMule 0.72a l'annonce aussi.
+    // FileIdent<<13 = 1: los códecs FileIdentifier (OP_MULTIPACKET_EXT2,
+    // OP_HASHSET*2) están implementados — eMule 0.72a también lo anuncia.
     let misc2: u32 = crate::services::hello_caps::misc_options2(
         client_id < 0x0100_0000,
         udp_verified_open,
@@ -322,10 +322,10 @@ pub(crate) async fn perform_peer_handshake(
         ));
     }
 
-    // 2b. Send OP_EMULEINFO right after OP_HELLO (eMule SendHelloTypePacket
-    // emits both in sequence). This is where eMule/aMule negotiate extended
-    // capabilities: compression, UDP endpoint, source exchange, comments,
-    // extended requests, feature flags.
+    // 2b. Enviar OP_EMULEINFO justo después de OP_HELLO (SendHelloTypePacket
+    // de eMule emite ambos en secuencia). Aquí es donde eMule/aMule negocian
+    // capacidades extendidas: compresión, extremo UDP, intercambio de fuentes,
+    // comentarios, peticiones extendidas y banderas de características.
     let emule_info = build_emule_info(kad_port, sec_ident_cap);
     match encoder.encode_emule_info(&emule_info) {
         Ok(info_pkt) => {
@@ -349,7 +349,7 @@ pub(crate) async fn perform_peer_handshake(
         }
     }
 
-    // 3. Receive OP_HELLO_ANSWER with Handshake Timeout
+    // 3. Recibir OP_HELLO_ANSWER con tiempo de espera de apretón de manos
     let decoder = Ed2kDecoder::default();
     let codec = PacketCodec::new();
     let mut read_buf = BytesMut::with_capacity(65536);
@@ -401,7 +401,7 @@ pub(crate) async fn perform_peer_handshake(
                             return Err(PeerError::new(PeerFailureReason::InvalidHandshake, "Peer read buffer exceeded limit during handshake"));
                         }
                         while let Ok(Some(packet)) = codec.decode(&mut read_buf) {
-                            // OP_PACKEDPROT (0xD4) — socket-level unpack,
+                            // OP_PACKEDPROT (0xD4) — desempaquetado a nivel de socket,
                             // cf. Packets.cpp::UnPackPacket.
                             let Some(packet) = mule_protocol::ed2k::packed::unpack_owned(
                                 packet,
@@ -471,7 +471,7 @@ pub(crate) async fn perform_peer_handshake(
                                                 peer_ext_req = peer_ext_req.max(v as u8);
                                             }
                                         }
-                                        // eMule answers OP_EMULEINFO with
+                                        // eMule responde a OP_EMULEINFO con
                                         // OP_EMULEINFOANSWER (SendMuleInfoPacket(true)).
                                         if packet.opcode == OP_EMULE_INFO {
                                             let answer = build_emule_info(kad_port, sec_ident_cap);
@@ -555,10 +555,9 @@ pub(crate) async fn perform_peer_handshake(
                                         if peer_info.supports_crypt_layer() { peer_opts |= 0x01; }
                                         if peer_info.requests_crypt_layer() { peer_opts |= 0x02; }
                                         if peer_info.requires_crypt_layer() { peer_opts |= 0x04; }
-                                        // MISCOPTIONS2 bit 12 (eMule
-                                        // `m_fDirectUDPCallback`) → bit 3
-                                        // du byte connect-options, comme
-                                        // `SetConnectOptions(bCallback=true)`.
+                                        // Bit 12 de MISCOPTIONS2 (m_fDirectUDPCallback
+                                        // de eMule) → bit 3 del byte de opciones de conexión,
+                                        // como en SetConnectOptions(bCallback=true).
                                         if peer_info.supports_direct_udp_callback() { peer_opts |= 0x08; }
 
                                         let hex_user_hash = hex::encode(ans.user_hash);
@@ -589,14 +588,13 @@ pub(crate) async fn perform_peer_handshake(
                                             buddy_id: None,
                                             software: Some(software.trim().to_string()),
                                             availability: None,
-                                            // Serveur du pair appris via le
-                                            // hello (eMule `m_dwServerIP`).
+                                            // Servidor del par aprendido mediante el
+                                            // hello (m_dwServerIP de eMule).
                                             server_ip: ans.server_ip,
                                             server_port: ans.server_port,
-                                            // Port UDP Kad du pair (tag
-                                            // CT_EMULE_UDPPORTS) — eMule
-                                            // `SetKadPort`, requis pour
-                                            // `OP_DIRECTCALLBACKREQ`.
+                                            // Puerto UDP de Kad del par (etiqueta
+                                            // CT_EMULE_UDPPORTS) — SetKadPort de eMule,
+                                            // requerido para OP_DIRECTCALLBACKREQ.
                                             udp_port: peer_udp_port.unwrap_or(0),
                                         };
                                         let _ = downloads.lock().await.upsert_peer_sources(file_hash_str, &[updated_src]);
@@ -652,10 +650,10 @@ pub(crate) async fn perform_peer_handshake(
     })
 }
 
-/// Builds our `OP_EMULEINFO`/`OP_EMULEINFO_ANSWER` payload — the eMule
-/// extended-capability announcement (7 tags, same set as eMule 0.72a
-/// `SendMuleInfoPacket`): compression, UDP version, UDP port, source
-/// exchange, comments, extended requests, feature flags.
+/// Construye nuestra carga útil de `OP_EMULEINFO`/`OP_EMULEINFO_ANSWER` — el anuncio
+/// de capacidades extendidas de eMule (7 etiquetas, el mismo conjunto que eMule 0.72a
+/// en `SendMuleInfoPacket`): compresión, versión UDP, puerto UDP, intercambio de fuentes,
+/// comentarios, peticiones extendidas y banderas de características.
 pub(crate) fn build_emule_info(
     udp_port: u16,
     sec_ident_cap: u8,
@@ -679,12 +677,12 @@ pub(crate) fn build_emule_info(
             t(TAG_SPECIAL_EMULE_EXT_COMPRESSION, 1),
             t(TAG_SPECIAL_EMULE_EXT_UDPVER, 4),
             t(TAG_SPECIAL_EMULE_EXT_UDPPORT, udp_port as u32),
-            // eMule 0.72a envoie 3 ici (SX1 déprécié) — la version SX1 v4
-            // reste annoncée dans MiscOptions1 bits 12-15.
+            // eMule 0.72a envía 3 aquí (SX1 obsoleto) — la versión SX1 v4
+            // continúa anunciándose en MiscOptions1 bits 12-15.
             t(TAG_SPECIAL_EMULE_EXT_SOURCEEXCHANGE, 3),
             t(TAG_SPECIAL_EMULE_EXT_COMMENTS, 1),
             t(TAG_SPECIAL_EMULE_EXT_EXTENDEDREQUEST, 2),
-            // ET_FEATURES: bits 0-1 = secure ident level (eMule m_uEmuleFeatures).
+            // ET_FEATURES: bits 0-1 = nivel de secure ident (m_uEmuleFeatures de eMule).
             t(
                 TAG_SPECIAL_EMULE_EXT_FEATURES,
                 (sec_ident_cap & 0x03) as u32,

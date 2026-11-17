@@ -28,39 +28,39 @@ use crate::met::error::MetError;
 use crate::met::known_met::{MET_HEADER, MET_HEADER_I64TAGS};
 use crate::met::reader::CountingReader;
 
-/// `CANCELLED_VERSION` (`KnownFileList.cpp:46`) — only version eMule
-/// accepts for the `0x0F` layout.
+/// `CANCELLED_VERSION` (`KnownFileList.cpp:46`) — única versión que eMule
+/// acepta para la disposición `0x0F`.
 pub const CANCELLED_VERSION: u8 = 0x01;
 
-/// Bounded record count — a cancelled list stays small; the cap only
-/// guards against corrupt count fields.
+/// Recuento acotado de registros — una lista de cancelados permanece pequeña; el límite
+/// solo previene contra campos de recuento corruptos.
 const MAX_CANCELLED_RECORDS: usize = 500_000;
-/// Bounded tag count per record — eMule writes zero; the reader skips
-/// tags for forward compatibility (`for compatibility with future
-/// versions`, `KnownFileList.cpp:167`).
+/// Recuento acotado de etiquetas por registro — eMule escribe cero; el lector omite
+/// las etiquetas para compatibilidad hacia adelante («para compatibilidad con versiones
+/// futuras», `KnownFileList.cpp:167`).
 const MAX_CANCELLED_TAGS: usize = 1_000;
 
-/// One cancelled entry. Whether the hash is already masked depends on
-/// the file version — see [`CancelledMetFile`].
+/// Una entrada cancelada. Si el hash ya está enmascarado depende de
+/// la versión del archivo — véase [`CancelledMetFile`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CancelledEntry {
-    /// `0x0F` format — `MD5(seed_le || file_hash)`, seed from the file.
+    /// Formato `0x0F` — `MD5(seed_le || file_hash)`, semilla obtenida del archivo.
     Masked([u8; 16]),
-    /// Deprecated `0x0E` format — the real eD2K file hash; the importer
-    /// must mask it under its own seed (eMule does the same at load).
+    /// Formato obsoleto `0x0E` — el hash real eD2K del archivo; el importador
+    /// debe enmascararlo con su propia semilla (eMule hace lo mismo al cargar).
     Real([u8; 16]),
 }
 
-/// Parsed `cancelled.met` content.
+/// Contenido analizado de `cancelled.met`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CancelledMetFile {
-    /// `m_dwCancelledFilesSeed` — present only for the `0x0F` layout.
-    /// `0` is impossible in valid files (eMule regenerates it).
+    /// `m_dwCancelledFilesSeed` — presente solo para la disposición `0x0F`.
+    /// `0` es imposible en archivos válidos (eMule la regenera).
     pub seed: Option<u32>,
-    /// Records in file order.
+    /// Registros en orden de archivo.
     pub entries: Vec<CancelledEntry>,
-    /// `true` when the file used the deprecated `0x0E` layout — entries
-    /// are all `Real` hashes.
+    /// `true` cuando el archivo utilizaba la disposición obsoleta `0x0E` — las entradas
+    /// son todas hashes `Real`.
     pub legacy_format: bool,
 }
 
@@ -88,7 +88,7 @@ impl CancelledMetFile {
             None
         } else {
             let version = cr.read_u8("cancelled version")?;
-            // `> CANCELLED_VERSION` → eMule refuses the file.
+            // `> CANCELLED_VERSION` → eMule rechaza el archivo.
             if version > CANCELLED_VERSION {
                 return Err(MetError::UnsupportedHeader {
                     offset: cr.offset(),
@@ -119,7 +119,7 @@ impl CancelledMetFile {
                     context: "cancelled tag count",
                 });
             }
-            // Future-version fields are skipped, like eMule's tag loop.
+            // Los campos de versiones futuras se omiten, como en el bucle de etiquetas de eMule.
             for _ in 0..tag_count {
                 let _ = cr.read_tag()?;
             }
@@ -137,8 +137,8 @@ impl CancelledMetFile {
     }
 }
 
-/// eMule `AddCancelledFileID`/`IsCancelledFileByID`
-/// (`KnownFileList.cpp:384-411`) — masked hash =
+/// `AddCancelledFileID`/`IsCancelledFileByID` de eMule
+/// (`KnownFileList.cpp:384-411`) — hash enmascarado =
 /// `MD5(seed_u32_le || file_hash)`.
 pub fn cancelled_mask(seed: u32, file_hash: &[u8; 16]) -> [u8; 16] {
     let mut buf = [0u8; 20];

@@ -16,7 +16,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     let (ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake and verify "categories" capability
+    // 1. Negociación (handshake) y verificación de la capacidad "categories"
     send_json(
         &mut write,
         json!({
@@ -45,7 +45,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
         "Expected 'categories' capability, got: {capabilities:?}"
     );
 
-    // 2. Initially categories.list is empty
+    // 2. Inicialmente categories.list está vacío
     send_json(
         &mut write,
         json!({
@@ -58,7 +58,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     let res = recv_response_by_id(&mut read, 2).await;
     assert_eq!(res["result"].as_array().unwrap().len(), 0);
 
-    // 3. Create two categories
+    // 3. Crear dos categorías
     send_json(
         &mut write,
         json!({
@@ -98,7 +98,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     let res = recv_response_by_id(&mut read, 4).await;
     let doc_id = res["result"]["id"].as_str().unwrap().to_string();
 
-    // 4. Update category
+    // 4. Actualizar categoría
     send_json(
         &mut write,
         json!({
@@ -119,7 +119,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     assert_eq!(res["result"]["color"], "#00BCD4");
     assert_eq!(res["result"]["defaultPriority"], "low");
 
-    // 5. Reorder categories
+    // 5. Reordenar categorías
     send_json(
         &mut write,
         json!({
@@ -152,7 +152,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     assert_eq!(list[1]["id"], video_id);
     assert_eq!(list[1]["sortOrder"], 1);
 
-    // 6. Add eD2K link with Category & 4-tier destination resolution
+    // 6. Añadir enlace eD2K con categoría y resolución de destino de 4 niveles
     let test_link = "ed2k://|file|sample_video.mkv|10485760|0123456789abcdef0123456789abcdef|/";
     send_json(
         &mut write,
@@ -170,7 +170,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     let res = recv_response_by_id(&mut read, 8).await;
     let download_id = res["result"]["downloadId"].as_str().unwrap().to_string();
 
-    // Verify download details include categoryId and category default destination
+    // Verificar que los detalles de la descarga incluyan categoryId y el destino predeterminado de la categoría
     send_json(
         &mut write,
         json!({
@@ -196,7 +196,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
         "Expected category destination 'Videos' to be resolved in tier 2: {target_path}"
     );
 
-    // 7. Change category on active download via downloads.setCategory
+    // 7. Cambiar categoría en descarga activa mediante downloads.setCategory
     send_json(
         &mut write,
         json!({
@@ -213,7 +213,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     let res = recv_response_by_id(&mut read, 10).await;
     assert_eq!(res["result"]["categoryId"], doc_id);
 
-    // 8. Delete category: MUST reassign assigned download to NULL, without deleting the download
+    // 8. Eliminar categoría: DEBE reasignar la descarga asignada a NULL, sin borrar la descarga
     send_json(
         &mut write,
         json!({
@@ -230,7 +230,7 @@ async fn test_category_rpc_lifecycle_and_invariants() {
     assert_eq!(res["result"]["deleted"], true);
     assert_eq!(res["result"]["reassignedDownloads"], 1);
 
-    // Check that the download is STILL ALIVE and its categoryId is null
+    // Comprobar que la descarga SIGUE ACTIVA y su categoryId es nulo
     send_json(
         &mut write,
         json!({

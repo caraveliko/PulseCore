@@ -13,7 +13,7 @@ use crate::ed2k::packet::{
 };
 use crate::ed2k::profile::Ed2kCompatibilityProfile;
 
-/// Decodes an `OP_HASHSETREQUEST` (`0x51`) payload: a bare 16-byte file hash.
+/// Decodifica una carga útil `OP_HASHSETREQUEST` (`0x51`): un hash de archivo simple de 16 bytes.
 pub fn decode_hashset_request(
     protocol: u8,
     opcode: u8,
@@ -51,7 +51,7 @@ pub fn decode_hashset_request(
     Ok(Ed2kHashSetReq { file_hash })
 }
 
-/// Decodes an `OP_HASHSETANSWER` (`0x52`) payload: `file_hash || u16 count || count*16 hashes`.
+/// Decodifica una carga útil `OP_HASHSETANSWER` (`0x52`): `file_hash || u16 count || count*16 hashes`.
 pub fn decode_hashset_answer(
     protocol: u8,
     opcode: u8,
@@ -106,7 +106,7 @@ pub fn decode_hashset_answer(
     })
 }
 
-/// Decodes a request parts payload according to an explicit `Ed2kCompatibilityProfile`.
+/// Decodifica una carga útil de petición de partes según un `Ed2kCompatibilityProfile` explícito.
 pub fn decode_request_parts_with_profile(
     profile: Ed2kCompatibilityProfile,
     protocol: u8,
@@ -328,7 +328,7 @@ pub fn decode_request_parts_with_profile(
     Ok(Ed2kRequestParts::multi(file_hash, ranges))
 }
 
-/// Decodes an `OP_REQUESTPARTS_I64` (`0xA3`) payload:
+/// Decodifica una carga útil `OP_REQUESTPARTS_I64` (`0xA3`):
 /// `<file_hash 16><start[3] u64 LE><end[3] u64 LE>` — 64 bytes.
 pub fn decode_request_parts_i64(
     protocol: u8,
@@ -403,8 +403,8 @@ pub fn decode_request_parts_i64(
     Ok(Ed2kRequestPartsI64 { file_hash, ranges })
 }
 
-/// Decodes an `OP_SENDINGPART_I64` (`0xA2`) payload:
-/// `<file_hash 16><start u64 LE><end u64 LE><data>`.
+/// Decodifica una carga útil `OP_SENDINGPART_I64` (`0xA2`):
+/// `<file_hash 16><start u64 LE><end u64 LE><datos>`.
 pub fn decode_sending_part_i64(
     protocol: u8,
     opcode: u8,
@@ -470,8 +470,8 @@ pub fn decode_sending_part_i64(
     })
 }
 
-/// Decodes an `OP_COMPRESSEDPART_I64` (`0xA1`) payload:
-/// `<file_hash 16><start u64 LE><compressed_size u32 LE><zlib data>`.
+/// Decodifica una carga útil `OP_COMPRESSEDPART_I64` (`0xA1`):
+/// `<file_hash 16><start u64 LE><compressed_size u32 LE><datos zlib>`.
 pub fn decode_compressed_part_i64(
     protocol: u8,
     opcode: u8,
@@ -523,13 +523,13 @@ pub fn decode_compressed_part_i64(
     })
 }
 
-/// Decodes a legacy `OP_COMPRESSEDPART` (`0x40`) payload:
-/// `<file_hash 16><start u32 LE><compressed_size u32 LE><zlib data>`
-/// (eMule `UploadDiskIOThread.cpp:449-456`, proto `PR_EMULE`).
+/// Decodifica una carga útil `OP_COMPRESSEDPART` (`0x40`) clásica:
+/// `<file_hash 16><start u32 LE><compressed_size u32 LE><datos zlib>`
+/// (eMule `UploadDiskIOThread.cpp:449-456`, protocolo `PR_EMULE`).
 ///
-/// `compressed_size` is the **total** size of the zlib stream, repeated on
-/// each packet of a multi-packet block — equality with the local `data`
-/// length only holds for single-chunk transfers.
+/// `compressed_size` es el tamaño **total** del flujo zlib, repetido en
+/// cada paquete de un bloque multipaquete; la igualdad con la longitud
+/// local de `data` solo se cumple para transferencias de un solo fragmento.
 pub fn decode_compressed_part(
     protocol: u8,
     opcode: u8,
@@ -560,9 +560,9 @@ pub fn decode_compressed_part(
     let compressed_size = u32::from_le_bytes(size_bytes);
 
     let actual_len = payload.len() - 24;
-    // eMule splits one zlib stream into <=10240-byte packets sharing the
-    // same `compressed_size` total — `actual_len <= compressed_size`, never
-    // the reverse (a trailing larger slice would exceed the stream).
+    // eMule divide un flujo zlib en paquetes de <=10240 bytes que comparten el
+    // mismo total `compressed_size` — `actual_len <= compressed_size`, nunca
+    // lo contrario (un fragmento final mayor excedería el flujo).
     if (compressed_size as usize) < actual_len {
         return Err(Ed2kParseError::new(
             protocol,
@@ -584,7 +584,7 @@ pub fn decode_compressed_part(
     })
 }
 
-/// Decodes an `OP_SENDINGPART` (`0x46`) payload.
+/// Decodifica una carga útil `OP_SENDINGPART` (`0x46`).
 pub fn decode_sending_part(
     protocol: u8,
     opcode: u8,

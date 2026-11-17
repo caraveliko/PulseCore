@@ -52,7 +52,7 @@ impl std::str::FromStr for DownloadStatus {
     }
 }
 
-/// In-memory representation of an active download task.
+/// Representación en memoria de una tarea de descarga activa.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Download {
     pub id: Uuid,
@@ -66,11 +66,11 @@ pub struct Download {
     pub created_at: i64,
     pub updated_at: i64,
     pub category_id: Option<String>,
-    /// Download priority: "low", "normal", "high" (eMule file priority —
-    /// biases the swarm allocator slot quota for this file).
+    /// Prioridad de descarga: "low", "normal", "high" (prioridad de archivo de eMule —
+    /// sesga la cuota de ranuras del asignador de enjambre para este archivo).
     pub priority: String,
-    /// Per-file source limit imported from `.part.met` `FT_MAXSOURCES`
-    /// (eMule `CPartFile::GetMaxSources`). `None` = use the global limit.
+    /// Límite de fuentes por archivo importado desde `.part.met` `FT_MAXSOURCES`
+    /// (eMule `CPartFile::GetMaxSources`). `None` = usar el límite global.
     pub max_sources: Option<u32>,
 }
 
@@ -106,7 +106,7 @@ impl Download {
     }
 }
 
-/// Category metadata for organizing local downloads.
+/// Metadatos de categoría para organizar las descargas locales.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadCategory {
@@ -146,7 +146,7 @@ impl DownloadCategory {
     }
 }
 
-/// Single historical event entry for a download transition.
+/// Entrada de evento histórico individual para una transición de descarga.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryEntry {
@@ -166,7 +166,7 @@ pub struct HistoryEntry {
     pub timestamp_unix_ms: i64,
 }
 
-/// Query filter for history list.
+/// Filtro de consulta para la lista de historial.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryFilter {
@@ -178,7 +178,7 @@ pub struct HistoryFilter {
     pub offset: Option<usize>,
 }
 
-/// Aggregated history and transfer statistics.
+/// Estadísticas agregadas de historial y transferencia.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryStats {
@@ -187,7 +187,7 @@ pub struct HistoryStats {
     pub total_failed_count: u64,
     pub total_resumes_count: u64,
     pub total_integrity_failures: u64,
-    // Time windows
+    // Ventanas de tiempo
     pub session_completed_bytes: u64,
     pub session_completed_count: u64,
     pub last_24h_completed_bytes: u64,
@@ -196,7 +196,7 @@ pub struct HistoryStats {
     pub last_7d_completed_count: u64,
 }
 
-/// Filter status for an eD2K server.
+/// Estado de filtrado para un servidor eD2K.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServerFilterStatus {
@@ -227,7 +227,7 @@ impl std::str::FromStr for ServerFilterStatus {
     }
 }
 
-/// Persistent record of an eD2K server in local storage.
+/// Registro persistente de un servidor eD2K en almacenamiento local.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Ed2kServer {
@@ -247,7 +247,7 @@ pub struct Ed2kServer {
     pub updated_at_unix_ms: i64,
 }
 
-/// Status of a discovered or contacted peer source.
+/// Estado de una fuente de par descubierta o contactada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PeerSourceStatus {
@@ -273,12 +273,12 @@ impl PeerSourceStatus {
         }
     }
 
-    /// Sémantique eMule `srclist` : une source dont la connexion échoue,
-    /// qui répond « fichier absent » ou qui est bloquée par le filtre IP
-    /// sort de la liste affichée et part en deadlist — cf.
+    /// Semántica eMule `srclist`: una fuente cuya conexión falla,
+    /// que responde «archivo ausente» o que está bloqueada por el filtro IP
+    /// sale de la lista mostrada y pasa a la lista muerta (deadlist) — cf.
     /// `CUpDownClient::Disconnected` (`RemoveSource` + `AddDeadSource`).
-    /// Les entrées `Failed`/`Rejected`/`Filtered` restent persistées pour
-    /// le backoff de re-essai, mais ne sont ni affichées ni comptées dans
+    /// Las entradas `Failed`/`Rejected`/`Filtered` permanecen persistidas para
+    /// el retardo de reintento, pero no se muestran ni se cuentan en
     /// `GetSourceCount()`.
     pub fn is_srclist_visible(&self) -> bool {
         !matches!(self, Self::Failed | Self::Rejected | Self::Filtered)
@@ -301,7 +301,7 @@ impl std::str::FromStr for PeerSourceStatus {
     }
 }
 
-/// Origin / discovery vector of a peer source.
+/// Origen / vector de descubrimiento de una fuente de par.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PeerSourceOrigin {
@@ -338,7 +338,7 @@ impl std::str::FromStr for PeerSourceOrigin {
     }
 }
 
-/// Normalized failure reasons for peer connection attempts.
+/// Motivos de fallo normalizados para los intentos de conexión de pares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PeerFailureReason {
@@ -357,8 +357,8 @@ pub enum PeerFailureReason {
     InvalidRange,
     CorruptedData,
     FileNotFound,
-    /// The peer shares the file but none of its advertised parts is needed
-    /// (eMule "No Needed Parts" source state — kept on a long cooldown).
+    /// El par comparte el archivo pero ninguna de sus partes anunciadas es necesaria
+    /// (estado de fuente "No Needed Parts" de eMule — mantenida en un enfriamiento prolongado).
     NoNeededParts,
     KillSwitchAborted,
     MissingUserHashForObfuscation,
@@ -391,7 +391,7 @@ impl PeerFailureReason {
     }
 }
 
-/// Persistent record of an eD2K peer source in local storage.
+/// Registro persistente de una fuente de par eD2K en almacenamiento local.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerSource {
@@ -410,39 +410,39 @@ pub struct PeerSource {
     pub user_hash: Option<String>,
     #[serde(default)]
     pub crypt_options: u8,
-    /// Kad buddy ID (hex) for LowID sources reachable only through a buddy
-    /// callback (`KADEMLIA_CALLBACK_REQ` relayed by this buddy node).
+    /// ID de compañero (buddy) Kad (hex) para fuentes LowID alcanzables solo a través de una
+    /// retrollamada de compañero (`KADEMLIA_CALLBACK_REQ` retransmitida por este nodo compañero).
     #[serde(default)]
     pub buddy_id: Option<String>,
-    /// Client software + version learned from the eD2K/eMule hello
-    /// (e.g. "eMule 0.70b", "aMule 3.0b").
+    /// Software de cliente + versión obtenidos del saludo eD2K/eMule
+    /// (p. ej. "eMule 0.70b", "aMule 3.0b").
     #[serde(default)]
     pub software: Option<String>,
-    /// Per-part availability bitmask received via `OP_FILESTATUS`
-    /// (`ceil(part_count/8)` bytes, bit set = source has the part).
+    /// Máscara de bits de disponibilidad por parte recibida mediante `OP_FILESTATUS`
+    /// (`ceil(part_count/8)` bytes, bit activo = la fuente tiene la parte).
     #[serde(default)]
     pub availability: Option<Vec<u8>>,
-    /// eD2K server (IPv4, little-endian u32) the source is connected to —
-    /// eMule `m_dwServerIP`. Decoded from source-exchange entries and filled
-    /// with the answering server for `OP_FOUNDSOURCES` results. 0 = unknown.
-    /// LowIDs are only unique per server: a `lowid:` source is callable via
-    /// `OP_CALLBACKREQUEST` only when this matches our connected server
+    /// Servidor eD2K (IPv4, u32 little-endian) al que la fuente está conectada —
+    /// `m_dwServerIP` de eMule. Descodificado de entradas de intercambio de fuentes y completado
+    /// con el servidor que responde para resultados `OP_FOUNDSOURCES`. 0 = desconocido.
+    /// Los LowID solo son únicos por servidor: una fuente `lowid:` solo es invocable mediante
+    /// `OP_CALLBACKREQUEST` cuando coincide con nuestro servidor conectado
     /// (eMule `CServerConnect::IsLocalServer`).
     #[serde(default)]
     pub server_ip: u32,
-    /// eD2K server port of the source — eMule `m_nServerPort`. 0 = unknown.
+    /// Puerto del servidor eD2K de la fuente — `m_nServerPort` de eMule. 0 = desconocido.
     #[serde(default)]
     pub server_port: u16,
-    /// Peer's Kad UDP port — eMule `GetKadPort()`. Carried by Kad search
-    /// source entries (`KadSourceWire.udp_port`); required to send an
-    /// `OP_DIRECTCALLBACKREQ` to a TCP-firewalled/UDP-open source
-    /// (`BaseClient.cpp:1414`). 0 = unknown.
+    /// Puerto UDP Kad del par — `GetKadPort()` de eMule. Transportado por entradas
+    /// de fuentes de búsqueda Kad (`KadSourceWire.udp_port`); necesario para enviar una
+    /// `OP_DIRECTCALLBACKREQ` a una fuente con cortafuegos TCP pero UDP abierto
+    /// (`BaseClient.cpp:1414`). 0 = desconocido.
     #[serde(default)]
     pub udp_port: u16,
 }
 
 impl PeerSource {
-    /// Returns the 16-byte decoded user hash if valid hex.
+    /// Devuelve el hash de usuario descodificado de 16 bytes si es un valor hexadecimal válido.
     pub fn user_hash_bytes(&self) -> Option<[u8; 16]> {
         self.user_hash.as_deref().and_then(|s| {
             if s.len() != 32 {
@@ -456,22 +456,22 @@ impl PeerSource {
         })
     }
 
-    /// Whether this peer supports protocol obfuscation (bit 0).
+    /// Indica si este par admite ofuscación de protocolo (bit 0).
     pub fn supports_crypt(&self) -> bool {
         (self.crypt_options & 0x01) != 0
     }
 
-    /// Whether this peer requests protocol obfuscation (bit 1).
+    /// Indica si este par solicita ofuscación de protocolo (bit 1).
     pub fn requests_crypt(&self) -> bool {
         (self.crypt_options & 0x02) != 0
     }
 
-    /// Whether this peer strictly requires protocol obfuscation (bit 2).
+    /// Indica si este par requiere estrictamente ofuscación de protocolo (bit 2).
     pub fn requires_crypt(&self) -> bool {
         (self.crypt_options & 0x04) != 0
     }
 
-    /// Returns the 16-byte decoded buddy Kad ID if valid hex.
+    /// Devuelve el ID Kad del compañero descodificado de 16 bytes si es un valor hexadecimal válido.
     pub fn buddy_id_bytes(&self) -> Option<[u8; 16]> {
         self.buddy_id.as_deref().and_then(|s| {
             if s.len() != 32 {
@@ -486,7 +486,7 @@ impl PeerSource {
     }
 }
 
-/// Explicitly approved shared file available for inbound eD2K upload.
+/// Archivo compartido aprobado explícitamente y disponible para subida eD2K entrante.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedFile {
@@ -494,39 +494,39 @@ pub struct SharedFile {
     pub file_name: String,
     pub file_size: u64,
     pub file_path: String,
-    /// Cached AICH root hash (SHA-1) of the file content, computed on first
-    /// `OP_AICHFILEHASHREQ` so it can be served to peers without rehashing.
+    /// Hash raíz AICH en caché (SHA-1) del contenido del archivo, calculado en la primera
+    /// `OP_AICHFILEHASHREQ` para poder servirse a los pares sin volver a calcular el hash.
     #[serde(default)]
     pub aich_root: Option<[u8; 20]>,
     pub shared_at_unix_ms: i64,
     pub enabled: bool,
-    /// Upload priority (eMule `PR_*` of the shared file): "verylow", "low",
-    /// "normal", "high", "veryhigh" (= powershare). Used as a score factor
-    /// in the upload queue (`GetFilePrioAsNumber` semantics).
+    /// Prioridad de subida (`PR_*` de eMule del archivo compartido): "verylow", "low",
+    /// "normal", "high", "veryhigh" (= powershare). Utilizada como factor de puntuación
+    /// en la cola de subida (semántica `GetFilePrioAsNumber`).
     #[serde(default = "default_up_priority")]
     pub up_priority: String,
-    /// `true` when this entry is an in-progress download (eMule `CPartFile`):
-    /// only `completed_parts` may be served to peers. Transient — never
-    /// persisted in the `shared_files` table.
+    /// `true` cuando esta entrada es una descarga en curso (eMule `CPartFile`):
+    /// solo `completed_parts` pueden servirse a los pares. Transitorio — nunca
+    /// persistido en la tabla `shared_files`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_partial: bool,
-    /// Indices of fully-complete eD2K parts (9 728 000 B) for a partial
-    /// share; empty for regular shared files (all parts available).
+    /// Índices de partes eD2K completamente finalizadas (9 728 000 B) para un
+    /// recurso compartido parcial; vacío para archivos compartidos normales (todas las partes disponibles).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub completed_parts: Vec<u16>,
-    /// Total cumulatif des octets uploadés pour ce fichier — persisté dans
-    /// `share_upload_stats`, renseigné par `shares.list` (eMule
-    /// `CKnownFile::statistic.GetTransferred()`).
+    /// Total acumulado de bytes subidos para este archivo — persistido en
+    /// `share_upload_stats`, completado por `shares.list` (`CKnownFile::statistic.GetTransferred()`
+    /// de eMule).
     #[serde(default)]
     pub uploaded_bytes: u64,
-    /// Débit d'upload courant agrégé sur les sessions actives de ce
-    /// fichier (B/s) — mesuré, 0 quand aucun slot actif.
+    /// Tasa de subida actual agregada en las sesiones activas de este
+    /// archivo (B/s) — medida, 0 cuando no hay ninguna ranura activa.
     #[serde(default)]
     pub upload_rate_bps: u64,
-    /// Catégorie associée (`categories.id`) — `None` = non classé. Pour
-    /// les partages synthétisés depuis un download (partiel ou complété
-    /// en DB), reflète `downloads.category_id` ; pour les partages
-    /// autonomes, persisté dans `shared_files.category_id`.
+    /// Categoría asociada (`categories.id`) — `None` = sin clasificar. Para
+    /// los recursos compartidos sintetizados desde una descarga (parcial o completada
+    /// en la BD), refleja `downloads.category_id`; para los compartidos
+    /// autónomos, persistido en `shared_files.category_id`.
     #[serde(default)]
     pub category_id: Option<String>,
 }
@@ -568,21 +568,21 @@ impl SharedFile {
     }
 }
 
-/// Persistent record of credits granted to / earned from a cryptographically verified peer.
+/// Registro persistente de créditos concedidos a / obtenidos de un par verificado criptográficamente.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerCredit {
-    /// SHA-256 or MD4 hash of the peer's public key (primary key).
+    /// Hash SHA-256 o MD4 de la clave pública del par (clave primaria).
     pub pubkey_hash: String,
-    /// Raw public key bytes (hex encoded).
+    /// Bytes sin procesar de la clave pública (codificados en hexadecimal).
     pub pubkey_hex: String,
-    /// Total bytes uploaded to this peer by us.
+    /// Total de bytes subidos a este par por nosotros.
     pub uploaded_bytes: u64,
-    /// Total bytes downloaded from this peer by us.
+    /// Total de bytes descargados de este par por nosotros.
     pub downloaded_bytes: u64,
-    /// Timestamp of first authentication.
+    /// Marca de tiempo de la primera autenticación.
     pub first_seen_unix_ms: i64,
-    /// Timestamp of most recent transfer or authentication.
+    /// Marca de tiempo de la transferencia o autenticación más reciente.
     pub last_seen_unix_ms: i64,
 }
 
@@ -602,22 +602,22 @@ impl PeerCredit {
         }
     }
 
-    /// Computes the eMule 0.72a canonical credit multiplier
-    /// (`CClientCredits::GetScoreRatio`, `ClientCredits.cpp`), clamped to
+    /// Calcula el multiplicador de crédito canónico de eMule 0.72a
+    /// (`CClientCredits::GetScoreRatio`, `ClientCredits.cpp`), delimitado a
     /// [1.0, 10.0].
     ///
-    /// Three candidate values, the *smallest* wins:
-    /// - `2 * downloaded / uploaded` (ratio, or 10.0 when nothing uploaded)
-    /// - `sqrt(downloaded / 1 MiB + 2)` (exponential cap: 9.2 MiB → ~3.34,
+    /// Tres valores candidatos, gana el *menor*:
+    /// - `2 * downloaded / uploaded` (proporción, o 10.0 si no se ha subido nada)
+    /// - `sqrt(downloaded / 1 MiB + 2)` (límite exponencial: 9.2 MiB → ~3.34,
     ///   100 MiB → ~10.0)
-    /// - linear cap for the first chunks: `(downloaded - 1 MiB) / 8 598 323
-    ///   * 2.34 + 1.0` below ~9.2 MiB, else 10.0
+    /// - límite lineal para los primeros fragmentos: `(downloaded - 1 MiB) / 8 598 323
+    ///   * 2.34 + 1.0` por debajo de ~9.2 MiB, si no 10.0
     ///
-    /// Peers that never sent us anything (< 1 MiB) get exactly 1.0.
+    /// Los pares que nunca nos enviaron nada (< 1 MiB) obtienen exactamente 1.0.
     ///
-    /// Semantic definitions:
-    /// - `downloaded_bytes`: bytes received by us from this peer.
-    /// - `uploaded_bytes`: bytes sent by us to this peer.
+    /// Definiciones semánticas:
+    /// - `downloaded_bytes`: bytes recibidos por nosotros desde este par.
+    /// - `uploaded_bytes`: bytes enviados por nosotros a este par.
     pub fn credit_multiplier(&self) -> f64 {
         const ONE_MIB: f64 = 1_048_576.0;
         if self.downloaded_bytes < ONE_MIB as u64 {
@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_credit_multiplier_canonical_vectors() {
-        // Vector 1: Received 0, Sent 0 => 1.0
+        // Vector 1: Recibido 0, Enviado 0 => 1.0
         let mut credit = PeerCredit::new("hash1", "pub1");
         credit.downloaded_bytes = 0;
         credit.uploaded_bytes = 0;
@@ -655,9 +655,9 @@ mod tests {
             "Expected floor 1.0 for 0/0"
         );
 
-        // Vector 2 (eMule formula): Received 5 MiB, Sent 0 →
-        // min(10.0, sqrt(5+2)≈2.65, linear≈2.14) = ~2.14 — the linear cap
-        // dominates below ~9.2 MiB. NOT 10.0 like the naive ratio.
+        // Vector 2 (fórmula eMule): Recibido 5 MiB, Enviado 0 →
+        // min(10.0, sqrt(5+2)≈2.65, linear≈2.14) = ~2.14 — el límite lineal
+        // domina por debajo de ~9.2 MiB. NO 10.0 como la proporción ingenua.
         credit.downloaded_bytes = 5 * 1_048_576;
         credit.uploaded_bytes = 0;
         let m = credit.credit_multiplier();
@@ -666,18 +666,18 @@ mod tests {
             "Expected ~2.14 for 5MiB/0, got {m}"
         );
 
-        // Vector 3: Received < 1 MiB => 1.0 floor regardless of ratio.
+        // Vector 3: Recibido < 1 MiB => suelo de 1.0 sin importar la proporción.
         credit.downloaded_bytes = 1000;
         credit.uploaded_bytes = 2000;
         assert_eq!(credit.credit_multiplier(), 1.0);
 
-        // Vector 4: 100 MiB received, 5 MiB sent →
-        // ratio = 2*100/5 = 40 → capped by sqrt(100+2)≈10.1 → min = 10.0
+        // Vector 4: 100 MiB recibidos, 5 MiB enviados →
+        // proporción = 2*100/5 = 40 → limitado por sqrt(100+2)≈10.1 → min = 10.0
         credit.downloaded_bytes = 100 * 1_048_576;
         credit.uploaded_bytes = 5 * 1_048_576;
         assert_eq!(credit.credit_multiplier(), 10.0);
 
-        // Vector 5: symmetric exchange 10 MiB / 10 MiB →
+        // Vector 5: intercambio simétrico 10 MiB / 10 MiB →
         // min(2.0, sqrt(12)≈3.46, 10.0) = 2.0
         credit.downloaded_bytes = 10 * 1_048_576;
         credit.uploaded_bytes = 10 * 1_048_576;
@@ -690,42 +690,42 @@ mod tests {
 
     #[test]
     fn peer_source_status_srclist_visibility_matches_emule() {
-        // Sources vivantes (srclist eMule) : en attente, file d'attente /
-        // re-demande, connexion en cours, connectée.
+        // Fuentes vivas (srclist eMule): en espera, cola /
+        // re-petición, conexión en curso, conectada.
         for s in [
             PeerSourceStatus::Candidate,
             PeerSourceStatus::Allowed,
             PeerSourceStatus::Tried,
             PeerSourceStatus::Connected,
         ] {
-            assert!(s.is_srclist_visible(), "{s:?} doit rester visible");
+            assert!(s.is_srclist_visible(), "{s:?} debe permanecer visible");
         }
-        // Deadlist eMule : échec de connexion, FNF, filtre IP — persistées
-        // pour le backoff mais masquées de la liste.
+        // Lista muerta (deadlist eMule): fallo de conexión, FNF, filtro IP — persistidas
+        // para el retardo pero ocultas de la lista.
         for s in [
             PeerSourceStatus::Failed,
             PeerSourceStatus::Rejected,
             PeerSourceStatus::Filtered,
         ] {
-            assert!(!s.is_srclist_visible(), "{s:?} doit être masqué");
+            assert!(!s.is_srclist_visible(), "{s:?} debe estar oculto");
         }
     }
 }
 
-/// Persisted friend identity (eMule `friends.met`): a user hash that is
-/// granted a dedicated upload slot regardless of queue pressure.
+/// Identidad persistida de amigo (`friends.met` de eMule): un hash de usuario al que se
+/// concede una ranura de subida dedicada independientemente de la presión de la cola.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Friend {
-    /// eD2K user hash (hex, lowercase) of the friend.
+    /// Hash de usuario eD2K (hex, minúsculas) del amigo.
     pub user_hash: String,
-    /// Display name.
+    /// Nombre para mostrar.
     pub name: String,
-    /// Timestamp when the friend was added (unix ms).
+    /// Marca de tiempo de cuándo se añadió el amigo (ms unix).
     pub added_at_unix_ms: i64,
 }
 
-/// Secure user identification state for a peer session.
+/// Estado de identificación de usuario segura para una sesión de par.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SecureIdentState {
@@ -735,7 +735,7 @@ pub enum SecureIdentState {
     Failed,
 }
 
-/// Media library item (movie or TV series) managed by eMule-Rust Media Manager.
+/// Elemento de biblioteca multimedia (película o serie de TV) gestionado por eMule-Rust Media Manager.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaItem {
@@ -760,7 +760,7 @@ pub struct MediaItem {
     pub updated_at: i64,
 }
 
-/// Episode of a TV series in the media library.
+/// Episodio de una serie de televisión en la biblioteca multimedia.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct EpisodeItem {
@@ -778,7 +778,7 @@ pub struct EpisodeItem {
     pub updated_at: i64,
 }
 
-/// Calendar entry combining an episode with its parent series information
+/// Entrada de calendario que combina un episodio con la información de su serie principal.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarEpisode {
@@ -788,7 +788,7 @@ pub struct CalendarEpisode {
     pub series_year: Option<u32>,
 }
 
-/// External Torznab/Newznab indexer configuration.
+/// Configuración externa del indexador Torznab/Newznab.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalIndexer {

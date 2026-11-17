@@ -7,8 +7,8 @@ use mule_daemon::rpc::methods::handle_request;
 use mule_network_policy::NetworkProfile;
 use mule_test_support::{make_req, rpc_state_with_config};
 
-/// État de test avec profil réseau forcé et auto-probe UPnP désactivée
-/// (évite le délai réseau dans les tests).
+/// Estado de prueba con perfil de red forzado y sondeo automático UPnP desactivado
+/// (evita el retraso de red en las pruebas).
 fn setup_test_state(profile: NetworkProfile) -> (mule_daemon::AppState, tempfile::TempDir) {
     rpc_state_with_config("wan_test_token_456", |c| {
         c.with_network_profile(profile).with_upnp_enabled(false)
@@ -230,7 +230,7 @@ fn test_upnp_wan_ip_and_gateway_validation() {
     ));
 
     // CGNAT range (RFC 6598 — 100.64.0.0/10): boundaries and interior
-    // is_cgnat_ip must return true for the entire 100.64.0.0–100.127.255.255 range.
+    // is_cgnat_ip debe devolver true para todo el rango 100.64.0.0–100.127.255.255.
     assert!(is_cgnat_ip("100.64.0.0".parse::<IpAddr>().unwrap())); // first address
     assert!(is_cgnat_ip("100.64.0.1".parse::<IpAddr>().unwrap()));
     assert!(is_cgnat_ip("100.100.10.5".parse::<IpAddr>().unwrap()));
@@ -365,8 +365,8 @@ fn test_upnp_mapping_ownership_inspection() {
         None
     );
 
-    // 8. Compatibilité : un bail créé par une version antérieure (« EMule-Rust »)
-    //    reste reconnu comme nous appartenant (ici : bail obsolète, IP différente)
+    // 8. Compatibilidad: una concesión creada por una versión anterior («EMule-Rust»)
+    //    sigue reconociéndose como perteneciente a nosotros (aquí: concesión obsoleta, IP diferente)
     assert_eq!(
         inspect_mapping_entry(
             PortMappingProtocol::TCP,
@@ -382,7 +382,7 @@ fn test_upnp_mapping_ownership_inspection() {
         Some(MappingOwnership::StaleLease)
     );
 
-    // 9. Compatibilité : idem pour le nom intermédiaire « eMule-Rust »
+    // 9. Compatibilidad: lo mismo para el nombre intermedio «eMule-Rust»
     assert_eq!(
         inspect_mapping_entry(
             PortMappingProtocol::TCP,

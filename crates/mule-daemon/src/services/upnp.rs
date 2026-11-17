@@ -27,7 +27,7 @@ pub use types::{
     UpnpStatusSnapshot,
 };
 
-/// Service managing UPnP IGD lifecycle.
+/// Servicio que gestiona el ciclo de vida de UPnP IGD.
 #[derive(Debug, Clone)]
 pub struct UpnpService {
     snapshot: Arc<RwLock<UpnpStatusSnapshot>>,
@@ -35,7 +35,7 @@ pub struct UpnpService {
 }
 
 impl UpnpService {
-    /// Creates a new UPnP service.
+    /// Crea un nuevo servicio UPnP.
     pub fn new(enabled: bool, tcp_port: u16, udp_port: u16) -> Self {
         let snap = UpnpStatusSnapshot {
             enabled,
@@ -49,27 +49,27 @@ impl UpnpService {
         }
     }
 
-    /// Returns a current status snapshot.
+    /// Devuelve una instantánea del estado actual.
     pub async fn snapshot(&self) -> UpnpStatusSnapshot {
         self.snapshot.read().await.clone()
     }
 
-    /// Enables or disables UPnP.
-    /// Updates the mapped TCP/UDP ports (eMule client ports changed at
-    /// runtime) so refreshes/remaps use the current values.
+    /// Actualiza los puertos TCP/UDP mapeados (cuando los puertos del cliente eMule
+    /// cambian en tiempo de ejecución) para que las renovaciones y remapeos utilicen los valores actuales.
     pub async fn set_ports(&self, tcp_port: u16, udp_port: u16) {
         let mut snap = self.snapshot.write().await;
         snap.tcp_port = tcp_port;
         snap.udp_port = udp_port;
     }
 
+    /// Habilita o deshabilita UPnP.
     pub async fn set_enabled(&self, enabled: bool) {
         let mut snap = self.snapshot.write().await;
         snap.enabled = enabled;
         snap.updated_at_unix_ms = current_unix_ms();
     }
 
-    /// Spawns a background task that periodically refreshes UPnP port mappings before leases expire.
+    /// Genera una tarea en segundo plano que renueva periódicamente los mapeos de puertos UPnP antes de que expiren las concesiones.
     pub fn start_periodic_refresh(
         self: Arc<Self>,
         interval: Duration,
@@ -99,7 +99,7 @@ impl UpnpService {
         })
     }
 
-    /// Discovers gateway and maps the ports.
+    /// Descubre la puerta de enlace y mapea los puertos.
     pub async fn map_ports(
         &self,
         tcp_port: u16,
@@ -252,7 +252,7 @@ impl UpnpService {
         Err(last_err)
     }
 
-    /// Removes previously mapped ports from the gateway if verified to still belong to eMuleRust.
+    /// Elimina de la puerta de enlace los puertos mapeados previamente si se verifica que todavía pertenecen a eMuleRust.
     pub async fn unmap_ports(&self) -> Result<(), String> {
         let (gw_opt, tcp_port, udp_port, tcp_mapped, udp_mapped) = {
             let snap = self.snapshot.read().await;
@@ -285,15 +285,15 @@ impl UpnpService {
         Ok(())
     }
 
-    /// Best-effort unmap for process shutdown, hard-bounded at 500 ms.
+    /// Desmapeo de mejor esfuerzo para el cierre del proceso, acotado estrictamente a 500 ms.
     ///
-    /// The gateway SOAP calls run on a detached `std::thread` — never on
-    /// `spawn_blocking`: the Tokio runtime waits for all blocking-pool
-    /// threads at shutdown, so a `spawn_blocking` still executing a slow
-    /// gateway call would keep the process alive past exit (making the old
-    /// outer `timeout()` ineffective). A detached thread is dropped with
-    /// the process, and the oneshot channel lets us await its completion
-    /// without occupying a blocking-pool slot.
+    /// Las llamadas SOAP a la puerta de enlace se ejecutan en un `std::thread` desacoplado,
+    /// nunca en `spawn_blocking`: el runtime de Tokio espera a todos los hilos del grupo
+    /// bloqueante durante el apagado, por lo que un `spawn_blocking` que siga ejecutando una
+    /// llamada lenta a la puerta de enlace mantendría el proceso activo más allá de la salida
+    /// (haciendo ineficaz el antiguo `timeout()` externo). Un hilo desacoplado se descarta
+    /// con el proceso, y el canal oneshot nos permite esperar su finalización sin ocupar
+    /// una ranura del grupo bloqueante.
     pub async fn unmap_ports_for_shutdown(&self) {
         const SHUTDOWN_UNMAP_BUDGET: Duration = Duration::from_millis(500);
 
@@ -324,9 +324,9 @@ impl UpnpService {
     }
 }
 
-/// Blocking SOAP ownership-check + removal for both unmap paths.
-/// Runs on a blocking thread (`spawn_blocking` or detached `std::thread`) —
-/// never on an async executor thread.
+/// Comprobación de pertenencia SOAP bloqueante + eliminación para ambas rutas de desmapeo.
+/// Se ejecuta en un hilo bloqueante (`spawn_blocking` o `std::thread` desacoplado) —
+/// nunca en un hilo ejecutor asíncrono.
 fn unmap_gateway_blocking(
     gateway: &Gateway,
     tcp_port: u16,

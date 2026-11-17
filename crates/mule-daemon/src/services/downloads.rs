@@ -30,24 +30,24 @@ pub use types::{
     MAX_IMPORT_PART_COUNT, MAX_IMPORT_TOTAL_SIZE,
 };
 
-/// Durée de bannissement d'une IP cliente — eMule `CLIENTBANTIME`
-/// (`Opcodes.h:123` — 2 heures).
+/// Duración del baneo de una IP de cliente — `CLIENTBANTIME` de eMule
+/// (`Opcodes.h:123` — 2 horas).
 pub const CLIENT_BAN_DURATION: Duration = Duration::from_secs(2 * 3600);
 
-/// Durée de conservation d'un client dans la liste de suivi
-/// `(IP,port)→userhash` — eMule `KEEPTRACK_TIME` (`Opcodes.h:125` — 2 h).
+/// Duración de conservación de un cliente en la lista de seguimiento
+/// `(IP,port)→userhash` — `KEEPTRACK_TIME` de eMule (`Opcodes.h:125` — 2 h).
 pub const KEEP_TRACK_DURATION: Duration = CLIENT_BAN_DURATION;
 
-/// Fabrique une closure `map_err` enveloppant une erreur de persistance en
-/// `DaemonError::Business` avec un contexte lisible : `"DB error {context}: {e}"`.
+/// Construye un cierre `map_err` que envuelve un error de persistencia en
+/// `DaemonError::Business` con un contexto legible: `"DB error {context}: {e}"`.
 pub(crate) fn db_err<E: std::fmt::Display>(
     context: &'static str,
 ) -> impl FnOnce(E) -> DaemonError {
     move |e| DaemonError::Business(format!("DB error {context}: {e}"))
 }
 
-/// Extrait l'`IpAddr` d'une adresse source `ip:port` ; `None` pour les
-/// adresses symboliques `lowid:`/`kadcb:` (pas d'IP directe à bannir).
+/// Extrae la `IpAddr` de una dirección de origen `ip:port`; `None` para las
+/// direcciones simbólicas `lowid:`/`kadcb:` (sin IP directa que banear).
 pub(crate) fn source_addr_ip(addr: &str) -> Option<std::net::IpAddr> {
     addr.parse::<std::net::SocketAddr>()
         .map(|a| a.ip())
@@ -60,28 +60,28 @@ pub struct DownloadService {
     temp_dir: PathBuf,
     active: HashMap<Uuid, ActiveDownload>,
     session_start_ms: i64,
-    /// Event channel installed by `AppState` for lifecycle events
+    /// Canal de eventos instalado por `AppState` para eventos de ciclo de vida
     /// (`event.downloadAdded/Removed/Completed/Failed`).
     event_tx: Option<tokio::sync::broadcast::Sender<String>>,
     sequence: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
-    /// IPs bannies par le `CorruptionBlackBox`, le flood de requêtes ou un
-    /// changement de userhash (eMule `clientlist->AddBannedClient` —
+    /// IPs baneadas por el `CorruptionBlackBox`, la inundación de peticiones o un
+    /// cambio de hash de usuario (`clientlist->AddBannedClient` de eMule —
     /// `CLIENTBANTIME` = 2 h, `Opcodes.h:123`).
     banned_source_ips: std::collections::HashMap<std::net::IpAddr, std::time::Instant>,
-    /// `(IP, port TCP annoncé) → (userhash, instant)` — eMule
-    /// `m_trackedClientsMap` (`KEEPTRACK_TIME` = 2 h, `Opcodes.h:125`),
-    /// rempli quand le pair fournit sa clé publique SUI.
+    /// `(IP, puerto TCP anunciado) → (userhash, instante)` — `m_trackedClientsMap`
+    /// de eMule (`KEEPTRACK_TIME` = 2 h, `Opcodes.h:125`),
+    /// completado cuando el par proporciona su clave pública SUI.
     tracked_clients: std::collections::HashMap<
         (std::net::IpAddr, u16),
         ([u8; 16], std::time::Instant),
     >,
-    /// `!theApp.IsFirewalled()` — le daemon accepte les sources `lowid:`
-    /// uniquement tant qu'il est joignable pour un connect-back (HighID
-    /// eD2K ou Kad UDP ouvert vérifié) ; sinon aucun `OP_CALLBACKREQUEST`
-    /// ne peut les faire nous rappeler (eMule `CPartFile::CanAddSource`,
-    /// `PartFile.cpp:2397-2402`, refus à l'ingestion). Rafraîchi par le
-    /// swarm coordinator à chaque tick ; `false` au démarrage — eMule
-    /// naît firewalled jusqu'à attribution d'un ID ou ouverture Kad.
+    /// `!theApp.IsFirewalled()` — el daemon acepta fuentes `lowid:`
+    /// únicamente mientras sea accesible para una devolución de conexión (HighID
+    /// eD2K o Kad UDP abierto verificado); de lo contrario ningún `OP_CALLBACKREQUEST`
+    /// puede hacer que nos devuelvan la llamada (`CPartFile::CanAddSource` de eMule,
+    /// `PartFile.cpp:2397-2402`, rechazo en la ingesta). Actualizado por el
+    /// coordinador de enjambre en cada tick; `false` al inicio — eMule
+    /// nace con cortafuegos hasta la asignación de un ID o apertura de Kad.
     accept_lowid_sources: bool,
 }
 
@@ -102,7 +102,7 @@ impl DownloadService {
             let ranges = db.load_received_ranges(&dl.id).unwrap_or_default();
             let covered = ranges.covered_len();
 
-            // Self-healing: probe target_path if download was completing or verifying (avoids NFS stalls on in-flight or completed files)
+            // Autorreparación: sondear target_path si la descarga se estaba completando o verificando (evita estancamientos de NFS en archivos completados o en curso)
             let is_finalized_on_disk = matches!(
                 dl.status,
                 DownloadStatus::Completing | DownloadStatus::Verifying
@@ -127,12 +127,12 @@ impl DownloadService {
                 let _ = db.update_status(&dl.id, DownloadStatus::Completed);
             }
 
-            // Le .part a été supprimé physiquement pendant que le daemon
-            // était arrêté : les plages persistées en DB pointent vers
-            // des données perdues — l'entrée est retirée comme une
-            // suppression de download. Garde : le dossier parent doit
-            // être joignable, sinon (lecteur débranché) impossible de
-            // distinguer une suppression d'un chemin inaccessible.
+            // El archivo .part fue eliminado físicamente mientras el daemon
+            // estaba detenido: los rangos persistidos en base de datos apuntan a
+            // datos perdidos — la entrada se retira como una
+            // eliminación de descarga. Salvaguarda: la carpeta contenedora debe
+            // ser accesible; de lo contrario (unidad desconectada) es imposible
+            // distinguir una eliminación de una ruta inaccesible.
             if !matches!(
                 dl.status,
                 DownloadStatus::Completed | DownloadStatus::Removed
@@ -198,7 +198,7 @@ impl DownloadService {
             );
         }
 
-        // Apply retention policy on startup
+        // Aplicar política de retención en el arranque
         let retention_days = db
             .get_setting("history_retention_days")
             .ok()
@@ -237,8 +237,8 @@ impl DownloadService {
         })
     }
 
-    /// Installs the broadcast channel used to emit download lifecycle
-    /// events. Called once by `AppState::new` before the service is shared.
+    /// Instala el canal de difusión utilizado para emitir eventos del ciclo
+    /// de vida de descargas. Llamado una sola vez por `AppState::new` antes de compartir el servicio.
     pub fn set_event_channel(
         &mut self,
         tx: tokio::sync::broadcast::Sender<String>,
@@ -255,8 +255,8 @@ impl DownloadService {
         make(seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst)).send(tx);
     }
 
-    /// Effective temp directory: persisted `temp_dir` setting wins over the
-    /// construction-time directory (eMule "Répertoire temporaire").
+    /// Directorio temporal efectivo: la configuración persistida `temp_dir` tiene prioridad
+    /// sobre el directorio de tiempo de construcción ("Directorio temporal" de eMule).
     fn effective_temp_dir(&self) -> PathBuf {
         self.db
             .get_setting("temp_dir")
@@ -345,12 +345,12 @@ impl DownloadService {
         Ok(result)
     }
 
-    /// Recovers orphaned `.part.met` files found in the effective temp
-    /// directory at startup (eMule `CPartFile` auto-load semantics): any met
-    /// whose file hash is not already tracked is imported through the same
-    /// sandboxed path as `downloads.importPartMet` (part-hash verification,
-    /// staged `{uuid}.part` copy, Paused status). Returns the number of
-    /// recovered downloads.
+    /// Recupera archivos `.part.met` huérfanos encontrados en el directorio temporal
+    /// efectivo al iniciar (semántica de carga automática de `CPartFile` de eMule): cualquier met
+    /// cuyo hash de archivo no esté ya rastreado se importa mediante la misma ruta en
+    /// aislamiento que `downloads.importPartMet` (verificación de hashes de parte,
+    /// copia por etapas `{uuid}.part`, estado Paused). Devuelve el número de
+    /// descargas recuperadas.
     pub fn recover_orphan_part_mets(&mut self, target_dir: &Path) -> usize {
         let temp_dir = self.effective_temp_dir();
         let entries = match std::fs::read_dir(&temp_dir) {
@@ -370,8 +370,8 @@ impl DownloadService {
                 continue;
             }
 
-            // Skip companions already owned by an active download
-            // (`{uuid}.part.met` written by save_part_met).
+            // Omitir archivos complementarios que ya pertenecen a una descarga activa
+            // (`{uuid}.part.met` escrito por save_part_met).
             let already_tracked = match mule_format::PartMetFile::open(&met_path) {
                 Ok(met) => self.active.values().any(|a| {
                     a.download
@@ -396,9 +396,9 @@ impl DownloadService {
                 true,
             ) {
                 Ok((result, active_dl)) => {
-                    // The orphan was adopted in place ({stem}.part renamed to
-                    // {uuid}.part): drop the source met so it is not
-                    // reprocessed on the next startup.
+                    // El huérfano fue adoptado in situ ({stem}.part renombrado a
+                    // {uuid}.part): eliminar el met original para que no vuelva
+                    // a procesarse en el siguiente arranque.
                     let _ = std::fs::remove_file(&met_path);
                     let verif_status = if result.corrupted_parts > 0 {
                         "partial_corruption"
@@ -436,12 +436,12 @@ impl DownloadService {
         recovered
     }
 
-    /// Persists `.part.met` companions for every non-terminal download —
-    /// eMule `SavePartFile` cadence, invoked periodically by the swarm
-    /// coordinator heartbeat and once on graceful shutdown so a crash never
-    /// leaves gap state staler than the last flush. Flush aussi les données
-    /// `.part` sales (fsync différé par `PART_PERSIST_INTERVAL`) : ce point
-    /// est le dernier garanti avant l'arrêt du processus.
+    /// Persiste los acompañantes `.part.met` para cada descarga no terminal —
+    /// cadencia `SavePartFile` de eMule, invocada periódicamente por el latido del
+    /// coordinador de enjambre y una vez durante el apagado limpio para que una caída nunca
+    /// deje el estado de huecos más desfasado que el último vaciado. También vacía los datos
+    /// `.part` sucios (fsync diferido por `PART_PERSIST_INTERVAL`): este punto
+    /// es el último garantizado antes de la finalización del proceso.
     pub fn save_active_part_mets(&mut self) {
         let ids: Vec<Uuid> = self
             .active
@@ -468,9 +468,9 @@ impl DownloadService {
         self.active.values().map(|a| a.snapshot()).collect()
     }
 
-    /// Octets utiles reçus depuis le démarrage du daemon : somme, sur tous
-    /// les downloads actifs, de `covered_len() - session_bytes_start`
-    /// (le point de départ est fixé à l'hydratation / à l'ajout).
+    /// Bytes útiles recibidos desde el inicio del daemon: suma, en todas
+    /// las descargas activas, de `covered_len() - session_bytes_start`
+    /// (el punto de partida se establece en la hidratación / al añadir).
     pub fn session_downloaded_bytes(&self) -> u64 {
         self.active
             .values()
@@ -478,8 +478,8 @@ impl DownloadService {
             .sum()
     }
 
-    /// Full details (incl. per-part state and source availability) so the
-    /// downloads list can render an eMule-style part map per row.
+    /// Detalles completos (incluyendo estado por parte y disponibilidad de fuentes) para
+    /// que la lista de descargas pueda renderizar un mapa de partes al estilo eMule por fila.
     pub fn list_download_details(&self) -> Vec<DownloadDetail> {
         self.active
             .values()
@@ -527,10 +527,10 @@ impl DownloadService {
         operations::inject_range(&mut self.db, &mut self.active, id, offset, data, sender)
     }
 
-    /// Variante de [`Self::inject_range`] pour le hot path de transfert :
-    /// le snapshot retourné n'inclut pas `parts` (résumé O(parts × ranges)
-    /// trop coûteux par bloc de 180 Ko). Ne pas émettre le retour vers les
-    /// clients RPC/WS — il ne sert qu'à lire `status`/`progress`.
+    /// Variante de [`Self::inject_range`] para la ruta crítica de transferencia:
+    /// la instantánea devuelta no incluye `parts` (resumen O(partes × rangos)
+    /// demasiado costoso por bloque de 180 KiB). No emitir el retorno hacia los
+    /// clientes RPC/WS — solo sirve para leer `status`/`progress`.
     pub fn inject_range_brief(
         &mut self,
         id: &Uuid,
@@ -541,8 +541,8 @@ impl DownloadService {
         operations::inject_range_brief(&mut self.db, &mut self.active, id, offset, data, sender)
     }
 
-    /// Lookup léger hash → id : évite `find_by_ed2k_hash` (snapshot complet)
-    /// dans le hot path de transfert qui n'a besoin que de l'identifiant.
+    /// Búsqueda ligera hash → id: evita `find_by_ed2k_hash` (instantánea completa)
+    /// en la ruta crítica de transferencia, que solo necesita el identificador.
     pub fn id_by_ed2k_hash(&self, hex_hash: &str) -> Option<Uuid> {
         let clean_hex = hex_hash.trim().to_lowercase();
         self.active
@@ -551,10 +551,10 @@ impl DownloadService {
             .map(|a| a.download.id)
     }
 
-    /// Flush périodique des `.part` sales (fsync différé) — backstop quand
-    /// le flux de blocs s'interrompt entre deux `inject_range` (la cadence
-    /// principale vit dans le chemin de réception). Appelé au tick du
-    /// swarm coordinator ; no-op quand rien n'est sale.
+    /// Vaciado periódico de `.part` sucios (fsync diferido) — respaldo cuando
+    /// el flujo de bloques se interrumpe entre dos `inject_range` (la cadencia
+    /// principal vive en la ruta de recepción). Llamado en el tick del
+    /// coordinador de enjambre; no-op cuando no hay nada sucio.
     pub fn flush_dirty_downloads(&mut self) {
         let ids: Vec<Uuid> = self
             .active
@@ -573,10 +573,10 @@ impl DownloadService {
         }
     }
 
-    /// Vide les bannissements demandés par le `CorruptionBlackBox` pour ce
-    /// téléchargement (eMule `Ban`/`AddBannedClient`). L'appelant doit
-    /// déconnecter la session du pair ; les IPs retournées sont ajoutées à
-    /// la liste de bannis de session consultée par l'ingestion et le dialer.
+    /// Vacía los baneos solicitados por el `CorruptionBlackBox` para esta
+    /// descarga (`Ban`/`AddBannedClient` de eMule). El llamador debe
+    /// desconectar la sesión del par; las IPs devueltas se añaden a la
+    /// lista de baneados de sesión consultada por la ingesta y el marcador.
     pub fn drain_corruption_bans(&mut self, id: &Uuid) -> Vec<String> {
         let Some(act) = self.active.get_mut(id) else {
             return Vec::new();
@@ -591,9 +591,9 @@ impl DownloadService {
         bans
     }
 
-    /// eMule `clientlist->IsBannedClient` : l'IP est-elle bannie depuis
-    /// moins de `CLIENTBANTIME` (2 h) ? (`ClientList.cpp:347` — le ban
-    /// expire, il n'est pas permanent.)
+    /// `clientlist->IsBannedClient` de eMule: ¿está la IP baneada desde
+    /// hace menos de `CLIENTBANTIME` (2 h)? (`ClientList.cpp:347` — el baneo
+    /// caduca, no es permanente).
     pub fn is_source_banned(&self, addr: &str) -> bool {
         let Some(ip) = source_addr_ip(addr) else {
             return false;
@@ -603,8 +603,8 @@ impl DownloadService {
             .is_some_and(|since| since.elapsed() < CLIENT_BAN_DURATION)
     }
 
-    /// Nombre d'IP actuellement sous ban (non expirées — pour le
-    /// heartbeat consolidé).
+    /// Número de IPs actualmente bajo baneo (no caducadas — para el
+    /// latido consolidado).
     pub fn banned_source_count(&self) -> usize {
         self.banned_source_ips
             .values()
@@ -612,7 +612,7 @@ impl DownloadService {
             .count()
     }
 
-    /// Bannit explicitement une IP pour `CLIENTBANTIME` (2 h).
+    /// Banea explícitamente una IP por `CLIENTBANTIME` (2 h).
     pub fn ban_source(&mut self, addr: &str) {
         if let Some(ip) = source_addr_ip(addr) {
             self.banned_source_ips
@@ -620,18 +620,18 @@ impl DownloadService {
         }
     }
 
-    /// eMule `AddTrackClient` (`ClientList.cpp:367`) : mémorise le
-    /// `(IP, port TCP annoncé) → userhash` d'un pair qui a présenté sa clé
-    /// publique SUI, conservé `KEEPTRACK_TIME` (2 h).
+    /// `AddTrackClient` de eMule (`ClientList.cpp:367`): memoriza el
+    /// `(IP, puerto TCP anunciado) → userhash` de un par que presentó su clave
+    /// pública SUI, conservado durante `KEEPTRACK_TIME` (2 h).
     pub fn track_client(
         &mut self,
         ip: std::net::IpAddr,
         announced_tcp_port: u16,
         user_hash: [u8; 16],
     ) {
-        // Purge paresseuse des entrées expirées (eMule purge dans
-        // `Process` toutes les 30 s — ici à chaque insertion, le volume
-        // reste faible).
+        // Purga perezosa de entradas caducadas (eMule purga en
+        // `Process` cada 30 s — aquí en cada inserción, el volumen
+        // se mantiene bajo).
         self.tracked_clients
             .retain(|_, (_, seen)| seen.elapsed() < KEEP_TRACK_DURATION);
         self.tracked_clients.insert(
@@ -640,10 +640,10 @@ impl DownloadService {
         );
     }
 
-    /// eMule `ComparePriorUserhash` (`ClientList.cpp:386`) : `false` si ce
-    /// `(IP, port)` a déjà été suivi sous un **autre** userhash — indice
-    /// fort d'usurpation d'identité (eMule bannit l'IP dans ce cas).
-    /// `true` si inconnu ou hash identique.
+    /// `ComparePriorUserhash` de eMule (`ClientList.cpp:386`): `false` si este
+    /// `(IP, port)` ya fue seguido bajo **otro** userhash — fuerte indicio
+    /// de suplantación de identidad (eMule banea la IP en este caso).
+    /// `true` si es desconocido o el hash es idéntico.
     pub fn check_prior_userhash(
         &self,
         ip: std::net::IpAddr,
@@ -686,15 +686,15 @@ impl DownloadService {
         Ok(snapshot)
     }
 
-    /// Updates the eMule-style file priority ("low" | "normal" | "high" |
-    /// "auto"). "auto" is eMule `PR_AUTO` (`m_bAutoDownPriority`) : la
-    /// priorité effective est recalculée par l'allocateur à chaque tick
-    /// selon le nombre de sources (`UpdateAutoDownPriority` : plus de 100
-    /// sources → low, plus de 20 → normal, sinon → high). Choisir une
-    /// valeur manuelle désactive l'auto — le flag est la valeur stockée,
-    /// comme `FT_DLPRIORITY`.
+    /// Actualiza la prioridad de archivo al estilo eMule ("low" | "normal" | "high" |
+    /// "auto"). "auto" es `PR_AUTO` de eMule (`m_bAutoDownPriority`): la
+    /// prioridad efectiva es recalculada por el asignador en cada tick
+    /// según el número de fuentes (`UpdateAutoDownPriority`: más de 100
+    /// fuentes → low, más de 20 → normal, de lo contrario → high). Elegir un
+    /// valor manual desactiva el modo auto — el indicador es el valor almacenado,
+    /// como `FT_DLPRIORITY`.
     ///
-    /// The swarm allocator uses it to bias the slot quota per file.
+    /// El asignador del enjambre lo utiliza para sesgar la cuota de ranuras por archivo.
     pub fn set_priority(
         &mut self,
         id: &Uuid,
@@ -714,8 +714,8 @@ impl DownloadService {
         Ok(act.snapshot())
     }
 
-    /// Updates the per-file source limit (eMule FT_MAXSOURCES). `None`
-    /// restores the global `max_peers_per_file` default.
+    /// Actualiza el límite de fuentes por archivo (`FT_MAXSOURCES` de eMule). `None`
+    /// restablece el valor predeterminado global `max_peers_per_file`.
     pub fn set_max_sources(
         &mut self,
         id: &Uuid,
@@ -820,7 +820,7 @@ impl DownloadService {
         operations::set_destination(&mut self.db, &mut self.active, id, target_dir)
     }
 
-    /// Met à jour le chemin cible final d'un téléchargement complété (ex: après organisation NAS)
+    /// Actualiza la ruta de destino final de una descarga completada (ej.: tras organización en el NAS)
     pub fn update_target_path(
         &mut self,
         id: &Uuid,
@@ -829,8 +829,8 @@ impl DownloadService {
         operations::update_target_path(&mut self.db, &mut self.active, id, new_target_path)
     }
 
-    /// `downloads.rename` — renomme le fichier (display_name + target ;
-    /// disque + `shared_files` pour un download terminé).
+    /// `downloads.rename` — renombra el archivo (display_name + destino;
+    /// disco + `shared_files` para una descarga terminada).
     pub fn rename_download(
         &mut self,
         id: &Uuid,
@@ -839,9 +839,9 @@ impl DownloadService {
         operations::rename_download(&mut self.db, &mut self.active, id, new_name)
     }
 
-    /// `shares.rename` — renomme un fichier partagé complet sur disque
-    /// et dans `shared_files` (délègue à `rename_download` quand le hash
-    /// adosse un download listé).
+    /// `shares.rename` — renombra un archivo compartido completo en disco
+    /// y en `shared_files` (delega en `rename_download` cuando el hash
+    /// respalda una descarga listada).
     pub fn rename_shared_file(
         &mut self,
         file_hash: &str,
@@ -905,7 +905,7 @@ impl DownloadService {
         history_categories::export_history(&self.db, format, filter)
     }
 
-    // --- Category Management ---
+    // --- Gestión de categorías ---
 
     pub fn list_categories(&self) -> Result<Vec<DownloadCategory>, DaemonError> {
         history_categories::list_categories(&self.db)
@@ -1022,11 +1022,11 @@ impl DownloadService {
         peers_servers::clear_servers(&mut self.db)
     }
 
-    /// Met à jour `!theApp.IsFirewalled()` — appelé par le swarm
-    /// coordinator à chaque tick (HighID eD2K ou Kad UDP ouvert vérifié).
-    /// Tant que nous sommes injoignables, les sources `lowid:` sont
-    /// refusées à l'ingestion : aucun callback ne peut nous faire
-    /// rappeler (`CPartFile::CanAddSource`, `PartFile.cpp:2397-2402`).
+    /// Actualiza `!theApp.IsFirewalled()` — llamado por el coordinador
+    /// de enjambre en cada tick (HighID eD2K o Kad UDP abierto verificado).
+    /// Mientras seamos inaccesibles, las fuentes `lowid:` se
+    /// rechazan en la ingesta: ninguna devolución de llamada puede hacer
+    /// que nos contacten (`CPartFile::CanAddSource`, `PartFile.cpp:2397-2402`).
     pub fn set_lowid_source_acceptance(&mut self, accept: bool) {
         self.accept_lowid_sources = accept;
     }
@@ -1036,11 +1036,11 @@ impl DownloadService {
         file_hash: &str,
         sources: &[mule_core::model::PeerSource],
     ) -> Result<usize, DaemonError> {
-        // eMule `AddSources` : les clients bannis (`IsBannedClient`) sont
-        // ignorés dès l'ingestion, quel que soit le canal de découverte.
-        // `IsLowID && IsFirewalled` est refusé au même endroit chez eMule
-        // (`CanAddSource`) — une LowID ne sert à rien tant que nous ne
-        // pouvons pas être rappelés.
+        // `AddSources` de eMule: los clientes baneados (`IsBannedClient`) se
+        // ignoran desde la ingesta, cualquiera que sea el canal de descubrimiento.
+        // `IsLowID && IsFirewalled` se rechaza en el mismo punto en eMule
+        // (`CanAddSource`) — una LowID no sirve de nada mientras no podamos
+        // recibir devoluciones de llamada.
         let accept_lowid = self.accept_lowid_sources;
         let filtered: Vec<mule_core::model::PeerSource> = sources
             .iter()
@@ -1054,7 +1054,7 @@ impl DownloadService {
         peers_servers::upsert_peer_sources(&mut self.db, &mut self.active, file_hash, &filtered)
     }
 
-    /// Lookup mutable hash → download actif, partagé par les setters de débit.
+    /// Búsqueda mutable hash → descarga activa, compartida por los configuradores de tasa.
     fn active_mut_by_hash(&mut self, hex_hash: &str) -> Option<&mut ActiveDownload> {
         let clean_hex = hex_hash.trim().to_lowercase();
         self.active
@@ -1081,10 +1081,10 @@ impl DownloadService {
         Some(active.snapshot())
     }
 
-    /// Variante sans snapshot de [`Self::set_download_rate_by_hash`] pour le
-    /// hot path : le débit est rafraîchi (y compris pour `decay_stale_rates`)
-    /// sans construire de `DownloadSnapshot` — l'émission d'événements est
-    /// coalescée par l'appelant (`sync_transfer_rates`).
+    /// Variante sin instantánea de [`Self::set_download_rate_by_hash`] para la
+    /// ruta crítica: la tasa se actualiza (incluso para `decay_stale_rates`)
+    /// sin construir un `DownloadSnapshot` — la emisión de eventos es
+    /// fusionada por el llamador (`sync_transfer_rates`).
     pub fn update_download_rate_by_hash(&mut self, hex_hash: &str, rate_bps: u64) -> bool {
         let Some(active) = self.active_mut_by_hash(hex_hash) else {
             return false;
@@ -1111,13 +1111,13 @@ impl DownloadService {
         decayed
     }
 
-    /// Dérive la racine eD2K d'un download depuis son hashset de parts
-    /// **sans relire le disque** (eMule `PerformFileComplete` —
-    /// `GetFileIdentifier().CalculateIdentifier()` calcule la racine
-    /// depuis les hash de parts, jamais en re-hachant le fichier).
-    /// `Some(root)` seulement quand le hashset est connu ET que chaque
-    /// part réelle est marquée vérifiée (`verified_parts`) ; `None`
-    /// sinon — l'appelant retombe alors sur `hash_reader`.
+    /// Deriva la raíz eD2K de una descarga a partir de su conjunto de hashes de partes
+    /// **sin volver a leer el disco** (eMule `PerformFileComplete` —
+    /// `GetFileIdentifier().CalculateIdentifier()` calcula la raíz
+    /// a partir de los hashes de partes, nunca volviendo a hashear el archivo).
+    /// `Some(root)` solo cuando el hashset es conocido Y cada
+    /// parte real está marcada como verificada (`verified_parts`); `None`
+    /// en caso contrario — el llamador recurre entonces a `hash_reader`.
     pub fn try_verified_root(&self, id: &Uuid) -> Option<[u8; 16]> {
         let act = self.active.get(id)?;
         let total_size = act.download.total_size;
@@ -1127,8 +1127,8 @@ impl DownloadService {
         let hash_hex = act.download.ed2k_hash.to_hex().to_lowercase();
         let part_hashes = self.db.get_part_hashes(&hash_hex).ok()?;
         if part_hashes.is_empty() {
-            // Fichier < 1 part : aucun hashset n'est persisté, la racine
-            // eD2K est alors le hash du fichier lui-même (MD4 unique).
+            // Archivo < 1 parte: no se persiste ningún hashset, la raíz
+            // eD2K es entonces el hash del propio archivo (MD4 único).
             if total_size < ED2K_PART_SIZE as u64 {
                 let verified: std::collections::HashSet<u32> =
                     self.db.get_verified_parts(id).ok()?.into_iter().collect();
@@ -1164,8 +1164,8 @@ impl DownloadService {
             if active.verification_in_progress {
                 continue;
             }
-            // Do not enter final verification while AICH block recovery is
-            // pending — corrupted parts are still covered by the RangeSet.
+            // No entrar en verificación final mientras la recuperación de bloques AICH esté
+            // pendiente — las partes corruptas todavía están cubiertas por el RangeSet.
             if !active.aich_pending.is_empty() {
                 continue;
             }
@@ -1222,10 +1222,10 @@ impl DownloadService {
         Ok(res)
     }
 
-    /// Compteur « srclist » façon eMule `GetSourceCount()` : seules les
-    /// sources vivantes comptent — les entrées deadlist (échec, FNF,
-    /// filtre IP) restent persistées mais ne gonflent pas le compteur.
-    /// Rafraîchi à chaque transition de statut ou suppression.
+    /// Contador «srclist» al estilo `GetSourceCount()` de eMule: solo las
+    /// fuentes activas cuentan — las entradas de lista muerta (fallo, FNF,
+    /// filtro IP) permanecen persistidas pero no incrementan el contador.
+    /// Actualizado con cada transición de estado o eliminación.
     fn refresh_source_count(&mut self, file_hash: &str) {
         let clean_hex = file_hash.trim().to_lowercase();
         if let Ok(list) = self.db.list_peer_sources(file_hash) {
@@ -1307,14 +1307,14 @@ impl DownloadService {
         None
     }
 
-    /// Nombre de sources connues couvrant chaque part d'un download actif —
-    /// indice de rareté pour le swarm healing (`swarm_healing` setting).
-    /// `None` si le hash n'est pas un download actif.
+    /// Número de fuentes conocidas que cubren cada parte de una descarga activa —
+    /// índice de rareza para la autorreparación del enjambre (ajuste `swarm_healing`).
+    /// `None` si el hash no corresponde a una descarga activa.
     ///
-    /// Convention eD2K : une source complète annonce `part_count = 0` (masque
-    /// vide) — elle couvre alors toutes les parts. Les sources dont le masque
-    /// n'a pas été rafraîchi depuis `SOURCE_FRESHNESS_MS` sont ignorées pour
-    /// ne pas compter une disponibilité périmée.
+    /// Convención eD2K: una fuente completa anuncia `part_count = 0` (máscara
+    /// vacía) — cubre por tanto todas las partes. Las fuentes cuya máscara
+    /// no haya sido actualizada desde `SOURCE_FRESHNESS_MS` se ignoran para
+    /// no contabilizar una disponibilidad obsoleta.
     pub fn part_source_counts(&self, hex_hash: &str) -> Option<Vec<u32>> {
         let part_size = ED2K_PART_SIZE as u64;
         use types::SOURCE_FRESHNESS_MS;
@@ -1332,7 +1332,7 @@ impl DownloadService {
                 continue;
             }
             if src.mask.part_count() == 0 {
-                // Source complète : couvre toutes les parts.
+                // Fuente completa: cubre todas las partes.
                 for c in counts.iter_mut() {
                     *c = c.saturating_add(1);
                 }
@@ -1347,7 +1347,7 @@ impl DownloadService {
         Some(counts)
     }
 
-    /// Stores the per-part MD4 hashset for a file hash (learned from peer, link, or .part.met).
+    /// Almacena el conjunto de hashes MD4 por parte para un hash de archivo (aprendido de par, enlace o .part.met).
     pub fn store_part_hashes_by_hash(
         &mut self,
         hex_hash: &str,
@@ -1358,14 +1358,14 @@ impl DownloadService {
             .map_err(db_err("storing part hashes"))
     }
 
-    /// Loads the per-part MD4 hashset for a file hash, if known.
+    /// Carga el conjunto de hashes MD4 por parte para un hash de archivo, si se conoce.
     pub fn get_part_hashes_by_hash(&self, hex_hash: &str) -> Vec<[u8; 16]> {
         self.db
             .get_part_hashes(&hex_hash.trim().to_lowercase())
             .unwrap_or_default()
     }
 
-    /// Loads the per-part MD4 hashset for a download, if known.
+    /// Carga el conjunto de hashes MD4 por parte para una descarga, si se conoce.
     pub fn get_part_hashes_for_download(&self, id: &Uuid) -> Vec<[u8; 16]> {
         self.active
             .get(id)
@@ -1373,8 +1373,8 @@ impl DownloadService {
             .unwrap_or_default()
     }
 
-    /// Evicts corrupted parts from the received ranges so they get re-downloaded,
-    /// and marks cleanly verified parts. Returns the indices actually evicted.
+    /// Desaloja partes corruptas de los rangos recibidos para que se vuelvan a descargar,
+    /// y marca las partes limpiamente verificadas. Devuelve los índices efectivamente desalojados.
     pub fn evict_corrupted_parts(
         &mut self,
         id: &Uuid,
@@ -1385,8 +1385,8 @@ impl DownloadService {
 
     // ── AICH recovery ───────────────────────────────────────────────────────
 
-    /// Records an AICH master hash received from a peer (vote tracking,
-    /// eMule `CAICHUntrustedHash` semantics). `masked_ip` = `ip & 0x00F0FFFF`.
+    /// Registra un hash maestro AICH recibido de un par (seguimiento de votos,
+    /// semántica `CAICHUntrustedHash` de eMule). `masked_ip` = `ip & 0x00F0FFFF`.
     pub fn record_aich_root_vote(
         &mut self,
         id: &Uuid,
@@ -1396,18 +1396,18 @@ impl DownloadService {
         operations::record_aich_root_vote(&mut self.db, &mut self.active, id, root, masked_ip)
     }
 
-    /// Returns the trusted AICH root hash for a download, if any.
+    /// Devuelve el hash raíz AICH de confianza para una descarga, si existe.
     pub fn trusted_aich_root(&self, id: &Uuid) -> Option<[u8; 20]> {
         operations::trusted_aich_root(&self.active, id)
     }
 
-    /// Next corrupted part awaiting an `OP_AICHREQUEST` for this download.
-    /// Returns `(part_index, master_hash)`.
+    /// Siguiente parte corrupta en espera de un `OP_AICHREQUEST` para esta descarga.
+    /// Devuelve `(part_index, master_hash)`.
     pub fn next_aich_recovery(&mut self, id: &Uuid) -> Option<(u32, [u8; 20])> {
         operations::next_aich_recovery(&mut self.db, &mut self.active, id)
     }
 
-    /// Same, resolved by ed2k file hash.
+    /// Lo mismo, resuelto por hash de archivo ed2k.
     pub fn next_aich_recovery_by_hash(&mut self, hex_hash: &str) -> Option<(u32, [u8; 20])> {
         let clean_hex = hex_hash.trim().to_lowercase();
         let id = self
@@ -1418,14 +1418,14 @@ impl DownloadService {
         self.next_aich_recovery(&id)
     }
 
-    /// Requeues or evicts a part whose AICH recovery request failed.
+    /// Vuelve a encolar o desaloja una parte cuya petición de recuperación AICH falló.
     pub fn fail_aich_recovery(&mut self, id: &Uuid, part: u32) {
         operations::fail_aich_recovery(&mut self.db, &mut self.active, id, part)
     }
 
-    /// Fails the most recently sent AICH recovery request for this download
-    /// (used when the peer answers with a bare file hash — the part index is
-    /// not echoed in failed `OP_AICHANSWER` packets).
+    /// Falla la petición de recuperación AICH enviada más recientemente para esta descarga
+    /// (utilizado cuando el par responde con un hash de archivo solo — el índice de parte no
+    /// se devuelve en paquetes `OP_AICHANSWER` fallidos).
     pub fn fail_last_aich_request(&mut self, id: &Uuid) {
         let part = self.active.get(id).and_then(|a| {
             a.aich_requested
@@ -1438,7 +1438,7 @@ impl DownloadService {
         }
     }
 
-    /// Applies received AICH recovery data for a corrupted part.
+    /// Aplica los datos de recuperación AICH recibidos para una parte corrupta.
     pub fn apply_aich_recovery(
         &mut self,
         id: &Uuid,
@@ -1456,7 +1456,7 @@ impl DownloadService {
         )
     }
 
-    /// Caches the computed AICH root of a shared file.
+    /// Almacena en caché la raíz AICH calculada de un archivo compartido.
     pub fn set_shared_aich_root(
         &mut self,
         file_hash: &str,
@@ -1493,13 +1493,13 @@ impl DownloadService {
         peers_servers::add_shared_file(&mut self.db, file)
     }
 
-    /// eMule `UAPPref` (`GetNewAutoUp`) : les nouveaux fichiers partagés
-    /// démarrent-ils en priorité upload « auto » ? (défaut `true`).
+    /// `UAPPref` de eMule (`GetNewAutoUp`): ¿inician los nuevos archivos compartidos
+    /// con prioridad de subida «auto»? (predeterminado `true`).
     pub fn auto_up_priority_enabled(&self) -> bool {
         peers_servers::auto_up_priority_enabled(&self.db)
     }
 
-    /// Ajoute `delta` octets au total uploadé persisté d'un fichier partagé.
+    /// Añade `delta` bytes al total subido persistido de un archivo compartido.
     pub fn add_share_uploaded_bytes(
         &mut self,
         file_hash: &str,
@@ -1508,19 +1508,19 @@ impl DownloadService {
         peers_servers::add_share_uploaded_bytes(&mut self.db, file_hash, delta)
     }
 
-    /// Totaux uploadés persistés par hash de fichier (clés en minuscules).
+    /// Totales subidos persistidos por hash de archivo (claves en minúsculas).
     pub fn list_share_uploaded_bytes(
         &self,
     ) -> Result<std::collections::HashMap<String, u64>, DaemonError> {
         peers_servers::list_share_uploaded_bytes(&self.db)
     }
 
-    /// Retire un fichier des partages. Avec `delete_file`, le fichier sur
-    /// disque est supprimé en plus : pour un download complété encore
-    /// actif on délègue à `remove_download` (entrée DB + fichier final +
-    /// share), sinon le fichier pointé par l'entrée est supprimé puis
-    /// l'entrée `shared_files` — et l'éventuel download complété en DB —
-    /// sont retirés.
+    /// Retira un archivo de los recursos compartidos. Con `delete_file`, el archivo en
+    /// disco se elimina adicionalmente: para una descarga completada aún
+    /// activa se delega en `remove_download` (entrada en BD + archivo final +
+    /// recurso compartido); de lo contrario, el archivo señalado por la entrada se elimina
+    /// y luego la entrada `shared_files` — y la eventual descarga completada en BD —
+    /// se retiran.
     pub fn remove_shared_file(
         &mut self,
         file_hash: &str,
@@ -1533,9 +1533,9 @@ impl DownloadService {
             .get_shared_file(file_hash)?
             .ok_or_else(|| DaemonError::NotFound(format!("Shared file {file_hash} not found")))?;
         if sf.is_partial {
-            // Partage transitoire d'un download en cours : le fichier à
-            // supprimer est le `.part`, ce qui est le rôle de
-            // `downloads.remove` — jamais de suppression ici.
+            // Recurso compartido transitorio de una descarga en curso: el archivo a
+            // eliminar es el `.part`, lo cual es función de
+            // `downloads.remove` — nunca eliminarlo aquí.
             return Err(DaemonError::Business(
                 "Cannot delete a partial share — remove the download instead".to_string(),
             ));
@@ -1559,8 +1559,8 @@ impl DownloadService {
             let _ = std::fs::remove_file(&path);
         }
         let removed = peers_servers::remove_shared_file(&mut self.db, file_hash)?;
-        // Download complété resté en DB (hors `active`) : sa target_path
-        // vient d'être supprimée, l'entrée devient morte — on la retire.
+        // Descarga completada restante en BD (fuera de `active`): su target_path
+        // acaba de ser eliminada, la entrada queda muerta — la retiramos.
         let stale_db_id = self
             .db
             .get_all_downloads()
@@ -1578,7 +1578,7 @@ impl DownloadService {
         Ok(removed)
     }
 
-    /// Sets the upload priority of a shared file ("verylow".."veryhigh").
+    /// Establece la prioridad de subida de un archivo compartido ("verylow".."veryhigh").
     pub fn set_shared_up_priority(
         &mut self,
         file_hash: &str,
@@ -1597,8 +1597,8 @@ impl DownloadService {
             if sf.file_path.is_empty() || Path::new(&sf.file_path).is_file() {
                 return Ok(Some(sf));
             }
-            // Entrée persistée dont le fichier n'existe plus : non
-            // servable — on laisse les sources synthétisées trancher.
+            // Entrada persistida cuyo archivo ya no existe: no
+            // servible — dejamos decidir a las fuentes sintetizadas.
         }
         for act in self.active.values() {
             if !act
@@ -1618,22 +1618,22 @@ impl DownloadService {
             sf.aich_root = act.download.aich_root.map(|a| a.0);
             return Ok(Some(sf));
         }
-        // Completed downloads are persisted in the DB even when not loaded
-        // into `active` (e.g. after a daemon restart) — they stay shared
-        // like eMule keeps finished files in the shared list.
+        // Las descargas completadas se persisten en la BD incluso cuando no están cargadas
+        // en `active` (ej.: tras un reinicio del daemon) — permanecen compartidas
+        // al igual que eMule mantiene los archivos finalizados en la lista compartida.
         if let Some(sf) = self.shared_entry_for_completed_db(file_hash) {
             return Ok(Some(sf));
         }
         Ok(None)
     }
 
-    /// Hashs actuellement présents dans la liste des partages — eMule
-    /// `sharedfiles` : entrées actives dont le fichier existe + downloads
-    /// complétés persistés ou chargés dont le fichier existe encore.
-    /// Les `.part` en cours n'y figurent **pas** (eMule `FindBestClientInQueue`
-    /// ne consulte que `sharedfiles->GetFileByID` — les attendeurs d'un
-    /// fichier partiel sont purgés comme chez eMule). Utilisé par
-    /// `UploadManager` pour purger la file des requêtes orphelines.
+    /// Hashes actualmente presentes en la lista de recursos compartidos — `sharedfiles`
+    /// de eMule: entradas activas cuyo archivo existe + descargas
+    /// completadas persistidas o cargadas cuyo archivo aún existe.
+    /// Los `.part` en curso **no** figuran aquí (`FindBestClientInQueue` de eMule
+    /// solo consulta `sharedfiles->GetFileByID` — los clientes en espera de un
+    /// archivo parcial se purgan igual que en eMule). Utilizado por
+    /// `UploadManager` para purgar de la cola las solicitudes huérfanas.
     pub fn list_shared_hashes(&self) -> std::collections::HashSet<String> {
         let mut set = std::collections::HashSet::new();
         if let Ok(shares) = peers_servers::list_shared_files(&self.db) {
@@ -1660,8 +1660,8 @@ impl DownloadService {
         set
     }
 
-    /// Resolves a completed download from the DB into a shareable entry —
-    /// only when the target file actually exists on disk.
+    /// Resuelve una descarga completada desde la BD en una entrada compartible —
+    /// únicamente cuando el archivo de destino existe realmente en disco.
     fn shared_entry_for_completed_db(
         &self,
         file_hash: &str,
@@ -1684,13 +1684,13 @@ impl DownloadService {
         Some(sf)
     }
 
-    /// Builds the shared-file view of an active download (eMule `CPartFile`
-    /// semantics): a completed download resolves to its target path; an
-    /// in-progress download resolves to its `.part` file as a partial share
-    /// exposing only its fully-received eD2K parts. Part files are always
-    /// shared files in eMule (`CDownloadQueue::AddPartFilesToShare`), even
-    /// before any part completes — the empty `completed_parts` mask simply
-    /// advertises nothing servable yet.
+    /// Construye la vista de archivo compartido de una descarga activa (semántica
+    /// `CPartFile` de eMule): una descarga completada se resuelve a su ruta de destino; una
+    /// descarga en progreso se resuelve a su archivo `.part` como recurso compartido parcial
+    /// exponiendo únicamente sus partes eD2K completamente recibidas. Los archivos de partes
+    /// siempre son archivos compartidos en eMule (`CDownloadQueue::AddPartFilesToShare`), incluso
+    /// antes de que se complete cualquier parte — la máscara vacía `completed_parts` simplemente
+    /// no anuncia nada servible todavía.
     fn shared_entry_for_active(act: &ActiveDownload) -> mule_core::model::SharedFile {
         if act.download.status == mule_core::DownloadStatus::Completed {
             let mut sf = mule_core::model::SharedFile::new(
@@ -1727,16 +1727,16 @@ impl DownloadService {
         sf
     }
 
-    /// Every file currently servable to peers: persisted shared files plus
-    /// active downloads (completed → full file, in-progress → completed
-    /// parts only), like eMule's `CSharedFileList` including `CPartFile`s.
+    /// Cada archivo actualmente servible a los pares: archivos compartidos persistidos más
+    /// descargas activas (completadas → archivo completo, en curso → partes
+    /// completadas únicamente), al igual que `CSharedFileList` de eMule incluyendo `CPartFile`s.
     pub fn list_all_shared_files(&self) -> Result<Vec<mule_core::model::SharedFile>, DaemonError> {
         let mut list = self.list_shared_files()?;
-        // Les partages persistés dont le fichier a disparu du disque ne
-        // sont plus servables — filtrés à la lecture pour que ni l'UI,
-        // ni l'offre serveur, ni la publication Kad n'annoncent un
-        // fichier mort. Les entrées sans chemin (partage par hash seul)
-        // sont conservées.
+        // Los recursos compartidos persistidos cuyo archivo desapareció del disco ya
+        // no son servibles — filtrados en la lectura para que ni la interfaz,
+        // ni la oferta del servidor, ni la publicación Kad anuncien un
+        // archivo muerto. Las entradas sin ruta (recurso compartido solo por hash)
+        // se conservan.
         list.retain(|f| f.file_path.is_empty() || Path::new(&f.file_path).is_file());
         let persisted: std::collections::HashSet<String> =
             list.iter().map(|f| f.file_hash.to_lowercase()).collect();
@@ -1744,8 +1744,8 @@ impl DownloadService {
             if persisted.contains(&act.download.ed2k_hash.to_hex().to_lowercase()) {
                 continue;
             }
-            // Même garde que `shared_entry_for_completed_db` : cible
-            // effacée physiquement → rien de servable à synthétiser.
+            // Misma salvaguarda que `shared_entry_for_completed_db`: destino
+            // eliminado físicamente → nada servible a sintetizar.
             if act.download.status == DownloadStatus::Completed
                 && !act.download.target_path.is_file()
             {
@@ -1755,9 +1755,9 @@ impl DownloadService {
             sf.aich_root = act.download.aich_root.map(|a| a.0);
             list.push(sf);
         }
-        // Completed downloads only live in the DB after a restart — merge
-        // them too so the shared list survives reboots (eMule rehashes
-        // finished files into `CSharedFileList` at startup).
+        // Las descargas completadas solo viven en la BD tras un reinicio — fusionarlas
+        // también para que la lista de compartidos sobreviva a reinicios (eMule vuelve a hashear
+        // los archivos completados en `CSharedFileList` al iniciar).
         for d in self.db.get_all_downloads()? {
             if d.status != mule_core::DownloadStatus::Completed {
                 continue;
@@ -1772,12 +1772,12 @@ impl DownloadService {
         Ok(list)
     }
 
-    /// `shares.setCategory` — associe (ou retire) une catégorie à un
-    /// fichier partagé identifié par son hash eD2K. Met à jour les deux
-    /// sources possibles : la ligne `shared_files` persistée et/ou le
-    /// download (actif ou complété en DB) dont le partage est synthétisé
-    /// — `list_all_shared_files` reflète la catégorie depuis l'une ou
-    /// l'autre.
+    /// `shares.setCategory` — asocia (o retira) una categoría a un
+    /// archivo compartido identificado por su hash eD2K. Actualiza las dos
+    /// fuentes posibles: la fila `shared_files` persistida y/o la
+    /// descarga (activa o completada en BD) cuyo recurso compartido se sintetiza
+    /// — `list_all_shared_files` refleja la categoría desde una u
+    /// otra.
     pub fn set_shared_file_category(
         &mut self,
         file_hash: &str,
@@ -1792,7 +1792,7 @@ impl DownloadService {
             }
         }
         let mut touched = false;
-        // Download actif connu par ce hash.
+        // Descarga activa conocida por este hash.
         let active_id = self
             .active
             .values()
@@ -1812,7 +1812,7 @@ impl DownloadService {
             }
             touched = true;
         } else {
-            // Download complété présent seulement en DB.
+            // Descarga completada presente solo en BD.
             let db_id = self
                 .db
                 .get_all_downloads()?
@@ -1826,7 +1826,7 @@ impl DownloadService {
                 touched = true;
             }
         }
-        // Partage persisté autonome (fichier ajouté hors download).
+        // Recurso compartido persistido autónomo (archivo añadido fuera de descarga).
         if self
             .db
             .set_shared_file_category(file_hash, cat.as_deref())
@@ -1886,9 +1886,9 @@ impl DownloadService {
         self.db.list_friends().map_err(Into::into)
     }
 
-    /// `CClientList::LoadFriendsList` — imports an `emfriends.met` file.
-    /// Returns the report; the caller registers each `user_hashes` entry
-    /// with the upload manager.
+    /// `CClientList::LoadFriendsList` — importa un archivo `emfriends.met`.
+    /// Devuelve el informe; el llamador registra cada entrada de `user_hashes`
+    /// en el gestor de subidas.
     pub fn import_emfriends_met(
         &mut self,
         path: &std::path::Path,
@@ -1896,8 +1896,8 @@ impl DownloadService {
         emfriends_import::import_emfriends_met(&mut self.db, path)
     }
 
-    /// `IsCancelledFileByID` — `true` when `ed2k_hash` (hex) is in the
-    /// cancelled set (`remember_cancelled` gate, like eMule).
+    /// `IsCancelledFileByID` — `true` cuando `ed2k_hash` (hex) está en el
+    /// conjunto de cancelados (control `remember_cancelled`, al igual que en eMule).
     pub fn is_cancelled_file(&self, ed2k_hash: &str) -> Result<bool, DaemonError> {
         let Some(hash) = cancelled_files::parse_hash16(ed2k_hash) else {
             return Ok(false);
@@ -1905,7 +1905,7 @@ impl DownloadService {
         cancelled_files::is_cancelled_file(&self.db, &hash)
     }
 
-    /// `CKnownFileList::LoadCancelled` — imports a `cancelled.met` file.
+    /// `CKnownFileList::LoadCancelled` — importa un archivo `cancelled.met`.
     pub fn import_cancelled_met(
         &mut self,
         path: &std::path::Path,
@@ -1913,15 +1913,15 @@ impl DownloadService {
         cancelled_files::import_cancelled_met(&mut self.db, path)
     }
 
-    /// Number of masked hashes in the cancelled set (inspection).
+    /// Número de hashes enmascarados en el conjunto de cancelados (inspección).
     pub fn cancelled_count(&self) -> Result<usize, DaemonError> {
         self.db
             .cancelled_count()
             .map_err(db_err("counting cancelled"))
     }
 
-    /// `CClientCreditsList::LoadList` — imports an eMule `clients.met`
-    /// into `peer_credits` (credits keyed on the stored RSA pubkey).
+    /// `CClientCreditsList::LoadList` — importa un `clients.met` de eMule
+    /// en `peer_credits` (créditos indexados por la clave pública RSA almacenada).
     pub fn import_clients_met(
         &mut self,
         path: &std::path::Path,
@@ -1951,7 +1951,7 @@ impl DownloadService {
 mod tests {
     use super::*;
 
-    /// `CLIENTBANTIME` (2 h) : un ban expire comme `IsBannedClient` eMule
+    /// `CLIENTBANTIME` (2 h): un baneo caduca como `IsBannedClient` de eMule
     /// (`ClientList.cpp:347` — `curTick < dwBantime + CLIENTBANTIME`).
     #[test]
     fn ban_expires_after_client_ban_time() {
@@ -1961,7 +1961,7 @@ mod tests {
         svc.ban_source("1.2.3.4:4662");
         assert!(svc.is_source_banned("1.2.3.4:4662"));
 
-        // Ban appliqué il y a plus de 2 h → expiré.
+        // Baneo aplicado hace más de 2 h → caducado.
         let ip: std::net::IpAddr = "1.2.3.4".parse().unwrap();
         svc.banned_source_ips.insert(
             ip,
@@ -1970,26 +1970,26 @@ mod tests {
         assert!(!svc.is_source_banned("1.2.3.4:4662"));
     }
 
-    /// `ComparePriorUserhash` (`ClientList.cpp:386`) : même (IP, port) suivi
-    /// sous un autre userhash → `false` ; userhash identique ou inconnu →
-    /// `true`. Les entrées expirent après `KEEPTRACK_TIME` (2 h).
+    /// `ComparePriorUserhash` de eMule (`ClientList.cpp:386`): mismo (IP, port) seguido
+    /// bajo otro userhash → `false`; userhash idéntico o desconocido →
+    /// `true`. Las entradas caducan tras `KEEPTRACK_TIME` (2 h).
     #[test]
     fn prior_userhash_detection_and_expiry() {
         let tmp = tempfile::tempdir().unwrap();
         let mut svc = DownloadService::in_memory(tmp.path().join("t")).unwrap();
         let ip: std::net::IpAddr = "9.9.9.9".parse().unwrap();
 
-        // Inconnu → OK.
+        // Desconocido → OK.
         assert!(svc.check_prior_userhash(ip, 4662, &[0xAA; 16]));
 
         svc.track_client(ip, 4662, [0xAA; 16]);
-        // Même hash → OK ; hash différent → usurpation.
+        // Mismo hash → OK; hash diferente → usurpación.
         assert!(svc.check_prior_userhash(ip, 4662, &[0xAA; 16]));
         assert!(!svc.check_prior_userhash(ip, 4662, &[0xBB; 16]));
-        // Autre port → identité distincte (eMule matche sur (ip, port)).
+        // Otro puerto → identidad distinta (eMule empareja por (ip, port)).
         assert!(svc.check_prior_userhash(ip, 4663, &[0xBB; 16]));
 
-        // Entrée expirée → OK de nouveau.
+        // Entrada caducada → OK de nuevo.
         svc.tracked_clients.insert(
             (ip, 4662),
             ([0xAA; 16], Instant::now() - KEEP_TRACK_DURATION - Duration::from_secs(1)),

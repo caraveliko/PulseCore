@@ -19,7 +19,7 @@ async fn test_kad_rpc_lifecycle_inspect_import_list_clear() {
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
     let mut authenticated = false;
 
-    // 1. Handshake (system.hello)
+    // 1. Negociación (handshake) (system.hello)
     let hello_req = JsonRpcRequest {
         jsonrpc: "2.0".into(),
         id: Some(json!(1)),
@@ -37,7 +37,7 @@ async fn test_kad_rpc_lifecycle_inspect_import_list_clear() {
     assert!(caps.iter().any(|c| c.as_str() == Some("kad-contacts")));
     assert!(authenticated);
 
-    // 2. kad.status initial
+    // 2. Estado inicial kad.status
     let status_req = JsonRpcRequest {
         jsonrpc: "2.0".into(),
         id: Some(json!(2)),
@@ -50,7 +50,7 @@ async fn test_kad_rpc_lifecycle_inspect_import_list_clear() {
     let status = resp.result.unwrap();
     assert_eq!(status["totalContacts"], 0);
 
-    // 3. Create a synthetic nodes.dat file
+    // 3. Crear un archivo nodes.dat sintético
     let contacts = vec![
         KadContactEntry::new([1u8; 16], Ipv4Addr::new(127, 0, 0, 1), 39737, 39735, 2),
         KadContactEntry::new([2u8; 16], Ipv4Addr::new(127, 0, 0, 2), 39737, 0, 1),
@@ -75,7 +75,7 @@ async fn test_kad_rpc_lifecycle_inspect_import_list_clear() {
         .unwrap();
     let inspect = resp.result.unwrap();
     assert_eq!(inspect["declaredCount"], 2);
-    // In LocalLab profile, 127.0.0.1 is allowed
+    // En el perfil LocalLab, 127.0.0.1 está permitido
     assert_eq!(inspect["validContactsCount"], 2);
 
     // 5. kad.importNodesDat
@@ -119,7 +119,7 @@ async fn test_kad_rpc_lifecycle_inspect_import_list_clear() {
     let clear_res = resp.result.unwrap();
     assert_eq!(clear_res["cleared"], 2);
 
-    // 8. Verify list is now empty
+    // 8. Verificar que la lista esté ahora vacía
     let resp = handle_request(&state, list_req, &mut authenticated)
         .await
         .unwrap();

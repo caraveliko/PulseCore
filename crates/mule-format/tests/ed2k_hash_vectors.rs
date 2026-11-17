@@ -9,7 +9,7 @@ use mule_format::{
 };
 use std::io::Cursor;
 
-/// Vérifie un fixture `BytePatternFixture` : hash eD2K racine + nombre de parts.
+/// Verifica un fixture `BytePatternFixture`: hash eD2K raíz + número de partes.
 fn check_pattern_fixture(fx: &BytePatternFixture) {
     let mut reader = PatternReader::new(&REPEATING_0_TO_255, fx.length);
     let res = hash_reader(&mut reader).unwrap();
@@ -48,7 +48,7 @@ fn test_fixture_just_under_part() {
 
 #[test]
 fn test_fixture_exact_one_part() {
-    // 9_728_000 bytes: checks append of empty MD4 block
+    // 9_728_000 bytes: comprueba la anexión de un bloque MD4 vacío
     check_pattern_fixture(&FIXTURE_EXACT_ONE_PART);
 }
 
@@ -59,7 +59,7 @@ fn test_fixture_one_part_plus_one() {
 
 #[test]
 fn test_fixture_exact_two_parts() {
-    // 19_456_000 bytes: checks 2 parts + empty MD4 block
+    // 19_456_000 bytes: comprueba 2 partes + bloque MD4 vacío
     check_pattern_fixture(&FIXTURE_EXACT_TWO_PARTS);
 }
 

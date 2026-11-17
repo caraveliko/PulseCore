@@ -19,47 +19,47 @@ use mule_mcp::tools::{classify, list_tools_for, ToolProfile, ToolRisk};
 
 use crate::error::AssistantError;
 
-/// Sous-ensemble curé d'outils présentés au modèle : opérations usuelles
-/// d'un client eD2K/Kad. Ajuster après mesure du taux de bonne sélection
-/// sur les modèles cibles.
+/// Subconjunto seleccionado de herramientas presentadas al modelo: operaciones habituales
+/// de un cliente eD2K/Kad. Ajustar tras medir la tasa de selección correcta
+/// en los modelos de destino.
 const TOOL_ALLOWLIST: &[&str] = &[
-    // État général
+    // Estado general
     "emule_status",
     "emule_get_settings",
-    // Recherche et connexion réseau
+    // Búsqueda y conexión de red
     "emule_search",
     "emule_list_servers",
     "emule_connect_server",
     "emule_disconnect_server",
     "emule_kad_status",
-    // Téléchargements
+    // Descargas
     "emule_list_downloads",
     "emule_get_download_details",
     "emule_add_link",
     "emule_pause_download",
     "emule_resume_download",
-    // Partage et sources
+    // Archivos compartidos y fuentes
     "emule_list_shares",
     "emule_swarm_status",
     "emule_list_sources",
 ];
 
-/// Outils de l'allowlist exigeant une confirmation utilisateur affichant
-/// les arguments exacts — effets externes ou difficilement réversibles.
-/// `emule_pause_download`/`emule_resume_download` restent libres :
-/// réversibles et purement locaux. Tout outil classé
-/// [`ToolRisk::Destructive`] demande aussi confirmation (défense en
-/// profondeur si le profil `full` laisse passer un destructif).
+/// Herramientas de la lista de permitidos que exigen confirmación del usuario mostrando
+/// los argumentos exactos: efectos externos o difícilmente reversibles.
+/// `emule_pause_download`/`emule_resume_download` permanecen libres:
+/// reversibles y puramente locales. Cualquier herramienta clasificada como
+/// [`ToolRisk::Destructive`] requiere también confirmación (defensa en
+/// profundidad si el perfil `full` dejara pasar una destructiva).
 const CONFIRM_REQUIRED: &[&str] = &[
     "emule_add_link",
     "emule_connect_server",
     "emule_disconnect_server",
 ];
 
-/// Capacité daemon requise par outil — préfixes évalués dans l'ordre,
-/// premier match gagne ; aucun match = toujours permis. La nomenclature
-/// des capacités (`daemon_capabilities()` côté mule-daemon) est
-/// par domaine, pas par outil — ce mapping est la seule traduction.
+/// Capacidad del daemon requerida por herramienta: prefijos evaluados en orden,
+/// la primera coincidencia gana; sin coincidencia = siempre permitida. La nomenclatura
+/// de las capacidades (`daemon_capabilities()` en mule-daemon) es
+/// por dominio, no por herramienta; esta asignación es la única traducción.
 const TOOL_CAPABILITY_PREFIXES: &[(&str, &str)] = &[
     ("emule_kad_", "kad-contacts"),
     ("emule_list_categor", "categories"),
@@ -122,8 +122,8 @@ const TOOL_CAPABILITY_PREFIXES: &[(&str, &str)] = &[
     ("emule_import_part_met", "downloads"),
 ];
 
-/// Capacité requise pour `tool_name` — `None` = pas de capacité dédiée.
-/// Publique pour le test qui vérifie la table contre
+/// Capacidad requerida para `tool_name`: `None` = sin capacidad dedicada.
+/// Pública para la prueba que verifica la tabla frente a
 /// `daemon_capabilities()`.
 pub fn required_capability(tool_name: &str) -> Option<&'static str> {
     TOOL_CAPABILITY_PREFIXES
@@ -132,8 +132,8 @@ pub fn required_capability(tool_name: &str) -> Option<&'static str> {
         .map(|(_, cap)| *cap)
 }
 
-/// Outils visibles pour le modèle : `list_tools_for(profile)` filtrée
-/// par l'allowlist puis par les capacités réelles du daemon.
+/// Herramientas visibles para el modelo: `list_tools_for(profile)` filtrada
+/// por la lista de permitidos y luego por las capacidades reales del daemon.
 pub fn visible_tools(profile: ToolProfile, capabilities: &[String]) -> Vec<ToolDefinition> {
     list_tools_for(profile)
         .into_iter()
@@ -146,9 +146,9 @@ pub fn visible_tools(profile: ToolProfile, capabilities: &[String]) -> Vec<ToolD
         .collect()
 }
 
-/// Vérification d'exécution — appelée juste avant `execute_tool`, pas
-/// seulement à l'établissement de la liste : le modèle peut demander un
-/// outil hors allowlist et les capacités peuvent avoir changé.
+/// Verificación de ejecución: llamada justo antes de `execute_tool`, no
+/// solo al confeccionar la lista: el modelo puede solicitar una
+/// herramienta fuera de la lista de permitidos y las capacidades pueden haber cambiado.
 pub fn check_call(
     profile: ToolProfile,
     capabilities: &[String],
@@ -178,9 +178,9 @@ pub fn check_call(
     Ok(())
 }
 
-/// Vrai si l'outil exige une confirmation utilisateur avant exécution :
-/// membres explicites de [`CONFIRM_REQUIRED`] plus tout destructif
-/// (dernier rempart côté assistant — le daemon reste l'autorité).
+/// Verdadero si la herramienta exige confirmación del usuario antes de la ejecución:
+/// miembros explícitos de [`CONFIRM_REQUIRED`] más cualquier destructiva
+/// (último bastión en el asistente; el daemon sigue siendo la autoridad).
 pub fn requires_confirmation(tool_name: &str) -> bool {
     CONFIRM_REQUIRED.contains(&tool_name) || classify(tool_name) == Some(ToolRisk::Destructive)
 }

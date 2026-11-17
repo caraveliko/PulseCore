@@ -22,7 +22,7 @@ pub async fn handle_request(
 ) -> Option<JsonRpcResponse> {
     let req_id = req.id?; // Notifications do not receive responses
 
-    // Handshake check: the first call must be system.hello unless already authenticated
+    // Comprobación de negociación inicial (handshake): la primera llamada debe ser system.hello salvo si ya se está autenticado
     if req.method == "system.hello" {
         let resp = handle_hello(state, req.params, is_authenticated);
         return Some(match resp {
@@ -77,7 +77,7 @@ pub async fn handle_request(
         "categories.create" => handle_categories_create(state, req.params).await,
         "categories.update" => handle_categories_update(state, req.params).await,
         "categories.delete" => handle_categories_delete(state, req.params).await,
-        // Media library manager (Radarr / Sonarr replacement)
+        // Gestor de biblioteca multimedia (reemplazo de Radarr / Sonarr)
         "media.search" => handle_media_search(state, req.params).await,
         "media.list" => handle_media_list(state, req.params).await,
         "media.get" => handle_media_get(state, req.params).await,
@@ -92,7 +92,7 @@ pub async fn handle_request(
         "media.autoGrab" => handle_media_auto_grab(state, req.params).await,
         "media.organize" => handle_media_organize(state, req.params).await,
         "media.clean" => handle_media_clean(state, req.params).await,
-        // Bazarr Subtitle Automation
+        // Automatización de subtítulos con Bazarr
         "subtitles.search" => handle_subtitles_search(state, req.params).await,
         "subtitles.download" => handle_subtitles_download(state, req.params).await,
         "subtitles.check" => handle_subtitles_check(state, req.params).await,
@@ -180,8 +180,8 @@ pub async fn handle_request(
         "kad.searchNotes" => handle_kad_search_notes(state, req.params).await,
         "kad.publishNote" => handle_kad_publish_note(state, req.params).await,
         "kad.bootstrapFromUrl" => handle_kad_bootstrap_from_url(state, req.params).await,
-        // "events.subscribe" is intercepted in rpc::server::handle_socket —
-        // it mutates the per-session topic filter, not daemon state.
+        // "events.subscribe" es interceptado en rpc::server::handle_socket —
+        // modifica el filtro de temas por sesión, no el estado del daemon.
         #[cfg(any(feature = "debug-rpc", feature = "lab-tools"))]
         "debug.injectRange" => handle_inject_range(state, req.params).await,
         "downloads.getSources" | "ed2k.getSources" => handle_get_sources(state, req.params).await,
@@ -227,7 +227,7 @@ fn handle_hello(
         return Err(JsonRpcError::protocol_mismatch(PROTOCOL_VERSION, proto_ver));
     }
 
-    // Check token if provided
+    // Comprobar token si se proporciona
     let token = params["token"].as_str().unwrap_or("");
     if !state.config.auth_token.is_empty() && token != state.config.auth_token {
         return Err(JsonRpcError::auth_failed());

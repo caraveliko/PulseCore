@@ -25,22 +25,22 @@ use super::types::{
     SMART_QUEUE_STALL_TIMEOUT, UDP_SERVER_REASK_INTERVAL,
 };
 
-/// eMule `PartFile.cpp:2291` — `UDPReaskForDownload` fires while the
-/// source's next TCP file re-ask is less than 2 minutes away
+/// `PartFile.cpp:2291` de eMule — `UDPReaskForDownload` se dispara mientras
+/// la siguiente repetición de petición TCP de la fuente dista menos de 2 minutos
 /// (`GetTimeUntilReask() < MIN2MS(2)`).
 const UDP_REASK_WINDOW_MS: i64 = 2 * 60 * 1_000;
-/// …but still more than 1 second away (`GetTimeUntilReask() > SEC2MS(1)`)
-/// — the UDP reply needs ~1 min to arrive before the TCP re-ask, and the
-/// window prevents pinging a source whose TCP re-ask already fired.
+/// …pero aún a más de 1 segundo de distancia (`GetTimeUntilReask() > SEC2MS(1)`)
+/// — la respuesta UDP necesita ~1 min para llegar antes de la repetición TCP, y la
+/// ventana evita enviar pings a una fuente cuya repetición TCP ya se disparó.
 const UDP_REASK_MIN_LEAD_MS: i64 = 1_000;
-/// …and only when the last connection attempt is at least 20 min old
+/// …y únicamente cuando el último intento de conexión tiene al menos 20 min de antigüedad
 /// (`curTick >= GetLastTriedToConnectTime() + MIN2MS(20)`).
 const UDP_REASK_MIN_CONNECT_AGE_MS: i64 = 20 * 60 * 1_000;
 
-/// eMule `CPartFile::Process` (`PartFile.cpp:2291-2294`): a `DS_ONQUEUE`
-/// source gets one UDP re-ask per cycle, inside the `(1 s, 2 min)` window
-/// before its TCP re-ask, when the connection is ≥ 20 min old and we are
-/// not firewalled (a NAT would drop the reply — eMule gates on
+/// `CPartFile::Process` de eMule (`PartFile.cpp:2291-2294`): una fuente `DS_ONQUEUE`
+/// recibe una repetición de petición UDP por ciclo, dentro de la ventana de `(1 s, 2 min)`
+/// anterior a su repetición TCP, cuando la conexión tiene ≥ 20 min y nosotros no estamos
+/// tras cortafuegos (un NAT descartaría la respuesta — eMule filtra con
 /// `!theApp.IsFirewalled()`).
 fn should_send_udp_reask(
     target: &crate::services::client_udp::UdpReaskTarget,
@@ -65,16 +65,16 @@ fn should_send_udp_reask(
     true
 }
 
-/// Smart heuristic ranking score to select the top concurrent downloads (max 4).
-/// Gives priority to:
-/// 1. User explicit priority (alta > normal > baja)
-/// 2. Proximity to 100% completion (finishing almost-done files first to free disk & slots)
-/// 3. Ongoing active transfers (anti-thrashing bonus for files currently receiving bytes)
-/// 4. Discovered source availability (files with known candidate sources)
+/// Puntuación heurística inteligente para seleccionar las descargas concurrentes principales (máx 4).
+/// Da prioridad a:
+/// 1. Prioridad explícita del usuario (alta > normal > baja)
+/// 2. Proximidad al 100% de compleción (terminar primero los archivos casi completos para liberar disco y ranuras)
+/// 3. Transferencias activas en curso (bonificación anti-oscilaciones para archivos que reciben bytes actualmente)
+/// 4. Disponibilidad de fuentes descubiertas (archivos con fuentes candidatas conocidas)
 ///
-/// Penalizes:
-/// - Inactive/stalled downloads in rotation cooldown (-50,000 points)
-/// - Prolonged zero-throughput stall duration on active downloads (-500 points per 30s)
+/// Penaliza:
+/// - Descargas inactivas/estancadas en enfriamiento de rotación (-50.000 puntos)
+/// - Duración de estancamiento prolongado con rendimiento cero en descargas activas (-500 puntos por cada 30 s)
 fn calculate_smart_download_score(
     dl: &DownloadSnapshot,
     active_peers: usize,
@@ -92,16 +92,16 @@ fn calculate_smart_download_score(
         _ => 5_000.0,
     };
 
-    // dl.progress is 0.0 .. 100.0. Higher progress = higher score to complete quickly.
-    // If the file has 0 known sources and 0 active peers, do not inflate its score with progress
-    // so it doesn't block files with viable sources.
+    // dl.progress es 0.0 .. 100.0. Mayor progreso = mayor puntuación para completar rápidamente.
+    // Si el archivo tiene 0 fuentes conocidas y 0 pares activos, no inflar su puntuación con el progreso
+    // para que no bloquee archivos con fuentes viables.
     let progress_weight = if source_count == 0 && active_peers == 0 {
         0.0
     } else {
         dl.progress.clamp(0.0, 100.0) * 40.0
     };
 
-    // Anti-thrashing / activity bonus: protect ongoing downloads from being swapped out
+    // Bonificación anti-oscilaciones / actividad: proteger descargas en curso para que no sean intercambiadas
     let activity_bonus = if dl.download_rate_bps > 0 {
         3_000.0
     } else if active_peers > 0 {
@@ -112,14 +112,14 @@ fn calculate_smart_download_score(
         0.0
     };
 
-    // Source viability bonus: files that have viable sources in DB get a modest boost
+    // Bonificación de viabilidad de fuentes: los archivos con fuentes viables en BD obtienen un impulso moderado
     let source_bonus = if source_count > 0 {
         (source_count as f64 * 20.0).min(1_000.0)
     } else {
         0.0
     };
 
-    // Stall decay: if download is active but stalled with 0 B/s, decay its score
+    // Atenuación por estancamiento: si la descarga está activa pero estancada con 0 B/s, atenuar su puntuación
     let stall_penalty = if let Some(stall) = stall_duration {
         (stall.as_secs_f64() / 30.0) * 500.0
     } else {
@@ -130,9 +130,9 @@ fn calculate_smart_download_score(
 }
 
 impl SwarmCoordinator {
-    /// eMule `CemuleApp::IsFirewalled` — unreachable from the outside:
-    /// neither a HighID on the connected server nor an open Kad UDP
-    /// socket. Firewalled clients skip UDP reasks entirely.
+    /// `CemuleApp::IsFirewalled` de eMule — inalcanzable desde el exterior:
+    /// ni un HighID en el servidor conectado ni un socket UDP de Kad abierto.
+    /// Los clientes tras cortafuegos omiten por completo los re-asks por UDP.
     async fn is_firewalled(&self) -> bool {
         let s_snap = self.state.server_session.snapshot().await;
         let server_high_id =
@@ -148,16 +148,16 @@ impl SwarmCoordinator {
                 && fw_status == crate::services::kad_udp::types::UdpFirewallStatus::Open))
     }
 
-    /// Evaluates all active downloads, runs source discovery, and connects to peers.
+    /// Evalúa todas las descargas activas, ejecuta el descubrimiento de fuentes y se conecta a los pares.
     pub async fn tick(&mut self) {
-        // Periodic consolidated system heartbeat (every 60s)
+        // Latido periódico consolidado del sistema (cada 60 s)
         if self.last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
             self.last_heartbeat = Instant::now();
             self.emit_heartbeat().await;
-            // eMule SavePartFile cadence: persist .part.met companions for
-            // in-progress downloads so a crash never loses more than ~60 s
-            // of gap state. I/O synchrones (fsync + écriture .met) déportées
-            // sur le pool bloquant Tokio.
+            // Cadencia SavePartFile de eMule: persistir acompañantes .part.met para
+            // descargas en progreso para que una caída nunca pierda más de ~60 s
+            // de estado de huecos. E/S síncronas (fsync + escritura .met) delegadas
+            // al grupo de hilos bloqueante de Tokio.
             let downloads = Arc::clone(&self.state.downloads);
             if let Err(e) = tokio::task::spawn_blocking(move || {
                 downloads.blocking_lock().save_active_part_mets();
@@ -168,7 +168,7 @@ impl SwarmCoordinator {
             }
         }
 
-        // 0. Self-healing Kad UDP: revive listener if profile allows UDP and state is enabled but socket is inactive
+        // 0. Autorreparación de UDP de Kad: revivir el oyente si el perfil permite UDP y el estado está habilitado pero el socket está inactivo
         let profile = self.state.network_policy.profile();
         if self.state.udp_enabled() && profile.allows_udp_kad() {
             let snap = self.state.kad.udp().get_snapshot().await;
@@ -190,10 +190,10 @@ impl SwarmCoordinator {
 
         // 0. Decay stale download rates (reset frozen speed to 0 if inactive > 2s)
         let decayed_snapshots = {
-            // Backstop de persistance : fsync des `.part` sales quand le
-            // flux de blocs s'est interrompu entre deux `inject_range`
-            // (la cadence principale vit dans le chemin de réception —
-            // `PART_PERSIST_INTERVAL`). I/O hors executor Tokio.
+            // Respaldo de persistencia: fsync de los `.part` sucios cuando el
+            // flujo de bloques se interrumpió entre dos `inject_range`
+            // (la cadencia principal reside en la ruta de recepción —
+            // `PART_PERSIST_INTERVAL`). E/S fuera del ejecutor de Tokio.
             let downloads = Arc::clone(&self.state.downloads);
             match tokio::task::spawn_blocking(move || {
                 let mut dl_guard = downloads.blocking_lock();
@@ -218,7 +218,7 @@ impl SwarmCoordinator {
             );
         }
 
-        // 1. Auto-verify and finalize any completed downloads
+        // 1. Autoverificar y finalizar cualquier descarga completada
         let pending_verifications = {
             let mut dl_guard = self.state.downloads.lock().await;
             dl_guard.get_pending_verifications()
@@ -227,12 +227,11 @@ impl SwarmCoordinator {
         for (id, temp_path, target_path, expected_hash, total_size) in pending_verifications {
             let state_clone = self.state.clone();
             tokio::spawn(async move {
-                // Chemin rapide (eMule `PerformFileComplete` /
-                // `CalculateIdentifier`) : la racine eD2K est dérivée du
-                // hashset de parts déjà vérifiées à la réception — aucune
-                // relecture du fichier complet (~total_size de `pread`
-                // évitée). Repli sur `hash_reader` quand le hashset est
-                // inconnu/incomplet ou contredit le hash attendu.
+                // Ruta rápida (`PerformFileComplete` / `CalculateIdentifier` de eMule):
+                // la raíz eD2K se deriva del conjunto de hashes de partes ya verificadas
+                // en la recepción — ninguna relectura del archivo completo (~total_size de `pread`
+                // evitada). Repliegue sobre `hash_reader` cuando el hashset es
+                // desconocido/incompleto o contradice el hash esperado.
                 let derived_ok = {
                     let dl_guard = state_clone.downloads.lock().await;
                     dl_guard
@@ -315,7 +314,7 @@ impl SwarmCoordinator {
                                                     }
                                                 }
 
-                                                // Broadcast update indicating this download is now actively writing to NAS
+                                                // Transmitir actualización indicando que esta descarga está escribiendo activamente en el NAS
                                                 if let Some(mut cur_snap) = {
                                                     let dl_guard = state_bg.downloads.lock().await;
                                                     dl_guard.get_download(&id)
@@ -354,7 +353,7 @@ impl SwarmCoordinator {
                                                                 );
                                                                 drop(dl_guard);
 
-                                                                // Immediately organize file natively into library (Peliculas/Series)
+                                                                // Organizar inmediatamente el archivo de forma nativa en la biblioteca (Películas/Series)
                                                                 let state_org = state_bg.clone();
                                                                 let id_str = id.to_string();
                                                                 let fp = final_path.clone();
@@ -401,10 +400,10 @@ impl SwarmCoordinator {
                                 }
                             }
                         } else {
-                            // Global MD4 mismatch: if the per-part hashset is known,
-                            // identify corrupted parts and evict only those ranges
-                            // for re-download (eMule CPartFile corrupted-part recovery)
-                            // instead of failing the whole file.
+                            // Discrepancia global de MD4: si se conoce el conjunto de hashes por parte,
+                            // identificar las partes dañadas y desalojar solo esos rangos
+                            // para volver a descargarlos (recuperación de partes dañadas de CPartFile en eMule)
+                            // en lugar de hacer fallar todo el archivo.
                             let expected_part_hashes = {
                                 let dl_guard = state_clone.downloads.lock().await;
                                 dl_guard.get_part_hashes_for_download(&id)
@@ -470,9 +469,9 @@ impl SwarmCoordinator {
                                         false
                                     }
                                 };
-                                // eMule `CorruptionBlackBox::EvaluateData` a pu
-                                // condamner des expéditeurs : déconnexion +
-                                // rejet de leurs sources.
+                                // `CorruptionBlackBox::EvaluateData` de eMule pudo
+                                // condenar a remitentes: desconexión +
+                                // rechazo de sus fuentes.
                                 let banned = dl_guard.drain_corruption_bans(&id);
                                 drop(dl_guard);
                                 for addr in banned {
@@ -547,14 +546,14 @@ impl SwarmCoordinator {
             });
         }
 
-        // 1. Skip if network is disabled by policy
+        // 1. Omitir si la red está deshabilitada por política
         if self.state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
             return;
         }
 
-        // 1b. Automatic server failover: if the eD2K server connection dropped,
-        // pick another enabled known server after a backoff (eMule DeadServer
-        // retry semantics, bounded so a dead server list cannot spin).
+        // 1b. Conmutación por error automática de servidor: si la conexión del servidor eD2K cayó,
+        // elegir otro servidor conocido habilitado tras un enfriamiento (semántica de reintento DeadServer
+        // de eMule, acotada para que una lista de servidores muertos no gire en bucle).
         self.maybe_reconnect_server().await;
 
         // 2. Fetch list of eligible downloads (active or queued)
@@ -591,7 +590,7 @@ impl SwarmCoordinator {
                 .clamp(1, 100)
         };
 
-        // 1. Maintain activity trackers for all eligible downloads
+        // 1. Mantener rastreadores de actividad para todas las descargas elegibles
         let eligible_ids: std::collections::HashSet<uuid::Uuid> =
             eligible_downloads.iter().map(|d| d.id).collect();
         self.download_trackers.retain(|id, _| eligible_ids.contains(id));
@@ -632,13 +631,13 @@ impl SwarmCoordinator {
                 .active_peer_count_for_hash(&dl.ed2k_hash)
                 .await;
 
-            // Forward progress check: if bytes arrived, rate > 0, or actively connected to peers in queue, reset stall timer and clear cooldown
+            // Comprobación de avance: si llegaron bytes, tasa > 0, o conectado activamente a pares en cola, reiniciar temporizador de estancamiento y limpiar enfriamiento
             if dl.received_bytes > tracker.last_received_bytes || dl.download_rate_bps > 0 || active_peers > 0 {
                 tracker.last_received_bytes = dl.received_bytes;
                 tracker.last_progress_time = now_instant;
                 tracker.cooldown_until = None;
             } else if is_currently_active && tracker.cooldown_until.is_none() {
-                // If it's been active with 0 bytes transferred AND 0 peers connected for longer than STALL_TIMEOUT:
+                // Si ha estado activa con 0 bytes transferidos Y 0 pares conectados por más tiempo que STALL_TIMEOUT:
                 let stall_duration = now_instant.saturating_duration_since(tracker.last_progress_time);
                 let time_active = now_instant.saturating_duration_since(tracker.activated_at);
 
@@ -710,7 +709,7 @@ impl SwarmCoordinator {
                 (scored_downloads.as_slice(), [].as_slice())
             };
 
-        // Demote queued candidates: mark status as Queued (peers are kept connected so queue rank is preserved)
+        // Degradar candidatos en cola: marcar estado como En cola (los pares se mantienen conectados para preservar la posición en cola)
         for (_score, dl, _active_peers) in queued_candidates {
             if dl.status.to_lowercase() != "queued" {
                 let mut dl_guard = self.state.downloads.lock().await;
@@ -720,13 +719,13 @@ impl SwarmCoordinator {
             }
         }
 
-        // Active downloads that will actively search, dial, and download in this tick:
+        // Descargas activas que buscarán, marcarán y descargarán activamente en este ciclo:
         let active_downloads: Vec<DownloadSnapshot> = active_candidates
             .iter()
             .map(|(_, dl, _)| dl.clone())
             .collect();
 
-        // Update activated_at for downloads transitioning from queued to active
+        // Actualizar activated_at para descargas en transición de en cola a activa
         for dl in &active_downloads {
             if dl.status.to_lowercase() == "queued" {
                 if let Some(t) = self.download_trackers.get_mut(&dl.id) {
@@ -743,10 +742,10 @@ impl SwarmCoordinator {
             .unwrap_or_default()
             .as_millis() as i64;
 
-        // État A4AF par fichier (eMule `ProcessA4AFClients`) : poids de
-        // priorité et pairs actifs — plus aucun quota d'allocation n'est
-        // calculé, chaque fichier connecte ses sources jusqu'à son plafond.
-        // `source_count` alimente `UpdateAutoDownPriority` (priorité « auto »).
+        // Estado A4AF por archivo (`ProcessA4AFClients` de eMule): peso de
+        // prioridad y pares activos — ya no se calcula ninguna cuota de asignación,
+        // cada archivo conecta sus fuentes hasta su límite.
+        // `source_count` alimenta `UpdateAutoDownPriority` (prioridad «auto»).
         let mut a4af_states = Vec::with_capacity(active_downloads.len());
         for dl in &active_downloads {
             if dl.ed2k_hash.is_empty() {
@@ -799,9 +798,9 @@ impl SwarmCoordinator {
             }
         };
 
-        // eMule `CListenSocket::TooManySockets` : la limite globale de
-        // connexions borne les nouvelles tentatives de ce tick, quel que
-        // soit le fichier — premier arrivé, premier servi.
+        // `CListenSocket::TooManySockets` de eMule: el límite global de
+        // conexiones acota los nuevos intentos de este ciclo, sea cual
+        // sea el archivo — primero en llegar, primero en ser atendido.
         let mut connect_budget = limits.max_global_peers.saturating_sub(
             self.state
                 .peer_session
@@ -810,10 +809,10 @@ impl SwarmCoordinator {
                 .active_peer_count,
         );
 
-        // Per-file source caps (eMule `.part.met` FT_MAXSOURCES /
-        // `CPartFile::GetMaxSources`): when present, the per-file limit
-        // overrides the global `max_peers_per_file` for connect, requery
-        // and purge-threshold decisions.
+        // Límites de fuentes por archivo (FT_MAXSOURCES en `.part.met` /
+        // `CPartFile::GetMaxSources` de eMule): cuando están presentes, el límite por archivo
+        // anula el `max_peers_per_file` global para decisiones de conexión, nueva consulta
+        // y umbral de purga.
         let file_max_sources: std::collections::HashMap<String, usize> = active_downloads
             .iter()
             .filter_map(|d| {
@@ -828,14 +827,14 @@ impl SwarmCoordinator {
             })
             .collect();
 
-        // A4AF ("Ask For Another File"): a starved download may reclaim a
-        // peer address currently connected to a lower-priority file that is
-        // already above its minimum peer count. eMule multiplexes files per
-        // connection; our sessions are mono-file, so we release the session
-        // and let the starved file dial the address on the next tick.
-        // A4AF event pass every tick: sources that just reported NNP are
-        // candidates for immediate swap to other files (eMule triggers
-        // `SwapToAnotherFile` on NNP/FNF, not only on the periodic pass).
+        // A4AF ("Ask For Another File"): una descarga desatendida puede reclamar una
+        // dirección de par actualmente conectada a un archivo de menor prioridad que
+        // ya se encuentre por encima de su recuento mínimo de pares. eMule multiplexa archivos por
+        // conexión; nuestras sesiones son monoarchivo, por lo que liberamos la sesión
+        // y dejamos que el archivo desatendido marque la dirección en el siguiente ciclo.
+        // Pasada de eventos A4AF en cada ciclo: fuentes que acaban de reportar NNP son
+        // candidatas para intercambio inmediato a otros archivos (eMule dispara
+        // `SwapToAnotherFile` ante NNP/FNF, no solo en la pasada periódica).
         self.a4af_event_pass(&active_downloads, now_ms).await;
 
         // Full A4AF rebalance at eMule's `ProcessA4AFClients` cadence (~8 min).
@@ -844,13 +843,13 @@ impl SwarmCoordinator {
             self.a4af_rebalance(&a4af_states, &limits, now_ms).await;
         }
 
-        // Client-UDP keep-alives — eMule `CPartFile::Process`
-        // (`PartFile.cpp:2291-2294`): the `OP_REASKFILEPING` goes out once
-        // per cycle, inside the `(1 s, 2 min)` window before the queued
-        // session's TCP re-ask (`next_tcp_reask_unix_ms`), only when the
-        // connection is ≥ 20 min old and we are not firewalled. The
-        // service-level dedup (`UDP_REASK_INTERVAL`, pending-ack map)
-        // remains as a backstop against repeated sends inside the window.
+        // Mantenimiento de conexión de clientes UDP — `CPartFile::Process`
+        // de eMule (`PartFile.cpp:2291-2294`): `OP_REASKFILEPING` se envía una vez
+        // por ciclo, dentro de la ventana de `(1 s, 2 min)` anterior a la repetición
+        // TCP de la sesión en cola (`next_tcp_reask_unix_ms`), únicamente cuando la
+        // conexión tiene ≥ 20 min y no estamos tras cortafuegos. La deduplicación
+        // a nivel de servicio (`UDP_REASK_INTERVAL`, mapa pending-ack)
+        // permanece como respaldo contra envíos repetidos dentro de la ventana.
         let is_firewalled = self.is_firewalled().await;
         for target in self.state.peer_session.queued_udp_targets().await {
             if should_send_udp_reask(&target, now_ms, is_firewalled) {
@@ -858,9 +857,9 @@ impl SwarmCoordinator {
             }
         }
 
-        // Réglages effectifs lus une fois par tick (persistés en base —
-        // eMule Preferences → Sécurité) : les valeurs `config.*` figées au
-        // boot ne reflètent pas les changements via `settings.set`.
+        // Ajustes efectivos leídos una vez por ciclo (persistidos en base de datos —
+        // Preferencias de eMule → Seguridad): los valores de `config.*` congelados al
+        // arrancar no reflejan los cambios aplicados mediante `settings.set`.
         let (obf_enabled, obf_required) = self.state.effective_obfuscation().await;
         let nickname = self.state.current_nickname().await;
         let mut global_connected_this_tick = 0usize;
@@ -889,17 +888,17 @@ impl SwarmCoordinator {
                     .then_with(|| b.last_seen_unix_ms.cmp(&a.last_seen_unix_ms))
             });
 
-            // eMule `CPartFile::Process` + `CDownloadQueue::Process`
-            // (Opcodes.h) : chaque canal de découverte a sa propre cadence
-            // et son propre seuil — pas de fenêtre adaptative.
+            // `CPartFile::Process` + `CDownloadQueue::Process` de eMule
+            // (Opcodes.h): cada canal de descubrimiento tiene su propia cadencia
+            // y su propio umbral — sin ventana adaptativa.
             //   TCP OP_GETSOURCES      : SERVERREASKTIME (15 min), si
-            //       sources < GetMaxSourcePerFileSoft (90 % du cap, ≤750)
+            //       fuentes < GetMaxSourcePerFileSoft (90 % del límite, ≤750)
             //   UDP OP_GLOBGETSOURCES2 : UDPSERVERREASKTIME (30 min), si
-            //       sources < GetMaxSourcePerFileUDP (75 % du cap, ≤50)
+            //       fuentes < GetMaxSourcePerFileUDP (75 % del límite, ≤50)
             //   Kad search_sources     : KADEMLIAREASKTIME (1 h) *
-            //       m_TotalSearchesKad (≤7), même seuil que l'UDP, plus
-            //       KADEMLIATOTALFILE recherches simultanées et
-            //       KADEMLIAASKTIME entre deux démarrages.
+            //       m_TotalSearchesKad (≤7), mismo umbral que el UDP, más
+            //       KADEMLIATOTALFILE búsquedas simultáneas y
+            //       KADEMLIAASKTIME entre dos inicios.
             let source_count = candidate_sources.len();
             let file_max = file_max_sources
                 .get(&hash_hex)
@@ -932,11 +931,11 @@ impl SwarmCoordinator {
                 .get(&hash_hex)
                 .is_none_or(|t| now.duration_since(*t) >= UDP_SERVER_REASK_INTERVAL);
             if udp_due && source_count < max_source_per_file_udp(file_max) {
-                // UDP source query (OP_GLOBGETSOURCES2) toward servers — its UDP port
-                // is TCP+4 (eMule convention). In official eMule (DownloadQueue.cpp: Process()),
-                // this query is sent to the connected server AND a round-robin batch of
-                // valid known servers (up to 8) to discover sources registered across different
-                // eD2k servers. Fire-and-forget; answers arrive as OP_GLOBFOUNDSOURCES.
+                // Consulta de fuentes por UDP (OP_GLOBGETSOURCES2) hacia servidores — su puerto UDP
+                // es TCP+4 (convención de eMule). En el eMule oficial (Process() en DownloadQueue.cpp),
+                // esta consulta se envía al servidor conectado Y a un lote round-robin de
+                // servidores conocidos válidos (hasta 8) para descubrir fuentes registradas en distintos
+                // servidores eD2K. Envío sin espera; las respuestas llegan como OP_GLOBFOUNDSOURCES.
                 self.last_source_query_udp.insert(hash_hex.clone(), now);
 
                 let connected_udp_addr = self
@@ -958,7 +957,7 @@ impl SwarmCoordinator {
                         .await;
                 }
 
-                // Multiserver UDP query across known allowed servers from DB
+                // Consulta UDP multiservidor a través de servidores conocidos permitidos desde BD
                 let other_servers: Vec<SocketAddr> = {
                     let dl_guard = self.state.downloads.lock().await;
                     dl_guard
@@ -1003,8 +1002,8 @@ impl SwarmCoordinator {
                     .map(|s| (s.total_searches + 1).min(KAD_MAX_TOTAL_SEARCHES))
                     .unwrap_or(1);
                 let kad_reask_interval = if source_count < 40 {
-                    // For files with fewer known sources, search Kad aggressively
-                    // (every 3 to 10 min max) to rapidly populate the swarm.
+                    // Para archivos con menos fuentes conocidas, buscar en Kad agresivamente
+                    // (cada 3 a 10 min máx) para poblar el enjambre rápidamente.
                     Duration::from_secs(3 * 60)
                         .saturating_mul(total_searches)
                         .min(Duration::from_secs(10 * 60))
@@ -1056,21 +1055,21 @@ impl SwarmCoordinator {
                     };
                     (cid, s_ip, s_port, s_snap.is_high_id)
                 } else {
-                    // eMule fonctionne en Kad-only : sans serveur le hello
-                    // annonce client_id = 0 (même convention que le chemin
-                    // manuel `sources.connect`). `server_is_high_id=false`
-                    // filtre d'office les callbacks serveur et les sources
-                    // LowID, injoignables sans serveur.
+                    // eMule funciona en modo solo Kad: sin servidor el hello
+                    // anuncia client_id = 0 (misma convención que en la ruta
+                    // manual `sources.connect`). `server_is_high_id=false`
+                    // filtra de oficio las devoluciones de llamada del servidor y las fuentes
+                    // LowID, inalcanzables sin servidor.
                     (0u32, 0u32, 0u16, false)
                 }
             };
 
-            // eMule `CemuleApp::CanDoCallback` (Emule.cpp:1067) :
-            // la joignabilité des sources LowID dépend de notre propre
-            // état — HighID serveur OU Kad connecté non firewalled — et,
-            // quand nous sommes LowID, du serveur sur lequel vit la source
+            // `CemuleApp::CanDoCallback` de eMule (Emule.cpp:1067):
+            // la alcanzabilidad de fuentes LowID depende de nuestro propio
+            // estado — HighID en servidor O Kad conectado sin cortafuegos — y,
+            // cuando somos LowID, del servidor en el que reside la fuente
             // (`IsLocalServer`). `kad_open` = `CKademlia::IsConnected() &&
-            // !IsFirewalled()` : socket UDP actif + test firewall positif.
+            // !IsFirewalled()`: socket UDP activo + prueba de cortafuegos positiva.
             let cb_ctx = {
                 let udp_snap = self.state.kad.udp().get_snapshot().await;
                 let fw_status = {
@@ -1088,18 +1087,18 @@ impl SwarmCoordinator {
                 }
             };
 
-            // eMule `CanAddSource` refuse les sources `lowid:` tant que
-            // `IsFirewalled()` (ni HighID eD2K ni Kad ouvert) — le flag est
-            // propagé au funnel d'ingestion `upsert_peer_sources` pour tous
-            // les canaux de découverte (serveur TCP/UDP, SX, inbound).
+            // `CanAddSource` de eMule rechaza fuentes `lowid:` mientras
+            // `IsFirewalled()` (ni HighID eD2K ni Kad abierto) — la bandera se
+            // propaga al embudo de ingesta `upsert_peer_sources` para todos
+            // los canales de descubrimiento (servidor TCP/UDP, SX, entrante).
             {
                 let mut dl_guard = self.state.downloads.lock().await;
                 dl_guard.set_lowid_source_acceptance(cb_ctx.server_high_id || cb_ctx.kad_open);
             }
 
-            // eMule `CPartFile::Process`: near the per-file source cap
-            // (>= 80%), periodically drop sources that cannot serve us —
-            // unreachable LowIDs, NNP-flagged and repeatedly failed sources.
+            // `CPartFile::Process` de eMule: cerca del límite de fuentes por archivo
+            // (>= 80%), purgar periódicamente fuentes que no puedan servirnos —
+            // LowIDs inalcanzables, marcadas como NNP y fuentes fallidas repetidamente.
             if self
                 .last_source_purge
                 .get(&hash_hex)
@@ -1117,11 +1116,11 @@ impl SwarmCoordinator {
                 .await;
             let active_count = swarm_snap.active_peer_count;
 
-            // eMule : pas de quota par fichier — chaque fichier connecte
-            // ses sources viables jusqu'à son plafond (`GetMaxSources` /
-            // `maxsourceperfile`). Seule la limite globale de connexions
-            // (`connect_budget`, eMule `maxconnections`), le plafond global
-            // par tick et le pacing par fichier bornent les nouvelles tentatives.
+            // eMule: sin cuota por archivo — cada archivo conecta
+            // sus fuentes viables hasta su límite (`GetMaxSources` /
+            // `maxsourceperfile`). Solo el límite global de conexiones
+            // (`connect_budget`, `maxconnections` de eMule), el límite global
+            // por ciclo y el ritmo por archivo acotan los nuevos intentos.
             let global_remaining = MAX_GLOBAL_CONNECT_PER_TICK.saturating_sub(global_connected_this_tick);
             if global_remaining == 0 {
                 break;
@@ -1170,46 +1169,46 @@ impl SwarmCoordinator {
                     continue;
                 }
 
-                // eMule `AddSources` : les clients bannis (corruption,
-                // `IsBannedClient`) ne sont jamais re-dialés — la source est
-                // marquée `Rejected` pour ne pas revenir en candidat.
+                // `AddSources` de eMule: los clientes baneados (corrupción,
+                // `IsBannedClient`) nunca se vuelven a marcar — la fuente se
+                // marca como `Rejected` para no volver como candidata.
                 let source_banned = {
                     let dl_guard = self.state.downloads.lock().await;
                     dl_guard.is_source_banned(&src.address)
                 };
                 if source_banned {
-                    // Le ban IP est temporaire (2h en mémoire) — on saute ce tick
-                    // sans condamner définitivement la source en base de données.
+                    // El baneo de IP es temporal (2 h en memoria) — saltamos este ciclo
+                    // sin condenar definitivamente la fuente en la base de datos.
                     continue;
                 }
 
-                // LowID source: unreachable directly — ask the connected
-                // server to relay a callback (eMule `OP_CALLBACKREQUEST`).
-                // The target then connects inbound; the inbound listener
-                // matches it by client_id and adopts it as a download session.
+                // Fuente LowID: inalcanzable directamente — solicitar al servidor
+                // conectado que retransmita una devolución de llamada (`OP_CALLBACKREQUEST` de eMule).
+                // El objetivo se conecta entonces entrante; el oyente entrante
+                // la asocia por client_id y la adopta como sesión de descarga.
                 if let Some(lowid_str) = src.address.strip_prefix("lowid:") {
                     let Ok(lowid) = lowid_str.parse::<u32>() else {
                         continue;
                     };
-                    // eMule `CemuleApp::CanDoCallback` — si ni notre ID
-                    // eD2K ni Kad ne permettent le connect-back, la source
-                    // reste parquée (eMule `DS_LOWTOLOWIP`, reprise
-                    // possible dès que notre état change).
+                    // `CemuleApp::CanDoCallback` de eMule — si ni nuestro ID
+                    // eD2K ni Kad permiten la reconexión, la fuente
+                    // permanece aparcada (`DS_LOWTOLOWIP` de eMule, reanudación
+                    // posible en cuanto nuestro estado cambie).
                     if !super::lowid_callback::can_do_callback(&src, &cb_ctx) {
                         continue;
                     }
-                    // eMule `CanAddSource` : notre propre LowID répercuté par
-                    // le serveur connecté ne doit pas être rappelé (les LowIDs
-                    // ne sont uniques que par serveur — limité aux sources
-                    // d'origine serveur comme chez eMule).
+                    // `CanAddSource` de eMule: nuestro propio LowID repercutido por
+                    // el servidor conectado no debe llamarse (los LowIDs
+                    // solo son únicos por servidor — limitado a fuentes
+                    // de origen servidor como en eMule).
                     if lowid == client_id && src.origin == PeerSourceOrigin::Server {
                         continue;
                     }
-                    // `OP_CALLBACKREQUEST` ne joindra la LowID que si elle
-                    // vit sur notre serveur (`IsLocalServer`) — aucune autre
-                    // option eMule (direct callback, buddy) n'est portée par
-                    // les sources `lowid:`. Sans option, eMule supprime la
-                    // source (`Disconnected("No Callback Option")`).
+                    // `OP_CALLBACKREQUEST` solo alcanzará a la LowID si
+                    // reside en nuestro servidor (`IsLocalServer`) — ninguna otra
+                    // opción de eMule (devolución directa, compañero) la portan
+                    // las fuentes `lowid:`. Sin opción, eMule elimina la
+                    // fuente (`Disconnected("No Callback Option")`).
                     if !super::lowid_callback::has_server_callback_option(&src, &cb_ctx) {
                         let mut dl_guard = self.state.downloads.lock().await;
                         let _ = dl_guard.update_peer_source_status(
@@ -1252,17 +1251,17 @@ impl SwarmCoordinator {
                     continue;
                 }
 
-                // Kad LowID source: reachable only through its published
-                // buddy. Send KADEMLIA_CALLBACK_REQ to the buddy node; the
-                // LowID client then connects inbound to our TCP port and is
-                // adopted by remote IP (pending_kad_callbacks).
+                // Fuente LowID de Kad: alcanzable únicamente a través de su compañero
+                // publicado. Enviar KADEMLIA_CALLBACK_REQ al nodo compañero; el
+                // cliente LowID se conecta entonces entrante a nuestro puerto TCP y es
+                // adoptado por IP remota (pending_kad_callbacks).
                 if let Some(ip_str) = src.address.strip_prefix("kadcb:") {
                     let Ok(src_ip) = ip_str.parse::<std::net::IpAddr>() else {
                         continue;
                     };
-                    // Le pair va tenter de se connecter à notre port TCP :
-                    // même condition `CanDoCallback` que les sources
-                    // `lowid:` (HighID serveur ou Kad ouvert).
+                    // El par intentará conectarse a nuestro puerto TCP:
+                    // misma condición `CanDoCallback` que las fuentes
+                    // `lowid:` (HighID en servidor o Kad abierto).
                     if !super::lowid_callback::can_do_callback(&src, &cb_ctx) {
                         continue;
                     }
@@ -1270,13 +1269,13 @@ impl SwarmCoordinator {
                         continue;
                     }
 
-                    // eMule `AskForDownload` (`DownloadClient.cpp:185-206`) :
-                    // source LowID déjà sollicitée (entrée `queued_peers` =
-                    // `GetLastAskedTime() > 0`) et présente dans notre file
-                    // d'upload (`US_ONUPLOADQUEUE`) → `m_bReaskPending` : le
-                    // re-ask est différé d'un cycle pour laisser le pair
-                    // composer vers nous à son propre re-ask d'upload. Le
-                    // flag est consommé à sa connexion entrante.
+                    // `AskForDownload` de eMule (`DownloadClient.cpp:185-206`):
+                    // fuente LowID ya solicitada (entrada `queued_peers` =
+                    // `GetLastAskedTime() > 0`) y presente en nuestra cola
+                    // de subida (`US_ONUPLOADQUEUE`) → `m_bReaskPending`: la
+                    // repetición de petición se pospone un ciclo para dejar que el par
+                    // marque hacia nosotros en su propia repetición de subida. La
+                    // bandera se consume en su conexión entrante.
                     if self
                         .state
                         .inbound_listener
@@ -1306,10 +1305,10 @@ impl SwarmCoordinator {
                         }
                     }
 
-                    // eMule `TryToConnect` step 4 (`BaseClient.cpp:1403`) —
-                    // le callback UDP direct précède le relais buddy : la
-                    // source est TCP-firewalled mais UDP-ouverte et a
-                    // annoncé le bit dans son byte d'options publié
+                    // Paso 4 de `TryToConnect` de eMule (`BaseClient.cpp:1403`) —
+                    // la devolución UDP directa precede al relevo por compañero: la
+                    // fuente está tras cortafuegos TCP pero abierta en UDP y ha
+                    // anunciado el bit en su byte de opciones publicado
                     // (`connect-options & 0x08`, OtherFunctions.cpp:4049).
                     if src.crypt_options
                         & mule_protocol::ed2k::client_udp::CONNECT_OPT_DIRECT_CALLBACK
@@ -1317,8 +1316,8 @@ impl SwarmCoordinator {
                         && src.udp_port != 0
                     {
                         let (obf_enabled, obf_required) = self.state.effective_obfuscation().await;
-                        // `GetMyConnectOptions(true, false)` : crypt flags
-                        // seuls, le bit direct-callback reste à 0.
+                        // `GetMyConnectOptions(true, false)`: solo banderas de cifrado,
+                        // el bit de devolución directa permanece en 0.
                         let conn_opts = (obf_enabled as u8)
                             | ((obf_enabled as u8) << 1)
                             | ((obf_required as u8) << 2);
@@ -1356,8 +1355,8 @@ impl SwarmCoordinator {
                             connected_this_tick += 1;
                             continue;
                         }
-                        // Pas de socket UDP → l'option n'existe pas,
-                        // on retombe sur le relais buddy.
+                        // Sin socket UDP → la opción no existe,
+                        // se recurre al relevo por compañero.
                     }
 
                     let Some(buddy_bytes) = src.buddy_id_bytes() else {
@@ -1424,10 +1423,10 @@ impl SwarmCoordinator {
                     Err(_) => continue,
                 };
 
-                // eMule `CanAddSource` : ne jamais dialer notre propre
-                // endpoint — quand le serveur nous a donné un HighID, notre
-                // client_id EST notre IP publique ; une source `ip:port`
-                // identique est notre propre annonce répercutée.
+                // `CanAddSource` de eMule: nunca marcar nuestro propio
+                // extremo — cuando el servidor nos asignó un HighID, nuestro
+                // client_id ES nuestra IP pública; una fuente `ip:port`
+                // idéntica es nuestro propio anuncio repercutido.
                 if server_is_high_id {
                     if let std::net::IpAddr::V4(v4) = peer_addr.ip() {
                         if u32::from_le_bytes(v4.octets()) == client_id
@@ -1444,11 +1443,11 @@ impl SwarmCoordinator {
                 ) {
                     Ok(p) => p,
                     Err(e) => {
-                        // Refus permanent (adresse invalide / ipfilter) : la
-                        // source ne sera jamais dialable — la marquer Rejected
-                        // au lieu de la retenter à chaque tick (eMule
-                        // DeadSourceList). Les refus transitoires (rate-limit,
-                        // budget) conservent le backoff normal.
+                        // Rechazo permanente (dirección inválida / ipfilter): la
+                        // fuente nunca será marcable — marcarla como Rejected
+                        // en lugar de reintentarla en cada ciclo (DeadSourceList
+                        // de eMule). Los rechazos transitorios (límite de tasa,
+                        // presupuesto) conservan el retroceso normal.
                         if matches!(
                             e,
                             mule_network_policy::PolicyError::AddressViolation(_)
@@ -1541,8 +1540,8 @@ impl SwarmCoordinator {
                 );
             }
 
-            // Chaque tentative de ce fichier consomme le budget global de
-            // connexions (eMule `maxconnections` — `TooManySockets`).
+            // Cada intento de este archivo consume el presupuesto global de
+            // conexiones (`maxconnections` de eMule — `TooManySockets`).
             connect_budget = connect_budget.saturating_sub(connected_this_tick);
             global_connected_this_tick += connected_this_tick;
 
@@ -1570,10 +1569,10 @@ impl SwarmCoordinator {
         }
     }
 
-    /// Automatic server failover. While disconnected, periodically picks an
-    /// enabled known server (excluding the one that just dropped and any
-    /// address attempted within `SERVER_FAIL_COOLDOWN`) and reconnects.
-    /// Bounded by `SERVER_RECONNECT_INTERVAL` between attempts.
+    /// Conmutación por error automática de servidor. Mientras está desconectado, elige
+    /// periódicamente un servidor conocido habilitado (excluyendo el que acaba de caer y
+    /// cualquier dirección intentada dentro de `SERVER_FAIL_COOLDOWN`) y se reconecta.
+    /// Acotado por `SERVER_RECONNECT_INTERVAL` entre intentos.
     async fn maybe_reconnect_server(&mut self) {
         use super::types::{SERVER_FAIL_COOLDOWN, SERVER_RECONNECT_INTERVAL};
 
@@ -1595,8 +1594,8 @@ impl SwarmCoordinator {
             }
         }
 
-        // Pick an enabled, non-blocked server not attempted recently; prefer
-        // a different server than the one that just dropped.
+        // Elegir un servidor habilitado y no bloqueado no intentado recientemente; preferir
+        // un servidor distinto al que acaba de caer.
         let candidates = {
             let dl_guard = self.state.downloads.lock().await;
             dl_guard
@@ -1671,7 +1670,7 @@ impl SwarmCoordinator {
             .await;
     }
 
-    /// Emits a consolidated periodic system heartbeat summarizing the entire daemon status.
+    /// Emite un latido periódico consolidado del sistema que resume el estado completo del daemon.
     pub(crate) async fn emit_heartbeat(&self) {
         // 1. Server info
         let srv_snap = self.state.server_session.snapshot().await;
@@ -1763,13 +1762,13 @@ impl SwarmCoordinator {
         );
     }
 
-    /// A4AF rebalance pass (eMule `CPartFile` source swapping semantics).
+    /// Pasada de reequilibrio A4AF (semántica de intercambio de fuentes de `CPartFile` en eMule).
     ///
-    /// For every download below `min_peers_per_file`, scan live sessions of
-    /// *lower-priority* files that sit above their minimum: if the connected
-    /// peer address is a viable candidate for the starved file, release the
-    /// session so the starved file can dial it on the next tick.
-    /// At most one swap per tick keeps the system stable.
+    /// Para cada descarga por debajo de `min_peers_per_file`, examinar sesiones activas de
+    /// archivos de *menor prioridad* que se encuentren por encima de su mínimo: si la dirección
+    /// del par conectado es una candidata viable para el archivo desatendido, liberar la
+    /// sesión para que el archivo desatendido pueda marcarla en el siguiente ciclo.
+    /// Como máximo un intercambio por ciclo mantiene la estabilidad del sistema.
     async fn a4af_rebalance(
         &mut self,
         states: &[A4afFileState],
@@ -1781,7 +1780,7 @@ impl SwarmCoordinator {
                 continue;
             }
 
-            // Candidate addresses for the starved file (viable sources only).
+            // Direcciones candidatas para el archivo desatendido (únicamente fuentes viables).
             let wanted: std::collections::HashSet<String> = {
                 let dl_guard = self.state.downloads.lock().await;
                 dl_guard
@@ -1823,8 +1822,8 @@ impl SwarmCoordinator {
                     continue;
                 }
                 let donor_weight = donors.get(donor_hash).copied().unwrap_or(2);
-                // Only steal from a strictly lower-priority donor that stays
-                // above its minimum peer count.
+                // Solo sustraer de un donante de prioridad estrictamente menor que se mantenga
+                // por encima de su recuento mínimo de pares.
                 if donor_weight >= starved.priority_weight {
                     continue;
                 }
@@ -1854,24 +1853,24 @@ impl SwarmCoordinator {
         }
     }
 
-    /// Conditional source purge (eMule `CPartFile::Process` slow timers).
+    /// Purga condicional de fuentes (temporizadores lentos de `CPartFile::Process` en eMule).
     ///
-    /// Only runs when the file's known-source count reaches ~80% of its
-    /// `maxSources` (`FT_MAXSOURCES` or the global per-file cap). Purged:
-    /// - `lowid:`/`kadcb:` sources we cannot call back at all
-    ///   (`!CanDoCallback` — eMule `DS_LOWTOLOWIP`, purgées à 80 %);
-    /// - `kadcb:` sources without a buddy id (unreachable);
-    /// - sources flagged "no needed parts" (NNP) — their part mask covers
-    ///   nothing we still need;
-    /// - sources that failed repeatedly (fail_count >= 3);
-    /// - sessions flagged `remote_queue_full` (`OP_QUEUEFULL` reçu sur le
-    ///   re-ask UDP) — eMule `DS_ONQUEUE && IsRemoteQueueFull()` : ces
-    ///   sources sont purgées en priorité quand la srclist atteint 80 % de
-    ///   `GetMaxSources` (`PartFile.cpp:2285-2295`, cadence 1 min).
+    /// Solo se ejecuta cuando el recuento de fuentes conocidas del archivo alcanza ~80% de su
+    /// `maxSources` (`FT_MAXSOURCES` o el límite global por archivo). Purgadas:
+    /// - fuentes `lowid:`/`kadcb:` a las que no podemos devolver la llamada en absoluto
+    ///   (`!CanDoCallback` — `DS_LOWTOLOWIP` de eMule, purgadas al 80 %);
+    /// - fuentes `kadcb:` sin ID de compañero (inalcanzables);
+    /// - fuentes marcadas como "no needed parts" (NNP) — su máscara de partes no cubre
+    ///   nada que aún necesitemos;
+    /// - fuentes que fallaron repetidamente (fail_count >= 3);
+    /// - sesiones marcadas como `remote_queue_full` (`OP_QUEUEFULL` recibido en el
+    ///   re-ask UDP) — `DS_ONQUEUE && IsRemoteQueueFull()` de eMule: estas
+    ///   fuentes se purgan con prioridad cuando la lista de fuentes alcanza el 80 % de
+    ///   `GetMaxSources` (`PartFile.cpp:2285-2295`, cadencia de 1 min).
     ///
-    /// Purge removes at most `count - threshold + 1` rows per pass —
-    /// eMule descends sous le seuil (`GetSourceCount() >= 4/5` → retire
-    /// encore à égalité), l'état final est `threshold - 1`.
+    /// La purga elimina como máximo `count - threshold + 1` filas por pasada —
+    /// eMule desciende por debajo del umbral (`GetSourceCount() >= 4/5` → retira
+    /// incluso en caso de igualdad), el estado final es `threshold - 1`.
     async fn purge_excess_sources(
         &mut self,
         file_hash: &str,
@@ -1883,15 +1882,15 @@ impl SwarmCoordinator {
         if file_max == 0 || sources.len() < file_max * 4 / 5 {
             return;
         }
-        // eMule purge tant que `GetSourceCount() >= GetMaxSources()*4/5` —
-        // l'état final est `seuil - 1` (à 8/10 il retire 1 source, pas 0).
+        // eMule purga mientras `GetSourceCount() >= GetMaxSources()*4/5` —
+        // el estado final es `umbral - 1` (a 8/10 retira 1 fuente, no 0).
         let budget = sources.len() - file_max * 4 / 5 + 1;
 
-        // Sessions live marquées remote-queue-full — eMule garde le flag
-        // sur le client (`m_bRemoteQueueFull`), nous sur le snapshot de
-        // session. Correspondance adresse exacte puis IP seule (les sources
-        // `lowid:`/`kadcb:` ont un peer_address ip:port différent de leur
-        // adresse source).
+        // Sesiones activas marcadas como remote-queue-full — eMule mantiene la bandera
+        // en el cliente (`m_bRemoteQueueFull`), nosotros en la instantánea de
+        // sesión. Coincidencia por dirección exacta y luego por IP sola (las fuentes
+        // `lowid:`/`kadcb:` tienen un peer_address ip:puerto diferente de su
+        // dirección de fuente).
         let rqfs = self
             .state
             .peer_session
@@ -1936,8 +1935,8 @@ impl SwarmCoordinator {
             if !(nnp || unreachable_lowid || repeatedly_failed || remote_queue_full) {
                 continue;
             }
-            // eMule purge aussi les DS_ONQUEUE connectés quand ils sont
-            // RemoteQueueFull — le statut Connected ne les protège pas.
+            // eMule purga también los DS_ONQUEUE conectados cuando están en
+            // RemoteQueueFull — el estado Connected no los protege.
             if s.status == PeerSourceStatus::Connected && !remote_queue_full {
                 continue;
             }
@@ -1958,10 +1957,10 @@ impl SwarmCoordinator {
                         "[SOURCE_PURGE] {file_hash}: dropped {why} source {} (swarm over 80% of maxSources={file_max})",
                         s.address
                     );
-                    // eMule `RemoveSource` détruit le download client —
-                    // terminer la session live associée si elle existe
-                    // (clé de session = peer_address réel, pas l'adresse
-                    // source `lowid:`/`kadcb:`).
+                    // `RemoveSource` de eMule destruye el cliente de descarga —
+                    // terminar la sesión activa asociada si existe
+                    // (clave de sesión = peer_address real, no la dirección
+                    // de fuente `lowid:`/`kadcb:`).
                     let session_addr = rqfs.peers.iter().find_map(|p| {
                         let pa = p.peer_address.as_ref()?;
                         let src_ip = crate::services::downloads::source_addr_ip(&s.address)?;
@@ -1990,13 +1989,13 @@ impl SwarmCoordinator {
         let _ = now_ms;
     }
 
-    /// Event-driven A4AF (eMule `CUpDownClient` NNP/FNF swap triggers).
+    /// A4AF dirigido por eventos (disparadores de intercambio NNP/FNF de `CUpDownClient` en eMule).
     ///
-    /// Scans sources recently flagged "no needed parts" (NNP): the source is
-    /// useless for the file it served but may hold parts for another active
-    /// download. When the same address is a viable candidate of another
-    /// file, its cooldown is cleared so the dialer picks it up immediately
-    /// (bounded to one address per file per tick).
+    /// Examina fuentes marcadas recientemente como "no needed parts" (NNP): la fuente es
+    /// inútil para el archivo que servía pero puede contener partes para otra descarga
+    /// activa. Cuando la misma dirección es una candidata viable de otro
+    /// archivo, se limpia su enfriamiento para que el marcador la tome de inmediato
+    /// (limitado a una dirección por archivo por ciclo).
     async fn a4af_event_pass(&mut self, downloads: &[DownloadSnapshot], now_ms: i64) {
         let hashes: Vec<String> = downloads
             .iter()
@@ -2017,10 +2016,10 @@ impl SwarmCoordinator {
             }
         }
 
-        // Addresses that just reported NNP/FNF, indexed by the file(s) that
-        // flagged them. The flag is per-(file, address): a source that said
-        // "no needed parts" for file A must never have its cooldown cleared
-        // on file A — only on other files where it might be useful.
+        // Direcciones que acaban de reportar NNP/FNF, indexadas por el archivo o archivos que
+        // las marcaron. La bandera es por (archivo, dirección): una fuente que reportó
+        // "no needed parts" para el archivo A nunca debe ver limpiado su enfriamiento
+        // en el archivo A — solo en otros archivos donde pueda ser útil.
         let mut nnp_files_by_addr: std::collections::HashMap<
             String,
             std::collections::HashSet<String>,
@@ -2047,8 +2046,8 @@ impl SwarmCoordinator {
             return;
         }
 
-        // Clear the cooldown of the same address on *other* files so the
-        // scheduler can dial it right away (eMule `SwapToAnotherFile`).
+        // Limpiar el enfriamiento de la misma dirección en *otros* archivos para que el
+        // planificador pueda marcarla de inmediato (`SwapToAnotherFile` de eMule).
         for (hash, srcs) in &per_file {
             for s in srcs {
                 let flagging_files = match nnp_files_by_addr.get(&s.address) {
@@ -2097,9 +2096,9 @@ mod tests {
     use mule_test_support::peer_fixtures::peer_source;
     use std::collections::HashMap;
 
-    /// État daemon minimal en mémoire — `mule_test_support` ne peut pas
-    /// servir ici : ses helpers renvoient l'`AppState` de la crate externe
-    /// (double version du type en unit-test).
+    /// Estado mínimo del daemon en memoria — `mule_test_support` no puede
+    /// utilizarse aquí: sus auxiliares devuelven el `AppState` del crate externo
+    /// (versión duplicada del tipo en pruebas unitarias).
     fn test_state(dir: &std::path::Path, hash_hex: &str) -> crate::state::AppState {
         let config = crate::config::DaemonConfig::new(dir.join("data"), "test-token")
             .with_workdir_mode(crate::workdir::WorkDirMode::Portable);
@@ -2117,8 +2116,8 @@ mod tests {
         crate::state::AppState::new(config, downloads)
     }
 
-    /// Contexte « LowID sans Kad » — `can_do_callback` faux pour toute
-    /// source (équivalent de l'ancien `server_is_high_id = false`).
+    /// Contexto «LowID sin Kad» — `can_do_callback` falso para toda
+    /// fuente (equivalente al anterior `server_is_high_id = false`).
     fn test_cb_ctx() -> super::super::lowid_callback::CallbackCtx {
         super::super::lowid_callback::CallbackCtx {
             server_connected: true,
@@ -2146,17 +2145,17 @@ mod tests {
         }
     }
 
-    /// eMule `CPartFile::Process` (`PartFile.cpp:2285-2295`) : à ≥80 % de
-    /// `GetMaxSources`, une source `DS_ONQUEUE && IsRemoteQueueFull` est
-    /// purgée — la session live est terminée et la ligne source supprimée,
-    /// alors qu'une source connectée sans flag survit.
+    /// `CPartFile::Process` de eMule (`PartFile.cpp:2285-2295`): al ≥80 % de
+    /// `GetMaxSources`, una fuente `DS_ONQUEUE && IsRemoteQueueFull` es
+    /// purgada — la sesión activa se termina y la fila de fuente se elimina,
+    /// mientras que una fuente conectada sin bandera sobrevive.
     #[tokio::test]
     async fn purge_evicts_remote_queue_full_sources_at_80_percent() {
         let dir = tempfile::tempdir().unwrap();
         let hash = "0123456789abcdef0123456789abcdef".to_string();
         let state = test_state(dir.path(), &hash);
         let file_max = 10usize;
-        // 8 sources sur un cap de 10 → 80 %, seuil eMule atteint.
+        // 8 fuentes sobre un límite de 10 → 80 %, umbral de eMule alcanzado.
         let sources: Vec<PeerSource> = (0..8)
             .map(|i| peer_source(&hash, &format!("10.0.0.{i}:49662")))
             .collect();
@@ -2165,7 +2164,7 @@ mod tests {
             dl.upsert_peer_sources(&hash, &sources).unwrap();
         }
 
-        // Session live queued + remote_queue_full sur la source 10.0.0.3.
+        // Sesión activa en cola + remote_queue_full en la fuente 10.0.0.3.
         state
             .peer_session
             .insert_test_session(PeerSessionSnapshot {
@@ -2186,7 +2185,7 @@ mod tests {
             .purge_excess_sources(&hash, &sources, file_max, &test_cb_ctx(), now_ms)
             .await;
 
-        // La source RQF est supprimée de la liste persistée.
+        // La fuente RQF es eliminada de la lista persistida.
         let remaining = state
             .downloads
             .lock()
@@ -2195,13 +2194,13 @@ mod tests {
             .unwrap();
         assert_eq!(remaining.len(), 7);
         assert!(!remaining.iter().any(|s| s.address == "10.0.0.3:49662"));
-        // Sa session live est terminée (eMule `RemoveSource` détruit le
-        // download client).
+        // Su sesión activa se termina (`RemoveSource` de eMule destruye el
+        // cliente de descarga).
         let snap = state.peer_session.swarm_snapshot(Some(&hash)).await;
         assert!(snap.peers.is_empty());
     }
 
-    /// Sous le seuil de 80 %, aucune purge n'a lieu même avec une session
+    /// Por debajo del umbral del 80 %, no se realiza ninguna purga incluso con una sesión
     /// remote-queue-full.
     #[tokio::test]
     async fn purge_keeps_remote_queue_full_below_80_percent() {
@@ -2258,9 +2257,9 @@ mod tests {
         }
     }
 
-    /// eMule `PartFile.cpp:2291-2294` — bornes de la fenêtre UDP : le ping
-    /// part uniquement quand le re-ask TCP arrive dans `(1 s, 2 min)`,
-    /// la connexion a ≥ 20 min et nous ne sommes pas firewalled.
+    /// `PartFile.cpp:2291-2294` de eMule — límites de la ventana UDP: el ping
+    /// se envía únicamente cuando la repetición TCP llega en `(1 s, 2 min)`,
+    /// la conexión tiene ≥ 20 min y no estamos tras cortafuegos.
     #[test]
     fn udp_reask_window_boundaries() {
         let now_ms = 1_000_000_000i64;
@@ -2271,7 +2270,7 @@ mod tests {
             now_ms,
             false,
         ));
-        // 1 ms sous la borne haute → dans la fenêtre.
+        // 1 ms por debajo del límite superior → dentro de la ventana.
         assert!(super::should_send_udp_reask(
             &udp_target(old_conn, Some(now_ms + super::UDP_REASK_WINDOW_MS - 1)),
             now_ms,
@@ -2283,13 +2282,13 @@ mod tests {
             now_ms,
             false,
         ));
-        // 1 ms au-dessus de la borne basse → dans la fenêtre.
+        // 1 ms por encima del límite inferior → dentro de la ventana.
         assert!(super::should_send_udp_reask(
             &udp_target(old_conn, Some(now_ms + super::UDP_REASK_MIN_LEAD_MS + 1)),
             now_ms,
             false,
         ));
-        // Deadline déjà dépassée → jamais de ping.
+        // Plazo límite ya vencido → nunca se envía ping.
         assert!(!super::should_send_udp_reask(
             &udp_target(old_conn, Some(now_ms - 1)),
             now_ms,
@@ -2297,8 +2296,8 @@ mod tests {
         ));
     }
 
-    /// eMule exige `curTick >= LastTriedToConnectTime + MIN2MS(20)` : une
-    /// session en file depuis moins de 20 min ne déclenche pas de ping.
+    /// eMule exige `curTick >= LastTriedToConnectTime + MIN2MS(20)`: una
+    /// sesión en cola desde hace menos de 20 min no dispara ningún ping.
     #[test]
     fn udp_reask_requires_old_connection() {
         let now_ms = 1_000_000_000i64;
@@ -2321,14 +2320,14 @@ mod tests {
             now_ms,
             false,
         ));
-        // `connected_at` inconnu → permissif (le champ est toujours rempli
-        // pour une vraie session ; absent = pas de preuve de fraîcheur).
+        // `connected_at` desconocido → permisivo (el campo siempre está relleno
+        // para una sesión real; ausente = sin prueba de frescura).
         assert!(super::should_send_udp_reask(
             &udp_target(None, in_window),
             now_ms,
             false,
         ));
-        // Pas de deadline publiée (session à peine en file) → pas de ping.
+        // Sin plazo publicado (sesión apenas en cola) → sin ping.
         assert!(!super::should_send_udp_reask(
             &udp_target(Some(now_ms - super::UDP_REASK_MIN_CONNECT_AGE_MS), None,),
             now_ms,
@@ -2336,8 +2335,8 @@ mod tests {
         ));
     }
 
-    /// eMule `!theApp.IsFirewalled()` — un client injoignable n'émet pas
-    /// de re-ask UDP (le NAT jetterait la réponse).
+    /// `!theApp.IsFirewalled()` de eMule — un cliente inalcanzable no emite
+    /// re-asks por UDP (el NAT descartaría la respuesta).
     #[test]
     fn udp_reask_skipped_when_firewalled() {
         let now_ms = 1_000_000_000i64;

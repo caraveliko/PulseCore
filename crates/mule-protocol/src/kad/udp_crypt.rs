@@ -30,7 +30,7 @@ pub struct DecryptedKadUdp {
     /// Decrypted wire packet (proto + opcode + payload), ready for
     /// `KadCodec::decode`.
     pub payload: Vec<u8>,
-    /// `dwReceiverKey` carried in the datagram (should equal the verify key
+    /// `dwReceiverKey` transportada en el datagrama (debe coincidir con la clave de verificación
     /// used for decryption).
     pub receiver_key: u32,
     /// `dwSenderKey` carried in the datagram.
@@ -41,7 +41,7 @@ pub struct DecryptedKadUdp {
 /// `receiver_verify_key` (the key the remote peer was told to use — for the
 /// UDP firewall check, the `sender_key` we sent in `OP_FWCHECKUDPREQ`).
 ///
-/// Returns `None` when the buffer is not an encrypted packet or the magic
+/// Devuelve `None` cuando el búfer no es un paquete cifrado o la magia
 /// does not check out (wrong key / corrupt).
 pub fn decrypt_kad_udp_packet(buf: &[u8], receiver_verify_key: u32) -> Option<DecryptedKadUdp> {
     // Minimum: proto(1) + randkey(2) + magic(4) + padbyte(1) + keys(8) + >=1 payload

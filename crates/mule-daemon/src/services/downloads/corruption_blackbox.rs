@@ -16,51 +16,51 @@
 
 use std::collections::{HashMap, HashSet};
 
-/// eMule `CBB_BANTHRESHOLD` — pourcentage de données corrompues déclenchant
-/// le bannissement de l'expéditeur.
+/// eMule `CBB_BANTHRESHOLD` — porcentaje de datos corruptos que activa
+/// la expulsión del remitente.
 pub const CBB_BANTHRESHOLD_PERCENT: u64 = 32;
 
-/// eMule `EMBLOCKSIZE` — un enregistrement corrompu compte toujours pour au
-/// moins un bloc complet (180 Kio), même si la plage corrompue est plus petite.
+/// eMule `EMBLOCKSIZE` — un registro corrupto cuenta siempre como al
+/// menos un bloque completo (180 KiB), incluso si el rango corrupto es más pequeño.
 const EMBLOCKSIZE: u64 = 184_320;
 
-/// Borne défensive sur les enregistrements conservés par part : une part de
-/// 9 728 000 octets couvre ~54 blocs eMule ; les réécritures multiplient les
-/// enregistrements par fragmentation, sans ordre de grandeur au-delà.
+/// Límite defensivo en los registros conservados por parte: una parte de
+/// 9 728 000 bytes cubre ~54 bloques de eMule; las reescrituras multiplican los
+/// registros por fragmentación, sin orden de magnitud más allá.
 const MAX_RECORDS_PER_PART: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RecordStatus {
-    /// Donnée reçue, pas encore évaluée (eMule `BBR_NONE`).
+    /// Datos recibidos, aún no evaluados (eMule `BBR_NONE`).
     Received,
-    /// Donnée dont la part/le bloc a passé la vérif (eMule `BBR_VERIFIED`).
+    /// Datos cuya parte/bloque ha superado la verificación (eMule `BBR_VERIFIED`).
     Verified,
-    /// Donnée appartenant à une plage corrompue (eMule `BBR_CORRUPTED`).
+    /// Datos que pertenecen a un rango corrupto (eMule `BBR_CORRUPTED`).
     Corrupted,
 }
 
 #[derive(Debug, Clone)]
 struct CbbRecord {
-    /// Plage demi-ouverte `[start, end)` en octets absolus du fichier.
+    /// Rango semiabierto `[start, end)` en bytes absolutos del archivo.
     start: u64,
     end: u64,
-    /// Adresse de l'expéditeur (`ip:port` ou `lowid:N`).
+    /// Dirección del remitente (`ip:port` o `lowid:N`).
     sender: String,
     status: RecordStatus,
 }
 
-/// État du blackbox pour un téléchargement (eMule `m_CorruptionBlackBox`).
+/// Estado de la caja negra para una descarga (eMule `m_CorruptionBlackBox`).
 #[derive(Debug, Default)]
 pub struct CorruptionBlackBox {
-    /// Enregistrements par index de part (eMule `m_aaRecords`).
+    /// Registros por índice de parte (eMule `m_aaRecords`).
     records: HashMap<u32, Vec<CbbRecord>>,
 }
 
 impl CorruptionBlackBox {
-    /// `CCorruptionBlackBox::ReceivedData` : enregistre la livraison de
-    /// `[start, end)` par `sender`. Les enregistrements existants perdent la
-    /// portion réécrite — les octets réécrits changent de responsable
-    /// (eMule remplace les stats des plages recouvertes).
+    /// `CCorruptionBlackBox::ReceivedData`: registra la entrega de
+    /// `[start, end)` por parte de `sender`. Los registros existentes pierden la
+    /// porción reescrita — los bytes reescritos cambian de responsable
+    /// (eMule reemplaza las estadísticas de los rangos solapados).
     pub fn received_data(&mut self, part: u32, start: u64, end: u64, sender: &str) {
         if end <= start || sender.is_empty() {
             return;
@@ -77,26 +77,26 @@ impl CorruptionBlackBox {
         }
     }
 
-    /// `CCorruptionBlackBox::VerifiedData` : marque la portion `[start, end)`
-    /// des enregistrements comme vérifiée.
+    /// `CCorruptionBlackBox::VerifiedData`: marca la porción `[start, end)`
+    /// de los registros como verificada.
     pub fn verified_data(&mut self, part: u32, start: u64, end: u64) {
         self.mark(part, start, end, RecordStatus::Verified);
     }
 
-    /// `CCorruptionBlackBox::CorruptedData` : marque la portion `[start, end)`
-    /// des enregistrements comme corrompue.
+    /// `CCorruptionBlackBox::CorruptedData`: marca la porción `[start, end)`
+    /// de los registros como corrupta.
     pub fn corrupted_data(&mut self, part: u32, start: u64, end: u64) {
         self.mark(part, start, end, RecordStatus::Corrupted);
     }
 
-    /// `CCorruptionBlackBox::EvaluateData` : retourne les expéditeurs dont le
-    /// ratio de données corrompues dépasse `CBB_BANTHRESHOLD` (32 %).
+    /// `CCorruptionBlackBox::EvaluateData`: devuelve los remitentes cuya
+    /// proporción de datos corruptos supera `CBB_BANTHRESHOLD` (32 %).
     ///
-    /// Les suspects sont les expéditeurs ayant au moins un enregistrement
-    /// corrompu dans `part`. Pour chacun, le ratio est calculé sur **toutes**
-    /// les parts du fichier : chaque enregistrement corrompu compte pour
-    /// `max(longueur, EMBLOCKSIZE)` octets, chaque enregistrement vérifié
-    /// pour sa longueur réelle.
+    /// Los sospechosos son los remitentes que tienen al menos un registro
+    /// corrupto en `part`. Para cada uno, la proporción se calcula sobre **todas**
+    /// las partes del archivo: cada registro corrupto cuenta como
+    /// `max(longitud, EMBLOCKSIZE)` bytes, cada registro verificado
+    /// por su longitud real.
     pub fn evaluate(&self, part: u32) -> Vec<String> {
         let suspects: HashSet<&str> = self
             .records
@@ -131,9 +131,9 @@ impl CorruptionBlackBox {
                     }
                 }
             }
-            // Dilution par l'ensemble des données livrées (vérifiées + reçues en vol)
+            // Dilución por el conjunto de datos entregados (verificados + recibidos en vuelo)
             let total = corrupt_bytes + verified_bytes + received_bytes;
-            // Comparaison entière équivalente à `100*corrupt/total > 32`.
+            // Comparación entera equivalente a `100*corrupt/total > 32`.
             if total > 0 && corrupt_bytes * 100 > total * CBB_BANTHRESHOLD_PERCENT {
                 guilty.push(sender.to_string());
             }
@@ -141,7 +141,7 @@ impl CorruptionBlackBox {
         guilty
     }
 
-    /// `m_CorruptionBlackBox.Free()` — libération à la complétion du fichier.
+    /// `m_CorruptionBlackBox.Free()` — liberación al completarse el archivo.
     pub fn clear(&mut self) {
         self.records.clear();
     }
@@ -162,9 +162,9 @@ impl CorruptionBlackBox {
                 i += 1;
                 continue;
             }
-            // Découpe l'enregistrement en [avant] [chevauchant] [après] :
-            // seule la portion chevauchante change de statut (eMule Split) —
-            // les fragments externes conservent le statut d'origine.
+            // Divide el registro en [antes] [solapado] [después]:
+            // solo la porción solapada cambia de estado (eMule Split) —
+            // los fragmentos externos conservan el estado original.
             let before = (rec.start < ov_start).then_some((rec.start, ov_start));
             let after = (rec.end > ov_end).then_some((ov_end, rec.end));
             let mut rec = recs.remove(i);
@@ -204,8 +204,8 @@ impl CorruptionBlackBox {
     }
 }
 
-/// Retire la portion `[start, end)` de chaque enregistrement (eMule
-/// `ReceivedData` : les octets réécrits perdent leurs anciennes stats).
+/// Elimina la porción `[start, end)` de cada registro (eMule
+/// `ReceivedData`: los bytes reescritos pierden sus estadísticas antiguas).
 fn subtract_range(recs: &mut Vec<CbbRecord>, start: u64, end: u64) {
     let mut i = 0;
     while i < recs.len() {
@@ -274,8 +274,8 @@ fn subtract_range(recs: &mut Vec<CbbRecord>, start: u64, end: u64) {
 mod tests {
     use super::*;
 
-    /// eMule `EvaluateData` : un expéditeur dont toute la livraison est
-    /// corrompue dépasse 32 % — banni.
+    /// eMule `EvaluateData`: un remitente cuya entrega completa está
+    /// corrupta supera el 32 % — expulsado.
     #[test]
     fn single_sender_fully_corrupt_is_guilty() {
         let mut bb = CorruptionBlackBox::default();
@@ -284,13 +284,13 @@ mod tests {
         assert_eq!(bb.evaluate(0), vec!["1.2.3.4:49662".to_string()]);
     }
 
-    /// Un expéditeur suspect n'est banni que si `corrompu/(corrompu+vérifié)`
-    /// dépasse 32 % — la dilution par des données vérifiées l'exonère.
+    /// Un remitente sospechoso solo se expulsa si `corrupto/(corrupto+verificado)`
+    /// supera el 32 % — la dilución por datos verificados lo exonera.
     #[test]
     fn verified_data_dilutes_corruption_ratio() {
         let mut bb = CorruptionBlackBox::default();
-        // 3 parts vérifiées (~29,2 Mio) + une part corrompue (~9,7 Mio)
-        // → ratio ≈ 25 % < 32 % : soupçonné mais pas banni.
+        // 3 partes verificadas (~29,2 MiB) + una parte corrupta (~9,7 MiB)
+        // → proporción ≈ 25 % < 32 %: sospechoso pero no expulsado.
         for part in 0..3 {
             bb.received_data(part, part as u64 * 9_728_000, (part as u64 + 1) * 9_728_000, "1.2.3.4:49662");
             bb.verified_data(part, part as u64 * 9_728_000, (part as u64 + 1) * 9_728_000);
@@ -299,7 +299,7 @@ mod tests {
         bb.corrupted_data(3, 3 * 9_728_000, 4 * 9_728_000);
         assert!(bb.evaluate(3).is_empty());
 
-        // Avec 2 parts vérifiées seulement : ~33 % > 32 % → banni.
+        // Con 2 partes verificadas solamente: ~33 % > 32 % → expulsado.
         let mut bb2 = CorruptionBlackBox::default();
         for part in 0..2 {
             bb2.received_data(part, part as u64 * 9_728_000, (part as u64 + 1) * 9_728_000, "1.2.3.4:49662");
@@ -310,23 +310,23 @@ mod tests {
         assert_eq!(bb2.evaluate(2), vec!["1.2.3.4:49662".to_string()]);
     }
 
-    /// `ReceivedData` remplace la provenance des octets réécrits : le
-    /// réexpéditeur hérite de la responsabilité de la plage recouverte.
+    /// `ReceivedData` reemplaza la procedencia de los bytes reescritos: el
+    /// nuevo remitente hereda la responsabilidad del rango solapado.
     #[test]
     fn rewritten_range_changes_attribution() {
         let mut bb = CorruptionBlackBox::default();
         bb.received_data(0, 0, 9_728_000, "bad:1");
-        // La plage [100, 200) est re-livrée par un autre pair.
+        // El rango [100, 200) es reentregado por otro par.
         bb.received_data(0, 100, 200, "good:1");
-        // Corruption limitée à la plage réécrite → seul "good" est suspect.
+        // Corrupción limitada al rango reescrito → solo "good" es sospechoso.
         bb.corrupted_data(0, 100, 200);
         let guilty = bb.evaluate(0);
         assert_eq!(guilty, vec!["good:1".to_string()]);
     }
 
-    /// Un enregistrement corrompu compte pour au moins `EMBLOCKSIZE` :
-    /// une toute petite plage corrompue suffit à bannir un expéditeur
-    /// qui n'a presque rien envoyé de vérifié.
+    /// Un registro corrupto cuenta como al menos `EMBLOCKSIZE`:
+    /// un rango corrupto muy pequeño basta para expulsar a un remitente
+    /// que casi no ha enviado nada verificado.
     #[test]
     fn corrupted_record_counts_at_least_block_size() {
         let mut bb = CorruptionBlackBox::default();
@@ -334,19 +334,19 @@ mod tests {
         bb.received_data(0, 1000, 2000, "1.2.3.4:49662");
         bb.verified_data(0, 0, 1000);
         bb.corrupted_data(0, 1000, 2000);
-        // corrompu compté = 184 320 (pas 1000) → 100 % > 32 %.
+        // corrupto contabilizado = 184 320 (no 1000) → 100 % > 32 %.
         assert_eq!(bb.evaluate(0), vec!["1.2.3.4:49662".to_string()]);
     }
 
-    /// `evaluate` n'incrimine que les expéditeurs ayant livré des données
-    /// corrompues dans LA part évaluée.
+    /// `evaluate` solo incrimina a los remitentes que hayan entregado datos
+    /// corruptos en LA parte evaluada.
     #[test]
     fn only_suspects_of_failed_part_are_evaluated() {
         let mut bb = CorruptionBlackBox::default();
         bb.received_data(0, 0, 9_728_000, "innocent:1");
         bb.corrupted_data(0, 0, 9_728_000);
-        // "innocent" est le seul suspect → banni ; un expéditeur d'une autre
-        // part n'entre pas dans l'évaluation sauf s'il est aussi suspect.
+        // "innocent" es el único sospechoso → expulsado; un remitente de otra
+        // parte no entra en la evaluación salvo que también sea sospechoso.
         bb.received_data(1, 9_728_000, 2 * 9_728_000, "other:1");
         let guilty = bb.evaluate(0);
         assert_eq!(guilty, vec!["innocent:1".to_string()]);

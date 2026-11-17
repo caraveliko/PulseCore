@@ -3,25 +3,25 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Resource limits and timeouts enforcing bounded networking operations.
+/// Límites de recursos y tiempos de espera que imponen operaciones de red acotadas.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceBudgets {
-    /// Maximum concurrent peer TCP connections (default: 200).
+    /// Conexiones TCP con pares simultáneas máximas (por defecto: 200).
     pub max_active_peer_connections: usize,
-    /// Maximum concurrent server TCP connections (default: 2).
+    /// Conexiones TCP con servidores simultáneas máximas (por defecto: 2).
     pub max_active_server_connections: usize,
-    /// Maximum concurrent listener sockets (default: 4 — inbound TCP,
-    /// server UDP and Kad UDP each consume one slot).
+    /// Sockets de escucha simultáneos máximos (por defecto: 4 — TCP entrante,
+    /// UDP de servidor y UDP de Kad consumen cada uno una ranura).
     pub max_active_listeners: usize,
-    /// Timeout in milliseconds for initiating a TCP connection (default: 10,000 ms).
+    /// Tiempo de espera en milisegundos para iniciar una conexión TCP (por defecto: 10.000 ms).
     pub connect_timeout_ms: u64,
-    /// Timeout in milliseconds for protocol handshake / hello exchange (default: 15,000 ms).
+    /// Tiempo de espera en milisegundos para el intercambio de protocolo / saludo (por defecto: 15.000 ms).
     pub handshake_timeout_ms: u64,
-    /// Maximum single frame / message payload size in bytes (default: 10 MiB).
+    /// Tamaño máximo de carga útil de una sola trama / mensaje en bytes (por defecto: 10 MiB).
     pub max_frame_size_bytes: usize,
-    /// Maximum aggregate buffer memory allocated across active network sockets (default: 32 MiB).
+    /// Memoria de búfer agregada máxima asignada en todos los sockets de red activos (por defecto: 32 MiB).
     pub max_total_buffer_bytes: usize,
-    /// Rate limit on connection attempts per rolling minute (default: 240 —
+    /// Límite de tasa en intentos de conexión por minuto móvil (por defecto: 240 —
     /// eMule 0.72a `MaxConnectionsPerFiveSeconds` = 20 ≈ 240/min).
     pub rate_limit_per_min: u32,
 }
@@ -41,14 +41,14 @@ impl Default for ResourceBudgets {
     }
 }
 
-/// Borne de sanité pour les connexions pairs simultanées — eMule n'impose
-/// aucun plafond fixe (`GetMaxWindowsTCPConnections` = `UNLIMITED` sous
-/// Windows NT+), on garde un garde-fou contre les fautes de frappe.
-/// En pratique la limite réelle reste `max_total_buffer_bytes`.
+/// Límite de cordura para conexiones simultáneas de pares — eMule no impone
+/// ningún límite fijo (`GetMaxWindowsTCPConnections` = `UNLIMITED` en
+/// Windows NT+), mantenemos una salvaguarda contra errores tipográficos.
+/// En la práctica el límite real sigue siendo `max_total_buffer_bytes`.
 pub const MAX_PEER_CONNECTIONS_CAP: usize = 65_000;
 
 impl ResourceBudgets {
-    /// Validates that configured budgets stay within safe upper and lower bounds.
+    /// Valida que los presupuestos configurados se mantengan dentro de límites superiores e inferiores seguros.
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.max_active_peer_connections == 0 {
             return Err("max_active_peer_connections must be at least 1");

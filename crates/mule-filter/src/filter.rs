@@ -14,15 +14,15 @@ use std::time::{Duration, Instant};
 use crate::interval::FilterRange;
 use crate::parser::{parse_ipfilter, ParseError, ParseReport, MAX_FILE_SIZE};
 
-/// Fenêtre glissante (en secondes) pour la détection de flood de connexions par IP.
+/// Ventana deslizante (en segundos) para la detección de inundación (flood) de conexiones por IP.
 pub const FLOOD_WINDOW_SECS: u64 = 10;
-/// Nombre maximal de nouvelles connexions entrantes tolérées par IP dans `FLOOD_WINDOW_SECS`.
+/// Número máximo de nuevas conexiones entrantes toleradas por IP en `FLOOD_WINDOW_SECS`.
 pub const MAX_CONNS_PER_FLOOD_WINDOW: u32 = 24;
-/// Nombre maximal d'erreurs protocolaires / paquets corrompus avant bannissement automatique.
+/// Número máximo de errores protocolarios / paquetes corruptos antes del baneo automático.
 pub const MAX_PROTOCOL_STRIKES: u32 = 6;
-/// Durée (en secondes) d'un bannissement automatique dynamique (30 minutes).
+/// Duración (en segundos) de un baneo automático dinámico (30 minutos).
 pub const AUTO_BAN_DURATION_SECS: u64 = 1800;
-/// Capacité maximale de la table de suivi anti-flood en mémoire (évite tout épuisement RAM).
+/// Capacidad máxima de la tabla de seguimiento anti-flood en memoria (evita el agotamiento de RAM).
 pub const MAX_TRACKED_DYNAMIC_IPS: usize = 8192;
 
 #[derive(Debug, Clone)]
@@ -42,9 +42,9 @@ pub struct FilterStats {
     pub last_import_report: Option<ParseReport>,
 }
 
-/// Thread-safe in-memory IP filter based on sorted disjoint intervals
-/// plus a bounded dynamic auto-ban table for anti-DDoS / flood / malformed packet protection.
-/// Lookup is \(O(\log N)\) using binary search.
+/// Filtro IP en memoria seguro para subprocesos basado en intervalos disjuntos ordenados,
+/// más una tabla acotada de baneo automático dinámico para protección anti-DDoS / flood / paquetes malformados.
+/// La búsqueda es \(O(\log N)\) usando búsqueda binaria.
 pub struct IpFilter {
     enabled: AtomicBool,
     ranges: RwLock<Vec<FilterRange>>,
@@ -93,7 +93,7 @@ impl IpFilter {
         *self.last_report.write().unwrap() = None;
     }
 
-    /// Vérifie si une adresse IP est exemptée d'auto-ban dynamique (loopback ou LAN privée RFC1918).
+    /// Comprueba si una dirección IP está exenta de baneo automático dinámico (loopback o LAN privada RFC1918).
     fn is_exempt_from_dynamic_ban(ip: IpAddr) -> bool {
         let canonical = match ip {
             IpAddr::V4(v4) => IpAddr::V4(v4),
@@ -108,9 +108,9 @@ impl IpFilter {
         }
     }
 
-    /// Enregistre une tentative de connexion entrante et déclenche un bannissement
-    /// automatique si l'IP dépasse `MAX_CONNS_PER_FLOOD_WINDOW` dans `FLOOD_WINDOW_SECS`.
-    /// Retourne `true` si l'IP vient d'être bannie ou est déjà bannie.
+    /// Registra un intento de conexión entrante y activa un baneo
+    /// automático si la IP supera `MAX_CONNS_PER_FLOOD_WINDOW` en `FLOOD_WINDOW_SECS`.
+    /// Devuelve `true` si la IP acaba de ser baneada o ya está baneada.
     pub fn record_connection_attempt(&self, ip: IpAddr) -> bool {
         if !self.is_enabled() || Self::is_exempt_from_dynamic_ban(ip) {
             return false;
@@ -165,8 +165,8 @@ impl IpFilter {
         false
     }
 
-    /// Enregistre une anomalie protocolaire (paquet malformé, échec d'obfuscation répété, flood UDP).
-    /// Retourne `true` si l'IP atteint `MAX_PROTOCOL_STRIKES` et est bannie automatiquement.
+    /// Registra una anomalía protocolaria (paquete malformado, fallo repetido de ofuscación, inundación UDP).
+    /// Devuelve `true` si la IP alcanza `MAX_PROTOCOL_STRIKES` y es baneada automáticamente.
     pub fn record_protocol_strike(&self, ip: IpAddr, reason: &str) -> bool {
         if !self.is_enabled() || Self::is_exempt_from_dynamic_ban(ip) {
             return false;
@@ -203,7 +203,7 @@ impl IpFilter {
         false
     }
 
-    /// Load and parse filter ranges from a local file path.
+    /// Carga y analiza rangos de filtro desde una ruta de archivo local.
     pub fn load_from_file<P: AsRef<Path>>(&self, path: P) -> Result<ParseReport, ParseError> {
         let path_ref = path.as_ref();
         let metadata = std::fs::metadata(path_ref)?;
@@ -227,7 +227,7 @@ impl IpFilter {
         Ok(report)
     }
 
-    /// Load and parse filter ranges from an in-memory string or byte slice.
+    /// Carga y analiza rangos de filtro desde una cadena en memoria o fragmento de bytes.
     pub fn load_from_str(&self, content: &str) -> Result<ParseReport, ParseError> {
         if content.len() as u64 > MAX_FILE_SIZE {
             return Err(ParseError::FileTooLarge(content.len() as u64));
@@ -247,14 +247,14 @@ impl IpFilter {
         Ok(report)
     }
 
-    /// Checks whether an IP address is blocked (by dynamic Auto-Ban or static `ipfilter.dat`).
-    /// Supports native IPv4 as well as IPv4-mapped IPv6 (`::ffff:a.b.c.d`).
+    /// Comprueba si una dirección IP está bloqueada (por baneo automático dinámico o `ipfilter.dat` estático).
+    /// Admite IPv4 nativa así como IPv6 asignada a IPv4 (`::ffff:a.b.c.d`).
     pub fn check_ip(&self, ip: IpAddr) -> Option<FilterRange> {
         if !self.is_enabled() {
             return None;
         }
 
-        // 1. Vérification de la table dynamique d'Auto-Ban (anti-DDoS / Flood / Strikes)
+        // 1. Comprobación de la tabla dinámica de baneo automático (anti-DDoS / inundación / penalizaciones)
         if let Some(st) = self.dynamic_bans.read().unwrap().get(&ip) {
             if let Some(until) = st.banned_until {
                 if Instant::now() < until {
@@ -281,8 +281,8 @@ impl IpFilter {
         let guard = self.ranges.read().unwrap();
         let ranges = guard.as_slice();
 
-        // Binary search on ranges. Since ranges are sorted by start ascending and merged (disjoint):
-        // We binary search for the first range whose start <= ip_u32
+        // Búsqueda binaria sobre los rangos. Dado que los rangos están ordenados por inicio ascendente y fusionados (disjuntos):
+        // Buscamos binariamente el primer rango cuyo inicio sea <= ip_u32
         let idx = match ranges.binary_search_by(|r| {
             if r.start <= ip_u32 && ip_u32 <= r.end {
                 std::cmp::Ordering::Equal
@@ -323,7 +323,7 @@ mod tests {
         for _ in 0..MAX_CONNS_PER_FLOOD_WINDOW {
             assert!(!filter.record_connection_attempt(attacker_ip));
         }
-        // Le dépassement déclenche le bannissement automatique
+        // La superación del límite activa el baneo automático
         assert!(filter.record_connection_attempt(attacker_ip));
         let rule = filter
             .check_ip(attacker_ip)

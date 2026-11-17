@@ -13,7 +13,7 @@ use rsa::pkcs1v15::Pkcs1v15Sign;
 use rsa::traits::PublicKeyParts;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
-/// eMule `RSAKEYSIZE` (opcodes.h): 384 bits.
+/// `RSAKEYSIZE` de eMule (opcodes.h): 384 bits.
 pub const EMULE_RSA_BITS: usize = 384;
 
 #[derive(Debug, thiserror::Error)]
@@ -34,7 +34,7 @@ pub enum SecureIdentVersion {
     V2,
 }
 
-/// Builds the exact byte sequence eMule signs:
+/// Construye la secuencia exacta de bytes que firma eMule:
 /// `challenger_pubkey || challenge_u32_le [|| ip_u32_le || kind_u8]`.
 pub fn build_sui_signing_payload(
     version: SecureIdentVersion,
@@ -57,8 +57,8 @@ pub fn build_sui_signing_payload(
     Ok(payload)
 }
 
-/// RSASSA-PKCS1v15-SHA1 signature, matching `RSASSA_PKCS1v15_SHA_Signer::SignMessage`.
-/// The `rsa` crate expects a pre-hashed digest; we hash the payload with SHA-1 here.
+/// Firma RSASSA-PKCS1v15-SHA1, coincidente con `RSASSA_PKCS1v15_SHA_Signer::SignMessage`.
+/// La crate `rsa` espera un resumen previamente procesado; aquí resumimos la carga útil con SHA-1.
 pub fn sign_sui_payload(key: &RsaPrivateKey, payload: &[u8]) -> Result<Vec<u8>, LegacySuiError> {
     use sha1::Digest;
     let digest = sha1::Sha1::digest(payload);
@@ -66,14 +66,13 @@ pub fn sign_sui_payload(key: &RsaPrivateKey, payload: &[u8]) -> Result<Vec<u8>, 
     Ok(key.sign_with_rng(&mut rsa::rand_core::OsRng, scheme, &digest)?)
 }
 
-/// eMule `MAXPUBKEYSIZE`: maximum accepted public key wire length.
+/// `MAXPUBKEYSIZE` de eMule: longitud máxima aceptada de clave pública en cable.
 pub const MAX_PUBKEY_WIRE: usize = 80;
 
-/// Parses a peer's wire public key. Accepts PKCS#1 `RSAPublicKey` DER
-/// (`SEQUENCE { n INTEGER, e INTEGER }`, the same bytes Crypto++
-/// `GetMaterial().Save()` produces) and, as fallback, X.509
-/// `SubjectPublicKeyInfo` (`SEQUENCE { AlgorithmIdentifier, BIT STRING }`)
-/// which some clients send instead.
+/// Analiza la clave pública de cable de un par. Acepta PKCS#1 `RSAPublicKey` DER
+/// (`SEQUENCE { n INTEGER, e INTEGER }`, los mismos bytes que produce Crypto++
+/// `GetMaterial().Save()`) y, como alternativa, `SubjectPublicKeyInfo` X.509
+/// (`SEQUENCE { AlgorithmIdentifier, BIT STRING }`) que algunos clientes envían en su lugar.
 pub fn parse_peer_public_key(der: &[u8]) -> Result<RsaPublicKey, LegacySuiError> {
     use rsa::pkcs1::DecodeRsaPublicKey;
     if der.len() > MAX_PUBKEY_WIRE {
@@ -85,8 +84,8 @@ pub fn parse_peer_public_key(der: &[u8]) -> Result<RsaPublicKey, LegacySuiError>
             RsaPublicKey::from_public_key_der(der)
         })
         .map_err(|e| LegacySuiError::Signature(rsa::signature::Error::from_source(e)))?;
-    // from_pkcs1_der already performs basic sanity checks; reject degenerate
-    // moduli that would make signature verification meaningless.
+    // from_pkcs1_der ya realiza comprobaciones básicas de cordura; rechazar módulos
+    // degenerados que harían que la verificación de firma carezca de sentido.
     use rsa::traits::PublicKeyParts;
     if key.size() == 0 || key.size() > 1024 {
         return Err(LegacySuiError::Signature(rsa::signature::Error::new()));
@@ -94,8 +93,8 @@ pub fn parse_peer_public_key(der: &[u8]) -> Result<RsaPublicKey, LegacySuiError>
     Ok(key)
 }
 
-/// Verification, matching `RSASSA_PKCS1v15_SHA_Verifier::VerifyMessage`.
-/// `signature.len()` must equal the modulus length (48 bytes for RSA-384).
+/// Verificación, coincidente con `RSASSA_PKCS1v15_SHA_Verifier::VerifyMessage`.
+/// `signature.len()` debe ser igual a la longitud del módulo (48 bytes para RSA-384).
 pub fn verify_sui_signature(
     public_key: &RsaPublicKey,
     payload: &[u8],
@@ -117,7 +116,7 @@ mod tests {
     use super::*;
     use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
-    /// Spike: does the `rsa` crate accept 384-bit key generation?
+    /// Spike: ¿admite el crate `rsa` la generación de claves de 384 bits?
     #[test]
     fn rsa_384_generation_is_supported() {
         let mut rng = rsa::rand_core::OsRng;
@@ -126,7 +125,7 @@ mod tests {
         assert_eq!(key.n().bits(), EMULE_RSA_BITS);
     }
 
-    /// Spike: sign + verify roundtrip at 384 bits with the eMule scheme.
+    /// Spike: ciclo completo de firma + verificación a 384 bits con el esquema de eMule.
     #[test]
     fn rsa_384_pkcs1v15_sha1_roundtrip() {
         let mut rng = rsa::rand_core::OsRng;
@@ -135,7 +134,7 @@ mod tests {
 
         let payload = build_sui_signing_payload(
             SecureIdentVersion::V1,
-            &[0x30; 76], // placeholder DER-shaped pubkey bytes
+            &[0x30; 76], // bytes comodín de clave pública con formato DER
             0xDEADBEEF,
             None,
             None,
@@ -146,14 +145,14 @@ mod tests {
         assert_eq!(sig.len(), EMULE_RSA_BITS / 8); // 48 bytes
         verify_sui_signature(&public, &payload, &sig).unwrap();
 
-        // Wrong signature / wrong payload must fail
+        // Firma incorrecta / carga útil incorrecta debe fallar
         assert!(verify_sui_signature(&public, &payload, &[0u8; 48]).is_err());
         let mut bad = payload.clone();
         bad[0] ^= 1;
         assert!(verify_sui_signature(&public, &bad, &sig).is_err());
     }
 
-    /// Spike: reconstruct a key from components (cryptkey.dat import path).
+    /// Spike: reconstruir una clave a partir de componentes (ruta de importación de cryptkey.dat).
     #[test]
     fn rsa_384_from_components_roundtrip() {
         let mut rng = rsa::rand_core::OsRng;
@@ -178,14 +177,14 @@ mod tests {
         verify_sui_signature(&RsaPublicKey::from(&rebuilt), &payload, &sig).unwrap();
     }
 
-    /// Public key wire size check: eMule caps OP_PUBLICKEY at 80 bytes.
+    /// Comprobación de tamaño de clave pública en cable: eMule limita OP_PUBLICKEY a 80 bytes.
     #[test]
     fn rsa_384_pubkey_fits_80_byte_wire_limit() {
         let mut rng = rsa::rand_core::OsRng;
         let key = RsaPrivateKey::new(&mut rng, EMULE_RSA_BITS).unwrap();
         let public = RsaPublicKey::from(&key);
         // DER SEQUENCE { n INTEGER, e INTEGER } = PKCS#1 RSAPublicKey,
-        // matching CryptoPP `GetMaterial().Save()` / `DEREncode()` output.
+        // coincidente con la salida de CryptoPP `GetMaterial().Save()` / `DEREncode()`.
         use rsa::pkcs1::EncodeRsaPublicKey;
         let der = public.to_pkcs1_der().unwrap();
         assert!(
@@ -195,9 +194,9 @@ mod tests {
         );
     }
 
-    /// Peer keys arriving as X.509 `SubjectPublicKeyInfo` (observed on the
-    /// live network: `SEQUENCE { AlgorithmIdentifier, BIT STRING }`) are
-    /// accepted via the SPKI fallback, not only bare PKCS#1.
+    /// Las claves de pares que llegan como `SubjectPublicKeyInfo` X.509 (observadas en la
+    /// red real: `SEQUENCE { AlgorithmIdentifier, BIT STRING }`) se aceptan mediante el
+    /// mecanismo de respaldo SPKI, no solo PKCS#1 puro.
     #[test]
     fn spki_wrapped_pubkey_is_accepted() {
         use rsa::pkcs1::EncodeRsaPublicKey;
@@ -218,7 +217,7 @@ mod tests {
         let parsed_spki = parse_peer_public_key(spki.as_bytes()).unwrap();
         assert_eq!(parsed_pkcs1, parsed_spki);
 
-        // A signature verifies against the SPKI-parsed key too.
+        // Una firma también se verifica contra la clave analizada mediante SPKI.
         let payload = build_sui_signing_payload(
             SecureIdentVersion::V1,
             pkcs1.as_bytes(),
@@ -231,7 +230,7 @@ mod tests {
         verify_sui_signature(&parsed_spki, &payload, &sig).unwrap();
     }
 
-    /// V2 payload ordering: pubkey || challenge || ip || kind.
+    /// Orden de la carga útil V2: pubkey || challenge || ip || kind.
     #[test]
     fn v2_payload_byte_order() {
         let payload = build_sui_signing_payload(

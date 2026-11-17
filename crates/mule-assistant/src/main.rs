@@ -31,60 +31,60 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Explicit WebSocket RPC URL of the eMuleRust daemon (e.g. ws://127.0.0.1:4660/rpc)
+    /// URL RPC WebSocket explícita del daemon eMuleRust (ej. ws://127.0.0.1:4660/rpc)
     #[arg(long)]
     url: Option<String>,
 
-    /// Session authentication token for the daemon
+    /// Token de autenticación de sesión para el daemon
     #[arg(long)]
     token: Option<String>,
 
-    /// Path to eMuleRust workdir where session.json and auth.token reside
+    /// Ruta al directorio de trabajo de eMuleRust donde residen session.json y auth.token
     #[arg(long)]
     workdir: Option<PathBuf>,
 
-    /// Path to eMuleRust.exe executable or application bundle root
+    /// Ruta al ejecutable eMuleRust.exe o a la raíz del paquete de la aplicación
     #[arg(long)]
     app: Option<PathBuf>,
 
-    /// LLM backend base URL — loopback IP literal required unless
-    /// --allow-remote-endpoint (default: http://127.0.0.1:11434)
+    /// URL base del backend LLM: requiere IP literal en bucle local a menos que
+    /// se indique --allow-remote-endpoint (por defecto: http://127.0.0.1:11434)
     #[arg(long, default_value = DEFAULT_ENDPOINT)]
     endpoint: String,
 
-    /// Model name on the backend (must support Ollama tool calling)
+    /// Nombre del modelo en el backend (debe admitir la llamada a herramientas de Ollama)
     #[arg(long, default_value = DEFAULT_MODEL)]
     model: String,
 
-    /// LLM provider type: 'ollama' (default) or 'openai' (for LM Studio, LocalAI, vLLM, OpenAI)
+    /// Tipo de proveedor LLM: 'ollama' (por defecto) u 'openai' (para LM Studio, LocalAI, vLLM, OpenAI)
     #[arg(long, default_value = "ollama")]
     provider: String,
 
-    /// Optional API key for OpenAI-compatible providers
+    /// Clave API opcional para proveedores compatibles con OpenAI
     #[arg(long)]
     api_key: Option<String>,
 
-    /// Explicitly allow a non-loopback LLM endpoint
+    /// Permite explícitamente un punto de conexión LLM no local
     #[arg(long)]
     allow_remote_endpoint: bool,
 
-    /// Tool risk ceiling presented to the model: read, safe, full
+    /// Techo de riesgo de herramientas presentado al modelo: read, safe, full
     #[arg(long, value_enum, default_value_t = ToolProfile::Full)]
     tool_profile: ToolProfile,
 }
 
 #[derive(Subcommand, Debug, Clone)]
 enum Command {
-    /// Interactive terminal session (default)
+    /// Sesión de terminal interactiva (por defecto)
     Chat,
-    /// One-shot prompt then exit
+    /// Petición puntual y posterior salida
     Prompt {
-        /// Texte du prompt utilisateur
+        /// Texto de la petición del usuario
         text: String,
     },
-    /// WebSocket server for the Flutter UI (ws://127.0.0.1:<port>/assistant)
+    /// Servidor WebSocket para la interfaz Flutter (ws://127.0.0.1:<port>/assistant)
     Serve {
-        /// Loopback port to bind
+        /// Puerto de bucle local al que vincularse
         #[arg(long, default_value_t = DEFAULT_WS_PORT)]
         port: u16,
     },
@@ -94,7 +94,7 @@ enum Command {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // Logs humains sur stderr uniquement — stdout reste l'interface REPL.
+    // Registros legibles en stderr exclusivamente; stdout sigue siendo la interfaz REPL.
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -143,8 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut session = session;
             let (events_tx, mut events_rx) = mpsc::unbounded_channel();
             let (confirm_tx, _confirm_rx) = mpsc::channel(8);
-            // Sans répondeur de confirmation : les appels à confirmer sont
-            // refusés (défaut sûr en mode non interactif).
+            // Sin respondedor de confirmación: las llamadas a confirmar se
+            // rechazan (comportamiento seguro por defecto en modo no interactivo).
             let turn = session.user_turn(&text, &events_tx, &confirm_tx);
             tokio::pin!(turn);
             loop {
@@ -174,8 +174,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Jeton attendu par `assistant.hello` : explicite `--token` ou jeton de
-/// la session daemon du workdir — même source que `DaemonClient`.
+/// Token esperado por `assistant.hello`: `--token` explícito o token de
+/// la sesión del daemon en el directorio de trabajo; misma fuente que `DaemonClient`.
 fn resolve_expected_token(cli: &Cli) -> Option<String> {
     if let Some(t) = &cli.token {
         return Some(t.clone());
@@ -186,7 +186,7 @@ fn resolve_expected_token(cli: &Cli) -> Option<String> {
     DaemonSession::read_token(&workdir)
 }
 
-/// Affichage compact d'un event en mode one-shot.
+/// Visualización compacta de un evento en modo puntual (one-shot).
 fn print_event_oneshot(ev: &mule_assistant::AssistantEvent) {
     use mule_assistant::AssistantEvent as E;
     match ev {

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-/// Lightweight, async-friendly cancellation token for coordinating immediate socket teardown.
+/// Token de cancelación ligero y compatible con asincronía para coordinar el cierre inmediato de sockets.
 #[derive(Debug, Clone)]
 pub struct CancellationToken {
     inner: Arc<TokenInner>,
@@ -33,19 +33,19 @@ impl CancellationToken {
         }
     }
 
-    /// Triggers cancellation and notifies all tasks waiting on `cancelled()`.
+    /// Activa la cancelación y notifica a todas las tareas que esperan en `cancelled()`.
     pub fn cancel(&self) {
         if !self.inner.cancelled.swap(true, Ordering::SeqCst) {
             self.inner.notify.notify_waiters();
         }
     }
 
-    /// Returns whether this token has been cancelled.
+    /// Indica si este token ha sido cancelado.
     pub fn is_cancelled(&self) -> bool {
         self.inner.cancelled.load(Ordering::SeqCst)
     }
 
-    /// Waits asynchronously until the token is cancelled.
+    /// Espera de forma asíncrona hasta que se cancele el token.
     pub async fn cancelled(&self) {
         if self.is_cancelled() {
             return;
@@ -62,7 +62,7 @@ impl CancellationToken {
         }
     }
 
-    /// Resets the cancellation state, allowing token reuse upon re-enabling network.
+    /// Restablece el estado de cancelación, permitiendo la reutilización del token al volver a habilitar la red.
     pub fn reset(&self) {
         self.inner.cancelled.store(false, Ordering::SeqCst);
     }

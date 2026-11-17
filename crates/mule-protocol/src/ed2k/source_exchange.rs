@@ -91,13 +91,13 @@ mod tests {
 
     #[test]
     fn test_answer_sources_sx1_envelope_and_endianness() {
-        // eMule `CreateSrcInfoPacket` for SX1: `<hash16><count u16>` — no
-        // version byte on the wire; v3+ entries use hybrid (little-endian)
-        // IPs, v<3 entries use `htonl` (`PartFile.cpp:3670-3691`).
+        // `CreateSrcInfoPacket` de eMule para SX1: `<hash16><count u16>` — sin
+        // byte de versión en el cable; las entradas v3+ usan IPs híbridas
+        // (little-endian), las entradas v<3 usan `htonl` (`PartFile.cpp:3670-3691`).
         let hash = [0x33u8; 16];
         let src = SxSource::new([80, 10, 20, 30], 49662, Some([0xCC; 16]), 0x03);
 
-        // SX1 v3 (negotiated `ET_SOURCEEXCHANGE = 3`): 28-byte entries.
+        // SX1 v3 (`ET_SOURCEEXCHANGE = 3` negociado): entradas de 28 bytes.
         let ans = Ed2kAnswerSources::new_v(3, hash, vec![src.clone()]);
         let packet = encode_answer_sources(&ans, false, false).expect("encode sx1 v3");
         assert_eq!(packet.protocol, PR_EMULE);
@@ -112,11 +112,11 @@ mod tests {
         assert_eq!(decoded.sources[0].user_hash, Some([0xCC; 16]));
         assert_eq!(decoded.sources[0].crypt_options, 0);
 
-        // SX1 v1: 12-byte entries, IP travels in network byte order.
+        // SX1 v1: entradas de 12 bytes, la IP viaja en orden de bytes de red.
         let ans_v1 = Ed2kAnswerSources::new_v(1, hash, vec![src.clone()]);
         let packet_v1 = encode_answer_sources(&ans_v1, false, false).expect("encode sx1 v1");
         assert_eq!(packet_v1.payload.len(), 18 + 12);
-        // First entry bytes are the reversed IP (htonl of the hybrid ID).
+        // Los primeros bytes de entrada son la IP invertida (htonl del identificador híbrido).
         assert_eq!(&packet_v1.payload[18..22], &[30, 20, 10, 80]);
 
         let decoded_v1 =
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_answer_sources_rejects_unknown_sx2_version() {
-        // eMule drops SX2 answers with version 0 or > SOURCEEXCHANGE2_VERSION
+        // eMule descarta respuestas SX2 con versión 0 o > SOURCEEXCHANGE2_VERSION
         // (`PartFile.cpp:3732-3740`).
         let mut payload = vec![0x05u8];
         payload.extend_from_slice(&[0x11u8; 16]);
@@ -142,19 +142,19 @@ mod tests {
 
     #[test]
     fn test_answer_sources_rejects_trailing_garbage_sx2() {
-        // eMule requires `count * entry_size == remaining` for SX2
+        // eMule requiere `count * entry_size == remaining` para SX2
         // (`PartFile.cpp:3743-3770`).
         let mut payload = vec![0x04u8];
         payload.extend_from_slice(&[0x22u8; 16]);
         payload.extend_from_slice(&0u16.to_le_bytes());
-        payload.extend_from_slice(&[0xEEu8; 3]); // trailing garbage
+        payload.extend_from_slice(&[0xEEu8; 3]); // basura residual
         assert!(decode_answer_sources(PR_EMULE, OP_ANSWERSOURCES2, &payload).is_err());
     }
 
     #[test]
     fn test_answer_sources_rejects_mismatched_sx1_size() {
-        // eMule drops SX1 packets whose trailing size matches none of the
-        // known entry sizes (`PartFile.cpp:3777-3827`).
+        // eMule descarta paquetes SX1 cuyo tamaño restante no coincida con ninguno de los
+        // tamaños de entrada conocidos (`PartFile.cpp:3777-3827`).
         let mut payload = Vec::new();
         payload.extend_from_slice(&[0x44u8; 16]);
         payload.extend_from_slice(&2u16.to_le_bytes());

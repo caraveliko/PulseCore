@@ -24,29 +24,29 @@ use mule_core::storage::AllocationPolicy;
 
 const AUTOGRABBER_STATE_KEY: &str = "autograbber_state_v1";
 
-/// Verrou global pour éviter que deux passes d'AutoGrabber (planificateur de fond et RPC manuel)
-/// ne s'exécutent simultanément et n'écrasent `autograbber_state_v1`.
+/// Bloqueo global para evitar que dos pasadas de AutoGrabber (planificador en segundo plano y RPC manual)
+/// se ejecuten simultáneamente y sobrescriban `autograbber_state_v1`.
 static AUTOGRAB_PASS_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
 fn autograb_pass_mutex() -> &'static tokio::sync::Mutex<()> {
     AUTOGRAB_PASS_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
-/// Délais de détection de blocage (Stall Detection).
-const STALL_ZERO_SOURCES_MS: i64 = 45 * 60 * 1000; // 45 min à 0 octet et 0 source
-const STALL_ZERO_BYTES_MAX_MS: i64 = 3 * 3600 * 1000; // 3h à 0 octet même avec sources fantômes
-const STALL_PARTIAL_NO_PROGRESS_MS: i64 = 12 * 3600 * 1000; // 12h sans avancer et 0 source
+/// Plazos de detección de bloqueo (detección de estancamiento / Stall Detection).
+const STALL_ZERO_SOURCES_MS: i64 = 45 * 60 * 1000; // 45 min a 0 bytes y 0 fuentes
+const STALL_ZERO_BYTES_MAX_MS: i64 = 3 * 3600 * 1000; // 3 h a 0 bytes incluso con fuentes fantasma
+const STALL_PARTIAL_NO_PROGRESS_MS: i64 = 12 * 3600 * 1000; // 12 h sin avance y 0 fuentes
 
-/// Intervalle entre deux vérifications d'upgrade de qualité/langue (12h).
+/// Intervalo entre dos comprobaciones de mejora de calidad/idioma (12 h).
 const UPGRADE_CHECK_INTERVAL_MS: i64 = 12 * 3600 * 1000;
-/// Gain minimal de score requis pour déclencher un upgrade automatique.
+/// Ganancia mínima de puntuación requerida para activar una mejora automática.
 const MIN_UPGRADE_SCORE_DELTA: i32 = 35;
-/// Nombre minimal d'épisodes manquants dans une même saison pour rechercher d'abord un Pack de Saison.
+/// Número mínimo de episodios faltantes en una misma temporada para buscar primero un paquete de temporada.
 const MIN_WANTED_EPS_FOR_SEASON_PACK: usize = 3;
-/// Score minimal requis pour accepter un Pack de Saison.
+/// Puntuación mínima requerida para aceptar un paquete de temporada.
 const MIN_SEASON_PACK_SCORE: i32 = 25;
 
-/// Paliers d'exponential backoff (en ms) lorsqu'aucune release valide n'est trouvée.
+/// Intervalos de retroceso exponencial (en ms) cuando no se encuentra ninguna versión válida.
 const BACKOFF_STEPS_MS: &[i64] = &[
     30 * 60 * 1000,      // 1er échec : 30 min
     2 * 3600 * 1000,     // 2e échec : 2h
@@ -158,7 +158,7 @@ impl AutoGrabber {
         }
     }
 
-    /// Retourne le rapport de diagnostic complet pour une fiche média (film ou série).
+    /// Devuelve el informe de diagnóstico completo para una ficha multimedia (película o serie).
     pub async fn get_diagnostics_for_media(
         state: &AppState,
         media_id: &str,
@@ -191,7 +191,7 @@ impl AutoGrabber {
         })
     }
 
-    /// Efface la liste noire et réinitialise le backoff pour un média ou un épisode.
+    /// Borra la lista negra y reinicia el retroceso para un medio o episodio.
     pub async fn clear_blacklist(state: &AppState, target_id: &str) -> Value {
         let mut ag_state = Self::load_state(state).await;
         let removed = ag_state
@@ -210,7 +210,7 @@ impl AutoGrabber {
         })
     }
 
-    /// Dispatch download to eMule or BitTorrent engine depending on protocol
+    /// Despacha la descarga al motor eMule o BitTorrent según el protocolo
     pub async fn grab_release(
         state: &AppState,
         media_id: &str,
@@ -291,7 +291,7 @@ impl AutoGrabber {
             }
         };
 
-        // Enregistrer le suivi actif et le diagnostic dans AutoGrabberState
+        // Registrar el seguimiento activo y el diagnóstico en AutoGrabberState
         let mut ag_state = Self::load_state(state).await;
         ag_state.active_grabs.insert(
             dl_id_str.clone(),
@@ -334,8 +334,8 @@ impl AutoGrabber {
         Ok(dl_id_str)
     }
 
-    /// Inspecte les téléchargements actifs liés à la médiathèque pour détecter les fichiers bloqués
-    /// (0 source / 0 octet prolongé), les placer en liste noire et basculer automatiquement sur une autre release.
+    /// Inspecciona las descargas activas vinculadas a la mediateca para detectar archivos bloqueados
+    /// (0 fuentes / 0 bytes prolongado), colocarlos en la lista negra y cambiar automáticamente a otra versión.
     async fn inspect_and_heal_stalled_downloads(
         state: &AppState,
         ag_state: &mut AutoGrabberState,
@@ -363,7 +363,7 @@ impl AutoGrabber {
             Vec::new()
         };
 
-        // Construire une liste de cibles en cours de téléchargement : (target_id, media_id, is_episode, title_label, download_id, has_existing_file)
+        // Construir una lista de objetivos en curso de descarga: (target_id, media_id, is_episode, title_label, download_id, has_existing_file)
         let mut downloading_targets: Vec<(String, String, bool, String, String, bool)> = Vec::new();
         for item in &media_items {
             if item.media_type == "movie" && item.status == "downloading" {
@@ -402,7 +402,7 @@ impl AutoGrabber {
         }
 
         for (target_id, media_id, is_episode, label, dl_id, has_existing_file) in downloading_targets {
-            // Chercher dans eD2k ou BitTorrent
+            // Buscar en eD2k o BitTorrent
             let ed2k_match = ed2k_details
                 .iter()
                 .find(|d| d.snapshot.id.to_string().eq_ignore_ascii_case(&dl_id));
@@ -443,7 +443,7 @@ impl AutoGrabber {
                         Some(t.id),
                     )
                 } else {
-                    // Téléchargement introuvable (supprimé manuellement) -> remettre l'item en 'wanted' ou 'completed'
+                    // Descarga no encontrada (eliminada manualmente) -> volver a poner el elemento en 'wanted' o 'completed'
                     let fallback_status = if has_existing_file { "completed" } else { "wanted" };
                     let dl_svc = state.downloads.lock().await;
                     if is_episode {
@@ -483,7 +483,7 @@ impl AutoGrabber {
             let elapsed_since_progress = now.saturating_sub(tracker.last_progress_at_ms);
             let tracked_lang = tracker.language.clone();
 
-            // Re-vérifier si le téléchargement actif viole la politique de langue stricte (ex: Unknown / Foreign / English)
+            // Volver a verificar si la descarga activa infringe la política estricta de idioma (ej.: Unknown / Foreign / English)
             let reevaluated = evaluate_release(
                 &release_title,
                 if is_ed2k { "ed2k" } else { "torrent" },
@@ -534,7 +534,7 @@ impl AutoGrabber {
                     label, release_title, reason, hash
                 );
 
-                // 1. Supprimer le téléchargement mort
+                // 1. Eliminar la descarga muerta
                 if is_ed2k {
                     if let Ok(uuid) = Uuid::parse_str(&dl_id) {
                         let mut dl_svc = state.downloads.lock().await;
@@ -546,11 +546,11 @@ impl AutoGrabber {
                     }
                 }
 
-                // 2. Blacklister le hash pour cette cible
+                // 2. Añadir a la lista negra el hash para este objetivo
                 ag_state.blacklist_hash(&target_id, &hash, &release_title, reason, now);
                 ag_state.active_grabs.remove(&dl_id);
 
-                // 3. Remettre en 'wanted' (ou 'completed' si c'était un upgrade) et réinitialiser le backoff
+                // 3. Volver a poner en 'wanted' (o 'completed' si era una mejora) y reiniciar el retroceso
                 let fallback_status = if has_existing_file { "completed" } else { "wanted" };
                 {
                     let dl_svc = state.downloads.lock().await;
@@ -586,8 +586,8 @@ impl AutoGrabber {
         healed_events
     }
 
-    /// Vérifie si un film déjà téléchargé (`completed`) est éligible à un upgrade automatique
-    /// en inspectant la résolution réelle et les pistes audio/sous-titres du fichier sur disque via `MediaProbe`.
+    /// Comprueba si una película ya descargada (`completed`) es elegible para una mejora automática
+    /// inspeccionando la resolución real y las pistas de audio/subtítulos del archivo en disco mediante `MediaProbe`.
     async fn check_movie_upgrade_eligibility(
         item: &MediaItem,
         ag_state: &AutoGrabberState,
@@ -678,7 +678,7 @@ impl AutoGrabber {
         now + BACKOFF_STEPS_MS[idx]
     }
 
-    /// Exécute la recherche, le filtrage, le diagnostic et le téléchargement automatique pour un film donné.
+    /// Ejecuta la búsqueda, el filtrado, el diagnóstico y la descarga automática para una película dada.
     async fn process_movie_item(
         state: &AppState,
         aggregator: &IndexerAggregator,
@@ -694,7 +694,7 @@ impl AutoGrabber {
             return None;
         }
 
-        // Vérifier le Smart Backoff si non forcé
+        // Comprobar el retroceso inteligente si no está forzado
         if !force && item.status == "wanted" {
             if let Some(diag) = ag_state.diagnostics.get(&item.id) {
                 if now < diag.next_eligible_search_ms {
@@ -742,7 +742,7 @@ impl AutoGrabber {
             queries.push(es_t.clone());
         }
 
-        // Titres alternatifs et traductions officielles fournis par le service de métadonnées
+        // Títulos alternativos y traducciones oficiales proporcionados por el servicio de metadatos
         let ext_details = state.media_metadata.get_extended_details(item).await;
         for alt_title in &ext_details.alternative_titles {
             let clean_alt = alt_title.replace([':', '-', '\''], " ");
@@ -759,7 +759,7 @@ impl AutoGrabber {
             }
         }
 
-        // Découper sur ':' (ex. "Ali G: Who Iz I?" -> "Ali G", "Who Iz I")
+        // Dividir por ':' (ej. "Ali G: Who Iz I?" -> "Ali G", "Who Iz I")
         if item.title.contains(':') {
             let parts: Vec<&str> = item.title.split(':').collect();
             if parts.len() >= 2 {
@@ -780,7 +780,7 @@ impl AutoGrabber {
             }
         }
 
-        // Variantes en espagnol et chiffres pour les suites (ex. "Part Two" -> "Parte Dos", "Parte 2", "2")
+        // Variantes en español y números para secuelas (ej. "Part Two" -> "Parte Dos", "Parte 2", "2")
         let title_lower = item.title.to_lowercase();
         if title_lower.contains("part two") || title_lower.contains("part 2") {
             let base = item.title.split(':').next().unwrap_or(&item.title).trim();
@@ -892,7 +892,7 @@ impl AutoGrabber {
             .collect();
 
         if let Some(best) = valid_releases.into_iter().next() {
-            // Sauvegarder temporairement l'état avant `grab_release` qui le recharge
+            // Guardar temporalmente el estado antes de `grab_release`, que lo recarga
             Self::save_state(state, ag_state).await;
             if let Ok(dl_id) = Self::grab_release(state, &item.id, &best).await {
                 *ag_state = Self::load_state(state).await;
@@ -919,7 +919,7 @@ impl AutoGrabber {
             }
         }
 
-        // Aucune release valide trouvée -> mettre à jour le diagnostic et le Smart Backoff
+        // Ninguna versión válida encontrada -> actualizar el diagnóstico y el retroceso inteligente
         let diag = ag_state.diagnostics.entry(item.id.clone()).or_default();
         diag.last_search_ms = now;
         diag.total_candidates = total_candidates;
@@ -950,7 +950,7 @@ impl AutoGrabber {
         None
     }
 
-    /// Exécute la recherche et le téléchargement automatique pour les épisodes recherchés d'une série TV.
+    /// Ejecuta la búsqueda y descarga automática para los episodios buscados de una serie de TV.
     async fn process_series_item(
         state: &AppState,
         aggregator: &IndexerAggregator,
@@ -996,7 +996,7 @@ impl AutoGrabber {
             .cloned()
             .collect();
 
-        // Prioriser les épisodes jamais cherchés (`consecutive_empty_searches == 0`)
+        // Priorizar los episodios nunca buscados (`consecutive_empty_searches == 0`)
         wanted_eps.sort_by_key(|ep| {
             let attempts = ag_state
                 .diagnostics
@@ -1008,7 +1008,7 @@ impl AutoGrabber {
 
         let mut handled_ep_ids: HashSet<String> = HashSet::new();
 
-        // 0. Recherche intelligente de Packs de Saison complète si >= 3 épisodes d'une même saison sont recherchés
+        // 0. Búsqueda inteligente de paquetes de temporada completa si se buscan >= 3 episodios de una misma temporada
         if only_episode_id.is_none() {
             let mut eps_by_season: HashMap<u32, Vec<EpisodeItem>> = HashMap::new();
             for ep in &wanted_eps {
@@ -1218,8 +1218,8 @@ impl AutoGrabber {
             .take(batch_limit)
             .collect();
 
-        // Pré-charger les résultats Kad/Torznab au niveau de la série (et de ses variantes espagnoles)
-        // une seule fois pour éviter N recherches redondantes sur le même mot-clé Kad de titre.
+        // Precargar los resultados de Kad/Torznab a nivel de serie (y sus variantes en español)
+        // una sola vez para evitar N búsquedas redundantes sobre la misma palabra clave Kad de título.
         let mut base_series_releases = Vec::new();
         if !remaining_eps.is_empty() {
             let mut base_queries = vec![item.title.clone()];
@@ -1246,8 +1246,8 @@ impl AutoGrabber {
                 }
             }
 
-            // Si un seul sous-ensemble de pairs d'indexation Kad a répondu au premier essai,
-            // effectuer une seconde passe de fusion pour maximiser la couverture d'épisodes.
+            // Si solo un subconjunto de pares de indexación Kad respondió en el primer intento,
+            // realizar una segunda pasada de fusión para maximizar la cobertura de episodios.
             if base_series_releases.len() < 150 {
                 aggregator.invalidate_cache().await;
                 let retry_futs = base_queries
@@ -1418,7 +1418,7 @@ impl AutoGrabber {
                         );
                         handled_ep_ids.insert(ep.id.clone());
 
-                        // Si la release couvre plusieurs épisodes (ex: S01E01-E03 ou Cap.101_102), lier tous les épisodes couverts
+                        // Si la versión cubre múltiples episodios (ej.: S01E01-E03 o Cap.101_102), vincular todos los episodios cubiertos
                         for covered_num in covered_ep_nums {
                             if covered_num != ep.episode_number {
                                 if let Some(other_ep) = episodes.iter().find(|e| {
@@ -1508,7 +1508,7 @@ impl AutoGrabber {
                 }
             }
 
-            // Aucune release trouvée pour cet épisode
+            // Ninguna versión encontrada para este episodio
             let (ep_status, ep_msg) = {
                 let ep_diag = ag_state.diagnostics.entry(ep.id.clone()).or_default();
                 ep_diag.last_search_ms = now;
@@ -1555,7 +1555,7 @@ impl AutoGrabber {
         grabbed_episodes
     }
 
-    /// Force l'exécution immédiate de l'AutoGrabber sur un film ou une série spécifique depuis l'UI.
+    /// Fuerza la ejecución inmediata de AutoGrabber sobre una película o serie específica desde la interfaz.
     pub async fn grab_for_media_id(
         state: &AppState,
         aggregator: &IndexerAggregator,
@@ -1580,7 +1580,7 @@ impl AutoGrabber {
         let mut grabbed_episodes = Vec::new();
 
         if item.media_type == "movie" {
-            // Si le film est 'wanted' ou éligible à un upgrade (ou forcé), lancer la recherche
+            // Si la película está en 'wanted' o es elegible para una mejora (o forzada), iniciar la búsqueda
             if let Some(m) = Self::process_movie_item(state, aggregator, &item, &mut ag_state, true).await {
                 grabbed_movies.push(m);
             }
@@ -1605,7 +1605,7 @@ impl AutoGrabber {
         }))
     }
 
-    /// Single pass over all wanted/upgradeable items to heal stalled downloads, search, and auto-grab the best candidates
+    /// Pasada única sobre todos los elementos deseados/mejorables para reparar descargas estancadas, buscar y capturar automáticamente los mejores candidatos
     pub async fn run_auto_grab_round(
         state: &AppState,
         aggregator: &IndexerAggregator,
@@ -1614,7 +1614,7 @@ impl AutoGrabber {
         let _pass_guard = autograb_pass_mutex().lock().await;
         let mut ag_state = Self::load_state(state).await;
 
-        // 1. Auto-guérison des téléchargements bloqués (Stall Detection + Blacklist + Failover)
+        // 1. Autorreparación de descargas bloqueadas (detección de estancamiento + lista negra + conmutación por error)
         let healed_downloads = Self::inspect_and_heal_stalled_downloads(state, &mut ag_state).await;
         if !healed_downloads.is_empty() {
             Self::save_state(state, &ag_state).await;
@@ -1628,7 +1628,7 @@ impl AutoGrabber {
                 .unwrap_or_default()
         };
 
-        // 2. File d'attente prioritaire : traiter d'abord les éléments nouvellement ajoutés (0 échec)
+        // 2. Cola de prioridad: procesar primero los elementos recién añadidos (0 fallos)
         media_items.sort_by_key(|item| {
             let empty_count = ag_state
                 .diagnostics

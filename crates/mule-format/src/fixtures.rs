@@ -4,7 +4,7 @@
 use std::cmp::min;
 use std::io::Read;
 
-/// Canonical repeating 0..=255 pattern.
+/// Patrón canónico repetitivo 0..=255.
 pub const REPEATING_0_TO_255: [u8; 256] = {
     let mut arr = [0u8; 256];
     let mut i = 0;
@@ -15,7 +15,7 @@ pub const REPEATING_0_TO_255: [u8; 256] = {
     arr
 };
 
-/// A streaming deterministic byte reader with zero RAM allocation overhead.
+/// Lector de bytes determinista en flujo continuo con sobrecarga de asignación en RAM cero.
 pub struct PatternReader<'a> {
     pattern: &'a [u8],
     total_len: u64,
@@ -57,7 +57,7 @@ impl<'a> Read for PatternReader<'a> {
     }
 }
 
-/// Description of an independent byte pattern fixture.
+/// Descripción de un juego de pruebas (fixture) de patrón de bytes independiente.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BytePatternFixture {
     pub name: &'static str,
@@ -67,7 +67,7 @@ pub struct BytePatternFixture {
     pub expected_aich_root_base32: Option<&'static str>,
 }
 
-/// Pre-calculated, independent test fixtures for repeating 0..=255.
+/// Fixtures de prueba calculados previamente e independientes para 0..=255 repetitivo.
 pub const FIXTURE_1_BYTE: BytePatternFixture = BytePatternFixture {
     name: "pattern_1_byte",
     length: 1,
@@ -88,7 +88,7 @@ pub const FIXTURE_EXACT_ONE_PART: BytePatternFixture = BytePatternFixture {
     name: "pattern_9728000",
     length: 9_728_000,
     expected_ed2k_hex: "d815a0409aaa0b4279dd86e580bb043f",
-    expected_part_hashes_count: 2, // part_0 + empty
+    expected_part_hashes_count: 2, // parte_0 + vacía
     expected_aich_root_base32: None,
 };
 
@@ -104,6 +104,6 @@ pub const FIXTURE_EXACT_TWO_PARTS: BytePatternFixture = BytePatternFixture {
     name: "pattern_19456000",
     length: 19_456_000,
     expected_ed2k_hex: "7fdd19736858b9f24c65da0e0e0adba3",
-    expected_part_hashes_count: 3, // part_0 + part_1 + empty
+    expected_part_hashes_count: 3, // parte_0 + parte_1 + vacía
     expected_aich_root_base32: None,
 };

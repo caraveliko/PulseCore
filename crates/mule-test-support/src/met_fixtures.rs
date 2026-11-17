@@ -11,39 +11,39 @@
 
 use mule_format::met::tags::{TAGTYPE_HASH16, TAGTYPE_STRING, TAGTYPE_UINT32, TAGTYPE_UINT64};
 
-/// Écrit l'en-tête d'un tag à nom court : `[type][u16 namelen=1][u8 name_id]`.
+/// Escribe la cabecera de una etiqueta de nombre corto: `[type][u16 namelen=1][u8 name_id]`.
 pub fn push_tag_id(buf: &mut Vec<u8>, tag_type: u8, name_id: u8) {
     buf.push(tag_type);
     buf.extend_from_slice(&1u16.to_le_bytes());
     buf.push(name_id);
 }
 
-/// Écrit un tag `TAGTYPE_STRING` à nom court.
+/// Escribe una etiqueta `TAGTYPE_STRING` de nombre corto.
 pub fn push_string_tag(buf: &mut Vec<u8>, name_id: u8, value: &str) {
     push_tag_id(buf, TAGTYPE_STRING, name_id);
     buf.extend_from_slice(&(value.len() as u16).to_le_bytes());
     buf.extend_from_slice(value.as_bytes());
 }
 
-/// Écrit un tag `TAGTYPE_UINT32` à nom court.
+/// Escribe una etiqueta `TAGTYPE_UINT32` de nombre corto.
 pub fn push_u32_tag(buf: &mut Vec<u8>, name_id: u8, value: u32) {
     push_tag_id(buf, TAGTYPE_UINT32, name_id);
     buf.extend_from_slice(&value.to_le_bytes());
 }
 
-/// Écrit un tag `TAGTYPE_UINT64` à nom court.
+/// Escribe una etiqueta `TAGTYPE_UINT64` de nombre corto.
 pub fn push_u64_tag(buf: &mut Vec<u8>, name_id: u8, value: u64) {
     push_tag_id(buf, TAGTYPE_UINT64, name_id);
     buf.extend_from_slice(&value.to_le_bytes());
 }
 
-/// Écrit un tag `TAGTYPE_HASH16` à nom court.
+/// Escribe una etiqueta `TAGTYPE_HASH16` de nombre corto.
 pub fn push_hash16_tag(buf: &mut Vec<u8>, name_id: u8, value: &[u8; 16]) {
     push_tag_id(buf, TAGTYPE_HASH16, name_id);
     buf.extend_from_slice(value);
 }
 
-/// Packed `CreditStruct` (0x12, 119 B) - `ClientCredits.h:41-52`.
+/// `CreditStruct` empaquetado (0x12, 119 B) - `ClientCredits.h:41-52`.
 pub fn credit_record(
     key: &[u8; 16],
     uploaded: u64,
@@ -66,7 +66,7 @@ pub fn credit_record(
     rec
 }
 
-/// Sérialise un fichier `clients.met` : `[version u8][count u32][records]`.
+/// Serializa un archivo `clients.met`: `[version u8][count u32][records]`.
 pub fn clients_met(version: u8, records: &[Vec<u8>]) -> Vec<u8> {
     let mut buf = vec![version];
     buf.extend_from_slice(&(records.len() as u32).to_le_bytes());

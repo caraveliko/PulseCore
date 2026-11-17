@@ -19,17 +19,17 @@ use super::tags::{Ed2kTag, RawTag, TagName};
 use crate::framing::RawPacket;
 use crate::limits::HEADER_SIZE;
 
-/// AICH message encoders (AichFileHashReq/Res, AichRequest/Answer).
+/// Módulos de codificación de mensajes AICH (AichFileHashReq/Res, AichRequest/Answer).
 pub mod aich;
-/// eMule 0.72a extended encoders (HashSet2, MultiPacket*, queue, chat, CAPTCHA…).
+/// Codificadores extendidos de eMule 0.72a (HashSet2, MultiPacket*, cola, chat, CAPTCHA…).
 pub mod extended;
-/// Handshake message encoders (Hello, HelloAnswer, EmuleInfo).
+/// Codificadores de mensajes de saludo (Hello, HelloAnswer, EmuleInfo).
 pub mod handshake;
-/// Security message encoders (PublicKey, Signature, SecIdentState).
+/// Codificadores de mensajes de seguridad (PublicKey, Signature, SecIdentState).
 pub mod security;
-/// eD2K Tag and tag name encoders.
+/// Codificadores de etiquetas y nombres de etiquetas eD2K.
 pub mod tags;
-/// Transfer message encoders (FileStatus, RequestParts, SendingPart, FileReqAnsNoFile).
+/// Codificadores de mensajes de transferencia (FileStatus, RequestParts, SendingPart, FileReqAnsNoFile).
 pub mod transfers;
 
 pub use aich::{
@@ -53,22 +53,22 @@ pub use transfers::{
     encode_request_parts_with_opcode, encode_sending_part, encode_sending_part_i64,
 };
 
-/// Deterministic wire encoder for historical eD2K protocol messages.
+/// Codificador determinista de red para mensajes históricos del protocolo eD2K.
 #[derive(Debug, Clone, Default)]
 pub struct Ed2kEncoder {
-    /// Safety limits and resource boundaries.
+    /// Límites de seguridad y fronteras de recursos.
     pub limits: Ed2kLimits,
-    /// Active compatibility profile for wire opcode selection.
+    /// Perfil de compatibilidad activo para la selección de códigos de operación de red.
     pub profile: Ed2kCompatibilityProfile,
 }
 
 impl Ed2kEncoder {
-    /// Creates a new encoder with default production limits and default profile (`Emule072a`).
+    /// Crea un nuevo codificador con límites de producción y perfil predeterminados (`Emule072a`).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates a new encoder with an explicit compatibility profile.
+    /// Crea un nuevo codificador con un perfil de compatibilidad explícito.
     pub fn with_profile(profile: Ed2kCompatibilityProfile) -> Self {
         Self {
             limits: Ed2kLimits::default(),
@@ -76,7 +76,7 @@ impl Ed2kEncoder {
         }
     }
 
-    /// Creates a new encoder with customized limits and default profile.
+    /// Crea un nuevo codificador con límites personalizados y perfil predeterminado.
     pub fn with_limits(limits: Ed2kLimits) -> Self {
         Self {
             limits,
@@ -84,12 +84,12 @@ impl Ed2kEncoder {
         }
     }
 
-    /// Creates a new encoder with customized limits and explicit compatibility profile.
+    /// Crea un nuevo codificador con límites personalizados y un perfil de compatibilidad explícito.
     pub fn with_limits_and_profile(limits: Ed2kLimits, profile: Ed2kCompatibilityProfile) -> Self {
         Self { limits, profile }
     }
 
-    /// Encodes a `TagName` into the destination buffer.
+    /// Codifica un `TagName` en el búfer de destino.
     pub fn encode_tag_name(
         &self,
         opcode: u8,
@@ -99,7 +99,7 @@ impl Ed2kEncoder {
         encode_tag_name(&self.limits, opcode, name, dst)
     }
 
-    /// Encodes a single recognized `Ed2kTag` into the destination buffer.
+    /// Codifica una única `Ed2kTag` reconocida en el búfer de destino.
     pub fn encode_tag(
         &self,
         opcode: u8,
@@ -109,7 +109,7 @@ impl Ed2kEncoder {
         encode_tag(&self.limits, opcode, tag, dst)
     }
 
-    /// Encodes a raw preserved unknown tag into the destination buffer.
+    /// Codifica una etiqueta desconocida sin procesar conservada en el búfer de destino.
     pub fn encode_raw_tag(
         &self,
         opcode: u8,
@@ -119,12 +119,12 @@ impl Ed2kEncoder {
         encode_raw_tag(&self.limits, opcode, tag, dst)
     }
 
-    /// Encodes an `Ed2kHello` message into a `RawPacket`.
+    /// Codifica un mensaje `Ed2kHello` en un `RawPacket`.
     pub fn encode_hello(&self, hello: &Ed2kHello) -> Result<RawPacket, Ed2kEncodeError> {
         encode_hello(&self.limits, self.profile, hello)
     }
 
-    /// Encodes an `Ed2kHelloAnswer` message into a `RawPacket`.
+    /// Codifica un mensaje `Ed2kHelloAnswer` en un `RawPacket`.
     pub fn encode_hello_answer(
         &self,
         answer: &Ed2kHelloAnswer,
@@ -132,7 +132,7 @@ impl Ed2kEncoder {
         encode_hello_answer(&self.limits, answer)
     }
 
-    /// Encodes an `Ed2kFileStatusReq` message using the encoder's active profile opcode.
+    /// Codifica un mensaje `Ed2kFileStatusReq` usando el código de operación del perfil activo del codificador.
     pub fn encode_file_status_req(
         &self,
         req: &Ed2kFileStatusReq,
@@ -140,7 +140,7 @@ impl Ed2kEncoder {
         encode_file_status_req(&self.limits, self.profile, req)
     }
 
-    /// Encodes an `Ed2kFileStatusReq` message into a `RawPacket` with a specified opcode.
+    /// Codifica un mensaje `Ed2kFileStatusReq` en un `RawPacket` con un código de operación especificado.
     pub fn encode_file_status_req_with_opcode(
         &self,
         req: &Ed2kFileStatusReq,
@@ -149,7 +149,7 @@ impl Ed2kEncoder {
         encode_file_status_req_with_opcode(&self.limits, req, opcode)
     }
 
-    /// Encodes an `Ed2kFileStatus` message into a `RawPacket`.
+    /// Codifica un mensaje `Ed2kFileStatus` en un `RawPacket`.
     pub fn encode_file_status(
         &self,
         status: &Ed2kFileStatus,
@@ -157,7 +157,7 @@ impl Ed2kEncoder {
         encode_file_status(&self.limits, status)
     }
 
-    /// Encodes an `Ed2kFileReqAnsNoFile` (`0x48`) message into a `RawPacket`.
+    /// Codifica un mensaje `Ed2kFileReqAnsNoFile` (`0x48`) en un `RawPacket`.
     pub fn encode_file_req_ans_no_file(
         &self,
         ans: &Ed2kFileReqAnsNoFile,
@@ -165,7 +165,7 @@ impl Ed2kEncoder {
         encode_file_req_ans_no_file(&self.limits, ans)
     }
 
-    /// Encodes an `Ed2kRequestParts` message using the encoder's active profile opcode.
+    /// Codifica un mensaje `Ed2kRequestParts` usando el código de operación del perfil activo del codificador.
     pub fn encode_request_parts(
         &self,
         req: &Ed2kRequestParts,
@@ -173,7 +173,7 @@ impl Ed2kEncoder {
         encode_request_parts(&self.limits, self.profile, req)
     }
 
-    /// Encodes an `Ed2kRequestParts` message with a specified opcode.
+    /// Codifica un mensaje `Ed2kRequestParts` con un código de operación especificado.
     pub fn encode_request_parts_with_opcode(
         &self,
         req: &Ed2kRequestParts,
@@ -182,7 +182,7 @@ impl Ed2kEncoder {
         encode_request_parts_with_opcode(&self.limits, req, opcode)
     }
 
-    /// Encodes an `Ed2kRequestPartsI64` message (`OP_REQUESTPARTS_I64`, `0xA3`).
+    /// Codifica un mensaje `Ed2kRequestPartsI64` (`OP_REQUESTPARTS_I64`, `0xA3`).
     pub fn encode_request_parts_i64(
         &self,
         req: &Ed2kRequestPartsI64,
@@ -190,7 +190,7 @@ impl Ed2kEncoder {
         encode_request_parts_i64(&self.limits, req)
     }
 
-    /// Encodes an `Ed2kSendingPart` message (`0x46`).
+    /// Codifica un mensaje `Ed2kSendingPart` (`0x46`).
     pub fn encode_sending_part(
         &self,
         part: &Ed2kSendingPart,
@@ -198,7 +198,7 @@ impl Ed2kEncoder {
         encode_sending_part(&self.limits, part)
     }
 
-    /// Encodes an `Ed2kSendingPartI64` message (`OP_SENDINGPART_I64`, `0xA2`).
+    /// Codifica un mensaje `Ed2kSendingPartI64` (`OP_SENDINGPART_I64`, `0xA2`).
     pub fn encode_sending_part_i64(
         &self,
         part: &Ed2kSendingPartI64,
@@ -206,7 +206,7 @@ impl Ed2kEncoder {
         encode_sending_part_i64(&self.limits, part)
     }
 
-    /// Encodes an `Ed2kHashSetReq` message (`0x51`).
+    /// Codifica un mensaje `Ed2kHashSetReq` (`0x51`).
     pub fn encode_hashset_request(
         &self,
         req: &Ed2kHashSetReq,
@@ -214,7 +214,7 @@ impl Ed2kEncoder {
         encode_hashset_request(&self.limits, req)
     }
 
-    /// Encodes an `Ed2kHashSetAnswer` message (`0x52`).
+    /// Codifica un mensaje `Ed2kHashSetAnswer` (`0x52`).
     pub fn encode_hashset_answer(
         &self,
         ans: &Ed2kHashSetAnswer,
@@ -222,8 +222,8 @@ impl Ed2kEncoder {
         encode_hashset_answer(&self.limits, ans)
     }
 
-    /// Encodes an `Ed2kHashSetReq2` message (`0xB1`, eMule protocol):
-    /// `<FileIdentifier><options u8>`.
+    /// Codifica un mensaje `Ed2kHashSetReq2` (`0xB1`, protocolo eMule):
+    /// `<FileIdentifier><opciones u8>`.
     pub fn encode_hashset_request2(
         &self,
         req: &Ed2kHashSetReq2,
@@ -231,8 +231,8 @@ impl Ed2kEncoder {
         encode_hashset_request2(&self.limits, req)
     }
 
-    /// Encodes an `Ed2kHashSetAnswer2` message (`0xB2`, eMule protocol):
-    /// `<FileIdentifier><options u8>[<md4 set>][<aich set>]`.
+    /// Codifica un mensaje `Ed2kHashSetAnswer2` (`0xB2`, protocolo eMule):
+    /// `<FileIdentifier><opciones u8>[<conjunto md4>][<conjunto aich>]`.
     pub fn encode_hashset_answer2(
         &self,
         ans: &Ed2kHashSetAnswer2,
@@ -240,7 +240,7 @@ impl Ed2kEncoder {
         encode_hashset_answer2(&self.limits, ans)
     }
 
-    /// Encodes an `OP_AICHFILEHASHREQ` (eMule `0x14`) message.
+    /// Codifica un mensaje `OP_AICHFILEHASHREQ` (eMule `0x14`).
     pub fn encode_aich_file_hash_req(
         &self,
         req: &Ed2kAichFileHashReq,
@@ -248,7 +248,7 @@ impl Ed2kEncoder {
         encode_aich_file_hash_req(&self.limits, req)
     }
 
-    /// Encodes an `OP_AICHFILEHASHANS` (eMule `0x15`) message.
+    /// Codifica un mensaje `OP_AICHFILEHASHANS` (eMule `0x15`).
     pub fn encode_aich_file_hash_res(
         &self,
         res: &Ed2kAichFileHashRes,
@@ -256,22 +256,22 @@ impl Ed2kEncoder {
         encode_aich_file_hash_res(&self.limits, res)
     }
 
-    /// Encodes an `OP_AICHREQUEST` (eMule `0x12`) message.
+    /// Codifica un mensaje `OP_AICHREQUEST` (eMule `0x12`).
     pub fn encode_aich_request(&self, req: &Ed2kAichRequest) -> Result<RawPacket, Ed2kEncodeError> {
         encode_aich_request(&self.limits, req)
     }
 
-    /// Encodes an `OP_AICHANSWER` (eMule `0x13`) message.
+    /// Codifica un mensaje `OP_AICHANSWER` (eMule `0x13`).
     pub fn encode_aich_answer(&self, ans: &Ed2kAichAnswer) -> Result<RawPacket, Ed2kEncodeError> {
         encode_aich_answer(&self.limits, ans)
     }
 
-    /// Encodes an `OP_EMULE_INFO` (`0xC5 0x01`) payload.
+    /// Codifica una carga útil `OP_EMULE_INFO` (`0xC5 0x01`).
     pub fn encode_emule_info(&self, info: &Ed2kEmuleInfo) -> Result<RawPacket, Ed2kEncodeError> {
         encode_emule_info(&self.limits, info)
     }
 
-    /// Encodes an `OP_EMULE_INFO_ANSWER` (`0xC5 0x02`) payload.
+    /// Codifica una carga útil `OP_EMULE_INFO_ANSWER` (`0xC5 0x02`).
     pub fn encode_emule_info_answer(
         &self,
         info: &Ed2kEmuleInfo,
@@ -279,17 +279,17 @@ impl Ed2kEncoder {
         encode_emule_info_answer(&self.limits, info)
     }
 
-    /// Encodes an `OP_PUBLICKEY` (`0x85`) message into a `RawPacket`.
+    /// Codifica un mensaje `OP_PUBLICKEY` (`0x85`) en un `RawPacket`.
     pub fn encode_public_key(&self, key: &Ed2kPublicKey) -> Result<RawPacket, Ed2kEncodeError> {
         encode_public_key(&self.limits, key)
     }
 
-    /// Encodes an `OP_SIGNATURE` (`0x86`) message into a `RawPacket`.
+    /// Codifica un mensaje `OP_SIGNATURE` (`0x86`) en un `RawPacket`.
     pub fn encode_signature(&self, sig: &Ed2kSignature) -> Result<RawPacket, Ed2kEncodeError> {
         encode_signature(&self.limits, sig)
     }
 
-    /// Encodes an `OP_SECIDENTSTATE` (`0x87`) message into a `RawPacket`.
+    /// Codifica un mensaje `OP_SECIDENTSTATE` (`0x87`) en un `RawPacket`.
     pub fn encode_secident_state(
         &self,
         state: &Ed2kSecIdentState,
@@ -297,7 +297,7 @@ impl Ed2kEncoder {
         encode_secident_state(&self.limits, state)
     }
 
-    /// Encodes any `Ed2kMessage` into its `RawPacket` representation.
+    /// Codifica cualquier `Ed2kMessage` en su representación `RawPacket`.
     pub fn encode_message(&self, msg: &Ed2kMessage) -> Result<RawPacket, Ed2kEncodeError> {
         match msg {
             Ed2kMessage::Hello(hello) => self.encode_hello(hello),
@@ -351,7 +351,7 @@ impl Ed2kEncoder {
         }
     }
 
-    /// Encodes any `Ed2kMessage` directly into a wire-ready byte buffer (5-byte header + frame).
+    /// Codifica cualquier `Ed2kMessage` directamente en un búfer de bytes listo para cable (cabecera de 5 bytes + trama).
     pub fn encode_to_bytes(&self, msg: &Ed2kMessage) -> Result<Bytes, Ed2kEncodeError> {
         let packet = self.encode_message(msg)?;
         let frame_len = packet.frame_len();
@@ -364,7 +364,7 @@ impl Ed2kEncoder {
         Ok(Bytes::from(buf))
     }
 
-    /// Encodes a Source Exchange request (`OP_REQUESTSOURCES` or `OP_REQUESTSOURCES2`).
+    /// Codifica una petición de Source Exchange (`OP_REQUESTSOURCES` u `OP_REQUESTSOURCES2`).
     pub fn encode_request_sources(
         &self,
         req: &super::source_exchange::Ed2kRequestSources,
@@ -372,10 +372,10 @@ impl Ed2kEncoder {
         super::source_exchange::encode_request_sources(req)
     }
 
-    /// Encodes a Source Exchange response. `is_sx2` selects
-    /// `OP_ANSWERSOURCES2` (`0x84`) or the legacy `OP_ANSWERSOURCES` (`0x82`)
-    /// envelope, matching the opcode the requester used (eMule
-    /// `bIsSX2Packet`, `PartFile.cpp:3705`).
+    /// Codifica una respuesta de Source Exchange. `is_sx2` selecciona la envoltura
+    /// `OP_ANSWERSOURCES2` (`0x84`) o la heredada `OP_ANSWERSOURCES` (`0x82`),
+    /// coincidiendo con el código de operación que utilizó el solicitante (`bIsSX2Packet`
+    /// de eMule, `PartFile.cpp:3705`).
     pub fn encode_answer_sources(
         &self,
         ans: &super::source_exchange::Ed2kAnswerSources,

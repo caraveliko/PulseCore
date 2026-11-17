@@ -10,95 +10,95 @@ use tokio::sync::{broadcast, Mutex};
 
 use crate::services::DaemonEvent;
 
-/// Maximum number of queued upload requests.
-/// eMule 0.72a `QueueSize` default (100 × QueueSizePref 50).
+/// Número máximo de peticiones de subida en cola.
+/// Valor predeterminado de eMule 0.72a `QueueSize` (100 × QueueSizePref 50).
 pub const MAX_UPLOAD_QUEUE: usize = 5000;
-/// Maximum number of concurrent active uploads.
-/// eMule 0.72a `MAX_UP_CLIENTS_ALLOWED` (Opcodes.h) — plafond absolu de
-/// slots upload, quels que soient les autres réglages.
+/// Número máximo de subidas activas simultáneas.
+/// eMule 0.72a `MAX_UP_CLIENTS_ALLOWED` (Opcodes.h) — tope absoluto de
+/// ranuras (slots) de subida, independientemente del resto de ajustes.
 pub const MAX_ACTIVE_UPLOADS: usize = 100;
-/// eMule `AcceptNewClient` : les `max(MIN_UP_CLIENTS_ALLOWED, 4)` = 4
-/// premiers slots sont toujours accordés — le plancher de débit moyen
-/// (`min_upload_rate`) ne peut pas geler l'upload quand des clients
-/// attendent. Au-delà, chaque nouveau slot exige que la moyenne par slot
-/// reste au-dessus du plancher.
+/// eMule `AcceptNewClient`: las `max(MIN_UP_CLIENTS_ALLOWED, 4)` = 4
+/// primeras ranuras siempre se conceden — el suelo de tasa media
+/// (`min_upload_rate`) no puede congelar la subida cuando hay clientes
+/// esperando. A partir de ahí, cada nueva ranura exige que la media por ranura
+/// se mantenga por encima del umbral mínimo.
 const GUARANTEED_UPLOAD_SLOTS: usize = 4;
 
-/// eMule trickle threshold: an active slot whose measured rate stays below
-/// 1 KiB/s past the grace period is demoted to a trickle slot — it keeps a
-/// residual share of bandwidth but no longer occupies a full upload slot
-/// (`CUploadQueue` keeps slow clients alive while freeing the slot).
+/// Umbral de goteo (trickle) de eMule: una ranura activa cuya tasa medida permanezca
+/// por debajo de 1 KiB/s tras el periodo de gracia se degrada a ranura de goteo — mantiene
+/// una cuota residual de ancho de banda pero deja de ocupar una ranura de subida completa
+/// (`CUploadQueue` mantiene vivos a los clientes lentos liberando la ranura).
 const TRICKLE_RATE_BPS: u64 = 1024;
-/// Grace period before a slow slot may be demoted (60 s).
+/// Periodo de gracia antes de que una ranura lenta pueda ser degradada (60 s).
 const TRICKLE_GRACE_MS: i64 = 60_000;
 
-/// eMule `UPLOAD_CLIENT_MAXDATARATE` (`Opcodes.h`) : débit cible maximal
-/// par client upload — 25 KiB/s.
+/// eMule `UPLOAD_CLIENT_MAXDATARATE` (`Opcodes.h`): tasa objetivo máxima
+/// por cliente de subida — 25 KiB/s.
 const UPLOAD_CLIENT_MAXDATARATE_BPS: u64 = 25 * 1024;
-/// eMule `MAX_PURGEQUEUETIME` (`Opcodes.h`) : une entrée de file dont le
-/// dernier re-ask date de plus d'1 h est purgée
+/// eMule `MAX_PURGEQUEUETIME` (`Opcodes.h`): una entrada de la cola cuya
+/// última repetición de petición (re-ask) date de más de 1 h es purgada
 /// (`CUploadQueue::FindBestClientInQueue`).
 const MAX_PURGEQUEUE_MS: i64 = 60 * 60 * 1000;
-/// eMule `SESSIONMAXTRANS` (`Opcodes.h`) = `PARTSIZE + 20*1024` : charge
-/// utile maximale servie par session quand `FullChunkTransfers` est actif
-/// (défaut eMule = `true`). Au-delà, le client est renvoyé en file si un
-/// nouveau slot ne peut pas être ouvert (`!ForceNewClient()`).
+/// eMule `SESSIONMAXTRANS` (`Opcodes.h`) = `PARTSIZE + 20*1024`: carga
+/// útil máxima servida por sesión cuando `FullChunkTransfers` está activo
+/// (predeterminado en eMule = `true`). Más allá de esto, el cliente es devuelto a la cola si no
+/// se puede abrir una nueva ranura (`!ForceNewClient()`).
 const SESSION_MAX_TRANS_BYTES: u64 = 9_728_000 + 20 * 1024;
-/// eMule `MIN_REQUESTTIME` (`Opcodes.h`) : un re-ask du même fichier avant
-/// 10 min compte comme « bad request » ; `BADCLIENTBAN` (4) cumulés → ban.
+/// eMule `MIN_REQUESTTIME` (`Opcodes.h`): un re-ask del mismo archivo antes
+/// de 10 min cuenta como «mala petición»; 4 `BADCLIENTBAN` acumulados → bloqueo.
 const MIN_REQUEST_TIME_MS: i64 = 10 * 60 * 1000;
 const BAD_CLIENT_BAN: u8 = 4;
-/// eMule `MIN_UP_CLIENTS_ALLOWED` (`Opcodes.h`) : sous ce nombre de slots
-/// actifs, `ForceNewClient` retourne vrai sans autre condition — aucune
-/// temporisation ne s'applique.
+/// eMule `MIN_UP_CLIENTS_ALLOWED` (`Opcodes.h`): por debajo de este número de ranuras
+/// activas, `ForceNewClient` devuelve verdadero sin ninguna otra condición — no se
+/// aplica temporización alguna.
 const MIN_UP_CLIENTS_ALLOWED: usize = 2;
-/// eMule `ForceNewClient` (`UploadQueue.cpp:420`) : entre deux ouvertures
-/// de slot, 1 s minimum tant que le débit mesuré reste sous ~100 Ko/s
+/// eMule `ForceNewClient` (`UploadQueue.cpp:420`): entre dos aperturas
+/// de ranura, 1 s mínimo mientras la velocidad medida permanezca por debajo de ~100 KB/s
 /// (`::GetTickCount() < m_nLastStartUpload + SEC2MS(1) && datarate < 102400`).
-/// Sans cette garde, une file pleine ouvrirait tous les slots permis en une
-/// rafale au démarrage, avant que le débit mesuré ne converge.
+/// Sin esta salvaguarda, una cola llena abriría todas las ranuras permitidas en una
+/// ráfaga al inicio, antes de que la velocidad medida converja.
 const PROMOTION_MIN_INTERVAL_MS: i64 = 1000;
-/// Au-delà de ~100 Ko/s mesurés (`datarate < 102400` inversé), les
-/// promotions ne sont plus espacées.
+/// Por encima de ~100 KB/s medidos (`datarate < 102400` invertido), las
+/// promociones dejan de espaciarse.
 const PROMOTION_UNPACED_BPS: u64 = 102_400;
-/// eMule `AddClientToQueue` (`UploadQueue.cpp:586-596`) : au plus 3
-/// clients depuis la même IP en file d'attente — file + slots actifs
-/// combinés (la `TrackedClientsList` eMule couvre les deux côtés).
+/// eMule `AddClientToQueue` (`UploadQueue.cpp:586-596`): como máximo 3
+/// clientes desde la misma IP en cola de espera — cola y ranuras activas
+/// combinadas (la lista `TrackedClientsList` de eMule abarca ambos lados).
 const MAX_SAME_IP_QUEUED: usize = 3;
 
-/// Fenêtre d'échantillonnage du débit upload (~2 s, cadence du statsTick) :
-/// `upload_rate_bps` est recalculé à chaque fenêtre échue — même approche
-/// que les débits de download mesurés par tranches de 500 ms dans
+/// Ventana de muestreo de la velocidad de subida (~2 s, cadencia de statsTick):
+/// `upload_rate_bps` se recalcula en cada ventana vencida — misma estrategia
+/// que las tasas de descarga medidas por tramos de 500 ms en
 /// `peer_session/transfer.rs`.
 const RATE_WINDOW_MS: i64 = 2_000;
-/// Premier échantillon rapide (500 ms) : une session qui vient d'ouvrir sa
-/// fenêtre n'attend pas 2 s avant d'afficher un débit réel.
+/// Primer muestreo rápido (500 ms): una sesión que acaba de abrir su
+/// ventana no espera 2 s antes de mostrar una velocidad real.
 const RATE_FIRST_SAMPLE_MS: i64 = 500;
 
-/// Sonde du débit upload effectif (`MaxSpeed` eMule) — typiquement une
-/// closure lisant `upload_bucket.rate_per_sec()`.
+/// Sonda de velocidad de subida efectiva (`MaxSpeed` de eMule) — típicamente una
+/// clausura que lee `upload_bucket.rate_per_sec()`.
 type UploadSpeedProbe = Option<std::sync::Arc<dyn Fn() -> u64 + Send + Sync>>;
 
-/// State of an upload slot or queue entry.
+/// Estado de una ranura de subida o entrada en cola.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UploadSlotState {
     Waiting,
     Uploading,
-    /// Slow client kept alive on residual bandwidth; does not count against
-    /// `max_active` (eMule "trickle slot").
+    /// Cliente lento mantenido con ancho de banda residual; no cuenta para
+    /// `max_active` ("ranura de goteo" / trickle slot de eMule).
     Trickle,
     Completed,
     Rejected,
     Aborted,
 }
 
-/// Snapshot of an upload session / slot.
+/// Instantánea de una sesión o ranura de subida.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSessionSnapshot {
-    /// Identity key used for dedup: `uh:<userhash>` when the peer announced
-    /// a user hash in OP_HELLO, otherwise its `ip:port` address.
+    /// Clave de identidad para deduplicación: `uh:<userhash>` si el par anunció
+    /// un hash de usuario en OP_HELLO; en caso contrario, su dirección `ip:port`.
     pub client_key: String,
     pub client_address: String,
     pub file_hash: String,
@@ -108,45 +108,45 @@ pub struct UploadSessionSnapshot {
     pub state: UploadSlotState,
     pub queue_rank: Option<u32>,
     pub started_at_unix_ms: i64,
-    /// Début de la fenêtre de mesure courante (ms Unix, 0 = pas de mesure).
-    /// État interne du `UploadManager` — non sérialisé.
+    /// Inicio de la ventana de medición actual (ms Unix, 0 = sin medición).
+    /// Estado interno de `UploadManager` — no serializado.
     #[serde(skip)]
     pub rate_window_start_ms: i64,
-    /// Octets envoyés dans la fenêtre courante. Non sérialisé.
+    /// Bytes enviados en la ventana actual. No serializado.
     #[serde(skip)]
     pub rate_window_bytes: u64,
-    /// `true` dès qu'une fenêtre de mesure a été refermée — requis pour la
-    /// rétrogradation `Trickle` (un débit jamais mesuré n'est pas « lent »).
-    /// Non sérialisé.
+    /// `true` en cuanto se cierra una ventana de medición — requerido para la
+    /// degradación a `Trickle` (una velocidad no medida aún no se considera «lenta»).
+    /// No serializado.
     #[serde(skip)]
     pub rate_sampled: bool,
-    /// Multiplicateur de crédits ×100 au moment de l'admission — conservé
-    /// pour reconstruire l'entrée de file lors d'une rotation de session
-    /// (eMule préserve le score via `credits`). Non sérialisé.
+    /// Multiplicador de créditos ×100 en el momento de admisión — conservado
+    /// para reconstruir la entrada de la cola durante una rotación de sesión
+    /// (eMule preserva la puntuación mediante `credits`). No serializado.
     #[serde(skip)]
     pub credit_multiplier_bps: u32,
-    /// Poids de priorité du fichier servi (`GetFilePrioAsNumber`) — même
-    /// usage que `credit_multiplier_bps`. Non sérialisé.
+    /// Peso de prioridad del archivo servido (`GetFilePrioAsNumber`) — mismo
+    /// uso que `credit_multiplier_bps`. No serializado.
     #[serde(skip)]
     pub file_prio_num: u32,
-    /// Début d'attente d'origine (eMule `credits->GetSecWaitStartTime`) :
-    /// `enqueued_at` de l'entrée promue, ou l'heure du grant direct —
-    /// préservé pour qu'un client renvoyé en file retrouve son score
-    /// (rotation de session). Non sérialisé.
+    /// Inicio de espera original (eMule `credits->GetSecWaitStartTime`):
+    /// `enqueued_at` de la entrada promocionada, o la hora de concesión directa —
+    /// preservado para que un cliente devuelto a la cola recupere su puntuación
+    /// (rotación de sesión). No serializado.
     #[serde(skip)]
     pub queued_since_ms: i64,
-    /// `true` quand le fichier servi est en priorité upload « auto »
-    /// (eMule `m_bAutoUpPriority`). Non sérialisé.
+    /// `true` cuando el archivo servido tiene prioridad de subida «automática»
+    /// (eMule `m_bAutoUpPriority`). No serializado.
     #[serde(skip)]
     pub auto_prio: bool,
 }
 
 impl UploadSessionSnapshot {
-    /// Débit effectif à `now_ms` : le dernier débit échantillonné tant que
-    /// la fenêtre courante reste fraîche ; au-delà de `RATE_WINDOW_MS` sans
-    /// nouvel envoi, les octets résiduels de la fenêtre sont rapportés au
-    /// temps écoulé — le débit décroît vers 0 quand le pair ne demande plus
-    /// rien (même convention que `decay_stale_rates` côté downloads).
+    /// Velocidad efectiva en `now_ms`: la última tasa muestreada mientras
+    /// la ventana actual permanezca reciente; tras `RATE_WINDOW_MS` sin
+    /// nuevos envíos, los bytes residuales de la ventana se ponderan según el
+    /// tiempo transcurrido — la tasa decrece hacia 0 cuando el par deja de solicitar
+    /// datos (misma convención que `decay_stale_rates` en descargas).
     pub fn effective_rate_bps(&self, now_ms: i64) -> u64 {
         let elapsed = now_ms.saturating_sub(self.rate_window_start_ms);
         if self.rate_window_start_ms == 0 || elapsed < RATE_WINDOW_MS {
@@ -157,86 +157,86 @@ impl UploadSessionSnapshot {
     }
 }
 
-/// Résultat du lookup `OP_REASKFILEPING` dans la file d'attente —
-/// eMule `GetWaitingClientByIP_UDP` + contrôle `GetUploadFileID`.
+/// Resultado de la búsqueda de `OP_REASKFILEPING` en la cola de espera —
+/// eMule `GetWaitingClientByIP_UDP` + comprobación `GetUploadFileID`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UdpRankLookup {
-    /// Client identifié, hash conforme : répondre `OP_REASKACK` + rang.
+    /// Cliente identificado, hash coincidente: responder `OP_REASKACK` + posición en cola.
     Rank(u32),
-    /// Plusieurs clients en file partagent cette IP sans correspondance
-    /// de port UDP — eMule ne répond pas (force la connexion TCP).
+    /// Varios clientes en cola comparten esta IP sin coincidencia
+    /// de puerto UDP — eMule no responde (fuerza la conexión TCP).
     Ambiguous,
-    /// Client identifié mais le hash demandé ≠ son fichier en attente —
-    /// eMule journalise l'erreur et ne répond pas.
+    /// Cliente identificado pero el hash solicitado ≠ su archivo en espera —
+    /// eMule registra el error y no responde.
     FileMismatch,
-    /// Aucun client en file à cette IP — eMule répond `OP_QUEUEFULL`
-    /// seulement si la file approche la saturation.
+    /// Ningún cliente en cola con esta IP — eMule responde `OP_QUEUEFULL`
+    /// únicamente si la cola se acerca a la saturación.
     NoSender,
 }
 
-/// Entry waiting in the upload queue.
+/// Entrada en espera dentro de la cola de subida.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueuedUpload {
-    /// Identity key (`uh:<userhash>` or `ip:port`) used for dedup/promotion.
+    /// Clave de identidad (`uh:<userhash>` o `ip:port`) usada para deduplicación/promoción.
     pub client_key: String,
     pub client_address: String,
     pub file_hash: String,
     pub file_name: String,
     pub enqueued_at_unix_ms: i64,
     pub credit_multiplier_bps: u32, // Multiplier * 100 (e.g. 100 for 1.0x, 1000 for 10.0x)
-    /// eMule `GetFilePrioAsNumber` of the requested shared file:
+    /// `GetFilePrioAsNumber` de eMule para el archivo compartido solicitado:
     /// veryhigh=18, high=9, normal=7, low=6, verylow=2.
     #[serde(default = "default_file_prio_num")]
     pub file_prio_num: u32,
-    /// eMule `IS_IDBADGUY`/`IsBanned` semantics: score is always 0, the entry
-    /// waits forever at the tail (never promoted, still listed).
+    /// Semántica de `IS_IDBADGUY`/`IsBanned` de eMule: la puntuación es siempre 0, la entrada
+    /// espera indefinidamente al final (nunca es promocionada, sigue listada).
     #[serde(default)]
     pub banned: bool,
-    /// Horodatage du dernier re-ask du client (`SetLastUpRequest` eMule) —
-    /// sert à la purge `MAX_PURGEQUEUETIME` (1 h).
+    /// Marca de tiempo del último re-ask del cliente (`SetLastUpRequest` de eMule) —
+    /// sirve para la purga `MAX_PURGEQUEUETIME` (1 h).
     #[serde(default)]
     pub last_request_unix_ms: i64,
-    /// Compteur « bad requests » eMule (`Requested_File_Struct::badrequests`)
-    /// : re-ask du même fichier avant `MIN_REQUESTTIME` (10 min) → ++ ;
-    /// `BAD_CLIENT_BAN` atteint → `banned`.
+    /// Contador de «malas peticiones» de eMule (`Requested_File_Struct::badrequests`)
+    /// : re-ask del mismo archivo antes de `MIN_REQUESTTIME` (10 min) → ++ ;
+    /// al alcanzar `BAD_CLIENT_BAN` → `banned`.
     #[serde(default)]
     pub bad_requests: u8,
-    /// Signal de promotion : le dispatcher qui a reçu `OP_QUEUERANKING`
-    /// attend dessus pour pousser `OP_ACCEPTUPLOADREQ` dès qu'un slot se
-    /// libère (eMule `AddUpNextClient` écrit directement sur le socket en
-    /// attente — sans ça, le client ne serait servi qu'à son prochain
+    /// Señal de promoción: el despachador que recibió `OP_QUEUERANKING`
+    /// espera en ella para emitir `OP_ACCEPTUPLOADREQ` en cuanto se libera una ranura
+    /// (eMule `AddUpNextClient` escribe directamente en el socket en espera
+    /// — sin esto, el cliente solo sería atendido en su siguiente
     /// re-ask, ~30 min).
     #[serde(skip)]
     pub promote_notify: std::sync::Arc<tokio::sync::Notify>,
-    /// Port UDP eMule annoncé dans le HELLO du client (`emule_udp_port`)
-    /// — eMule `GetUDPPort()` : permet à `GetWaitingClientByIP_UDP` de
-    /// distinguer deux clients derrière la même IP (NAT) lors d'un
+    /// Puerto UDP de eMule anunciado en el HELLO del cliente (`emule_udp_port`)
+    /// — eMule `GetUDPPort()`: permite a `GetWaitingClientByIP_UDP` distinguir
+    /// dos clientes tras la misma IP (NAT) durante un
     /// `OP_REASKFILEPING`.
     #[serde(default)]
     pub client_udp_port: Option<u16>,
-    /// `true` quand le fichier demandé a `up_priority == "auto"` (eMule
-    /// `m_bAutoUpPriority`) — `file_prio_num` est alors rafraîchi depuis
-    /// `auto_up_prio` à chaque tri de la file, comme eMule lit
-    /// `GetFilePrioAsNumber()` en direct dans `GetScore`.
+    /// `true` cuando el archivo solicitado tiene `up_priority == "auto"` (eMule
+    /// `m_bAutoUpPriority`) — `file_prio_num` se actualiza desde
+    /// `auto_up_prio` en cada ordenación de la cola, igual que eMule lee
+    /// `GetFilePrioAsNumber()` directamente en `GetScore`.
     #[serde(default)]
     pub auto_prio: bool,
-    /// Le client a une connexion TCP vivante — eMule ne détruit pas un
-    /// client en file quand son socket meurt (`bDelete =
-    /// m_eUploadState != US_ONUPLOADQUEUE`, `BaseClient.cpp:1169`) : son
-    /// entrée survit jusqu'à `MAX_PURGEQUEUETIME`. Sans socket on ne peut
-    /// pas le promouvoir (`GetScore(false)` l'exclut implicitement — un
-    /// `ACCEPTUPLOADREQ` ne peut être écrit nulle part), mais son score
-    /// continue de monter. Une entrée désérialisée n'a par définition pas
+    /// El cliente tiene una conexión TCP activa — eMule no destruye un
+    /// cliente en cola cuando se cierra su socket (`bDelete =
+    /// m_eUploadState != US_ONUPLOADQUEUE`, `BaseClient.cpp:1169`): su
+    /// entrada sobrevive hasta `MAX_PURGEQUEUETIME`. Sin socket no se le puede
+    /// promocionar (`GetScore(false)` lo excluye implícitamente — un
+    /// `ACCEPTUPLOADREQ` no puede escribirse en ningún sitio), pero su puntuación
+    /// sigue aumentando. Una entrada deserializada carece por definición
     /// de socket → `false`.
     #[serde(default)]
     pub connected: bool,
-    /// eMule `m_bAddNextConnect` (`UploadQueue.cpp:151`) : un client non
-    /// connecté dont le score dépasse le meilleur client connecté est
-    /// marqué — à sa reconnexion/re-ask il reçoit un slot **immédiatement**
-    /// (`AddClientToQueue:537` → `AddUpNextClient`), sans attendre un slot
-    /// libre (compense le temps perdu sans socket, surtout pour les LowID
-    /// dont la reconnexion passe par callback serveur).
+    /// eMule `m_bAddNextConnect` (`UploadQueue.cpp:151`): un cliente no
+    /// conectado cuya puntuación supere a la del mejor cliente conectado queda
+    /// marcado — en su reconexión/re-ask recibe una ranura **inmediatamente**
+    /// (`AddClientToQueue:537` → `AddUpNextClient`), sin esperar una ranura
+    /// libre (compensa el tiempo perdido sin socket, especialmente para clientes LowID
+    /// cuya reconexión requiere callback del servidor).
     #[serde(default)]
     pub add_next_connect: bool,
 }
@@ -245,14 +245,14 @@ fn default_file_prio_num() -> u32 {
     7
 }
 
-/// Maps an upload priority string to the eMule `GetFilePrioAsNumber` weight
+/// Mapea una cadena de prioridad de subida al peso `GetFilePrioAsNumber` de eMule
 /// (`UploadClient.cpp`): veryhigh=18, high=9, normal=7, low=6, verylow=2.
-/// `PR_POWER` (powershare) n'a pas de cas dédié dans eMule → branche
-/// `default` = 7, comme `PR_NORMAL` (le powershare joue sur la publication,
-/// pas sur le score de file).
-/// `"auto"` (eMule `m_bAutoUpPriority`) retombe sur la priorité effective
-/// initiale `PR_HIGH` = 9 — le recalcul dynamique
-/// (`UpdateAutoUpPriority`) est porté par `UploadManager::auto_up_prio`.
+/// `PR_POWER` (powershare) no tiene un caso dedicado en eMule → rama
+/// `default` = 7, igual que `PR_NORMAL` (el powershare influye en la publicación,
+/// no en la puntuación de cola).
+/// `"auto"` (eMule `m_bAutoUpPriority`) recae en la prioridad efectiva
+/// inicial `PR_HIGH` = 9 — el recálculo dinámico
+/// (`UpdateAutoUpPriority`) se gestiona mediante `UploadManager::auto_up_prio`.
 pub fn file_prio_num(priority: &str) -> u32 {
     match priority.to_lowercase().as_str() {
         "veryhigh" => 18,
@@ -265,9 +265,9 @@ pub fn file_prio_num(priority: &str) -> u32 {
 }
 
 impl QueuedUpload {
-    /// Computes the eMule waiting score:
-    /// `wait_secs * credit_multiplier * (file_prio / 10)`, 0 when banned.
-    /// Stored in centi-units (`*_bps` fields keep two decimals).
+    /// Calcula la puntuación de espera de eMule:
+    /// `wait_secs * credit_multiplier * (file_prio / 10)`, 0 si está bloqueado.
+    /// Almacenado en centi-unidades (los campos `*_bps` conservan dos decimales).
     pub fn effective_score(&self, now_ms: i64) -> u64 {
         if self.banned {
             return 0;
@@ -277,86 +277,86 @@ impl QueuedUpload {
         wait_secs * mult * self.file_prio_num as u64 / 1000
     }
 
-    /// eMule `CUpDownClient::GetCombinedFilePrioAndCredit` :
-    /// `10 * GetFilePrioAsNumber() * GetScoreRatio()` — utilisé pour
-    /// l'admission au-delà de la *soft* queue limit.
+    /// eMule `CUpDownClient::GetCombinedFilePrioAndCredit`:
+    /// `10 * GetFilePrioAsNumber() * GetScoreRatio()` — utilizado para
+    /// la admisión por encima del límite flexible (*soft limit*) de la cola.
     pub fn combined_prio_credit(&self) -> u64 {
         10 * self.file_prio_num as u64 * self.credit_multiplier_bps as u64 / 100
     }
 }
 
-/// Fair bounded upload queue and active slot tracker.
-/// Supports up to `MAX_ACTIVE_UPLOADS` concurrent upload slots
-/// (eMule grants several simultaneous upload slots).
+/// Cola de subida equitativa y acotada con seguimiento de ranuras activas.
+/// Soporta hasta `MAX_ACTIVE_UPLOADS` ranuras de subida simultáneas
+/// (eMule concede varias ranuras de subida concurrentes).
 #[derive(Clone)]
 pub struct UploadManager {
     queue: Arc<Mutex<VecDeque<QueuedUpload>>>,
     active_uploads: Arc<Mutex<std::collections::HashMap<String, UploadSessionSnapshot>>>,
-    /// Signal vers la connexion d'une session **active** rotée par
-    /// `process_tick` (`CheckForTimeOver`) — le dispatcher pousse alors
-    /// `OP_OUTOFPARTREQS` (0x57) pour que le downloader repasse OnQueue
-    /// au lieu d'attendre des blocs qui n'arriveront pas (eMule
+    /// Señal hacia la conexión de una sesión **activa** rotada por
+    /// `process_tick` (`CheckForTimeOver`) — el despachador emite entonces
+    /// `OP_OUTOFPARTREQS` (0x57) para que el descargador vuelva a estar en cola
+    /// en lugar de esperar bloques que no llegarán (eMule
     /// `SendOutOfPartReqsAndAddToWaitingQueue`, `UploadQueue.cpp:312`).
     rotation_notifies:
         Arc<Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Notify>>>>,
     active_count: Arc<AtomicUsize>,
     max_active: Arc<AtomicUsize>,
-    /// USS `AcceptNewClient` gate — when false, new clients stay queued
-    /// while latency is above tolerance (`UssService::accept_flag`).
+    /// Compuerta `AcceptNewClient` de USS — cuando es false, los nuevos clientes permanecen en cola
+    /// mientras la latencia supere la tolerancia (`UssService::accept_flag`).
     uss_gate: Arc<std::sync::RwLock<Arc<AtomicBool>>>,
-    /// Optional event channel (set by `AppState`) for `upload.uploadsUpdated`.
+    /// Canal opcional de eventos (establecido por `AppState`) para `upload.uploadsUpdated`.
     event_tx: Arc<std::sync::RwLock<Option<broadcast::Sender<String>>>>,
     sequence: Arc<std::sync::RwLock<Option<Arc<AtomicU64>>>>,
-    /// Throttle for progress-driven emissions (~500 ms).
+    /// Limitador de frecuencia para emisiones impulsadas por progreso (~500 ms).
     last_progress_emit_ms: Arc<AtomicI64>,
-    /// Friend client keys (`uh:<userhash>`) — granted a dedicated slot even
-    /// when `max_active` is reached (eMule friend slot).
+    /// Claves de clientes amigos (`uh:<userhash>`) — se les concede una ranura dedicada incluso
+    /// cuando se alcanza `max_active` (ranura de amigo de eMule).
     friends: Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
-    /// Maximum waiting-queue length (eMule `QueueSize` pref, default 500).
+    /// Longitud máxima de la cola de espera (preferencia `QueueSize` de eMule, 500 por defecto).
     max_queue: Arc<AtomicUsize>,
-    /// Minimum upload bandwidth per slot in bytes/sec (eMule `MinUpload`):
-    /// a new slot is only opened when existing slots still reach it.
+    /// Ancho de banda de subida mínimo por ranura en bytes/s (eMule `MinUpload`):
+    /// solo se abre una nueva ranura si las ranuras existentes continúan alcanzándolo.
     min_upload_rate_bps: Arc<std::sync::atomic::AtomicU64>,
-    /// Sonde du débit upload configuré/effectif (`MaxSpeed` eMule) — lit
-    /// `upload_bucket.rate_per_sec()` en direct : reflète la limite manuelle
-    /// (`rate_limit_upload_bps`) comme la valeur dynamique pilotée par USS
-    /// (`IsDynUpEnabled → lastCommonRouteFinder->GetUpload()`). 0 = illimité.
+    /// Sonda de velocidad de subida configurada/efectiva (`MaxSpeed` de eMule) — lee
+    /// `upload_bucket.rate_per_sec()` directamente: refleja tanto el límite manual
+    /// (`rate_limit_upload_bps`) como el valor dinámico guiado por USS
+    /// (`IsDynUpEnabled → lastCommonRouteFinder->GetUpload()`). 0 = ilimitado.
     upload_speed_probe: Arc<std::sync::RwLock<UploadSpeedProbe>>,
-    /// Quota journalier d'upload (eMuleRust `dailyUploadQuotaGb`) — quand
-    /// `false`, aucune nouvelle demande de slot n'est acceptée.
+    /// Cuota diaria de subida (eMuleRust `dailyUploadQuotaGb`) — cuando es
+    /// `false`, no se acepta ninguna nueva petición de ranura.
     quota_gate: Arc<std::sync::RwLock<Arc<AtomicBool>>>,
-    /// Total cumulatif des octets uploadés depuis le démarrage du daemon
-    /// (compteur source du quota journalier).
+    /// Total acumulado de bytes subidos desde el inicio del daemon
+    /// (contador de origen para la cuota diaria).
     total_uploaded_bytes: Arc<AtomicU64>,
-    /// Totaux uploadés par fichier (hash hex en minuscules) — hydratés
-    /// depuis `share_upload_stats` au démarrage puis incrémentés à chaque
-    /// bloc envoyé ; persistés par deltas dans la boucle `statsTick`.
+    /// Totales subidos por archivo (hash hex en minúsculas) — cargados
+    /// desde `share_upload_stats` al arrancar y luego incrementados con cada
+    /// bloque enviado; persistidos mediante deltas en el bucle de `statsTick`.
     file_upload_totals: Arc<std::sync::RwLock<std::collections::HashMap<String, u64>>>,
-    /// Début d'attente préservé pour un client renvoyé de son slot par la
-    /// rotation de session (`CheckForTimeOver`) — appliqué comme
-    /// `enqueued_at` s'il re-demande (eMule conserve le wait start dans
-    /// `credits` ; le score accumulé n'est pas perdu).
+    /// Inicio de espera preservado para un cliente desalojado de su ranura por
+    /// rotación de sesión (`CheckForTimeOver`) — aplicado como
+    /// `enqueued_at` si vuelve a solicitarla (eMule conserva el inicio de espera en
+    /// `credits`; la puntuación acumulada no se pierde).
     rotation_grace: Arc<Mutex<std::collections::HashMap<String, i64>>>,
-    /// Instantané des hash actuellement partagés (minuscules) — rafraîchi
-    /// par la boucle de tick via [`Self::set_shared_hashes`]. eMule purge
-    /// de la file les clients dont le fichier demandé n'est plus partagé
+    /// Instantánea de los hashes actualmente compartidos (en minúsculas) — actualizada
+    /// por el bucle de tick mediante [`Self::set_shared_hashes`]. eMule purga
+    /// de la cola a los clientes cuyo archivo solicitado ya no esté compartido
     /// (`FindBestClientInQueue` → `!sharedfiles->GetFileByID`). `None` =
-    /// sonde non câblée → la purge par partage est inactive (tests).
+    /// sonda no conectada → la purga por compartición está inactiva (pruebas).
     shared_hashes: Arc<std::sync::RwLock<Option<std::collections::HashSet<String>>>>,
-    /// Priorité effective recalculée des fichiers en `up_priority = "auto"`
-    /// (hash en minuscules → `GetFilePrioAsNumber`) — registre des
-    /// fichiers auto *et* cache du dernier `UpdateAutoUpPriority`.
-    /// eMule `CKnownFile::UpdateAutoUpPriority` : plus de 20 uploaders
-    /// → low (6), plus de 1 → normal (7), sinon → high (9).
+    /// Prioridad efectiva recalculada de los archivos con `up_priority = "auto"`
+    /// (hash en minúsculas → `GetFilePrioAsNumber`) — registro de
+    /// archivos auto *y* caché del último `UpdateAutoUpPriority`.
+    /// eMule `CKnownFile::UpdateAutoUpPriority`: más de 20 subidores
+    /// → baja (6), más de 1 → normal (7), en otro caso → alta (9).
     auto_up_prio: Arc<std::sync::RwLock<std::collections::HashMap<String, u32>>>,
-    /// Horodatage de la dernière ouverture de slot (eMule
-    /// `m_nLastStartUpload`, positionné dans `AddUpNextClient`) — alimente
-    /// la temporisation `PROMOTION_MIN_INTERVAL_MS` de `promotion_paced`.
+    /// Marca de tiempo de la última apertura de ranura (eMule
+    /// `m_nLastStartUpload`, establecido en `AddUpNextClient`) — alimenta
+    /// el intervalo de temporización `PROMOTION_MIN_INTERVAL_MS` de `promotion_paced`.
     last_upload_start_ms: Arc<AtomicI64>,
-    /// IPs dont `bad_requests` vient d'atteindre `BAD_CLIENT_BAN` —
-    /// eMule `Ban()` → `AddBannedClient` bannit l'IP 2 h au lieu de
-    /// seulement marquer l'entrée. Le dispatcher les vide après
-    /// `request_upload_slot` et alimente `DownloadService::ban_source`.
+    /// IPs cuyas `bad_requests` acaban de alcanzar `BAD_CLIENT_BAN` —
+    /// eMule `Ban()` → `AddBannedClient` bloquea la IP durante 2 h en vez de
+    /// marcar únicamente la entrada. El despachador las vacía tras
+    /// `request_upload_slot` y alimenta `DownloadService::ban_source`.
     pending_bans: Arc<Mutex<Vec<String>>>,
 }
 
@@ -367,7 +367,7 @@ impl Default for UploadManager {
 }
 
 impl UploadManager {
-    /// Creates a new `UploadManager`.
+    /// Crea un nuevo `UploadManager`.
     pub fn new() -> Self {
         Self {
             queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_UPLOAD_QUEUE))),
@@ -396,17 +396,17 @@ impl UploadManager {
         }
     }
 
-    /// Remplace l'instantané des hash partagés — appelé périodiquement par
-    /// la boucle de tick (eMule lit `sharedfiles` en direct dans
-    /// `FindBestClientInQueue`). Passer `Some(set)` active la purge des
-    /// entrées de file dont le fichier n'est plus partagé.
+    /// Sustituye la instantánea de los hashes compartidos — invocado periódicamente por
+    /// el bucle de tick (eMule lee `sharedfiles` directamente en
+    /// `FindBestClientInQueue`). Pasar `Some(set)` activa la purga de las
+    /// entradas de la cola cuyo archivo ya no esté compartido.
     pub fn set_shared_hashes(&self, hashes: std::collections::HashSet<String>) {
         *self.shared_hashes.write().unwrap() = Some(hashes);
     }
 
-    /// `true` quand le hash est absent de l'instantané des partages —
-    /// `true` aussi quand la sonde n'est pas câblée (pas de purge dans ce
-    /// cas, eMule `sharedfiles` étant la source de vérité).
+    /// `true` cuando el hash no está en la instantánea de compartidos —
+    /// `true` también si la sonda no está conectada (sin purga en dicho
+    /// caso, siendo `sharedfiles` de eMule la fuente de verdad).
     fn hash_still_shared(&self, file_hash: &str) -> bool {
         self.shared_hashes
             .read()
@@ -415,20 +415,20 @@ impl UploadManager {
             .is_none_or(|set| set.contains(file_hash))
     }
 
-    /// Hydrate les totaux uploadés par fichier persistés en SQLite
-    /// (`share_upload_stats`) — appelé une fois au démarrage.
+    /// Carga los totales subidos por archivo persistidos en SQLite
+    /// (`share_upload_stats`) — llamado una vez al arrancar.
     pub fn set_file_upload_totals(&self, totals: std::collections::HashMap<String, u64>) {
         *self.file_upload_totals.write().unwrap() = totals;
     }
 
-    /// Copie des totaux uploadés par fichier (hash en minuscules).
+    /// Copia de los totales subidos por archivo (hash en minúsculas).
     pub fn per_file_uploaded_bytes(&self) -> std::collections::HashMap<String, u64> {
         self.file_upload_totals.read().unwrap().clone()
     }
 
-    /// Débit effectif courant agrégé par fichier (somme des slots actifs
-    /// sur le même hash, clés en minuscules) — eMule affiche ce débit dans
-    /// la colonne « Upload speed » de la liste des fichiers partagés.
+    /// Velocidad efectiva actual acumulada por archivo (suma de ranuras activas
+    /// sobre el mismo hash, claves en minúsculas) — eMule muestra esta velocidad en
+    /// la columna «Velocidad de subida» de la lista de archivos compartidos.
     pub async fn per_file_rates_bps(&self) -> std::collections::HashMap<String, u64> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -442,22 +442,22 @@ impl UploadManager {
         rates
     }
 
-    /// Sets the minimum per-slot upload rate (eMule `MinUpload`, B/s).
-    /// `0` disables the floor.
+    /// Establece la velocidad de subida mínima por ranura (eMule `MinUpload`, B/s).
+    /// `0` desactiva el umbral mínimo.
     pub fn set_min_upload_rate(&self, bps: u64) {
         self.min_upload_rate_bps
             .store(bps, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Installe la sonde du débit upload effectif (`MaxSpeed` eMule) — appelée
-    /// par `AppState` avec une closure lisant
+    /// Instala la sonda de velocidad de subida efectiva (`MaxSpeed` de eMule) — invocada
+    /// por `AppState` mediante una clausura que lee
     /// `upload_bucket.rate_per_sec()`.
     pub fn set_upload_speed_probe(&self, probe: impl Fn() -> u64 + Send + Sync + 'static) {
         *self.upload_speed_probe.write().unwrap() = Some(std::sync::Arc::new(probe));
     }
 
-    /// Débit upload configuré/effectif en octets/s (0 = illimité ou sonde
-    /// absente) — eMule `MaxSpeed` dans `AcceptNewClient`.
+    /// Velocidad de subida configurada/efectiva en bytes/s (0 = ilimitado o sonda
+    /// ausente) — eMule `MaxSpeed` en `AcceptNewClient`.
     fn max_upload_speed_bps(&self) -> u64 {
         self.upload_speed_probe
             .read()
@@ -467,18 +467,18 @@ impl UploadManager {
             .unwrap_or(0)
     }
 
-    /// Sets the maximum waiting-queue length (eMule `QueueSize` pref).
+    /// Establece la longitud máxima de la cola de espera (preferencia `QueueSize` de eMule).
     pub fn set_max_queue(&self, max: usize) {
         self.max_queue
             .store(max.clamp(10, 5000), std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Installs the friend client-key set (`uh:<userhash>` entries).
+    /// Instala el conjunto de claves de clientes amigos (entradas `uh:<userhash>`).
     pub fn set_friends(&self, friends: std::collections::HashSet<String>) {
         *self.friends.write().unwrap() = friends;
     }
 
-    /// Adds/removes a friend client key at runtime (RPC-driven).
+    /// Añade o elimina una clave de cliente amigo en tiempo de ejecución (mediante RPC).
     pub fn set_friend(&self, client_key: &str, is_friend: bool) {
         let mut f = self.friends.write().unwrap();
         if is_friend {
@@ -488,28 +488,28 @@ impl UploadManager {
         }
     }
 
-    /// True when `client_key` belongs to a configured friend.
+    /// Devuelve verdadero si `client_key` corresponde a un amigo configurado.
     fn is_friend(&self, client_key: &str) -> bool {
         self.friends.read().unwrap().contains(client_key)
     }
 
-    /// IPs fraîchement tombées sous `BAD_CLIENT_BAN` — le dispatcher les
-    /// traduit en `DownloadService::ban_source` (ban IP 2 h, eMule
-    /// `AddBannedClient`) et coupe la connexion du pair.
+    /// IPs recién caídas bajo `BAD_CLIENT_BAN` — el despachador las
+    /// traduce a `DownloadService::ban_source` (bloqueo de IP 2 h, eMule
+    /// `AddBannedClient`) y cierra la conexión del par.
     pub async fn drain_pending_bans(&self) -> Vec<String> {
         std::mem::take(&mut *self.pending_bans.lock().await)
     }
 
-    /// Installs the broadcast channel used to emit `upload.uploadsUpdated`.
+    /// Instala el canal de difusión utilizado para emitir `upload.uploadsUpdated`.
     pub fn set_event_channel(&self, tx: broadcast::Sender<String>, seq: Arc<AtomicU64>) {
         *self.event_tx.write().unwrap() = Some(tx);
         *self.sequence.write().unwrap() = Some(seq);
     }
 
-    /// Emits the full uploads snapshot (active slots + queue + aggregate
-    /// rate). No-op when no event channel is installed. `pub` pour la
-    /// poussée périodique depuis la boucle `statsTick` (`state.rs`) qui
-    /// rafraîchit les débits mesurés entre deux envois de blocs.
+    /// Emite la instantánea completa de subidas (ranuras activas + cola + tasa
+    /// agregada). No realiza ninguna operación si no hay canal de eventos instalado. `pub` para la
+    /// emisión periódica desde el bucle `statsTick` (`state.rs`) que
+    /// refresca las velocidades medidas entre envíos de bloques.
     pub async fn emit_uploads_updated(&self) {
         let (tx, seq) = {
             let tx = self.event_tx.read().unwrap().clone();
@@ -531,8 +531,8 @@ impl UploadManager {
         .send(&tx);
     }
 
-    /// Emits `uploadsUpdated` from the hot progress path, throttled to at
-    /// most once every 500 ms.
+    /// Emite `uploadsUpdated` desde la ruta de progreso activo, limitado a
+    /// como máximo una vez cada 500 ms.
     async fn emit_uploads_updated_throttled(&self) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -551,43 +551,43 @@ impl UploadManager {
         }
     }
 
-    /// Installs the USS accept-new-client flag
-    /// (`LastCommonRouteFinder::AcceptNewClient` semantics).
+    /// Instala la bandera de aceptación de nuevos clientes de USS
+    /// (semántica `LastCommonRouteFinder::AcceptNewClient`).
     pub fn set_uss_gate(&self, flag: Arc<AtomicBool>) {
         *self.uss_gate.write().unwrap() = flag;
     }
 
-    /// Installe le gate du quota journalier (`dailyUploadQuotaGb`) — `false`
-    /// bloque toute nouvelle demande de slot.
+    /// Instala la compuerta de cuota diaria (`dailyUploadQuotaGb`) — `false`
+    /// bloquea cualquier nueva petición de ranura.
     pub fn set_quota_gate(&self, flag: Arc<AtomicBool>) {
         *self.quota_gate.write().unwrap() = flag;
     }
 
-    /// Octets uploadés cumulés depuis le démarrage du daemon.
+    /// Bytes subidos acumulados desde el inicio del daemon.
     pub fn total_uploaded_bytes(&self) -> u64 {
         self.total_uploaded_bytes.load(Ordering::SeqCst)
     }
 
-    /// Overrides the maximum number of concurrent active upload slots.
+    /// Sobrescribe el número máximo de ranuras de subida activas simultáneas.
     pub fn set_max_active(&self, max: usize) {
         self.max_active.store(max.max(1), Ordering::SeqCst);
     }
 
-    /// Number of currently active upload slots.
+    /// Número de ranuras de subida activas actualmente.
     pub fn active_len(&self) -> usize {
         self.active_count.load(Ordering::SeqCst)
     }
 
-    /// Requests an upload slot for an inbound client.
+    /// Solicita una ranura de subida para un cliente entrante.
     ///
-    /// - If a slot is available, immediately grants `UploadSlotState::Uploading`.
-    /// - If all slots are occupied, enqueues the client in the
-    ///   credit-weighted queue and returns `UploadSlotState::Waiting` + rank.
-    /// - Returns an error if queue capacity is exceeded.
+    /// - Si hay una ranura disponible, concede de inmediato `UploadSlotState::Uploading`.
+    /// - Si todas las ranuras están ocupadas, encola al cliente en la
+    ///   cola ponderada por créditos y devuelve `UploadSlotState::Waiting` + posición.
+    /// - Devuelve un error si se supera la capacidad máxima de la cola.
     ///
-    /// `client_key` is the identity used for dedup/release — `uh:<userhash>`
-    /// when the peer announced a user hash, otherwise `client_address`.
-    /// `client_address` stays the display/UDP-lookup address (`ip:port`).
+    /// `client_key` es la identidad usada para deduplicación/liberación — `uh:<userhash>`
+    /// si el par anunció un hash de usuario; en caso contrario, `client_address`.
+    /// `client_address` se mantiene como la dirección de visualización/búsqueda UDP (`ip:port`).
     pub async fn request_upload_slot(
         &self,
         client_key: &str,
@@ -606,10 +606,10 @@ impl UploadManager {
             .as_millis() as i64;
         let auto_prio = file_prio.eq_ignore_ascii_case("auto");
 
-        // Client already holds a slot — eMule `IsDownloading()` : un client
-        // qui télécharge déjà et demande un autre fichier conserve son slot
-        // (`OP_ACCEPTUPLOADREQ` + `SetUploadFileID`), il ne rejoint jamais
-        // la file.
+        // El cliente ya tiene una ranura — eMule `IsDownloading()`: un cliente
+        // que ya está descargando y pide otro archivo conserva su ranura
+        // (`OP_ACCEPTUPLOADREQ` + `SetUploadFileID`), nunca vuelve
+        // a la cola.
         if active.contains_key(client_key) {
             let mut switched_from = None;
             if let Some(cur) = active.get_mut(client_key) {
@@ -625,25 +625,25 @@ impl UploadManager {
                 if let Some(cur) = active.get_mut(client_key) {
                     cur.file_prio_num = new_num;
                 }
-                // Le fichier précédent perd un uploader, le nouveau en
-                // gagne un — `UpdateAutoUpPriority` des deux côtés.
+                // El archivo anterior pierde un subidor y el nuevo
+                // gana uno — `UpdateAutoUpPriority` en ambos lados.
                 self.update_auto_up_prio(&active, &old_hash);
                 self.update_auto_up_prio(&active, file_hash);
             }
             return Ok((UploadSlotState::Uploading, None));
         }
 
-        // Quota journalier atteint (`dailyUploadQuotaGb`) : aucune nouvelle
-        // demande n'est acceptée jusqu'à la remise à zéro du compteur.
+        // Cuota diaria alcanzada (`dailyUploadQuotaGb`): no se acepta
+        // ninguna nueva petición hasta el restablecimiento del contador.
         if !self.quota_gate.read().unwrap().load(Ordering::SeqCst) {
             return Err("Daily upload quota reached".to_string());
         }
 
-        // Grant a slot immediately while capacity remains and USS accepts
-        // new clients (acceptNewClient=false when latency is too high).
-        // Trickle slots keep residual bandwidth but do not occupy a full slot.
-        // eMule `AddClientToQueue` → `ForceNewClient(true)` : la garde
-        // d'espacement 1 s s'applique aussi à l'ajout direct.
+        // Concede una ranura de inmediato mientras haya capacidad y USS acepte
+        // nuevos clientes (acceptNewClient=false si la latencia es excesiva).
+        // Las ranuras de goteo (trickle) mantienen ancho de banda residual pero no ocupan una ranura completa.
+        // eMule `AddClientToQueue` → `ForceNewClient(true)`: la salvaguarda
+        // de espaciado de 1 s también se aplica a la adición directa.
         if self.can_open_slot(&active, now) && !self.promotion_paced(&active, now) {
             let snap = UploadSessionSnapshot {
                 client_key: client_key.to_string(),
@@ -666,8 +666,8 @@ impl UploadManager {
             active.insert(client_key.to_string(), snap);
             // `AddUpNextClient` → `m_nLastStartUpload = GetTickCount()`.
             self.last_upload_start_ms.store(now, Ordering::Relaxed);
-            // `AddUploadingClient` → `UpdateAutoUpPriority` : le nombre
-            // d'uploaders du fichier vient de monter.
+            // `AddUploadingClient` → `UpdateAutoUpPriority`: el número
+            // de subidores del archivo acaba de aumentar.
             self.update_auto_up_prio(&active, file_hash);
             self.active_count
                 .store(Self::uploading_count(&active), Ordering::SeqCst);
@@ -680,8 +680,8 @@ impl UploadManager {
             return Ok((UploadSlotState::Uploading, None));
         }
 
-        // eMule friend slot: a friend bypasses the full queue and receives a
-        // dedicated extra slot beyond `max_active`.
+        // Ranura de amigo de eMule: un amigo se salta la cola y recibe
+        // una ranura adicional dedicada por encima de `max_active`.
         if self.is_friend(client_key) {
             let snap = UploadSessionSnapshot {
                 client_key: client_key.to_string(),
@@ -712,31 +712,31 @@ impl UploadManager {
             return Ok((UploadSlotState::Uploading, None));
         }
 
-        // Un client renvoyé de son slot par la rotation de session
-        // retrouve son wait start d'origine (eMule `credits` le conserve) :
-        // son score accumulé n'est pas perdu — il revient près du sommet.
+        // Un cliente desalojado de su ranura por rotación de sesión
+        // recupera su inicio de espera original (eMule `credits` lo conserva):
+        // su puntuación acumulada no se pierde — regresa cerca de la cabecera.
         let rotation_grace = self.rotation_grace.lock().await.remove(client_key);
 
-        // All active slots occupied: enqueue if space available
+        // Todas las ranuras activas ocupadas: encolar si hay espacio disponible
         let mut q = self.queue.lock().await;
         let mult_bps = (credit_multiplier.clamp(1.0, 10.0) * 100.0) as u32;
 
-        // Priorité repassée en manuel : le fichier sort du registre auto
-        // et les entrées qui le demandent reprennent le poids explicite.
+        // Prioridad cambiada a manual: el archivo sale del registro automático
+        // y las entradas que lo solicitan retoman el peso explícito.
         if !auto_prio {
             self.clear_auto_file(&mut q, file_hash, file_prio_num(file_prio));
         }
 
-        // eMule : un seul objet client = une seule entrée de file, quel que
-        // soit le fichier demandé. Le re-ask rafraîchit `last_request`,
-        // met à jour le fichier demandé et renvoie le rang courant —
-        // et nourrit le compteur anti-abus (`MIN_REQUESTTIME`/`BADCLIENTBAN`).
+        // eMule: un único objeto cliente = una única entrada en cola, sin importar
+        // el archivo pedido. El re-ask actualiza `last_request`,
+        // actualiza el archivo solicitado y devuelve la posición actual —
+        // y nutre el contador anti-abuso (`MIN_REQUESTTIME`/`BADCLIENTBAN`).
         if let Some(pos) = q.iter().position(|entry| entry.client_key == client_key) {
             let entry = &mut q[pos];
-            // Reconnexion d'un client dont l'entrée a survécu à la mort du
-            // socket (`mark_disconnected`). `AddClientToQueue` eMule : si
-            // `m_bAddNextConnect` était posé (score ≥ meilleur connecté
-            // alors qu'il était injoignable), il reçoit un slot immédiat.
+            // Reconexión de un cliente cuya entrada sobrevivió al cierre del
+            // socket (`mark_disconnected`). `AddClientToQueue` de eMule: si
+            // `m_bAddNextConnect` estaba fijado (puntuación ≥ mejor conectado
+            // mientras estuvo inalcanzable), recibe una ranura inmediata.
             entry.connected = true;
             if entry.add_next_connect {
                 entry.add_next_connect = false;
@@ -772,8 +772,8 @@ impl UploadManager {
                 self.emit_uploads_updated().await;
                 return Ok((UploadSlotState::Uploading, None));
             }
-            // `!GetFriendSlot()` dans `AddRequestCount` eMule : les amis
-            // sont exemptés du compteur anti-flood.
+            // `!GetFriendSlot()` en `AddRequestCount` de eMule: los amigos
+            // están exentos del contador anti-flood.
             if !self.is_friend(client_key)
                 && entry.file_hash == file_hash
                 && now.saturating_sub(entry.last_request_unix_ms) < MIN_REQUEST_TIME_MS
@@ -781,8 +781,8 @@ impl UploadManager {
                 entry.bad_requests = entry.bad_requests.saturating_add(1);
                 if entry.bad_requests >= BAD_CLIENT_BAN && !entry.banned {
                     entry.banned = true;
-                    // eMule `Ban()` → `AddBannedClient(IP)` : le pair est
-                    // banni 2 h au niveau IP, pas seulement déscoré.
+                    // eMule `Ban()` → `AddBannedClient(IP)`: el par queda
+                    // bloqueado 2 h a nivel de IP, no solo desprovisto de puntuación.
                     let ip = client_address
                         .parse::<std::net::SocketAddr>()
                         .map(|a| a.ip().to_string())
@@ -799,8 +799,8 @@ impl UploadManager {
             entry.auto_prio = auto_prio;
             entry.credit_multiplier_bps = mult_bps;
             entry.banned |= banned;
-            // Le score évolue avec le temps — recalculer l'ordre avant de
-            // rapporter le rang (eMule évalue `GetScore` à la demande).
+            // La puntuación evoluciona con el tiempo — recalcular el orden antes de
+            // devolver la posición (eMule evalúa `GetScore` bajo demanda).
             self.sort_queue_by_score(&mut q, now);
             let rank = q
                 .iter()
@@ -813,10 +813,10 @@ impl UploadManager {
             return Ok((UploadSlotState::Waiting, Some(rank)));
         }
 
-        // eMule `AddClientToQueue` — la limite de file est *souple* :
-        // `hard = soft + max(soft, 800)/4`. Entre soft et hard, seuls les
-        // clients à slot ami ou dont `combined(prio × crédits)` dépasse la
-        // moyenne de la file sont admis.
+        // eMule `AddClientToQueue` — el límite de cola es *flexible*:
+        // `hard = soft + max(soft, 800)/4`. Entre el límite suave y el estricto, solo los
+        // clientes con ranura de amigo o cuyo `combined(prio × créditos)` supere la
+        // media de la cola son admitidos.
         let soft_limit = self.max_queue.load(std::sync::atomic::Ordering::Relaxed);
         let hard_limit = soft_limit + soft_limit.max(800) / 4;
         if q.len() >= hard_limit {
@@ -834,11 +834,10 @@ impl UploadManager {
             }
         }
 
-        // eMule `AddClientToQueue` : refuse l'entrée quand 3 clients de
-        // la même IP sont déjà en file ou actifs (`cSameIP >= 3` +
-        // `GetClientsFromIP >= 3`). L'IP est extraite de `client_address`
-        // via `rsplit_once(':')` pour supporter les adresses IPv6
-        // bracketées.
+        // eMule `AddClientToQueue`: rechaza la entrada si ya hay 3 clientes de
+        // la misma IP en cola o activos (`cSameIP >= 3` +
+        // `GetClientsFromIP >= 3`). La IP se extrae de `client_address`
+        // mediante `rsplit_once(':')` para admitir direcciones IPv6 entre corchetes.
         let req_ip = client_address.rsplit_once(':').map(|(h, _)| h).unwrap_or("");
         if !req_ip.is_empty() {
             let same_ip = q
@@ -874,8 +873,8 @@ impl UploadManager {
             add_next_connect: false,
         });
 
-        // Sort queue by effective score descending (eMule ranks clients by
-        // live `GetScore`, pas par ordre d'arrivée).
+        // Ordena la cola por puntuación efectiva descendente (eMule califica a los clientes
+        // según `GetScore` en vivo, no por orden de llegada).
         self.sort_queue_by_score(&mut q, now);
 
         let rank = q
@@ -895,8 +894,8 @@ impl UploadManager {
         Ok((UploadSlotState::Waiting, Some(rank)))
     }
 
-    /// Number of slots currently occupying a full upload slot — trickle
-    /// slots are excluded (eMule counts only full-speed uploads).
+    /// Número de ranuras que ocupan actualmente una ranura de subida completa — las ranuras
+    /// de goteo (trickle) se excluyen (eMule solo cuenta subidas a velocidad normal).
     fn uploading_count(active: &std::collections::HashMap<String, UploadSessionSnapshot>) -> usize {
         active
             .values()
@@ -904,10 +903,10 @@ impl UploadManager {
             .count()
     }
 
-    /// eMule `CKnownFile::UpdateAutoUpPriority` : priorité effective d'un
-    /// fichier « auto » selon le nombre de clients qui l'uploadent
-    /// (`GetQueuedCount` — sessions Uploading + Trickle) : plus de 20
-    /// → low (6), plus de 1 → normal (7), sinon → high (9).
+    /// eMule `CKnownFile::UpdateAutoUpPriority`: prioridad efectiva de un
+    /// archivo «auto» según la cantidad de clientes que lo suben
+    /// (`GetQueuedCount` — sesiones Uploading + Trickle): más de 20
+    /// → baja (6), más de 1 → normal (7), en otro caso → alta (9).
     fn compute_auto_up_prio(
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
         lower_hash: &str,
@@ -928,10 +927,10 @@ impl UploadManager {
         }
     }
 
-    /// Priorité effective d'un fichier « auto » : la première demande
-    /// enregistre le fichier dans `auto_up_prio` avec la valeur calculée
-    /// sur l'état courant (eMule démarre à `PR_HIGH` puis recalcule à
-    /// chaque ajout/retrait d'uploader).
+    /// Prioridad efectiva de un archivo «auto»: la primera petición
+    /// registra el archivo en `auto_up_prio` con el valor calculado
+    /// sobre el estado actual (eMule comienza en `PR_HIGH` y recalcula con
+    /// cada adición o retirada de subidor).
     fn auto_up_prio_for(
         &self,
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -946,9 +945,9 @@ impl UploadManager {
         v
     }
 
-    /// Recalcule la priorité effective d'un fichier auto après une mutation
-    /// des sessions actives — no-op si le fichier n'est pas en mode auto
-    /// (absent du registre `auto_up_prio`).
+    /// Recalcula la prioridad efectiva de un archivo auto tras un cambio
+    /// en las sesiones activas — no hace nada si el archivo no está en modo auto
+    /// (ausente del registro `auto_up_prio`).
     fn update_auto_up_prio(
         &self,
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -962,10 +961,10 @@ impl UploadManager {
         self.auto_up_prio.write().unwrap().insert(key, v);
     }
 
-    /// Le fichier repasse en priorité manuelle : sort du registre auto et
-    /// réécrit `file_prio_num`/`auto_prio` des entrées de file concernées
-    /// (la priorité fichier est une propriété du fichier partagé, commune
-    /// à tous les clients qui le demandent).
+    /// El archivo vuelve a prioridad manual: sale del registro automático y
+    /// reescribe `file_prio_num`/`auto_prio` en las entradas de cola correspondientes
+    /// (la prioridad del archivo es una propiedad del archivo compartido, común
+    /// a todos los clientes que lo solicitan).
     fn clear_auto_file(&self, q: &mut VecDeque<QueuedUpload>, file_hash: &str, manual_num: u32) {
         let key = file_hash.to_lowercase();
         if self.auto_up_prio.write().unwrap().remove(&key).is_none()
@@ -981,9 +980,9 @@ impl UploadManager {
         }
     }
 
-    /// `GetFilePrioAsNumber` effectif : `"auto"` lit la valeur recalculée
-    /// (`auto_up_prio`), les autres priorités passent par le mapping
-    /// statique eMule.
+    /// `GetFilePrioAsNumber` efectivo: `"auto"` lee el valor recalculado
+    /// (`auto_up_prio`), mientras que el resto de prioridades utilizan el mapeo
+    /// estático de eMule.
     fn resolve_file_prio_num(
         &self,
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -997,11 +996,11 @@ impl UploadManager {
         }
     }
 
-    /// Trie la file par `effective_score` décroissant — eMule compare les
-    /// scores **à la demande** (`GetQueueRank`, `FindBestClientInQueue`) ;
-    /// le tri matérialise le même ordre pour `pop_front`/rang affiché.
-    /// Les entrées « auto » rafraîchissent d'abord `file_prio_num` depuis
-    /// `auto_up_prio`, comme eMule lit `GetFilePrioAsNumber()` en direct.
+    /// Ordena la cola por `effective_score` decreciente — eMule compara las
+    /// puntuaciones **bajo demanda** (`GetQueueRank`, `FindBestClientInQueue`);
+    /// la ordenación reproduce el mismo orden para `pop_front`/posición mostrada.
+    /// Las entradas «auto» actualizan primero `file_prio_num` desde
+    /// `auto_up_prio`, al igual que eMule lee `GetFilePrioAsNumber()` directamente.
     fn sort_queue_by_score(&self, q: &mut VecDeque<QueuedUpload>, now_ms: i64) {
         {
             let auto_map = self.auto_up_prio.read().unwrap();
@@ -1018,9 +1017,9 @@ impl UploadManager {
         q.extend(entries);
     }
 
-    /// eMule `CUploadQueue::GetTargetClientDataRate` : ≤3 slots → 3 KiB/s,
-    /// sinon `slots × 1 KiB/s` plafonné à `UPLOAD_CLIENT_MAXDATARATE`
-    /// (25 KiB/s). La variante `min_datarate` retourne ×3/4.
+    /// eMule `CUploadQueue::GetTargetClientDataRate`: ≤3 ranuras → 3 KiB/s,
+    /// en otro caso `slots × 1 KiB/s` con tope en `UPLOAD_CLIENT_MAXDATARATE`
+    /// (25 KiB/s). La variante `min_datarate` devuelve ×3/4.
     fn target_client_data_rate_bps(open_slots: usize, min_datarate: bool) -> u64 {
         let r = if open_slots <= 3 {
             3 * 1024
@@ -1034,17 +1033,17 @@ impl UploadManager {
         }
     }
 
-    /// eMule `CUploadQueue::AcceptNewClient` : ouvre un slot si
-    /// - le veto USS est levé (`lastCommonRouteFinder->AcceptNewClient`),
-    /// - `uploading < max(MIN_UP_CLIENTS_ALLOWED, 4)` → toujours,
-    /// - `uploading >= MAX_UP_CLIENTS_ALLOWED` → jamais,
-    /// - `uploading < datarate / minTargetRate` : le débit mesuré nourrit
-    ///   encore chaque client au plancher,
-    /// - `uploading < MaxSpeed / targetRate` : la capacité configurée
-    ///   (ou mesurée par USS) permet un slot de plus au débit cible.
+    /// eMule `CUploadQueue::AcceptNewClient`: abre una ranura si
+    /// - no hay veto de USS (`lastCommonRouteFinder->AcceptNewClient`),
+    /// - `uploading < max(MIN_UP_CLIENTS_ALLOWED, 4)` → siempre,
+    /// - `uploading >= MAX_UP_CLIENTS_ALLOWED` → nunca,
+    /// - `uploading < datarate / minTargetRate`: la velocidad medida aún
+    ///   abastece a cada cliente en el umbral mínimo,
+    /// - `uploading < MaxSpeed / targetRate`: la capacidad configurada
+    ///   (o medida por USS) admite una ranura adicional a la tasa objetivo.
     ///
-    /// Partagé par `request_upload` (nouveau client), `promote_waiting`
-    /// (promotion) et `process_tick` (rotation) pour éviter la divergence.
+    /// Compartido por `request_upload` (nuevo cliente), `promote_waiting`
+    /// (promoción) y `process_tick` (rotación) para evitar divergencias.
     fn can_open_slot(
         &self,
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -1054,9 +1053,9 @@ impl UploadManager {
             return false;
         }
         let uploading = Self::uploading_count(active);
-        // `MAX_UP_CLIENTS_ALLOWED` d'abord : eMule teste le garanti avant
-        // le plafond, mais y le plafond (100) dépasse toujours le garanti
-        // (4) — ici `max_active` est réglable et peut passer sous 4.
+        // `MAX_UP_CLIENTS_ALLOWED` primero: eMule prueba lo garantizado antes
+        // del tope, pero el tope (100) siempre supera lo garantizado
+        // (4) — aquí `max_active` es configurable y puede descender de 4.
         if uploading >= self.max_active.load(Ordering::SeqCst) {
             return false;
         }
@@ -1070,31 +1069,31 @@ impl UploadManager {
             .filter(|s| s.state == UploadSlotState::Uploading)
             .map(|s| s.effective_rate_bps(now))
             .sum();
-        // `curUploadSlots >= datarate / minTarget` → refus : chaque client
-        // existant doit conserver au moins le débit plancher.
+        // `curUploadSlots >= datarate / minTarget` → rechazo: cada cliente
+        // existente debe mantener al menos la velocidad mínima.
         if uploading as u64 >= total_bps / min_target {
             return false;
         }
-        // `curUploadSlots >= MaxSpeed*1024 / target` → refus : la capacité
-        // upload configurée ne permet pas un slot supplémentaire au débit
-        // cible. 0 = illimité → seul le terme datarate borne la croissance
-        // (eMule ajoute un plafond « graph rate » interne non modélisé ici).
+        // `curUploadSlots >= MaxSpeed*1024 / target` → rechazo: la capacidad
+        // de subida configurada no permite una ranura adicional a la velocidad
+        // objetivo. 0 = ilimitado → únicamente el término datarate limita el crecimiento
+        // (eMule añade un límite interno «graph rate» no modelado aquí).
         let max_speed = self.max_upload_speed_bps();
         if max_speed > 0 && uploading as u64 >= max_speed / target {
             return false;
         }
-        // Plancher optionnel `min_upload_kbs` (eMule `MinUpload` nourrit USS,
-        // pas `AcceptNewClient` — conservé comme garde utilisateur
-        // supplémentaire, inactif par défaut).
+        // Umbral mínimo opcional `min_upload_kbs` (eMule `MinUpload` alimenta USS,
+        // no `AcceptNewClient` — mantenido como salvaguarda adicional de usuario,
+        // inactivo de forma predeterminada).
         let min_rate = self.min_upload_rate_bps.load(Ordering::Relaxed);
         !(min_rate > 0 && total_bps / (uploading.max(1) as u64) < min_rate)
     }
 
-    /// eMule `ForceNewClient` pacing (`UploadQueue.cpp:417-421`) : `true`
-    /// quand l'ouverture d'un slot supplémentaire doit attendre — moins de
-    /// `PROMOTION_MIN_INTERVAL_MS` depuis la dernière ouverture et débit
-    /// mesuré < `PROMOTION_UNPACED_BPS`. Sous `MIN_UP_CLIENTS_ALLOWED`
-    /// slots actifs, jamais de temporisation (`return true` précoce).
+    /// Temporización de `ForceNewClient` de eMule (`UploadQueue.cpp:417-421`): `true`
+    /// cuando la apertura de una ranura adicional debe esperar — menos de
+    /// `PROMOTION_MIN_INTERVAL_MS` desde la última apertura y velocidad
+    /// medida < `PROMOTION_UNPACED_BPS`. Por debajo de `MIN_UP_CLIENTS_ALLOWED`
+    /// ranuras activas, nunca hay temporización (`return true` anticipado).
     fn promotion_paced(
         &self,
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -1115,8 +1114,8 @@ impl UploadManager {
         total_bps < PROMOTION_UNPACED_BPS
     }
 
-    /// Promotes waiting clients while full slots remain. Caller must hold
-    /// the `active_uploads` lock and pass it in.
+    /// Promociona a los clientes en espera mientras queden ranuras disponibles. El invocador debe mantener
+    /// el cerrojo de `active_uploads` y pasarlo como argumento.
     async fn promote_waiting(
         &self,
         active: &mut std::collections::HashMap<String, UploadSessionSnapshot>,
@@ -1126,38 +1125,38 @@ impl UploadManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        // Purge des entrées mortes — eMule `FindBestClientInQueue` retire
-        // les clients dont le dernier re-ask date de plus de
-        // `MAX_PURGEQUEUETIME` (1 h) ou dont le fichier demandé n'est
-        // plus partagé (`!sharedfiles->GetFileByID`).
+        // Purga de entradas inactivas — eMule `FindBestClientInQueue` retira
+        // a los clientes cuya última repetición de petición (re-ask) date de más de
+        // `MAX_PURGEQUEUETIME` (1 h) o cuyo archivo solicitado ya no
+        // esté compartido (`!sharedfiles->GetFileByID`).
         q.retain(|e| {
             now.saturating_sub(e.last_request_unix_ms) <= MAX_PURGEQUEUE_MS
                 && self.hash_still_shared(&e.file_hash)
         });
-        // Le score évolue avec l'attente : re-trier avant de choisir le
-        // meilleur (eMule lit `GetScore` en direct).
+        // La puntuación evoluciona con la espera: volver a ordenar antes de elegir al
+        // mejor candidato (eMule lee `GetScore` en vivo).
         self.sort_queue_by_score(&mut q, now);
         self.promote_locked(&mut q, active, now);
         self.active_count
             .store(Self::uploading_count(active), Ordering::SeqCst);
     }
 
-    /// Corps de `promote_waiting` sur une file déjà verrouillée — partagé
-    /// avec `process_tick` qui promeut après chaque éviction de session.
-    /// Retourne `true` si au moins un client a été promu.
+    /// Cuerpo de `promote_waiting` sobre una cola ya bloqueada — compartido
+    /// con `process_tick` que promociona tras cada desalojo de sesión.
+    /// Devuelve `true` si al menos un cliente fue promocionado.
     fn promote_locked(
         &self,
         q: &mut VecDeque<QueuedUpload>,
         active: &mut std::collections::HashMap<String, UploadSessionSnapshot>,
         now: i64,
     ) -> bool {
-        // eMule `FindBestClientInQueue` marque le meilleur client
-        // injoignable quand son score dépasse le meilleur connecté —
-        // indépendamment de la disponibilité d'un slot (`m_bAddNextConnect`
-        // → slot immédiat à la reconnexion). La file est triée par score
-        // décroissant : le premier connecté non banni est le meilleur
-        // candidat, le premier déconnecté non banni/non déjà marqué est
-        // le meilleur injoignable.
+        // eMule `FindBestClientInQueue` marca al mejor cliente
+        // inalcanzable cuando su puntuación supera a la del mejor conectado —
+        // independientemente de la disponibilidad de ranura (`m_bAddNextConnect`
+        // → ranura inmediata al reconectar). La cola está ordenada por puntuación
+        // decreciente: el primer conectado no bloqueado es el mejor
+        // candidato, el primer desconectado no bloqueado/no marcado previamente es
+        // el mejor inalcanzable.
         let mut best_conn_score = 0u64;
         let mut best_disc: Option<(usize, u64)> = None;
         for (i, e) in q.iter().enumerate() {
@@ -1181,21 +1180,21 @@ impl UploadManager {
 
         let mut promoted = false;
         loop {
-            // Même éligibilité qu'`AcceptNewClient` : débit cible par
-            // client, capacité `MaxSpeed` et veto USS s'appliquent aussi
-            // à la promotion.
+            // Misma elegibilidad que `AcceptNewClient`: la tasa objetivo por
+            // cliente, la capacidad `MaxSpeed` y el veto de USS se aplican también
+            // a la promoción.
             if !self.can_open_slot(active, now) {
                 break;
             }
-            // eMule `ForceNewClient` : 1 s minimum entre deux ouvertures
-            // tant que le débit mesuré < 100 Ko/s — la file pleine ne
-            // vide pas en rafale au démarrage.
+            // eMule `ForceNewClient`: 1 s mínimo entre dos aperturas
+            // mientras la tasa medida sea < 100 KB/s — la cola llena no
+            // se vacía en ráfaga durante el arranque.
             if self.promotion_paced(active, now) {
                 break;
             }
-            // Premier client connecté, non banni, pas déjà actif — la
-            // file étant triée par score, c'est le meilleur candidat.
-            // Les déconnectés ne peuvent pas recevoir `ACCEPTUPLOADREQ`.
+            // Primer cliente conectado, no bloqueado y no activo ya — al
+            // estar la cola ordenada por puntuación, es el mejor candidato.
+            // Los clientes desconectados no pueden recibir `ACCEPTUPLOADREQ`.
             let Some(idx) = q.iter().position(|e| {
                 e.connected && !e.banned && !active.contains_key(&e.client_key)
             }) else {
@@ -1218,9 +1217,9 @@ impl UploadManager {
                 rate_sampled: false,
                 credit_multiplier_bps: next.credit_multiplier_bps,
                 file_prio_num: next.file_prio_num,
-                // Le wait start survit à la promotion — eMule le conserve
-                // dans `credits` ; il resservira si le client est renvoyé
-                // en file par la rotation de session.
+                // El inicio de espera sobrevive a la promoción — eMule lo conserva
+                // en `credits`; volverá a usarse si el cliente es devuelto
+                // a la cola por rotación de sesión.
                 queued_since_ms: next.enqueued_at_unix_ms,
                 auto_prio: next.auto_prio,
             };
@@ -1234,27 +1233,27 @@ impl UploadManager {
             self.last_upload_start_ms.store(now, Ordering::Relaxed);
             // `AddUploadingClient` → `UpdateAutoUpPriority`.
             self.update_auto_up_prio(active, &promoted_hash);
-            // eMule `AddUpNextClient` pousse OP_ACCEPTUPLOADREQ sur le
-            // socket en attente — le dispatcher réveillé l'émet.
+            // eMule `AddUpNextClient` envía OP_ACCEPTUPLOADREQ al
+            // socket en espera — el despachador despertado lo emite.
             next.promote_notify.notify_one();
             promoted = true;
         }
         promoted
     }
 
-    /// Updates active upload progress and measures the slot's real rate.
+    /// Actualiza el progreso de subida activo y mide la velocidad real de la ranura.
     ///
-    /// Le débit est mesuré en interne par fenêtres (`RATE_WINDOW_MS`,
-    /// premier échantillon à `RATE_FIRST_SAMPLE_MS`) à partir des octets
-    /// réellement envoyés — l'appelant ne fournit que `bytes_sent`, jamais
-    /// un débit estimé. `effective_rate_bps` décroît vers 0 quand le pair
-    /// cesse de demander des blocs.
+    /// La velocidad se mide internamente por ventanas (`RATE_WINDOW_MS`,
+    /// primera muestra en `RATE_FIRST_SAMPLE_MS`) a partir de los bytes
+    /// realmente enviados — el invocador solo aporta `bytes_sent`, nunca
+    /// una tasa estimada. `effective_rate_bps` disminuye hacia 0 cuando el par
+    /// deja de pedir bloques.
     ///
-    /// Slot focusing (eMule semantics): an active slot whose measured rate
-    /// stays under `TRICKLE_RATE_BPS` past `TRICKLE_GRACE_MS` is demoted to
-    /// `Trickle` — it keeps residual bandwidth but frees its slot so the
-    /// best queued client is promoted. This concentrates bandwidth on fast
-    /// clients.
+    /// Focalización de ranuras (semántica de eMule): una ranura activa cuya tasa medida
+    /// permanezca bajo `TRICKLE_RATE_BPS` tras `TRICKLE_GRACE_MS` se degrada a
+    /// `Trickle` — mantiene ancho de banda residual pero libera su ranura para que el
+    /// mejor cliente en cola sea promocionado. Esto concentra el ancho de banda en los clientes
+    /// rápidos.
     pub async fn update_progress(&self, client_key: &str, bytes_sent: u64) {
         let mut demoted = false;
         {
@@ -1278,8 +1277,8 @@ impl UploadManager {
                 }
                 cur.rate_window_bytes = cur.rate_window_bytes.saturating_add(bytes_sent);
                 let elapsed = now.saturating_sub(cur.rate_window_start_ms);
-                // Referme la fenêtre échue — ou dès 500 ms pour le premier
-                // échantillon — et mesure le débit réellement desservi.
+                // Cierra la ventana vencida — o tras 500 ms en la primera
+                // muestra — y mide la velocidad realmente servida.
                 if elapsed >= RATE_WINDOW_MS
                     || (!cur.rate_sampled && elapsed >= RATE_FIRST_SAMPLE_MS)
                 {
@@ -1313,23 +1312,23 @@ impl UploadManager {
         }
     }
 
-    /// Releases the client's active upload slot and promotes waiting clients
-    /// until all slots are filled again. Accepts either the `client_key`
-    /// (`uh:<userhash>` or `ip:port`) or a bare `ip:port` address — the
-    /// latter resolves through the stored `client_address` so RPC callers
-    /// that only know the address keep working.
+    /// Libera la ranura de subida activa del cliente y promociona clientes en espera
+    /// hasta volver a llenar las ranuras. Acepta tanto `client_key`
+    /// (`uh:<userhash>` o `ip:port`) como una dirección simple `ip:port` — esta
+    /// última se resuelve mediante el `client_address` almacenado para que las llamadas RPC
+    /// que solo conocen la dirección sigan funcionando.
     pub async fn release_slot(&self, client_key: &str) {
         self.release_active(client_key, true).await;
         self.promote_after_release().await;
     }
 
-    /// Le socket TCP du client vient de mourir — eMule `Disconnected` ne
-    /// détruit **pas** un client en file (`bDelete = m_eUploadState !=
-    /// US_ONUPLOADQUEUE`, `BaseClient.cpp:1169`) : l'entrée `waitinglist`
-    /// survit jusqu'à `MAX_PURGEQUEUETIME` avec son `WaitStartTime` intact,
-    /// et `FindBestClientInQueue` la marque `m_bAddNextConnect` si son
-    /// score dépasse le meilleur connecté. Un slot actif est en revanche
-    /// toujours libéré (`US_UPLOADING → RemoveFromUploadQueue`).
+    /// El socket TCP del cliente acaba de cerrarse — `Disconnected` de eMule **no**
+    /// destruye a un cliente en cola (`bDelete = m_eUploadState !=
+    /// US_ONUPLOADQUEUE`, `BaseClient.cpp:1169`): la entrada en `waitinglist`
+    /// sobrevive hasta `MAX_PURGEQUEUETIME` con su `WaitStartTime` intacto,
+    /// y `FindBestClientInQueue` la marca con `m_bAddNextConnect` si su
+    /// puntuación supera al mejor conectado. Una ranura activa, en cambio,
+    /// siempre se libera (`US_UPLOADING → RemoveFromUploadQueue`).
     pub async fn mark_disconnected(&self, client_key: &str) {
         let resolved_key = self.release_active(client_key, false).await;
         {
@@ -1340,15 +1339,15 @@ impl UploadManager {
                 }
             }
         }
-        // Un slot actif libéré peut promouvoir un attenteur connecté.
+        // Una ranura activa liberada puede promocionar a un cliente en espera conectado.
         self.promote_after_release().await;
     }
 
-    /// Libère le slot actif éventuel et résout la clé canonique
-    /// (`uh:<hash>` quand l'actif est enregistré sous `ip:port`).
-    /// `drop_queue` retire aussi l'entrée de file (fin explicite) ;
-    /// `!drop_queue` la conserve avec `connected = false` est appliqué
-    /// par l'appelant (`mark_disconnected`). Retourne la clé résolue.
+    /// Libera la posible ranura activa y resuelve la clave canónica
+    /// (`uh:<hash>` si el cliente activo está registrado con `ip:port`).
+    /// `drop_queue` retira también la entrada de la cola (finalización explícita);
+    /// `!drop_queue` la conserva con `connected = false` según lo aplique
+    /// el invocador (`mark_disconnected`). Devuelve la clave resuelta.
     async fn release_active(&self, client_key: &str, drop_queue: bool) -> String {
         let mut active = self.active_uploads.lock().await;
         let resolved_key = if active.contains_key(client_key) {
@@ -1365,8 +1364,8 @@ impl UploadManager {
                 "[UPLOAD_RELEASED] Active upload slot released by client {} for file '{}' (transferred: {} bytes)",
                 resolved_key, cur.file_name, cur.transferred_bytes
             );
-            // `RemoveUploadingClient` → `UpdateAutoUpPriority` : le fichier
-            // vient de perdre un uploader.
+            // `RemoveUploadingClient` → `UpdateAutoUpPriority`: el archivo
+            // acaba de perder un subidor.
             self.update_auto_up_prio(&active, &cur.file_hash);
         }
         drop(active);
@@ -1377,15 +1376,15 @@ impl UploadManager {
                 entry.client_key != resolved_key && entry.client_address != client_key
             });
         }
-        // Et le wait start préservé par la rotation — le client ne reviendra
-        // pas le réclamer.
+        // Y el inicio de espera preservado por la rotación — el cliente ya no
+        // volverá a reclamarlo.
         self.rotation_grace.lock().await.remove(&resolved_key);
         self.rotation_notifies.lock().await.remove(&resolved_key);
         resolved_key
     }
 
-    /// Promote from queue while free slots remain — relit le verrou
-    /// `active_uploads` après `release_active`.
+    /// Promociona desde la cola mientras queden ranuras libres — vuelve a adquirir el cerrojo
+    /// `active_uploads` tras `release_active`.
     async fn promote_after_release(&self) {
         let mut active = self.active_uploads.lock().await;
         self.promote_waiting(&mut active).await;
@@ -1393,13 +1392,13 @@ impl UploadManager {
         self.emit_uploads_updated().await;
     }
 
-    /// `OP_END_OF_DOWNLOAD` (`0x49`) — eMule `ListenSocket.cpp:537` : le
-    /// downloader signale qu'il a terminé le fichier. Si `file_hash`
-    /// correspond au fichier actuellement uploadé ou demandé par ce client,
-    /// celui-ci est retiré du slot actif / de la file (`RemoveFromUploadQueue`).
-    /// Retourne `true` si le client a été retiré ; `false` quand le hash ne
-    /// correspond à aucun fichier servi pour ce client (l'appelant applique
-    /// alors `CheckFailedFileIdReqs`).
+    /// `OP_END_OF_DOWNLOAD` (`0x49`) — eMule `ListenSocket.cpp:537`: el
+    /// descargador señala que ha terminado el archivo. Si `file_hash`
+    /// coincide con el archivo actualmente subido o solicitado por este cliente,
+    /// este es retirado de la ranura activa / de la cola (`RemoveFromUploadQueue`).
+    /// Devuelve `true` si el cliente fue retirado; `false` si el hash no
+    /// coincide con ningún archivo servido para este cliente (el llamador aplica
+    /// entonces `CheckFailedFileIdReqs`).
     pub async fn end_of_download(&self, client_key: &str, file_hash: &str) -> bool {
         let hash_matches = {
             let active = self.active_uploads.lock().await;
@@ -1420,9 +1419,9 @@ impl UploadManager {
         hash_matches
     }
 
-    /// Handle de promotion de l'entrée en file de `client_key` — le
-    /// dispatcher l'attend pour pousser `OP_ACCEPTUPLOADREQ` dès que le
-    /// client est promu (eMule `AddUpNextClient` écrit sur le socket).
+    /// Descriptor de promoción para la entrada en cola de `client_key` — el
+    /// despachador lo espera para emitir `OP_ACCEPTUPLOADREQ` en cuanto el
+    /// cliente sea promocionado (eMule `AddUpNextClient` escribe en el socket).
     pub async fn promotion_notify(
         &self,
         client_key: &str,
@@ -1435,10 +1434,10 @@ impl UploadManager {
             .map(|e| std::sync::Arc::clone(&e.promote_notify))
     }
 
-    /// Handle de rotation pour une session **active** de `client_key` —
-    /// `None` si le client n'est pas en train d'uploader. Le dispatcher
-    /// s'y abonne pour pousser `OP_OUTOFPARTREQS` quand `process_tick`
-    /// libère le slot (`SendOutOfPartReqsAndAddToWaitingQueue` eMule).
+    /// Descriptor de rotación para una sesión **activa** de `client_key` —
+    /// `None` si el cliente no está subiendo datos. El despachador
+    /// se suscribe para emitir `OP_OUTOFPARTREQS` cuando `process_tick`
+    /// libera la ranura (`SendOutOfPartReqsAndAddToWaitingQueue` de eMule).
     pub async fn rotation_notify(
         &self,
         client_key: &str,
@@ -1461,18 +1460,18 @@ impl UploadManager {
         )
     }
 
-    /// Tick périodique — équivalent de `CUploadQueue::Process()` appelé par
-    /// `UploadTimer` eMule :
-    /// 1. purge des entrées de file > `MAX_PURGEQUEUETIME` (1 h),
-    /// 2. rotation des sessions — `CheckForTimeOver` avec
-    ///    `FullChunkTransfers` (défaut eMule) : un client ayant reçu plus de
-    ///    `SESSIONMAXTRANS` est renvoyé en file quand un nouveau slot ne
-    ///    peut pas être ouvert (`!ForceNewClient()`), son temps d'upload +
-    ///    bonus 15 min comptant comme attente (`GetScore(isdownloading)`),
-    /// 3. promotion des meilleurs clients en attente tant que les slots le
-    ///    permettent (`ForceNewClient`/`AcceptNewClient`).
+    /// Tick periódico — equivalente a `CUploadQueue::Process()` invocado por
+    /// `UploadTimer` en eMule:
+    /// 1. purga de entradas de cola > `MAX_PURGEQUEUETIME` (1 h),
+    /// 2. rotación de sesiones — `CheckForTimeOver` con
+    ///    `FullChunkTransfers` (por defecto en eMule): un cliente que ha recibido más de
+    ///    `SESSIONMAXTRANS` regresa a la cola si no se puede
+    ///    abrir una nueva ranura (`!ForceNewClient()`), computando su tiempo de subida +
+    ///    bonificación de 15 min como espera (`GetScore(isdownloading)`),
+    /// 3. promoción de los mejores clientes en espera mientras las ranuras lo
+    ///    permitan (`ForceNewClient`/`AcceptNewClient`).
     ///
-    /// Doit tourner en permanence, même sans client UI connecté.
+    /// Debe ejecutarse permanentemente, incluso sin interfaz de usuario conectada.
     pub async fn process_tick(&self) {
         let mut active = self.active_uploads.lock().await;
         let now = std::time::SystemTime::now()
@@ -1489,11 +1488,11 @@ impl UploadManager {
                     && self.hash_still_shared(&e.file_hash)
             });
             changed |= q.len() != before;
-            // Rotation : tant que la file est disputée (pas de nouveau slot
-            // ouvrable), les sessions au-delà de SESSIONMAXTRANS cèdent leur
-            // slot — eMule `CheckForTimeOver`. Le slot libéré est rempli
-            // immédiatement (eMule promeut après chaque retrait) avant
-            // d'évaluer la session suivante.
+            // Rotación: mientras la cola esté disputada (sin nuevas ranuras
+            // disponibles), las sesiones que superen SESSIONMAXTRANS ceden su
+            // ranura — eMule `CheckForTimeOver`. La ranura liberada se cubre
+            // inmediatamente (eMule promociona tras cada desalojo) antes
+            // de evaluar la siguiente sesión.
             loop {
                 if q.is_empty() || self.can_open_slot(&active, now) {
                     break;
@@ -1514,17 +1513,17 @@ impl UploadManager {
                         "[UPLOAD_ROTATED] Client {} upload slot released after {} bytes session ('{}') — re-queues on next request",
                         log_addr_str(&cur.client_address), cur.transferred_bytes, cur.file_name
                     );
-                    // eMule `SendOutOfPartReqsAndAddToWaitingQueue` — le
-                    // dispatcher abonné pousse OP_OUTOFPARTREQS (0x57) sur
-                    // le socket encore ouvert pour que le downloader
-                    // repasse OnQueue au lieu d'attendre ses blocs.
+                    // eMule `SendOutOfPartReqsAndAddToWaitingQueue` — el
+                    // despachador suscrito emite OP_OUTOFPARTREQS (0x57) por
+                    // el socket aún abierto para que el descargador
+                    // vuelva a estar en cola en lugar de seguir esperando bloques.
                     if let Some(n) =
                         self.rotation_notifies.lock().await.remove(&victim)
                     {
                         n.notify_one();
                     }
-                    // eMule : le client n'est PAS re-enfilé ici — il revient
-                    // en file à son prochain re-ask.
+                    // eMule: el cliente NO se reencola aquí — vuelve
+                    // a la cola en su próximo re-ask.
                     self.update_auto_up_prio(&active, &cur.file_hash);
                     evicted.push((cur.client_key, cur.queued_since_ms));
                 }
@@ -1535,8 +1534,8 @@ impl UploadManager {
             changed |= self.promote_locked(&mut q, &mut active, now);
             drop(q);
         }
-        // Wait start d'origine (conservé dans `credits` chez eMule) gardé
-        // pour que le score accumulé survive à la rotation.
+        // Inicio de espera original (conservado en `credits` en eMule) mantenido
+        // para que la puntuación acumulada sobreviva a la rotación.
         if !evicted.is_empty() {
             let mut grace = self.rotation_grace.lock().await;
             for (key, since) in evicted {
@@ -1553,7 +1552,7 @@ impl UploadManager {
         }
     }
 
-    /// Clears queue and active slots on kill switch or network reset.
+    /// Limpia la cola y las ranuras activas al activar el interruptor de corte o reiniciar la red.
     pub async fn abort_all(&self) {
         let mut active = self.active_uploads.lock().await;
         active.clear();
@@ -1566,8 +1565,8 @@ impl UploadManager {
         self.emit_uploads_updated().await;
     }
 
-    /// Returns the snapshot of the first active upload (if any).
-    /// `upload_rate_bps` y est le débit effectif à l'instant de la lecture.
+    /// Devuelve la instantánea de la primera subida activa (si existe).
+    /// `upload_rate_bps` es la tasa efectiva en el momento de la lectura.
     pub async fn active_snapshot(&self) -> Option<UploadSessionSnapshot> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1580,9 +1579,9 @@ impl UploadManager {
         })
     }
 
-    /// Returns snapshots of all active upload slots.
-    /// `upload_rate_bps` y est le débit effectif à l'instant de la lecture
-    /// (décroît vers 0 quand un pair ne demande plus de blocs).
+    /// Devuelve instantáneas de todas las ranuras de subida activas.
+    /// `upload_rate_bps` representa la velocidad efectiva en el instante de la lectura
+    /// (disminuye hacia 0 si un par deja de pedir bloques).
     pub async fn active_snapshots(&self) -> Vec<UploadSessionSnapshot> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1599,9 +1598,9 @@ impl UploadManager {
             .collect()
     }
 
-    /// Returns the 1-based queue position of a waiting client matched by
-    /// IP address (`CUploadQueue::GetWaitingClientByIP_UDP` semantics:
-    /// UDP pings carry only the sender IP).
+    /// Devuelve la posición basada en 1 de un cliente en espera coincidente por
+    /// dirección IP (semántica `CUploadQueue::GetWaitingClientByIP_UDP`:
+    /// los pings UDP solo transportan la IP emisora).
     pub async fn waiting_rank_by_ip(&self, ip: &std::net::IpAddr) -> Option<u32> {
         let ip_str = ip.to_string();
         let q = self.queue.lock().await;
@@ -1617,17 +1616,17 @@ impl UploadManager {
     }
 
     /// eMule `GetWaitingClientByIP_UDP(ip, udp_port, bIgnorePortOnUniqueIP
-    /// = true, &bSenderMultipleIpUnknown)` + contrôle `md4equ(reqfilehash,
-    /// sender->GetUploadFileID())` de `ClientUDPSocket.cpp` :
-    /// - un client en file avec la même IP **et** le même port UDP annoncé
-    ///   est identifié directement ;
-    /// - sinon, s'il n'existe qu'**un seul** client en file à cette IP, il
-    ///   est retenu (tolérance au port, `bIgnorePortOnUniqueIP`) ;
-    /// - plusieurs clients à la même IP sans correspondance de port →
-    ///   [`UdpRankLookup::Ambiguous`] (eMule ne répond pas : il force une
-    ///   connexion TCP pour lever l'ambiguïté NAT) ;
-    /// - le hash demandé doit correspondre au fichier du client trouvé,
-    ///   sinon [`UdpRankLookup::FileMismatch`] (eMule ne répond pas).
+    /// = true, &bSenderMultipleIpUnknown)` + comprobación `md4equ(reqfilehash,
+    /// sender->GetUploadFileID())` de `ClientUDPSocket.cpp`:
+    /// - un cliente en cola con la misma IP **y** el mismo puerto UDP anunciado
+    ///   se identifica directamente;
+    /// - en caso contrario, si solo existe **un único** cliente en cola con esa IP,
+    ///   se acepta (tolerancia de puerto, `bIgnorePortOnUniqueIP`);
+    /// - varios clientes en la misma IP sin coincidencia de puerto →
+    ///   [`UdpRankLookup::Ambiguous`] (eMule no responde: fuerza una
+    ///   conexión TCP para despejar la ambigüedad de NAT);
+    /// - el hash solicitado debe coincidir con el archivo del cliente encontrado,
+    ///   de lo contrario [`UdpRankLookup::FileMismatch`] (eMule no responde).
     pub async fn waiting_rank_for_udp(
         &self,
         ip: &std::net::IpAddr,
@@ -1643,7 +1642,7 @@ impl UploadManager {
                 .map(|(host, _)| host == ip_str)
                 .unwrap_or(false)
         };
-        // 1. Correspondance exacte IP + port UDP (désambiguïsation NAT).
+        // 1. Coincidencia exacta IP + puerto UDP (desambiguación NAT).
         if let Some(pos) = q.iter().position(|e| {
             same_ip(&e) && e.client_udp_port.is_some_and(|p| p == udp_port)
         }) {
@@ -1654,7 +1653,7 @@ impl UploadManager {
                 UdpRankLookup::FileMismatch
             };
         }
-        // 2. Tolérance « unique IP » : un seul client en file à cette IP.
+        // 2. Tolerancia de «IP única»: solo un cliente en cola en esta IP.
         let matches: Vec<usize> = q
             .iter()
             .enumerate()
@@ -1675,10 +1674,10 @@ impl UploadManager {
         }
     }
 
-    /// eMule `SetLastUpRequest` — un `OP_REASKFILEPING` accepté d'un
-    /// client en file rafraîchit son horodatage de re-ask (la purge
-    /// `MAX_PURGEQUEUETIME` 1 h ne doit pas frapper un client vivant qui
-    /// n'a plus de socket TCP ouverte de re-ask).
+    /// eMule `SetLastUpRequest` — un `OP_REASKFILEPING` aceptado de un
+    /// cliente en cola actualiza su marca temporal de re-ask (la purga
+    /// `MAX_PURGEQUEUETIME` de 1 h no debe expulsar a un cliente activo que
+    /// carece de socket TCP abierto para re-ask).
     pub async fn note_udp_reask(&self, ip: &std::net::IpAddr) {
         let ip_str = ip.to_string();
         let now = std::time::SystemTime::now()
@@ -1698,19 +1697,19 @@ impl UploadManager {
         }
     }
 
-    /// Number of clients currently waiting in the upload queue.
+    /// Cantidad de clientes esperando actualmente en la cola de subida.
     pub async fn waiting_len(&self) -> usize {
         self.queue.lock().await.len()
     }
 
-    /// True when the waiting queue is within 50 entries of capacity —
-    /// eMule answers `OP_QUEUEFULL` to UDP pings from unknown clients in
-    /// that state (`GetWaitingUserCount() + 50 > GetQueueSize()`).
+    /// Verdadero si la cola de espera está a menos de 50 entradas de su capacidad máxima —
+    /// eMule responde `OP_QUEUEFULL` a pings UDP de clientes desconocidos en
+    /// dicho estado (`GetWaitingUserCount() + 50 > GetQueueSize()`).
     pub async fn is_nearly_full(&self) -> bool {
         self.waiting_len().await + 50 > self.max_queue.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Returns list of all queued upload snapshots.
+    /// Devuelve la lista de instantáneas de todas las subidas en cola.
     pub async fn list_queue(&self) -> Vec<UploadSessionSnapshot> {
         let q = self.queue.lock().await;
         q.iter()
@@ -1741,21 +1740,21 @@ impl UploadManager {
 mod tests {
     use super::*;
 
-    /// Rembobine `m_nLastStartUpload` entre deux ouvertures de slot — les
-    /// tests exercent les gardes d'admission sans subir le pacing 1 s de
-    /// `ForceNewClient` (comportement eMule testé séparément).
+    /// Rebobina `m_nLastStartUpload` entre dos aperturas de ranura — las
+    /// pruebas evalúan las condiciones de admisión sin sufrir la espera de 1 s de
+    /// `ForceNewClient` (comportamiento de eMule probado por separado).
     fn unpaced(mgr: &UploadManager) {
         mgr.last_upload_start_ms.store(0, Ordering::Relaxed);
     }
 
-    /// eMule `ForceNewClient` (`UploadQueue.cpp:417-421`) : sous
-    /// `MIN_UP_CLIENTS_ALLOWED` jamais d'attente ; au-delà, 1 s minimum
-    /// entre deux ouvertures tant que le débit mesuré < 100 Ko/s ;
-    /// au-dessus, plus d'espacement.
+    /// eMule `ForceNewClient` (`UploadQueue.cpp:417-421`): por debajo de
+    /// `MIN_UP_CLIENTS_ALLOWED` nunca hay espera; por encima, 1 s mínimo
+    /// entre dos aperturas mientras la velocidad medida sea < 100 KB/s;
+    /// por encima de esa cifra, sin espaciamiento.
     #[tokio::test]
     async fn force_new_client_paces_slot_opens_below_100kbs() {
         let mgr = UploadManager::new();
-        // Les deux premiers slots passent sans temporisation
+        // Las dos primeras ranuras se conceden sin temporización
         // (`curUploadSlots < MIN_UP_CLIENTS_ALLOWED → true`).
         for i in 0..2 {
             let (state, _) = mgr
@@ -1764,14 +1763,14 @@ mod tests {
                 .unwrap();
             assert_eq!(state, UploadSlotState::Uploading);
         }
-        // 3e ouverture < 1 s après la dernière, débit 0 < 100 Ko/s → file.
+        // 3.ª apertura < 1 s tras la anterior, velocidad 0 < 100 KB/s → cola.
         let (state, _) = mgr
             .request_upload_slot("c2", "c2", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Waiting);
-        // Débit mesuré ≥ 100 Ko/s → plus d'espacement : le client en file
-        // est promu immédiatement.
+        // Velocidad medida ≥ 100 KB/s → sin espaciamiento: el cliente en cola
+        // es promocionado de inmediato.
         {
             let mut active = mgr.active_uploads.lock().await;
             for s in active.values_mut() {
@@ -1783,7 +1782,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Uploading);
-        // Intervalle écoulé (> 1 s simulé) → ouverture même sous 100 Ko/s.
+        // Intervalo transcurrido (> 1 s simulado) → apertura incluso por debajo de 100 KB/s.
         mgr.last_upload_start_ms.store(0, Ordering::Relaxed);
         {
             let mut active = mgr.active_uploads.lock().await;
@@ -1819,7 +1818,7 @@ mod tests {
                 .unwrap();
             assert_eq!(state, UploadSlotState::Uploading);
         }
-        // 4th client queues
+        // El 4.º cliente entra en cola
         let (state, rank) = mgr
             .request_upload_slot("c3", "c3", "h", "f", 1.0, "normal", false, None)
             .await
@@ -1865,7 +1864,7 @@ mod tests {
     async fn userhash_key_dedups_across_ips_and_release_by_address_works() {
         let mgr = UploadManager::new();
         mgr.set_max_active(1);
-        // Same userhash reconnecting from a different IP is the same client.
+        // El mismo userhash reconectando desde una IP diferente representa al mismo cliente.
         mgr.request_upload_slot("uh:AA", "1.1.1.1:49662", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
@@ -1874,7 +1873,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Uploading);
-        // release_slot by bare ip:port resolves via client_address.
+        // release_slot mediante ip:port simple se resuelve a través de client_address.
         mgr.release_slot("1.1.1.1:49662").await;
         assert_eq!(mgr.active_len(), 0);
     }
@@ -1883,19 +1882,19 @@ mod tests {
     async fn slow_slot_demoted_to_trickle_and_promotes_queue() {
         let mgr = UploadManager::new();
         mgr.set_max_active(1);
-        // c1 takes the only slot.
+        // c1 ocupa la única ranura.
         let (state, _) = mgr
             .request_upload_slot("c1", "c1", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Uploading);
-        // c2 waits.
+        // c2 espera en cola.
         let (state, _) = mgr
             .request_upload_slot("c2", "c2", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Waiting);
-        // c1 stays slow past the grace period → trickle → c2 promoted.
+        // c1 permanece lento tras el periodo de gracia → trickle → c2 promocionado.
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1904,8 +1903,8 @@ mod tests {
             let mut active = mgr.active_uploads.lock().await;
             let s = active.get_mut("c1").unwrap();
             s.started_at_unix_ms -= TRICKLE_GRACE_MS + 1;
-            // Fenêtre de mesure amorcée il y a 1,5 s : le premier
-            // échantillon (≥ 500 ms) mesure ~341 B/s < TRICKLE_RATE_BPS.
+            // Ventana de medición iniciada hace 1,5 s: la primera
+            // muestra (≥ 500 ms) mide ~341 B/s < TRICKLE_RATE_BPS.
             s.rate_window_start_ms = now_ms - 1_500;
         }
         mgr.update_progress("c1", 512).await;
@@ -1924,12 +1923,12 @@ mod tests {
     #[tokio::test]
     async fn per_file_stats_aggregate_sessions_and_persist_totals() {
         let mgr = UploadManager::new();
-        // Hydratation au boot : le fichier a déjà 1000 B uploadés.
+        // Carga al arrancar: el archivo ya tiene 1000 B subidos.
         mgr.set_file_upload_totals(std::collections::HashMap::from([(
             "haa".to_string(),
             1000u64,
         )]));
-        // Deux slots actifs sur le même hash (casse mixte) + un autre fichier.
+        // Dos ranuras activas sobre el mismo hash (mayúsculas/minúsculas mixtas) + otro archivo.
         mgr.request_upload_slot("c1", "c1", "HAA", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
@@ -1940,8 +1939,8 @@ mod tests {
         mgr.request_upload_slot("c3", "c3", "hbb", "g", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Fenêtre de mesure amorcée il y a 1 s → premier échantillon au
-        // prochain update_progress (elapsed ≥ RATE_FIRST_SAMPLE_MS).
+        // Ventana de medición iniciada hace 1 s → primera muestra en el
+        // próximo update_progress (transcurrido ≥ RATE_FIRST_SAMPLE_MS).
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1962,14 +1961,14 @@ mod tests {
         assert!(!totals.contains_key("hcc"));
 
         let rates = mgr.per_file_rates_bps().await;
-        // ~1500 B/s par slot → ~3000 B/s agrégé pour haa, ~1500 pour hbb.
+        // ~1500 B/s por ranura → ~3000 B/s agregados para haa, ~1500 para hbb.
         let haa = rates["haa"];
         let hbb = rates["hbb"];
         assert!(haa > hbb, "deux slots agrégés ({haa}) > un slot ({hbb})");
         assert!(haa > 0 && hbb > 0);
         assert!(!rates.contains_key("hcc"));
 
-        // Slots libérés : débit retombe, total persisté conservé.
+        // Ranuras liberadas: la tasa vuelve a descender, manteniéndose el total persistido.
         mgr.release_slot("c1").await;
         mgr.release_slot("c2").await;
         assert_eq!(
@@ -1990,7 +1989,7 @@ mod tests {
         mgr.request_upload_slot("c1", "c1", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Slow rate but still within grace period → stays Uploading.
+        // Tasa lenta pero dentro del periodo de gracia → permanece en Uploading.
         mgr.update_progress("c1", 512).await;
         let s = &mgr.active_snapshots().await[0];
         assert_eq!(s.state, UploadSlotState::Uploading);
@@ -2001,7 +2000,7 @@ mod tests {
         let mgr = UploadManager::new();
         let flag = Arc::new(AtomicBool::new(false));
         mgr.set_uss_gate(flag.clone());
-        // Gate closed: free slots exist but the client must queue.
+        // Compuerta cerrada: existen ranuras libres pero el cliente debe esperar en cola.
         let (state, rank) = mgr
             .request_upload_slot("a", "a", "h", "f", 1.0, "normal", false, None)
             .await
@@ -2009,7 +2008,7 @@ mod tests {
         assert_eq!(state, UploadSlotState::Waiting);
         assert_eq!(rank, Some(1));
         assert_eq!(mgr.active_len(), 0);
-        // Gate open: next request is granted immediately.
+        // Compuerta abierta: la siguiente petición se concede de inmediato.
         flag.store(true, Ordering::SeqCst);
         let (state, _) = mgr
             .request_upload_slot("b", "b", "h", "f", 1.0, "normal", false, None)
@@ -2086,9 +2085,9 @@ mod tests {
                 .unwrap()
                 .as_millis() as i64
         };
-        // Fenêtre amorcée il y a 1 s : 200 KiB envoyés → premier échantillon
-        // (≥ 500 ms) ≈ 200 KiB/s — le débit mesuré reflète les octets
-        // réellement servis, pas la limite configurée.
+        // Ventana iniciada hace 1 s: 200 KiB enviados → primera muestra
+        // (≥ 500 ms) ≈ 200 KiB/s — la tasa medida refleja los bytes
+        // realmente servidos, no el límite configurado.
         {
             let mut active = mgr.active_uploads.lock().await;
             active.get_mut("a").unwrap().rate_window_start_ms = now_ms() - 1_000;
@@ -2100,14 +2099,14 @@ mod tests {
             (150 * 1024..=250 * 1024).contains(&rate),
             "measured rate should be ~200 KiB/s, got {rate}"
         );
-        // Pair inactif depuis > 2 s : le débit effectif retombe à 0 au lieu
-        // de rester figé sur la dernière valeur.
+        // Par inactivo desde hace > 2 s: la velocidad efectiva cae a 0 en vez de
+        // quedarse congelada en el último valor.
         assert_eq!(snaps[0].effective_rate_bps(now_ms() + 10_000), 0);
     }
 
-    /// eMule `AcceptNewClient` : `curUploadSlots >= MaxSpeed*1024/targetRate`
-    /// → refus. Le nombre de slots suit la capacité upload configurée,
-    /// pas un plafond fixe de 100.
+    /// eMule `AcceptNewClient`: `curUploadSlots >= MaxSpeed*1024/targetRate`
+    /// → rechazo. La cantidad de ranuras sigue la capacidad de subida configurada,
+    /// no un tope fijo de 100.
     #[tokio::test]
     async fn accept_new_client_caps_slots_by_configured_upload_speed() {
         let mgr = UploadManager::new();
@@ -2115,7 +2114,7 @@ mod tests {
         let speed_probe = Arc::clone(&speed);
         mgr.set_upload_speed_probe(move || speed_probe.load(Ordering::Relaxed));
 
-        // Les 4 slots garantis passent toujours (max(MIN_UP_CLIENTS,4)).
+        // Las 4 ranuras garantizadas se conceden siempre (max(MIN_UP_CLIENTS,4)).
         for i in 0..4 {
             unpaced(&mgr);
             let (state, _) = mgr
@@ -2124,15 +2123,15 @@ mod tests {
                 .unwrap();
             assert_eq!(state, UploadSlotState::Uploading);
         }
-        // 5e : 12 KiB/s / 4 KiB/s cible = 3 < 4 slots → refus → file.
+        // 5.ª: 12 KiB/s / 4 KiB/s objetivo = 3 < 4 ranuras → rechazo → cola.
         let (state, _) = mgr
             .request_upload_slot("c5", "c5", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
         assert_eq!(state, UploadSlotState::Waiting);
 
-        // Débit mesuré réel (40 KiB/s) : le terme `datarate/minTarget`
-        // passerait (40/3 ≈ 13 > 4) mais `MaxSpeed/target` refuse encore.
+        // Velocidad medida real (40 KiB/s): el término `datarate/minTarget`
+        // pasaría (40/3 ≈ 13 > 4) pero `MaxSpeed/target` sigue denegándolo.
         {
             let mut active = mgr.active_uploads.lock().await;
             for s in active.values_mut() {
@@ -2145,7 +2144,7 @@ mod tests {
             .unwrap();
         assert_eq!(state, UploadSlotState::Waiting);
 
-        // Limite relevée à 200 KiB/s → 200/4 = 50 > 4 → slot ouvert.
+        // Límite aumentado a 200 KiB/s → 200/4 = 50 > 4 → ranura concedida.
         speed.store(200 * 1024, Ordering::Relaxed);
         unpaced(&mgr);
         let (state, _) = mgr
@@ -2155,9 +2154,9 @@ mod tests {
         assert_eq!(state, UploadSlotState::Uploading);
     }
 
-    /// eMule `IsDownloading` → `OP_ACCEPTUPLOADREQ` + `SetUploadFileID` :
-    /// un client qui détient un slot conserve ce slot quand il demande un
-    /// autre fichier — jamais de deuxième entrée en file.
+    /// eMule `IsDownloading` → `OP_ACCEPTUPLOADREQ` + `SetUploadFileID`:
+    /// un cliente que posee una ranura conserva dicha ranura al solicitar
+    /// otro archivo — nunca se duplica la entrada en cola.
     #[tokio::test]
     async fn downloading_client_other_file_keeps_slot() {
         let mgr = UploadManager::new();
@@ -2176,8 +2175,8 @@ mod tests {
         assert_eq!(mgr.waiting_len().await, 0);
     }
 
-    /// eMule : un objet client = une entrée de file. Le re-ask pour un
-    /// autre fichier met à jour l'entrée existante au lieu d'en créer une.
+    /// eMule: un objeto cliente = una entrada en cola. El re-ask para
+    /// otro archivo actualiza la entrada existente en vez de crear una nueva.
     #[tokio::test]
     async fn queued_client_single_entry_and_updates_on_reask() {
         let mgr = UploadManager::new();
@@ -2199,9 +2198,9 @@ mod tests {
         assert_eq!(q[0].file_prio_num, 9);
     }
 
-    /// eMule `CheckForTimeOver` (`FullChunkTransfers`, défaut) : une session
-    /// au-delà de `SESSIONMAXTRANS` est renvoyée en file quand aucun slot ne
-    /// peut s'ouvrir — le wait start (`credits`) survit à la rotation.
+    /// eMule `CheckForTimeOver` (`FullChunkTransfers`, predeterminado): una sesión
+    /// por encima de `SESSIONMAXTRANS` es devuelta a la cola cuando no se puede
+    /// abrir ninguna ranura — el inicio de espera (`credits`) sobrevive a la rotación.
     #[tokio::test]
     async fn process_tick_rotates_full_session_and_preserves_wait() {
         let mgr = UploadManager::new();
@@ -2223,15 +2222,15 @@ mod tests {
             s.queued_since_ms = now - 60_000; // wait start d'origine
         }
         mgr.process_tick().await;
-        // c1 évincé → c2 promu. c1 ne réintègre la file qu'à son prochain
-        // re-ask (comportement eMule : RemoveFromUploadQueue → US_NONE).
+        // c1 desalojado → c2 promocionado. c1 solo se reincorpora a la cola en su próximo
+        // re-ask (comportamiento de eMule: RemoveFromUploadQueue → US_NONE).
         let snaps = mgr.active_snapshots().await;
         assert_eq!(snaps.len(), 1);
         assert_eq!(snaps[0].client_key, "c2");
         assert_eq!(mgr.waiting_len().await, 0);
 
-        // Re-ask de c1 : wait start restauré → enqueued_at antérieur à now,
-        // le score accumulé n'est pas perdu.
+        // Re-ask de c1: inicio de espera restaurado → enqueued_at anterior a now,
+        // conservando la puntuación acumulada.
         let (state, rank) = mgr
             .request_upload_slot("c1", "c1", "h", "f", 1.0, "normal", false, None)
             .await
@@ -2246,9 +2245,9 @@ mod tests {
         );
     }
 
-    /// `SendOutOfPartReqsAndAddToWaitingQueue` eMule — à l'éviction
-    /// `CheckForTimeOver`, le dispatcher abonné via `rotation_notify` est
-    /// signalé pour pousser `OP_OUTOFPARTREQS` (0x57) sur le socket.
+    /// `SendOutOfPartReqsAndAddToWaitingQueue` de eMule — tras el desalojo por
+    /// `CheckForTimeOver`, se notifica al despachador suscrito mediante `rotation_notify`
+    /// para emitir `OP_OUTOFPARTREQS` (0x57) en el socket.
     #[tokio::test]
     async fn rotation_notify_fires_on_timeover_eviction() {
         let mgr = UploadManager::new();
@@ -2259,7 +2258,7 @@ mod tests {
         mgr.request_upload_slot("c2", "c2", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Pas de handle pour un client qui n'upload pas / inconnu.
+        // Sin descriptor para un cliente desconocido o que no esté subiendo.
         assert!(mgr.rotation_notify("c2").await.is_none());
         assert!(mgr.rotation_notify("nobody").await.is_none());
         let notify = mgr.rotation_notify("c1").await.unwrap();
@@ -2271,7 +2270,7 @@ mod tests {
         tokio::time::timeout(std::time::Duration::from_millis(200), notify.notified())
             .await
             .expect("la rotation doit signaler le dispatcher");
-        // Le handle est consommé — plus de notify pour cette session.
+        // Descriptor consumido — cesan las notificaciones para esta sesión.
         assert!(mgr
             .rotation_notifies
             .lock()
@@ -2280,9 +2279,9 @@ mod tests {
             .is_none());
     }
 
-    /// La promotion signale le dispatcher (`notify`) qui pousse
-    /// `OP_ACCEPTUPLOADREQ` — le client en attente ne dépend pas de son
-    /// prochain re-ask.
+    /// La promoción avisa al despachador (`notify`) que emite
+    /// `OP_ACCEPTUPLOADREQ` — el cliente en espera no depende de su
+    /// siguiente re-ask.
     #[tokio::test]
     async fn promotion_notify_fires_when_slot_frees() {
         let mgr = UploadManager::new();
@@ -2301,8 +2300,8 @@ mod tests {
         assert_eq!(mgr.active_snapshots().await[0].client_key, "c2");
     }
 
-    /// eMule `MAX_PURGEQUEUETIME` : une entrée sans re-ask depuis plus d'1 h
-    /// est purgée de la file.
+    /// eMule `MAX_PURGEQUEUETIME`: una entrada sin re-ask desde hace más de 1 h
+    /// es purgada de la cola.
     #[tokio::test]
     async fn stale_queue_entries_purged_after_one_hour() {
         let mgr = UploadManager::new();
@@ -2321,10 +2320,10 @@ mod tests {
         assert_eq!(mgr.waiting_len().await, 0);
     }
 
-    /// eMule soft/hard limit : au-delà de `QueueSize`, seuls les clients
-    /// dont `combined(prio × crédits)` dépasse la moyenne de la file (ou
-    /// les amis) sont admis ; `hard = soft + max(soft,800)/4` reste un
-    /// refus sec.
+    /// Límite suave y estricto de eMule: por encima de `QueueSize`, solo los clientes
+    /// cuyo `combined(prio × créditos)` supere la media de la cola (o
+    /// los amigos) son admitidos; `hard = soft + max(soft,800)/4` supone
+    /// un rechazo tajante.
     #[tokio::test]
     async fn soft_limit_admits_only_above_average_combined_score() {
         let mgr = UploadManager::new();
@@ -2333,20 +2332,20 @@ mod tests {
         mgr.request_upload_slot("c0", "c0", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Remplit la soft limit avec des clients très scorés
-        // (veryhigh=18 × 10.0 crédits → combined 1800).
+        // Llena el límite suave con clientes de alta puntuación
+        // (veryhigh=18 × 10.0 créditos → combinado 1800).
         for i in 0..10 {
             mgr.request_upload_slot(&format!("q{i}"), &format!("q{i}"), "h", "f", 10.0, "veryhigh", false, None)
                 .await
                 .unwrap();
         }
         assert_eq!(mgr.waiting_len().await, 10);
-        // Combined faible (normal ×1.0 = 70 < 1800) → refus.
+        // Combinado bajo (normal ×1.0 = 70 < 1800) → rechazo.
         assert!(mgr
             .request_upload_slot("low1", "low1", "h", "f", 1.0, "normal", false, None)
             .await
             .is_err());
-        // Combined égal à la moyenne → admis.
+        // Combinado igual a la media → admitido.
         let (state, _) = mgr
             .request_upload_slot("hi1", "hi1", "h", "f", 10.0, "veryhigh", false, None)
             .await
@@ -2354,8 +2353,8 @@ mod tests {
         assert_eq!(state, UploadSlotState::Waiting);
     }
 
-    /// eMule `MIN_REQUESTTIME`/`BADCLIENTBAN` : 4 re-asks du même fichier en
-    /// moins de 10 min → client banni (score 0, jamais promu).
+    /// eMule `MIN_REQUESTTIME`/`BADCLIENTBAN`: 4 re-asks del mismo archivo en
+    /// menos de 10 min → cliente bloqueado (puntuación 0, nunca promocionado).
     #[tokio::test]
     async fn aggressive_reasks_mark_client_banned() {
         let mgr = UploadManager::new();
@@ -2384,9 +2383,9 @@ mod tests {
         assert_eq!(q[0].effective_score(now), 0);
     }
 
-    /// Mapping `GetFilePrioAsNumber` eMule : veryhigh=18, high=9, normal=7,
-    /// low=6, verylow=2 ; powershare tombe sur la branche default (7) ;
-    /// « auto » = priorité effective initiale `PR_HIGH` (9).
+    /// Mapeo `GetFilePrioAsNumber` de eMule: veryhigh=18, high=9, normal=7,
+    /// low=6, verylow=2; powershare recae en la rama predeterminada (7);
+    /// «auto» = prioridad efectiva inicial `PR_HIGH` (9).
     #[test]
     fn file_prio_num_matches_emule_get_file_prio_as_number() {
         assert_eq!(file_prio_num("veryhigh"), 18);
@@ -2399,9 +2398,9 @@ mod tests {
         assert_eq!(file_prio_num("unknown"), 7);
     }
 
-    /// eMule `CKnownFile::UpdateAutoUpPriority` : la priorité effective
-    /// d'un fichier « auto » suit le nombre de clients qui l'uploadent —
-    /// plus de 20 → low (6), plus de 1 → normal (7), sinon → high (9).
+    /// eMule `CKnownFile::UpdateAutoUpPriority`: la prioridad efectiva
+    /// de un archivo «auto» sigue el número de clientes que lo suben —
+    /// más de 20 → baja (6), más de 1 → normal (7), en otro caso → alta (9).
     #[tokio::test]
     async fn auto_up_priority_tracks_uploader_count() {
         let mgr = UploadManager::new();
@@ -2435,7 +2434,7 @@ mod tests {
         };
 
         let mut active = mgr.active_uploads.lock().await;
-        // c1 actif → +20 fakes = 21 uploaders du même fichier.
+        // c1 activo → +20 simulados = 21 subidores del mismo archivo.
         for i in 0..20 {
             let k = format!("f{i}");
             active.insert(k.clone(), fake(&k));
@@ -2470,9 +2469,9 @@ mod tests {
         );
     }
 
-    /// Une entrée de file « auto » reflète le dernier
-    /// `UpdateAutoUpPriority` à chaque re-ask/tri ; un re-ask avec une
-    /// priorité manuelle sort le fichier du mode auto.
+    /// Una entrada en cola «auto» refleja el último
+    /// `UpdateAutoUpPriority` en cada re-ask u ordenación; un re-ask con
+    /// prioridad manual saca al archivo del modo automático.
     #[tokio::test]
     async fn auto_prio_queue_entry_refresh_and_manual_override() {
         let mgr = UploadManager::new();
@@ -2491,7 +2490,7 @@ mod tests {
             assert_eq!(q[0].file_prio_num, 9, "auto initial → high");
         }
 
-        // 21 uploaders actifs sur haa → effective low au prochain re-ask.
+        // 21 subidores activos en haa → prioridad baja efectiva en el próximo re-ask.
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -2533,7 +2532,7 @@ mod tests {
             assert_eq!(q[0].file_prio_num, 6, "auto recalculée → low");
         }
 
-        // Bascule manuelle : sortie du registre auto + poids explicite.
+        // Cambio a manual: salida del registro automático + peso explícito.
         mgr.request_upload_slot("q1", "q1", "haa", "f", 1.0, "high", false, None)
             .await
             .unwrap();
@@ -2552,13 +2551,13 @@ mod tests {
         mgr.set_max_active(1);
         let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5));
 
-        // Occupe l'unique slot actif pour que les clients suivants
-        // rejoignent la file.
+        // Ocupa la única ranura activa para que los siguientes clientes
+        // pasen a la cola.
         mgr.request_upload_slot("uh:F", "f", "hf", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
 
-        // Un client en file pour "haa" avec port UDP annoncé 49672.
+        // Un cliente en cola para "haa" con puerto UDP anunciado 49672.
         mgr.request_upload_slot(
             "uh:AAAA",
             "10.0.0.5:5000",
@@ -2572,22 +2571,22 @@ mod tests {
         .await
         .unwrap();
 
-        // Hash conforme + port conforme → rang 1.
+        // Hash coincidente + puerto coincidente → posición 1.
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 49672, "haa").await,
             UdpRankLookup::Rank(1)
         );
-        // Port inconnu mais IP unique → tolérance `bIgnorePortOnUniqueIP`.
+        // Puerto desconocido pero IP única → tolerancia `bIgnorePortOnUniqueIP`.
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 9999, "haa").await,
             UdpRankLookup::Rank(1)
         );
-        // Hash différent → silence eMule (`reqfile does not match`).
+        // Hash diferente → silencio en eMule (`reqfile does not match`).
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 49672, "hbb").await,
             UdpRankLookup::FileMismatch
         );
-        // IP inconnue → NoSender (→ QUEUEFULL seulement si quasi-pleine).
+        // IP desconocida → NoSender (→ QUEUEFULL únicamente si la cola está casi llena).
         assert_eq!(
             mgr.waiting_rank_for_udp(&IpAddr::V4(Ipv4Addr::new(10, 0, 0, 6)), 49672, "haa")
                 .await,
@@ -2606,7 +2605,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Deux clients derrière la même IP (NAT), ports UDP distincts.
+        // Dos clientes tras la misma IP (NAT), puertos UDP diferentes.
         mgr.request_upload_slot(
             "uh:A",
             "10.0.0.9:5000",
@@ -2632,26 +2631,26 @@ mod tests {
         .await
         .unwrap();
 
-        // Le port UDP désambiguïse → le bon client et le bon fichier.
+        // El puerto UDP desambigua → el cliente correcto y el archivo correcto.
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 49673, "hbb").await,
             UdpRankLookup::Rank(2)
         );
-        // Sans correspondance de port → Ambiguous (eMule force le TCP).
+        // Sin coincidencia de puerto → Ambiguous (eMule fuerza conexión TCP).
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 1111, "haa").await,
             UdpRankLookup::Ambiguous
         );
-        // Port exact mais fichier différent → FileMismatch (silence).
+        // Puerto exacto pero archivo diferente → FileMismatch (silencio).
         assert_eq!(
             mgr.waiting_rank_for_udp(&ip, 49672, "hcc").await,
             UdpRankLookup::FileMismatch
         );
     }
-    /// eMule `Disconnected` (`BaseClient.cpp:1169`) : `bDelete =
-    /// m_eUploadState != US_ONUPLOADQUEUE` — un client en file survit à la
-    /// mort de son socket avec son score intact ; `release_slot` (fin
-    /// explicite) le retire toujours.
+    /// eMule `Disconnected` (`BaseClient.cpp:1169`): `bDelete =
+    /// m_eUploadState != US_ONUPLOADQUEUE` — un cliente en cola sobrevive al
+    /// cierre de su socket conservando intacta su puntuación; `release_slot` (finalización
+    /// explícita) siempre lo retira.
     #[tokio::test]
     async fn disconnect_keeps_queue_entry_and_wait_score() {
         let mgr = UploadManager::new();
@@ -2672,14 +2671,14 @@ mod tests {
             assert_eq!(q[0].enqueued_at_unix_ms, enqueued_at);
         }
 
-        // Fin explicite (CANCELTRANSFER/fin de fichier) : suppression nette.
+        // Finalización explícita (CANCELTRANSFER/fin de archivo): retirada completa.
         mgr.release_slot("q").await;
         assert!(mgr.queue.lock().await.is_empty());
     }
 
-    /// eMule `FindBestClientInQueue` : un attenteur sans socket ne peut
-    /// pas etre promu (`ACCEPTUPLOADREQ` s'ecrit sur la connexion) — le
-    /// prochain connecte gagne le slot libere.
+    /// eMule `FindBestClientInQueue`: un cliente en espera sin socket no puede
+    /// ser promocionado (`ACCEPTUPLOADREQ` se escribe en la conexión) — el
+    /// siguiente cliente conectado obtiene la ranura liberada.
     #[tokio::test]
     async fn disconnected_waiter_is_skipped_for_promotion() {
         let mgr = UploadManager::new();
@@ -2687,8 +2686,8 @@ mod tests {
         mgr.request_upload_slot("a", "a", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Deux attenteurs : "q1" entre en premier (score le plus fort),
-        // "q2" ensuite.
+        // Dos clientes en espera: "q1" entra primero (mayor puntuación),
+        // luego "q2".
         mgr.request_upload_slot("q1", "q1", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
@@ -2701,17 +2700,17 @@ mod tests {
         let actives = mgr.active_snapshots().await;
         assert_eq!(actives.len(), 1);
         assert_eq!(actives[0].client_address, "q2");
-        // q1 reste en file, toujours marque deconnecte.
+        // q1 permanece en cola, aún marcado como desconectado.
         let q = mgr.queue.lock().await;
         assert_eq!(q.len(), 1);
         assert_eq!(q[0].client_key, "q1");
         assert!(!q[0].connected);
     }
 
-    /// eMule `m_bAddNextConnect` (`UploadQueue.cpp:134-151, 537-549`) : le
-    /// meilleur attenteur injoignable qui depasse le meilleur connecte est
-    /// marque — a sa reconnexion il recoit un slot immediatement, meme
-    /// file pleine de connectes en dessous.
+    /// eMule `m_bAddNextConnect` (`UploadQueue.cpp:134-151, 537-549`): el
+    /// mejor cliente en espera inalcanzable que supere al mejor conectado queda
+    /// marcado — en su reconexión recibe una ranura inmediatamente, incluso
+    /// con la cola llena de clientes conectados por debajo.
     #[tokio::test]
     async fn add_next_connect_promotes_on_reconnect() {
         let mgr = UploadManager::new();
@@ -2719,7 +2718,7 @@ mod tests {
         mgr.request_upload_slot("a", "a", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // Ancien attenteur (wait long -> gros score) puis un recent.
+        // Cliente antiguo en espera (larga espera -> gran puntuación) y luego uno reciente.
         mgr.request_upload_slot("old", "old", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
@@ -2733,19 +2732,19 @@ mod tests {
             .unwrap();
         mgr.mark_disconnected("old").await;
 
-        // "old" (deconnecte, gros score) depasse "new" (connecte, low prio)
-        // -> add_next_connect pose par promote_locked (declenche par le
-        // tick de release).
+        // "old" (desconectado, alta puntuación) supera a "new" (conectado, baja prioridad)
+        // -> add_next_connect fijado por promote_locked (disparado por el
+        // tick de liberación).
         mgr.release_slot("a").await;
         {
             let q = mgr.queue.lock().await;
             let old = q.iter().find(|e| e.client_key == "old").unwrap();
             assert!(old.add_next_connect);
-            // "new" a ete promu dans le slot libere.
+            // "new" fue promocionado a la ranura liberada.
             assert!(mgr.active_snapshots().await.iter().any(|s| s.client_address == "new"));
         }
 
-        // Reconnexion de "old" : slot immediat malgre la file pleine.
+        // Reconexión de "old": ranura inmediata a pesar de que la cola esté llena.
         let (state, _) = mgr
             .request_upload_slot("old", "old", "h", "f", 1.0, "normal", false, None)
             .await
@@ -2758,9 +2757,9 @@ mod tests {
             .any(|s| s.client_address == "old"));
     }
 
-    /// eMule `Ban()` → `AddBannedClient` : quand `bad_requests` atteint
-    /// `BAD_CLIENT_BAN`, l'IP est poussée dans `pending_bans` pour un ban
-    /// IP de 2 h côté `DownloadService` — pas seulement déscorée.
+    /// eMule `Ban()` → `AddBannedClient`: cuando `bad_requests` alcanza
+    /// `BAD_CLIENT_BAN`, la IP se incluye en `pending_bans` para un bloqueo
+    /// de IP de 2 h en `DownloadService` — no solo retirada de puntuación.
     #[tokio::test]
     async fn bad_client_ban_pushes_ip_for_two_hour_ban() {
         let mgr = UploadManager::new();
@@ -2771,7 +2770,7 @@ mod tests {
         mgr.request_upload_slot("f", "9.9.9.9:4662", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // 4 re-asks rapprochés du même fichier par le pair en file.
+        // 4 re-asks muy seguidos para el mismo archivo por parte del par en cola.
         for _ in 0..4 {
             mgr.request_upload_slot("f", "9.9.9.9:4662", "h", "f", 1.0, "normal", false, None)
                 .await
@@ -2783,8 +2782,8 @@ mod tests {
         assert!(mgr.drain_pending_bans().await.is_empty());
     }
 
-    /// `!GetFriendSlot()` dans `AddRequestCount` : un ami n'est jamais
-    /// comptabilisé dans l'anti-flood de requêtes.
+    /// `!GetFriendSlot()` en `AddRequestCount`: un amigo nunca se
+    /// contabiliza en el control anti-flood de peticiones.
     #[tokio::test]
     async fn friend_is_exempt_from_bad_request_count() {
         let mgr = UploadManager::new();
@@ -2793,7 +2792,7 @@ mod tests {
         mgr.request_upload_slot("a", "1.1.1.1:4662", "h", "f", 1.0, "normal", false, None)
             .await
             .unwrap();
-        // L'ami entre en file puis re-demande 5 fois de suite.
+        // El amigo entra en cola y vuelve a solicitar 5 veces consecutivas.
         for _ in 0..6 {
             let r = mgr
                 .request_upload_slot("f", "9.9.9.9:4662", "h", "f", 1.0, "normal", false, None)

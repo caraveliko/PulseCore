@@ -10,11 +10,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 
-/// Taille maximale de l'en-tête binaire inspecté en fallback sans `ffprobe` (256 Ko).
+/// Tamaño máximo de la cabecera binaria inspeccionada como respaldo sin `ffprobe` (256 KiB).
 const HEADER_PROBE_BYTES: usize = 256 * 1024;
-/// Nombre maximal d'entrées dans le cache d'inspection média en mémoire.
+/// Número máximo de entradas en la caché de inspección de medios en memoria.
 const PROBE_CACHE_MAX_ENTRIES: usize = 1024;
-/// Seuils de résolution vidéo (largeur / hauteur).
+/// Umbrales de resolución de vídeo (ancho / alto).
 const UHD_MIN_WIDTH: u32 = 3200;
 const UHD_MIN_HEIGHT: u32 = 1800;
 const FHD_MIN_WIDTH: u32 = 1700;
@@ -70,8 +70,8 @@ struct FfprobeTags {
     title: Option<String>,
 }
 
-/// Inspecte de manière asynchrone (`spawn_blocking`) un fichier vidéo pour déterminer sa résolution réelle,
-/// son codec vidéo et ses pistes audio/sous-titres intégrées (avec cache mémoire indexé par mtime/taille).
+/// Inspecciona de manera asíncrona (`spawn_blocking`) un archivo de vídeo para determinar su resolución real,
+/// su códec de vídeo y sus pistas de audio/subtítulos integradas (con caché en memoria indexada por mtime/tamaño).
 pub async fn probe_video_file(path: &Path) -> MediaProbeInfo {
     let path_buf = path.to_path_buf();
     tokio::task::spawn_blocking(move || probe_video_file_sync(&path_buf))
@@ -79,7 +79,7 @@ pub async fn probe_video_file(path: &Path) -> MediaProbeInfo {
         .unwrap_or_else(|_| fallback_from_filename(path))
 }
 
-/// Version synchrone de l'inspection média (utilisable directement depuis un contexte `spawn_blocking`).
+/// Versión síncrona de la inspección multimedia (utilizable directamente desde un contexto `spawn_blocking`).
 pub fn probe_video_file_sync(path: &Path) -> MediaProbeInfo {
     let meta = std::fs::metadata(path).ok();
     let cache_key = meta.as_ref().map(|m| {
@@ -306,7 +306,7 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
     ))
 }
 
-/// Inspecte les premiers 256 Ko d'un conteneur Matroska (`.mkv`) ou MP4 lorsque `ffprobe` est absent.
+/// Inspecciona los primeros 256 KiB de un contenedor Matroska (`.mkv`) o MP4 cuando `ffprobe` no está presente.
 fn probe_via_binary_header(path: &Path) -> Option<MediaProbeInfo> {
     let mut file = File::open(path).ok()?;
     let mut buf = vec![0u8; HEADER_PROBE_BYTES];
@@ -316,7 +316,7 @@ fn probe_via_binary_header(path: &Path) -> Option<MediaProbeInfo> {
     }
     buf.truncate(n);
 
-    // Vérifier signature Matroska / EBML (0x1A 0x45 0xDF 0xA3)
+    // Verificar firma Matroska / EBML (0x1A 0x45 0xDF 0xA3)
     let is_ebml = buf.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]);
     if !is_ebml {
         return None;
@@ -325,14 +325,14 @@ fn probe_via_binary_header(path: &Path) -> Option<MediaProbeInfo> {
     let mut width = None;
     let mut height = None;
     for i in 0..buf.len().saturating_sub(4) {
-        // EBML PixelWidth ID = 0xB0, taille 2 octets (0x82)
+        // ID EBML PixelWidth = 0xB0, tamaño 2 bytes (0x82)
         if width.is_none() && buf[i] == 0xB0 && buf[i + 1] == 0x82 {
             let w = u16::from_be_bytes([buf[i + 2], buf[i + 3]]) as u32;
             if (320..=7680).contains(&w) {
                 width = Some(w);
             }
         }
-        // EBML PixelHeight ID = 0xBA, taille 2 octets (0x82)
+        // ID EBML PixelHeight = 0xBA, tamaño 2 bytes (0x82)
         if height.is_none() && buf[i] == 0xBA && buf[i + 1] == 0x82 {
             let h = u16::from_be_bytes([buf[i + 2], buf[i + 3]]) as u32;
             if (200..=4320).contains(&h) {

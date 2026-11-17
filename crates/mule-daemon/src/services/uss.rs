@@ -54,28 +54,28 @@ const DEFAULT_TOLERANCE_PERCENT: u32 = 500;
 const DEFAULT_TOLERANCE_MS: u32 = 200;
 /// eMule `USSGoingUpDivider` / `USSGoingDownDivider` defaults.
 const DEFAULT_DIVIDER: u32 = 1000;
-/// eMule `USSNumberOfPings` default: 1.
+/// Valor predeterminado de `USSNumberOfPings` en eMule: 1.
 const DEFAULT_NUM_PINGS: usize = 1;
-/// Hard-coded `uLowestInitialPingAllowed` in `UploadQueue.cpp` (20 ms).
+/// `uLowestInitialPingAllowed` codificado en `UploadQueue.cpp` de eMule (20 ms).
 const LOWEST_INITIAL_PING_MS: u32 = 20;
-/// Probes used to establish the baseline RTT (eMule `initialPingCounter = 10`).
+/// Sondeos utilizados para establecer el RTT de línea base (`initialPingCounter = 10` de eMule).
 const BASELINE_PROBES: usize = 10;
-/// Probe timeout.
+/// Tiempo de espera de sondeo.
 const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
-/// ICMP probe timeout (last-common-host ping).
+/// Tiempo de espera de sondeo ICMP (ping al último host común).
 const ICMP_PROBE_TIMEOUT_MS: u32 = 2000;
-/// Give up the baseline/control loop after this many consecutive probe
-/// failures (eMule restarts after 60).
+/// Abandonar el bucle de línea base / control tras este número de fallos
+/// consecutivos de sondeo (eMule reinicia tras 60).
 const MAX_CONSECUTIVE_FAILURES: u32 = 60;
-/// Resolved ping target is cached this long — route discovery runs at
-/// most once per TTL (eMule re-evaluates its host set periodically).
+/// El destino de ping resuelto se almacena en caché este tiempo — el descubrimiento de rutas se ejecuta
+/// como máximo una vez por TTL (eMule reevalúa su conjunto de hosts periódicamente).
 const TARGET_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
-/// Max traceroute destinations sampled (eMule keeps a small host set).
+/// Destinos máximos de traceroute muestreados (eMule mantiene un conjunto pequeño de hosts).
 const MAX_TRACE_DESTINATIONS: usize = 8;
 
-/// Probe target — `Icmp` is the discovered last-common-host (eMule LCRF),
-/// `Tcp` is the connect-RTT fallback (explicit `pingHost` or connected
-/// eD2K server).
+/// Destino de sondeo — `Icmp` es el último host común descubierto (LCRF de eMule),
+/// `Tcp` es el respaldo de RTT de conexión (`pingHost` explícito o servidor
+/// eD2K conectado).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PingTarget {
     Icmp(std::net::Ipv4Addr),
@@ -90,31 +90,31 @@ impl std::fmt::Display for PingTarget {
         }
     }
 }
-/// Upload speed never goes below this floor when USS drives it (1 KiB/s,
-/// eMule `m_minUpload` lower bound).
+/// La velocidad de subida nunca baja de este suelo cuando USS la controla (1 KiB/s,
+/// límite inferior `m_minUpload` de eMule).
 const MIN_UPLOAD_BPS: u64 = 1024;
 
-/// USS configuration, persisted as JSON in the settings table.
+/// Configuración de USS, persistida como JSON en la tabla de ajustes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UssConfig {
     pub enabled: bool,
-    /// Optional `host:port` probe target; falls back to the connected server.
+    /// Destino de sondeo `host:port` opcional; recurre al servidor conectado.
     pub ping_host: Option<String>,
-    /// Lower bound of the dynamic limit (bytes/sec).
+    /// Límite inferior del límite dinámico (bytes/s).
     pub min_upload_bps: u64,
-    /// Upper bound of the dynamic limit (bytes/sec); 0 = uncapped
-    /// (eMule `UNLIMITED` — the limit then floats freely).
+    /// Límite superior del límite dinámico (bytes/s); 0 = sin límite
+    /// (`UNLIMITED` de eMule — el límite fluctúa libremente).
     pub max_upload_bps: u64,
-    /// true → `soll_ping = ping_tolerance_ms`; false → percent mode.
+    /// true → `soll_ping = ping_tolerance_ms`; false → modo porcentaje.
     pub use_ms_tolerance: bool,
-    /// Raw eMule `USSPingTolerance` value; factor = (v-100)/100.
+    /// Valor sin procesar de `USSPingTolerance` de eMule; factor = (v-100)/100.
     pub ping_tolerance_percent: u32,
-    /// Target ping ceiling in ms (ms-tolerance mode).
+    /// Techo de ping objetivo en ms (modo de tolerancia en ms).
     pub ping_tolerance_ms: u32,
     pub going_up_divider: u32,
     pub going_down_divider: u32,
-    /// Median window size (`USSNumberOfPings`).
+    /// Tamaño de ventana de la mediana (`USSNumberOfPings`).
     pub number_of_pings: usize,
 }
 
@@ -135,23 +135,23 @@ impl Default for UssConfig {
     }
 }
 
-/// Runtime snapshot exposed via RPC.
+/// Instantánea de tiempo de ejecución expuesta mediante RPC.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UssSnapshot {
     pub enabled: bool,
-    /// `disabled` | `waiting` (no probe target) | `preparing` (baseline) |
+    /// `disabled` | `waiting` (sin destino de sondeo) | `preparing` (línea base) |
     /// `active` | `error`.
     pub state: &'static str,
-    /// Current dynamic upload limit in bytes/sec (0 when USS is off).
+    /// Límite de subida dinámico actual en bytes/s (0 cuando USS está apagado).
     pub current_limit_bps: u64,
-    /// Median latency of the last probes (ms).
+    /// Latencia mediana de los últimos sondeos (ms).
     pub latency_ms: u32,
-    /// Baseline (lowest observed) latency (ms).
+    /// Latencia de línea base (más baja observada) (ms).
     pub lowest_ping_ms: u32,
-    /// Whether new upload clients are currently accepted.
+    /// Si actualmente se aceptan nuevos clientes de subida.
     pub accept_new_client: bool,
-    /// Probe target actually in use.
+    /// Destino de sondeo efectivamente en uso.
     pub ping_target: Option<String>,
 }
 
@@ -162,16 +162,16 @@ struct UssInner {
     latency_ms: u32,
     lowest_ping_ms: u32,
     ping_target: Option<String>,
-    /// Upload limit configured manually via `limits.set` — restored when
-    /// USS is disabled.
+    /// Límite de subida configurado manualmente mediante `limits.set` — restaurado cuando
+    /// USS está deshabilitado.
     manual_limit_bps: u64,
-    /// Download limit *configurée* (`rate_limit_download_bps`) — le bucket
-    /// download est replafonné à `emule_ud_ratio(dl_cfg, upload)` à chaque
-    /// ajustement dynamique (eMule `GetMaxDownloadInBytesPerSec` dynamique).
+    /// Límite de descarga *configurado* (`rate_limit_download_bps`) — el cubo de
+    /// descarga se vuelve a ajustar a `emule_ud_ratio(dl_cfg, upload)` en cada
+    /// ajuste dinámico (`GetMaxDownloadInBytesPerSec` dinámico de eMule).
     download_limit_bps: u64,
 }
 
-/// USS controller. Drives `upload_bucket` when enabled.
+/// Controlador USS. Controla `upload_bucket` cuando está habilitado.
 #[derive(Clone)]
 pub struct UssService {
     inner: Arc<RwLock<UssInner>>,
@@ -221,12 +221,12 @@ impl UssService {
 
     pub fn set_downloads(&self, dl: Arc<tokio::sync::Mutex<DownloadService>>) {
         *self.downloads.write().unwrap() = Some(dl);
-        // Persisted config is loaded lazily by the control loop's first
-        // iteration (avoids blocking in `AppState::new`).
+        // La configuración persistida se carga de forma diferida en la primera
+        // iteración del bucle de control (evita bloqueos en `AppState::new`).
     }
 
-    /// Shared flag consulted by `UploadManager` before granting slots
-    /// (eMule `LastCommonRouteFinder::AcceptNewClient`).
+    /// Indicador compartido consultado por `UploadManager` antes de conceder ranuras
+    /// (`LastCommonRouteFinder::AcceptNewClient` de eMule).
     pub fn accept_flag(&self) -> Arc<AtomicBool> {
         self.accept_new_client.clone()
     }
@@ -248,8 +248,8 @@ impl UssService {
         }
     }
 
-    /// Applies a new config (partial update), persists it, and nudges the
-    /// control loop by restarting the task.
+    /// Aplica una nueva configuración (actualización parcial), la persiste y notifica al
+    /// bucle de control reiniciando la tarea.
     pub async fn update_config<F: FnOnce(&mut UssConfig)>(&self, apply: F) {
         let (json, dl) = {
             let mut inner = self.inner.write().unwrap();
@@ -267,20 +267,20 @@ impl UssService {
         }
     }
 
-    /// Records the manual upload limit configured via `limits.set` so USS
-    /// can restore it when disabled.
+    /// Registra el límite de subida manual configurado mediante `limits.set` para que USS
+    /// pueda restaurarlo cuando se deshabilite.
     pub fn note_manual_limit(&self, bps: u64) {
         self.inner.write().unwrap().manual_limit_bps = bps;
     }
 
-    /// Records the *configured* download limit (`limits.set`, capacity
-    /// clamp, boot) so the control loop can re-cap the download bucket
-    /// with the eMule upload/download ratio on every dynamic update.
+    /// Registra el límite de descarga *configurado* (`limits.set`, límite de capacidad,
+    /// arranque) para que el bucle de control pueda volver a ajustar el cubo de descarga
+    /// con la proporción de subida/descarga de eMule en cada actualización dinámica.
     pub fn note_manual_download_limit(&self, bps: u64) {
         self.inner.write().unwrap().download_limit_bps = bps;
     }
 
-    /// Starts the background control loop. Idempotent.
+    /// Inicia el bucle de control en segundo plano. Idempotente.
     pub fn start(&self, limiters: Arc<PolicyRateLimiters>, cancel: CancellationToken) {
         if self.running.swap(true, Ordering::SeqCst) {
             return;
@@ -289,8 +289,8 @@ impl UssService {
         let running = Arc::clone(&self.running);
         let handle = tokio::spawn(async move {
             svc.run(limiters, cancel).await;
-            // Le kill switch annule la boucle via le token ; on libère le
-            // drapeau pour que `network.enable` puisse relancer le service.
+            // El interruptor de corte cancela el bucle mediante el token; se libera la
+            // bandera para que `network.enable` pueda reiniciar el servicio.
             running.store(false, Ordering::SeqCst);
         });
         if let Ok(mut t) = self.task.try_lock() {
@@ -307,12 +307,12 @@ impl UssService {
         let mut consecutive_failures: u32 = 0;
         let mut baseline_done = false;
         let loop_start = Instant::now();
-        // Cible de ping résolue + horodatage — la découverte du dernier
-        // routeur commun (traceroutes ICMP) est coûteuse : on la rejoue au
-        // plus toutes les TARGET_CACHE_TTL, ou après re-baseline.
+        // Destino de ping resuelto + marca de tiempo — el descubrimiento del último
+        // router común (traceroutes ICMP) es costoso: se vuelve a ejecutar a lo
+        // sumo cada TARGET_CACHE_TTL, o tras recalcular la línea base.
         let mut cached_target: Option<(PingTarget, Instant)> = None;
 
-        // Load persisted config once.
+        // Cargar configuración persistida una sola vez.
         let dl_opt = { self.downloads.read().unwrap().clone() };
         if let Some(dl) = dl_opt {
             if let Ok(Some(json)) = dl.lock().await.get_setting(USS_SETTINGS_KEY) {
@@ -320,7 +320,7 @@ impl UssService {
                     self.inner.write().unwrap().config = cfg;
                 }
             }
-            // Limite download configurée persistée (ratio eMule dynamique).
+            // Límite de descarga configurado persistido (ratio dinámico de eMule).
             if let Ok(Some(s)) = dl.lock().await.get_setting("rate_limit_download_bps") {
                 if let Ok(v) = s.trim().parse::<u64>() {
                     self.inner.write().unwrap().download_limit_bps = v;
@@ -328,8 +328,8 @@ impl UssService {
             }
         }
 
-        /// Replafonne le bucket download au ratio eMule
-        /// (`GetMaxDownloadInBytesPerSec`) pour la limite upload courante.
+        /// Vuelve a ajustar el límite del cubo de descarga a la proporción de eMule
+        /// (`GetMaxDownloadInBytesPerSec`) para el límite de subida actual.
         macro_rules! apply_ud_ratio {
             ($ul_eff:expr) => {{
                 let dl_cfg = self.inner.read().unwrap().download_limit_bps;
@@ -344,7 +344,7 @@ impl UssService {
             }
             let cfg = self.config();
             if !cfg.enabled {
-                // Restore manual limit once per transition.
+                // Restaurar límite manual una vez por transición.
                 {
                     let mut inner = self.inner.write().unwrap();
                     if inner.state != "disabled" || inner.current_limit_bps != 0 {
@@ -366,7 +366,7 @@ impl UssService {
                 continue;
             }
 
-            // Resolve probe target (cached — route discovery is expensive).
+            // Resolver destino de sondeo (en caché — el descubrimiento de rutas es costoso).
             let stale = cached_target
                 .as_ref()
                 .is_none_or(|(_, at)| at.elapsed() >= TARGET_CACHE_TTL);
@@ -384,7 +384,7 @@ impl UssService {
             };
             self.inner.write().unwrap().ping_target = Some(target.to_string());
 
-            // --- Baseline: lowest of up to BASELINE_PROBES probes ---
+            // --- Línea base: el menor de hasta BASELINE_PROBES sondeos ---
             if !baseline_done {
                 self.set_state("preparing");
                 let mut best = u32::MAX;
@@ -408,7 +408,7 @@ impl UssService {
                     continue;
                 }
                 if successes == 0 {
-                    // Target unreachable — wait before retrying.
+                    // Destino inalcanzable — esperar antes de reintentar.
                     self.set_state("waiting");
                     tokio::select! {
                         _ = cancel.cancelled() => return,
@@ -421,7 +421,7 @@ impl UssService {
                 } else {
                     best
                 };
-                // eMule: upload = max(curUpload, minUpload), clamped to max.
+                // eMule: subida = max(curUpload, minUpload), acotado al máximo.
                 let cur_upload = self.current_upload_rate().await;
                 let max = cfg.max_upload_bps;
                 upload_bps = cur_upload.max(cfg.min_upload_bps.max(MIN_UPLOAD_BPS));
@@ -437,9 +437,9 @@ impl UssService {
                 self.inner.write().unwrap().lowest_ping_ms = initial_ping_ms;
             }
 
-            // --- Control loop ---
-            // eMule: ticksBetweenPings = 100*64/upload*1000 ms, clamped
-            // [125ms, 1s] — probes use ~1% of upload bandwidth.
+            // --- Bucle de control ---
+            // eMule: ticksBetweenPings = 100*64/upload*1000 ms, acotado a
+            // [125ms, 1s] — los sondeos utilizan ~1% del ancho de banda de subida.
             let interval_ms = 6_400_000u64
                 .checked_div(upload_bps)
                 .map_or(1000, |v| v.clamp(125, 1000));
@@ -455,8 +455,8 @@ impl UssService {
                 continue;
             }
 
-            // soll_ping: ms mode uses the fixed tolerance; percent mode
-            // uses initial_ping * (tolerance-100)/100 (UploadQueue.cpp:921).
+            // soll_ping: el modo ms usa la tolerancia fija; el modo porcentaje
+            // usa initial_ping * (tolerance-100)/100 (UploadQueue.cpp:921).
             let soll_ping: i64 = if cfg.use_ms_tolerance {
                 cfg.ping_tolerance_ms as i64
             } else {
@@ -468,7 +468,7 @@ impl UssService {
                 Some(ms) => {
                     consecutive_failures = 0;
                     let ms = ms.max(1);
-                    // Track new lowest ping (eMule lowers initial_ping).
+                    // Registrar nuevo ping más bajo (eMule reduce initial_ping).
                     if ms < initial_ping_ms && initial_ping_ms > LOWEST_INITIAL_PING_MS {
                         initial_ping_ms = ms.max(LOWEST_INITIAL_PING_MS);
                         self.inner.write().unwrap().lowest_ping_ms = initial_ping_ms;
@@ -477,15 +477,15 @@ impl UssService {
                 }
                 None => {
                     consecutive_failures += 1;
-                    // eMule: failing ping counts as 3*(soll+initial) → forces
-                    // a decrease.
+                    // eMule: un ping fallido cuenta como 3*(soll+initial) → fuerza
+                    // una disminución.
                     (soll_ping + initial_ping_ms as i64) * 3
                 }
             };
 
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                // Re-baseline: topology/target may have changed — force
-                // target re-resolution (route discovery) too.
+                // Recalcular línea base: la topología/destino puede haber cambiado — forzar
+                // también la resolución del destino (descubrimiento de ruta).
                 baseline_done = false;
                 cached_target = None;
                 delays.clear();
@@ -498,7 +498,7 @@ impl UssService {
             }
             let ping_average = median(&delays);
 
-            // eMule ramps up/down dividers for the first ~60s after start.
+            // eMule incrementa/reduce divisores durante los primeros ~60 s tras el inicio.
             let elapsed = loop_start.elapsed().as_secs();
             let (mut up_div, mut down_div) =
                 (cfg.going_up_divider.max(1), cfg.going_down_divider.max(1));
@@ -524,7 +524,7 @@ impl UssService {
 
             let cur_upload = self.current_upload_rate().await;
             if hping < 0 {
-                // Latency above tolerance → lower the rate, refuse new clients.
+                // Latencia superior a la tolerancia → reducir la tasa, rechazar nuevos clientes.
                 self.accept_new_client.store(false, Ordering::Relaxed);
                 let diff = hping * 1024 * 10 / down_div as i64 / initial_ping_ms.max(1) as i64;
                 upload_bps = if upload_bps as i64 + diff > 0 {
@@ -534,7 +534,7 @@ impl UssService {
                 };
             } else if hping > 0 {
                 self.accept_new_client.store(true, Ordering::Relaxed);
-                // eMule only raises while actual throughput tracks the limit
+                // eMule solo aumenta mientras el rendimiento real sigue el límite
                 // (curUpload + 30KB > upload).
                 if cur_upload + 30 * 1024 > upload_bps {
                     let diff = hping * 1024 * 10 / (up_div as i64 * initial_ping_ms.max(1) as i64);
@@ -557,8 +557,8 @@ impl UssService {
         }
     }
 
-    /// Current achieved upload throughput (sum of active slot rates) —
-    /// eMule uses `uploadqueue->GetDatarate()` as `curUpload`.
+    /// Rendimiento de subida alcanzado actual (suma de tasas de ranuras activas) —
+    /// eMule utiliza `uploadqueue->GetDatarate()` como `curUpload`.
     async fn current_upload_rate(&self) -> u64 {
         let mgr = self.upload_manager.read().unwrap().clone();
         match mgr {
@@ -573,15 +573,15 @@ impl UssService {
     }
 
     async fn resolve_target(&self, cfg: &UssConfig) -> Option<PingTarget> {
-        // Explicit override wins (`uss.pingHost` in `limits.set`).
+        // Prevalece la anulación explícita (`uss.pingHost` en `limits.set`).
         if let Some(host) = &cfg.ping_host {
             if let Ok(addr) = host.parse::<SocketAddr>() {
                 return Some(PingTarget::Tcp(addr));
             }
         }
-        // eMule `LastCommonRouteFinder`: trace ICMP routes toward a sample
-        // of remote hosts and ping the deepest shared hop — the ISP-side
-        // router where local uplink congestion actually shows up.
+        // `LastCommonRouteFinder` de eMule: traza rutas ICMP hacia una muestra
+        // de hosts remotos y hace ping al salto compartido más profundo — el router
+        // del lado del ISP donde realmente se manifiesta la congestión de subida local.
         if let Some(ip) = self.discover_last_common_host().await {
             tracing::info!(
                 "USS: last common host discovered, pinging {peer}",
@@ -589,7 +589,7 @@ impl UssService {
             );
             return Some(PingTarget::Icmp(ip));
         }
-        // Fallback: TCP-connect RTT to the connected eD2K server.
+        // Respaldo: RTT de conexión TCP al servidor eD2K conectado.
         let mgr = self.server_session.read().unwrap().clone()?;
         let snap = mgr.snapshot().await;
         if snap.status != ServerConnectionStatus::Connected {
@@ -600,11 +600,10 @@ impl UssService {
             .map(PingTarget::Tcp)
     }
 
-    /// Traces ICMP routes toward known remote peers (connected server,
-    /// upload clients, download sources) and returns the deepest hop
-    /// common to all routes. `None` when ICMP is unavailable or fewer
-    /// than two distinct destinations are known (a single route has no
-    /// meaningful "common" hop).
+    /// Traza rutas ICMP hacia pares remotos conocidos (servidor conectado,
+    /// clientes de subida, fuentes de descarga) y devuelve el salto más profundo
+    /// común a todas las rutas. `None` si ICMP no está disponible o se conocen menos
+    /// de dos destinos distintos (una sola ruta no tiene ningún salto "común" significativo).
     async fn discover_last_common_host(&self) -> Option<std::net::Ipv4Addr> {
         if !uss_icmp::icmp_available() {
             return None;
@@ -627,9 +626,9 @@ impl UssService {
         host
     }
 
-    /// Distinct public IPv4 destinations for route discovery: connected
-    /// eD2K server, active upload clients and download sources (eMule
-    /// traces toward peers it is connected to).
+    /// Destinos IPv4 públicos distintos para el descubrimiento de rutas: servidor eD2K
+    /// conectado, clientes de subida activos y fuentes de descarga (eMule
+    /// traza rutas hacia pares con los que está conectado).
     async fn collect_destinations(&self) -> Vec<std::net::Ipv4Addr> {
         let mut ips: Vec<std::net::Ipv4Addr> = Vec::new();
 
@@ -666,8 +665,8 @@ impl UssService {
             }
         }
 
-        // Keep only public routable IPs — LAN/loopback hops would pollute
-        // the common-hop detection (the home gateway is trivially shared).
+        // Mantener solo IPs públicas enrutables — saltos LAN/loopback contaminarían
+        // la detección del salto común (la pasarela doméstica se comparte de forma trivial).
         ips.retain(|ip| {
             mule_network_policy::classify_ip(std::net::IpAddr::V4(*ip))
                 == mule_network_policy::IpCategory::PublicRoutable
@@ -683,9 +682,9 @@ impl UssService {
     }
 }
 
-/// Measures RTT to `target` in milliseconds — ICMP echo for the
-/// discovered last-common-host (eMule behaviour), TCP connect for the
-/// fallback targets.
+/// Mide el RTT hacia `target` en milisegundos — eco ICMP para el
+/// último host común descubierto (comportamiento de eMule), conexión TCP para los
+/// destinos de respaldo.
 async fn probe_target(target: &PingTarget) -> Option<u32> {
     match target {
         PingTarget::Icmp(ip) => uss_icmp::ping(*ip, ICMP_PROBE_TIMEOUT_MS).await,
@@ -693,7 +692,7 @@ async fn probe_target(target: &PingTarget) -> Option<u32> {
     }
 }
 
-/// Measures TCP connect RTT to `addr` in milliseconds.
+/// Mide el RTT de conexión TCP a `addr` en milisegundos.
 async fn probe_tcp_rtt(addr: SocketAddr) -> Option<u32> {
     let start = Instant::now();
     match tokio::time::timeout(PROBE_TIMEOUT, tokio::net::TcpStream::connect(addr)).await {
@@ -702,7 +701,7 @@ async fn probe_tcp_rtt(addr: SocketAddr) -> Option<u32> {
     }
 }
 
-/// Median of the delay window (`LastCommonRouteFinder::Median`).
+/// Mediana de la ventana de retardo (`LastCommonRouteFinder::Median`).
 fn median(delays: &VecDeque<u32>) -> u32 {
     if delays.is_empty() {
         return 0;

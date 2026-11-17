@@ -80,7 +80,7 @@ fn test_part_sink_incremental_writes_and_interval_merging() {
     assert_eq!(sink.completed_ranges(), &[(0, 10240)]);
     assert_eq!(sink.total_bytes_received(), 10240);
 
-    // Write chunk 1: [10240, 20480) - adjacent, should merge with chunk 0
+    // Escribir fragmento 1: [10240, 20480) - adyacente, debe fusionarse con fragmento 0
     let chunk1 = Ed2kSendingPart {
         file_hash: hash,
         start_offset: 10240,
@@ -190,7 +190,7 @@ fn test_part_sink_cross_part_boundary_rejection() {
     let mut sink =
         Ed2kPartFileSink::create_new(part_path, hash, TEST_FILE_SIZE).expect("create new sink");
 
-    // Part 0 ends at 9,728,000. Try writing a chunk that crosses this boundary.
+    // La parte 0 finaliza en 9.728.000. Intentar escribir un fragmento que cruce este límite.
     let cross_chunk = Ed2kSendingPart {
         file_hash: hash,
         start_offset: 9_727_000,
@@ -334,7 +334,7 @@ fn test_part_sink_compute_part_md4_streams_from_disk_matching_oracle() {
     oracle_hasher.update(&part0_bytes);
     let expected_md4: [u8; 16] = oracle_hasher.finalize().into();
 
-    // Incomplete part check: before writing, computing MD4 must fail
+    // Comprobación de parte incompleta: antes de escribir, el cálculo de MD4 debe fallar
     let incomplete_err = sink.compute_part_md4(0, &sequencer).unwrap_err();
     assert!(matches!(incomplete_err, Ed2kSequencerError::Storage(_)));
     assert!(!sink
@@ -397,7 +397,7 @@ async fn test_download_blocks_pipelined_with_resume_and_interruption() {
     let part0_blocks = sequencer.plan_part_blocks(0).expect("plan part 0");
     let target_blocks = &part0_blocks[0..5];
 
-    // Session 1: Download with sliding window (max 3 in-flight) but stop after exactly 2 blocks
+    // Sesión 1: Descarga con ventana deslizante (máx 3 en vuelo) pero detenerse tras exactamente 2 bloques
     {
         let (mut client, _info) = Ed2kLoopbackClient::connect_and_handshake(
             peer_addr,

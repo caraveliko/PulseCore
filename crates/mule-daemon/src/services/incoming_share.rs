@@ -22,31 +22,31 @@ use tokio::sync::Mutex;
 
 use crate::services::downloads::DownloadService;
 
-/// Setting key (persisted in the settings table): `"0"` disables the scan.
+/// Clave de configuración (persistida en la tabla de ajustes): `"0"` desactiva el escaneo.
 pub const SETTING_SHARE_DOWNLOAD_DIR: &str = "share_download_dir";
 
-/// File extensions skipped during the incoming-folder scan (download
-/// artifacts, never shareable payloads).
+/// Extensiones de archivo omitidas durante el escaneo de la carpeta de entrada (artefactos
+/// de descarga, nunca cargas útiles compartibles).
 const SKIP_EXTENSIONS: &[&str] = &["part", "met", "part.met", "bak", "tmp", "ts", "emuletd"];
 
-/// Résultat d'un scan du dossier Incoming : entrées nouvellement
-/// enregistrées et entrées devenues orphelines purgées.
+/// Resultado de un escaneo de la carpeta Incoming: entradas recién
+/// registradas y entradas convertidas en huérfanas purgadas.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ShareScanReport {
     pub added: usize,
     pub removed: usize,
 }
 
-/// Scans `dir` recursively and registers every regular file as a shared
-/// file (eMule shares subdirectories too).
+/// Escanea `dir` recursivamente y registra cada archivo regular como archivo
+/// compartido (eMule también comparte subdirectorios).
 ///
-/// Hashing runs on the blocking pool (eD2K hashing is I/O + MD4 bound).
-/// Returns the number of newly registered files.
+/// El cálculo de hash se ejecuta en el grupo de hilos bloqueantes (el hash eD2K está acotado por E/S + MD4).
+/// Devuelve el número de archivos recién registrados.
 pub async fn scan_download_dir_shares(
     downloads: &Arc<Mutex<DownloadService>>,
     dir: PathBuf,
 ) -> ShareScanReport {
-    // Opt-out setting; defaults to enabled like eMule's Incoming folder.
+    // Ajuste de exclusión voluntaria; habilitado por defecto como la carpeta Incoming de eMule.
     let enabled = {
         let dl = downloads.lock().await;
         dl.get_setting(SETTING_SHARE_DOWNLOAD_DIR)
@@ -60,8 +60,8 @@ pub async fn scan_download_dir_shares(
         return ShareScanReport::default();
     }
 
-    // eMule shares subdirectories recursively — collect all shareable
-    // files under `dir` on the blocking pool (arbitrary depth, I/O bound).
+    // eMule comparte subdirectorios recursivamente — recopilar todos los archivos
+    // compartibles bajo `dir` en el grupo bloqueante (profundidad arbitraria, limitado por E/S).
     let walk_dir = dir.clone();
     let entries: Vec<PathBuf> = match tokio::task::spawn_blocking(move || {
         collect_shareable_files(&walk_dir)
@@ -75,11 +75,11 @@ pub async fn scan_download_dir_shares(
         }
     };
 
-    // Réconciliation façon `CSharedFileList::Reload` : les partages dont
-    // le fichier sous le dossier Incoming a disparu du disque
-    // (suppression physique hors daemon) sont retirés. Garde
-    // `dir.is_dir()` : si le dossier entier est injoignable (lecteur
-    // débranché) chaque fichier semble manquant — ne rien purger.
+    // Reconciliación al estilo `CSharedFileList::Reload`: los recursos compartidos cuyo
+    // archivo bajo la carpeta Incoming haya desaparecido del disco
+    // (eliminación física fuera del daemon) son retirados. Guarda
+    // `dir.is_dir()`: si la carpeta entera es inaccesible (unidad
+    // desconectada) cada archivo parecerá faltante — no purgar nada.
     let mut removed = 0usize;
     if dir.is_dir() {
         removed = prune_stale_incoming_shares(downloads, &dir).await;
@@ -123,8 +123,8 @@ pub async fn scan_download_dir_shares(
         let hash_hex = hashed.root_hash.to_hex().to_lowercase();
         let mut dl = downloads.lock().await;
 
-        // Already shared (completed download or manual share): keep the
-        // existing entry and its user settings untouched.
+        // Ya compartido (descarga completada o recurso compartido manual): mantener la
+        // entrada existente y sus ajustes de usuario intactos.
         if dl.get_shared_file(&hash_hex).ok().flatten().is_some() {
             continue;
         }
@@ -135,7 +135,7 @@ pub async fn scan_download_dir_shares(
             hashed.total_bytes,
             path.to_string_lossy().as_ref(),
         );
-        // eMule `UAPPref` : un nouveau partage démarre en priorité « auto ».
+        // `UAPPref` de eMule: un nuevo recurso compartido inicia con prioridad «auto».
         if dl.auto_up_priority_enabled() {
             shared.up_priority = "auto".to_string();
         }
@@ -166,11 +166,11 @@ pub async fn scan_download_dir_shares(
     ShareScanReport { added, removed }
 }
 
-/// Retire les entrées `shared_files` pointant sous `dir` dont le fichier
-/// n'existe plus sur le disque. Les partages hors `dir` sont ignorés :
-/// un chemin injoignable y est indiscernable d'un lecteur hors-ligne.
-/// Le test `exists()` par fichier (et non l'appartenance à la liste
-/// scannée) immunise contre les sous-dossiers illisibles.
+/// Retira las entradas `shared_files` que apuntan bajo `dir` cuyo archivo
+/// ya no existe en el disco. Los recursos compartidos fuera de `dir` se ignoran:
+/// una ruta inaccesible allí es indistinguible de una unidad fuera de línea.
+/// La comprobación `exists()` por archivo (y no la pertenencia a la lista
+/// escaneada) inmuniza frente a subcarpetas ilegibles.
 async fn prune_stale_incoming_shares(
     downloads: &Arc<Mutex<DownloadService>>,
     dir: &Path,
@@ -218,8 +218,8 @@ async fn prune_stale_incoming_shares(
     removed
 }
 
-/// Normalisation lexicale pour comparaison de chemins Windows :
-/// insensible à la casse, séparateurs `/` vs `\` unifiés.
+/// Normalización léxica para comparación de rutas de Windows:
+/// insensible a mayúsculas/minúsculas, separadores `/` frente a `\` unificados.
 fn normalize_path_str(p: &Path) -> String {
     p.to_string_lossy()
         .replace('\\', "/")
@@ -232,9 +232,9 @@ fn path_is_under_dir(file_path: &str, dir_norm: &str) -> bool {
     p == dir_norm || p.starts_with(&format!("{dir_norm}/"))
 }
 
-/// Depth-first walk collecting every shareable file under `dir`.
-/// Subdirectories are recursed into (eMule semantics); hidden entries and
-/// symlinks are skipped — the latter prevents filesystem cycles.
+/// Recorrido en profundidad que recopila cada archivo compartible bajo `dir`.
+/// Se entra recursivamente en los subdirectorios (semántica de eMule); las entradas ocultas y
+/// los enlaces simbólicos se omiten — esto último previene ciclos en el sistema de archivos.
 pub(crate) fn collect_shareable_files(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
@@ -273,8 +273,8 @@ pub(crate) fn collect_shareable_files(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// A file is shareable when it is a regular, non-hidden file whose
-/// extension is not a download artifact.
+/// Un archivo es compartible cuando es un archivo regular, no oculto, cuya
+/// extensión no es un artefacto de descarga.
 fn is_shareable_file(path: &Path) -> bool {
     if !path.is_file() {
         return false;

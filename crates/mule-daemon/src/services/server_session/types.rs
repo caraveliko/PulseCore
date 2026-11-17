@@ -3,17 +3,17 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Current lifecycle status of an eD2K server connection.
+/// Estado actual del ciclo de vida de una conexión a un servidor eD2K.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ServerConnectionStatus {
-    /// No connection active.
+    /// Ninguna conexión activa.
     Disconnected,
-    /// TCP handshake and login request in progress.
+    /// Apretón de manos TCP y solicitud de inicio de sesión en curso.
     Connecting,
-    /// Successfully logged in and ready for operations.
+    /// Sesión iniciada con éxito y listo para operar.
     Connected,
-    /// Disconnection in progress.
+    /// Desconexión en curso.
     Disconnecting,
 }
 
@@ -28,31 +28,31 @@ impl ServerConnectionStatus {
     }
 }
 
-/// Snapshot of the current eD2K server session.
+/// Instantánea de la sesión actual con el servidor eD2K.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerSessionSnapshot {
-    /// Current connection status.
+    /// Estado actual de la conexión.
     pub status: ServerConnectionStatus,
-    /// Server address ("ip:port") if connected or connecting.
+    /// Dirección del servidor ("ip:puerto") si está conectado o conectando.
     pub server_address: Option<String>,
-    /// Server name if received in ident or hello.
+    /// Nombre del servidor si se recibió en la identificación o saludo.
     pub server_name: Option<String>,
-    /// Server description.
+    /// Descripción del servidor.
     pub server_desc: Option<String>,
-    /// Server assigned Client ID.
+    /// ID de cliente asignada por el servidor.
     pub client_id: Option<u32>,
-    /// True if client ID >= 16_777_216.
+    /// Verdadero si el ID de cliente es >= 16_777_216 (HighID).
     pub is_high_id: bool,
-    /// Server MOTD / greeting message.
+    /// Mensaje de bienvenida / MOTD del servidor.
     pub welcome_message: Option<String>,
-    /// Active users reported by server.
+    /// Usuarios activos notificados por el servidor.
     pub current_users: Option<u32>,
-    /// Active files reported by server.
+    /// Archivos activos notificados por el servidor.
     pub current_files: Option<u32>,
-    /// Timestamp when connection completed (unix ms).
+    /// Marca temporal de finalización de la conexión (milisegundos unix).
     pub connected_at_unix_ms: Option<i64>,
-    /// Ping / roundtrip time estimate in milliseconds.
+    /// Estimación del tiempo de ida y vuelta (ping / RTT) en milisegundos.
     pub ping_ms: Option<u32>,
 }
 

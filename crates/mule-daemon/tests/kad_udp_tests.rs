@@ -16,7 +16,7 @@ async fn test_kad_udp_nominal_ping_pong_and_contact_verification() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // 1. Start Kad UDP on loopback ephemeral port
+    // 1. Iniciar Kad UDP en un puerto efímero de loopback
     let bound_addr = state
         .kad
         .udp()
@@ -26,13 +26,13 @@ async fn test_kad_udp_nominal_ping_pong_and_contact_verification() {
 
     assert!(bound_addr.port() > 0);
 
-    // 2. Start a mock Kad peer socket on loopback
+    // 2. Iniciar un socket de par Kad simulado en loopback
     let mock_peer_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind mock peer");
     let mock_peer_addr = mock_peer_socket.local_addr().expect("mock addr");
 
-    // Spawn mock peer answering with Pong
+    // Generar par simulado que responde con Pong
     let mock_task = tokio::spawn(async move {
         let mut buf = vec![0u8; 1024];
         let (len, from_addr) = mock_peer_socket.recv_from(&mut buf).await.expect("recv");
@@ -49,7 +49,7 @@ async fn test_kad_udp_nominal_ping_pong_and_contact_verification() {
         }
     });
 
-    // 3. Ping the mock peer from daemon
+    // 3. Hacer ping al par simulado desde el daemon
     let target_kad_id = KadId::random();
     let latency_ms = state
         .kad
@@ -64,7 +64,7 @@ async fn test_kad_udp_nominal_ping_pong_and_contact_verification() {
     assert!(latency_ms < 2000);
     mock_task.await.expect("mock peer task finishes");
 
-    // 4. Verify contact is marked as verified in status & list
+    // 4. Verificar que el contacto quede marcado como verificado en el estado y la lista
     let status = state.kad.get_status().await;
     assert_eq!(status.packets_sent, 1);
     assert_eq!(status.packets_received, 1);
@@ -92,13 +92,13 @@ async fn test_kad_udp_timeout_and_transaction_cleanup() {
         .await
         .expect("start kad udp");
 
-    // Bind mock peer that ignores incoming packets
+    // Vincular par simulado que ignora los paquetes entrantes
     let mock_peer_socket = UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("bind mock peer");
     let mock_peer_addr = mock_peer_socket.local_addr().expect("mock addr");
 
-    // Ping non-responding peer
+    // Hacer ping a un par que no responde
     let err = state
         .kad
         .ping_contact(
@@ -130,10 +130,10 @@ async fn test_kad_udp_kill_switch_teardown() {
         .await
         .expect("start kad udp");
 
-    // Trigger Kill switch
+    // Activar el interruptor de corte (kill switch)
     state.network_policy.disconnect_all();
 
-    // Outbound ping must immediately fail under policy
+    // El ping saliente debe fallar de inmediato bajo la directiva
     let err = state
         .kad
         .ping_contact("127.0.0.1", 39737, None)
@@ -146,9 +146,9 @@ async fn test_kad_udp_kill_switch_teardown() {
     assert_eq!(snap.active_transactions, 0);
 }
 
-/// End-to-end UDP firewall check: a mock eD2K peer answers our OP_HELLO,
-/// receives OP_FWCHECKUDPREQ, and sends KADEMLIA2_FIREWALLUDP to our bound
-/// Kad UDP port — the check must conclude Open.
+/// Comprobación de cortafuegos UDP de extremo a extremo: un par eD2K simulado responde a nuestro OP_HELLO,
+/// recibe OP_FWCHECKUDPREQ y envía KADEMLIA2_FIREWALLUDP a nuestro puerto
+/// Kad UDP vinculado; la comprobación debe concluir como Abierta (Open).
 #[tokio::test]
 async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     use bytes::BytesMut;
@@ -163,8 +163,8 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
-    /// Reproduces eMule `EncryptSendClient` (Kad reckey path, no padding):
-    /// RC4 stream keyed by MD5(receiverKey:u16 rand) over everything after
+    /// Reproduce `EncryptSendClient` de eMule (ruta reckey de Kad, sin relleno):
+    /// flujo RC4 con clave MD5(receiverKey:u16 rand) sobre todo lo posterior al
     /// byte 3.
     fn encrypt_kad_udp(plain: &[u8], receiver_key: u32, sender_key: u32) -> Vec<u8> {
         use md5::{Digest, Md5};
@@ -193,7 +193,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // Daemon Kad UDP socket = intern port under test.
+    // Socket UDP Kad del daemon = puerto interno bajo prueba.
     let bound = state
         .kad
         .udp()
@@ -202,7 +202,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
         .expect("start kad udp");
     let intern_port = bound.port();
 
-    // Mock peer: TCP listener + UDP socket.
+    // Par simulado: oyente TCP + socket UDP.
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind tcp");
     let mock_tcp_port = listener.local_addr().unwrap().port();
     let mock_udp = UdpSocket::bind("127.0.0.1:0").await.expect("bind udp");
@@ -255,8 +255,8 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
                 }
             }
             if let Some(sender_key) = pending_fw.take() {
-                // Real eMule peers reply with the FIREWALLUDP datagram
-                // RC4-encrypted under our sender key.
+                // Los pares eMule reales responden con el datagrama FIREWALLUDP
+                // cifrado con RC4 bajo nuestra clave de remitente.
                 let probe = KadCodec::encode_firewall_udp(0, intern_port);
                 let enc = encrypt_kad_udp(&probe, sender_key, sender_key);
                 mock_udp
@@ -267,7 +267,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
         }
     });
 
-    // Register the mock as a verified Kad v8 contact via nodes.dat import.
+    // Registrar el simulador como un contacto Kad v8 verificado mediante la importación de nodes.dat.
     let contact = KadContactEntry::new(
         [7u8; 16],
         std::net::Ipv4Addr::LOCALHOST,
@@ -288,7 +288,7 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     let status = state.kad.run_udp_firewall_check().await;
     assert_eq!(status, UdpFirewallStatus::Open);
 
-    // Status snapshot exposes the verified state.
+    // La instantánea de estado expone el estado verificado.
     let snap = state.kad.get_status().await;
     assert_eq!(snap.udp_firewall_status, "open");
     assert!(snap.udp_firewall_verified);
@@ -297,8 +297,8 @@ async fn test_udp_firewall_check_succeeds_via_mock_peer() {
     mock.abort();
 }
 
-/// A candidate that connects but never sends FIREWALLUDP must not resolve a
-/// pending entry for a different IP (unsolicited datagrams are ignored).
+/// Un candidato que se conecta pero nunca envía FIREWALLUDP no debe resolver una
+/// entrada pendiente para una IP diferente (se ignoran los datagramas no solicitados).
 #[tokio::test]
 async fn test_udp_firewall_check_no_candidates_stays_unverified() {
     use mule_daemon::services::UdpFirewallStatus;
@@ -315,15 +315,15 @@ async fn test_udp_firewall_check_no_candidates_stays_unverified() {
         .await
         .expect("start kad udp");
 
-    // Empty routing table → no candidates → back to Unverified.
+    // Tabla de enrutamiento vacía → sin candidatos → vuelve a No verificado (Unverified).
     let status = state.kad.run_udp_firewall_check().await;
     assert_eq!(status, UdpFirewallStatus::Unverified);
 }
 
-/// Buddy relay role: FINDBUDDY_REQ from a Kad peer is accepted only when we
-/// are a verified non-firewalled node; the requester is registered as a
-/// pending buddy awaiting its TCP link, and a CALLBACK_REQ without an
-/// active buddy link is dropped silently.
+/// Rol de retransmisión de compañero (buddy relay): FINDBUDDY_REQ de un par Kad se acepta solo si somos
+/// un nodo verificado sin cortafuegos; el solicitante se registra como
+/// compañero pendiente a la espera de su enlace TCP, y un CALLBACK_REQ sin un
+/// enlace de compañero activo se descarta silenciosamente.
 #[tokio::test]
 async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
     let tmp = tempdir().expect("create tempdir");
@@ -339,8 +339,8 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
         .await
         .expect("start kad udp");
 
-    // Pretend we completed the UDP firewall check successfully — eMule only
-    // accepts buddy duty on a verified non-firewalled node.
+    // Simular que completamos la comprobación de cortafuegos UDP con éxito — eMule solo
+    // acepta tareas de compañero en un nodo verificado sin cortafuegos.
     {
         let fw_tracker = state.kad.udp().firewall_tracker();
         let mut fw = fw_tracker.lock().await;
@@ -352,7 +352,7 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
     let mock = UdpSocket::bind("127.0.0.1:0").await.expect("bind mock");
     let mock_addr = mock.local_addr().unwrap();
 
-    // 1. FINDBUDDY_REQ → expect FINDBUDDY_RES echoing our buddy_id.
+    // 1. FINDBUDDY_REQ → se espera FINDBUDDY_RES reflejando nuestro buddy_id.
     let buddy_id = [0x77u8; 16];
     let user_id = [0x88u8; 16];
     let mut req = Vec::new();
@@ -380,7 +380,7 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
         other => panic!("expected FindBuddyRes, got {other:?}"),
     }
 
-    // Pending registration keyed by the requester's IP.
+    // Registro pendiente indexado por la IP del solicitante.
     let pending = state
         .kad
         .udp()
@@ -393,7 +393,7 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
     assert_eq!(pb.user_id, user_id);
     assert_eq!(pb.tcp_port, 5555);
 
-    // 2. CALLBACK_REQ without an active buddy TCP link → dropped, no reply.
+    // 2. CALLBACK_REQ sin enlace TCP de compañero activo → descartado, sin respuesta.
     let cb = KadCodec::encode_callback_req(&buddy_id, &[0x99u8; 16], 49662);
     mock.send_to(&cb, bound_addr)
         .await
@@ -409,8 +409,8 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
     );
 }
 
-/// When the node has not passed its UDP firewall check, FINDBUDDY_REQ is
-/// refused silently (eMule requires verified, non-firewalled buddies).
+/// Cuando el nodo no ha superado su comprobación de cortafuegos UDP, FINDBUDDY_REQ se
+/// rechaza silenciosamente (eMule exige compañeros verificados y sin cortafuegos).
 #[tokio::test]
 async fn test_kad_buddy_findbuddy_rejected_when_unverified() {
     let tmp = tempdir().expect("create tempdir");
@@ -449,8 +449,8 @@ async fn test_kad_buddy_findbuddy_rejected_when_unverified() {
     );
 }
 
-/// Publish a note to the daemon's storage-node role, then retrieve it via a
-/// SearchNotesReq — full roundtrip through the live UDP service.
+/// Publicar una nota en el rol de nodo de almacenamiento del daemon, y luego recuperarla mediante un
+/// SearchNotesReq — ciclo completo de ida y vuelta a través del servicio UDP activo.
 #[tokio::test]
 async fn test_kad_notes_publish_and_search_roundtrip() {
     use mule_protocol::ed2k::tags::{Ed2kTag, TagName, TagValue};
@@ -469,13 +469,13 @@ async fn test_kad_notes_publish_and_search_roundtrip() {
         .expect("start kad udp");
 
     let mock = UdpSocket::bind("127.0.0.1:0").await.expect("bind mock");
-    // The publish target must sit within SEARCHTOLERANCE of the daemon's
-    // KadID — eMule drops out-of-tolerance publishes silently. Reusing the
-    // local ID gives distance 0 and keeps the test deterministic.
+    // El destino de publicación debe situarse dentro de SEARCHTOLERANCE del
+    // KadID del daemon — eMule descarta silenciosamente las publicaciones fuera de tolerancia. Reutilizar el
+    // ID local otorga distancia 0 y mantiene la prueba determinista.
     let file_hash = state.kad.local_id().0;
     let source_id = [0x77u8; 16];
 
-    // 1. PublishNotesReq → daemon stores it and answers 0x4B with load.
+    // 1. PublishNotesReq → el daemon la almacena y responde 0x4B con la carga.
     let tags = vec![
         Ed2kTag {
             name: TagName::Id(TAG_NOTE_FILENAME),
@@ -512,7 +512,7 @@ async fn test_kad_notes_publish_and_search_roundtrip() {
         other => panic!("expected PublishSourceRes (0x4B), got {other:?}"),
     }
 
-    // 2. SearchNotesReq → daemon replies with the stored note on 0x3B.
+    // 2. SearchNotesReq → el daemon responde con la nota almacenada en 0x3B.
     let search_req = KadCodec::encode_search_notes_req(&file_hash, 700_000);
     mock.send_to(&search_req, bound_addr).await.expect("send");
 
@@ -536,7 +536,7 @@ async fn test_kad_notes_publish_and_search_roundtrip() {
         other => panic!("expected SearchNotesRes, got {other:?}"),
     }
 
-    // 3. Wrong file size → no response (SendValidNoteResult filters).
+    // 3. Tamaño de archivo incorrecto → sin respuesta (SendValidNoteResult filtra).
     let bad_search = KadCodec::encode_search_notes_req(&file_hash, 12345);
     mock.send_to(&bad_search, bound_addr).await.expect("send");
     let res = tokio::time::timeout(
@@ -550,10 +550,10 @@ async fn test_kad_notes_publish_and_search_roundtrip() {
     );
 }
 
-/// eMule `CKademliaUDPListener::FirewalledCheck` + `Prefs` verdict —
-/// requester side of the Kad TCP firewall check: while `m_uRecheckip < 4`,
-/// an inbound HELLO_REQ triggers a `FIREWALLED2_REQ` back; `FIREWALLED_RES`
-/// ticks the round, `FIREWALLED_ACK_RES` counts a connect-back success.
+/// Veredicto de `CKademliaUDPListener::FirewalledCheck` + `Prefs` de eMule —
+/// lado solicitante de la comprobación de cortafuegos TCP de Kad: mientras `m_uRecheckip < 4`,
+/// un HELLO_REQ entrante desencadena un `FIREWALLED2_REQ` de vuelta; `FIREWALLED_RES`
+/// avanza la ronda y `FIREWALLED_ACK_RES` cuenta un éxito de conexión de retorno.
 #[tokio::test]
 async fn test_kad_tcp_firewall_check_round() {
     let tmp = tempdir().expect("create tempdir");
@@ -562,8 +562,8 @@ async fn test_kad_tcp_firewall_check_round() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // `FIREWALLED2_REQ` carries our eD2K TCP port + user hash — both must be
-    // wired before `start()` (the listener snapshots them).
+    // `FIREWALLED2_REQ` transporta nuestro puerto TCP eD2K + hash de usuario — ambos deben estar
+    // conectados antes de `start()` (el oyente toma una instantánea de ellos).
     state.kad.udp().set_buddy_tcp_info(49662, 0x03);
     state.kad.udp().set_fw_user_hash([0x42; 16]);
 
@@ -574,7 +574,7 @@ async fn test_kad_tcp_firewall_check_round() {
         .await
         .expect("start kad udp");
 
-    // A fresh tracker starts mid-round (eMule `m_uRecheckip = 0`).
+    // Un rastreador nuevo comienza a mitad de ronda (`m_uRecheckip = 0` en eMule).
     {
         let tracker = state.kad.udp().firewall_tracker();
         let fw = tracker.lock().await;
@@ -587,7 +587,7 @@ async fn test_kad_tcp_firewall_check_round() {
         .expect("bind mock peer");
     let mock_kad_id: [u8; 16] = [0xAB; 16];
 
-    // HELLO_REQ v8 → we answer HELLO_RES *and* FIREWALLED2_REQ.
+    // HELLO_REQ v8 → respondemos HELLO_RES *y* FIREWALLED2_REQ.
     let hello = KadCodec::encode_hello_req(
         &mock_kad_id,
         mock.local_addr().unwrap().port(),
@@ -609,7 +609,7 @@ async fn test_kad_tcp_firewall_check_round() {
             KadMessage::HelloRes(_) => saw_hello_res = true,
             KadMessage::FirewalledReq2(req) => {
                 saw_fw_req2 = true;
-                // eMule payload: our eD2K TCP port + user hash + options.
+                // Carga útil de eMule: nuestro puerto TCP eD2K + hash de usuario + opciones.
                 assert_eq!(req.tcp_port, 49662);
                 assert_eq!(req.user_hash, [0x42; 16]);
                 assert_eq!(req.connect_options, 0x03);
@@ -622,8 +622,8 @@ async fn test_kad_tcp_firewall_check_round() {
     }
     assert!(saw_hello_res && saw_fw_req2, "expected HELLO_RES + FIREWALLED2_REQ, got res={saw_hello_res} req={saw_fw_req2}");
 
-    // The asking IP is now registered (`AddKadFirewallRequest`) — its RES
-    // ticks the round and records the observed IP (any u32 works here).
+    // La IP solicitante queda registrada (`AddKadFirewallRequest`) — su RES
+    // avanza la ronda y registra la IP observada (cualquier u32 sirve aquí).
     let res = KadCodec::encode_firewalled_res(0x7F00_0001u32.to_le());
     mock.send_to(&res, bound_addr).await.unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -634,7 +634,7 @@ async fn test_kad_tcp_firewall_check_round() {
         assert!(fw.observed_ip.is_some());
     }
 
-    // Legacy UDP ack (< Kad7 equivalent) counts one connect-back success.
+    // Acuse de recibo UDP heredado (equivalente a < Kad7) cuenta un éxito de conexión de retorno.
     let ack = [mule_protocol::kad::PR_KADEMLIA, mule_protocol::kad::KADEMLIA_FIREWALLED_ACK_RES];
     mock.send_to(&ack, bound_addr).await.unwrap();
     mock.send_to(&ack, bound_addr).await.unwrap();

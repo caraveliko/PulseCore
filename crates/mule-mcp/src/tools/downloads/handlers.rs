@@ -7,7 +7,7 @@ use crate::client::DaemonClient;
 use crate::protocol::ToolCallResult;
 use serde_json::{json, Value};
 
-/// Resolves a download UUID or file hash to an active download instance ID.
+/// Resuelve un UUID de descarga o hash de archivo a un identificador de instancia de descarga activa.
 pub async fn resolve_download_id(
     client: &DaemonClient,
     id_or_hash: &str,
@@ -48,7 +48,7 @@ pub async fn resolve_download_id(
     ))
 }
 
-/// Dispatches download and category tool invocations over JSON-RPC.
+/// Despacha invocaciones de herramientas de descargas y categorías sobre JSON-RPC.
 pub async fn execute(
     client: &DaemonClient,
     tool_name: &str,

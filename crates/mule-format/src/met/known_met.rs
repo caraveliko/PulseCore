@@ -32,52 +32,52 @@ use crate::met::error::MetError;
 use crate::met::reader::CountingReader;
 use crate::met::tags::*;
 
-/// `MET_HEADER` (`OpCodes.h:145`) — 32-bit tag layout.
+/// `MET_HEADER` (`OpCodes.h:145`) — disposición de etiquetas de 32 bits.
 pub const MET_HEADER: u8 = 0x0E;
-/// `MET_HEADER_I64TAGS` (`OpCodes.h:146`) — 64-bit tag layout.
+/// `MET_HEADER_I64TAGS` (`OpCodes.h:146`) — disposición de etiquetas de 64 bits.
 pub const MET_HEADER_I64TAGS: u8 = 0x0F;
 
 /// `MAX_EMULE_FILE_SIZE` (`OpCodes.h:103`) — 256 GiB.
 pub const MAX_EMULE_FILE_SIZE: u64 = 0x40_0000_0000;
 
-/// Upper bound on the MD4 part-hash list
+/// Límite superior de la lista de hashes de partes MD4
 /// (`FileIdentifier.cpp:185` — `MAX_EMULE_FILE_SIZE / PARTSIZE + 1`).
 pub const MAX_PART_HASH_COUNT: usize = (MAX_EMULE_FILE_SIZE / ED2K_PART_SIZE as u64 + 1) as usize;
 
-/// Bounded record count (eMule has no explicit cap; files are bounded
-/// by disk — this guards against corrupt count fields).
+/// Recuento acotado de registros (eMule no tiene límite explícito; los archivos están acotados
+/// por disco — esto protege contra campos de recuento corruptos).
 pub const MAX_KNOWN_RECORDS: usize = 500_000;
-/// Bounded per-record tag count (real known.met carries < 50).
+/// Recuento acotado de etiquetas por registro (el known.met real porta < 50).
 pub const MAX_KNOWN_TAG_COUNT: usize = 1_000;
 
-/// eMule `PR_*` upload priority values (`Opcodes.h` / `KnownFile.cpp`).
+/// Valores de prioridad de subida `PR_*` de eMule (`Opcodes.h` / `KnownFile.cpp`).
 pub const PR_VERYLOW: u8 = 4;
-/// eMule `PR_LOW`.
+/// `PR_LOW` de eMule.
 pub const PR_LOW: u8 = 0;
-/// eMule `PR_NORMAL`.
+/// `PR_NORMAL` de eMule.
 pub const PR_NORMAL: u8 = 1;
-/// eMule `PR_HIGH`.
+/// `PR_HIGH` de eMule.
 pub const PR_HIGH: u8 = 2;
-/// eMule `PR_VERYHIGH` (powershare).
+/// `PR_VERYHIGH` de eMule (powershare).
 pub const PR_VERYHIGH: u8 = 3;
-/// eMule `PR_AUTO` — resolved to `PR_HIGH` + auto flag on load
+/// `PR_AUTO` de eMule — resuelto a `PR_HIGH` + indicador auto al cargar
 /// (`KnownFile.cpp:662`).
 pub const PR_AUTO: u8 = 5;
 
-/// A single `known.met` record (`CKnownFile`).
+/// Un único registro de `known.met` (`CKnownFile`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnownFileRecord {
-    /// `m_tUTClastModified` — UTC mtime of the file when last hashed.
+    /// `m_tUTClastModified` — mtime UTC del archivo cuando se calculó el hash por última vez.
     pub last_modified_utc: u32,
-    /// eD2K file hash (MD4 root).
+    /// Hash eD2K del archivo (raíz MD4).
     pub file_hash: Ed2kHash,
-    /// Stored MD4 part hashes (empty when the record only knew the root).
+    /// Hashes de partes MD4 almacenados (vacío cuando el registro solo conocía la raíz).
     pub part_hashes: Vec<Ed2kHash>,
     /// `FT_FILENAME`.
     pub file_name: Option<String>,
-    /// `FT_FILESIZE` (+ `FT_FILESIZE_HI` composed when present).
+    /// `FT_FILESIZE` (+ `FT_FILESIZE_HI` compuesto cuando está presente).
     pub file_size: Option<u64>,
-    /// `FT_AICH_HASH` decoded from base32 (20-byte SHA-1 root).
+    /// `FT_AICH_HASH` decodificado de base32 (raíz SHA-1 de 20 bytes).
     pub aich_root: Option<AichHash>,
     /// `FT_LASTSHARED`.
     pub last_shared_utc: Option<u32>,
@@ -87,27 +87,27 @@ pub struct KnownFileRecord {
     pub requested: u32,
     /// `FT_ATACCEPTED`.
     pub accepted: u32,
-    /// `FT_ULPRIORITY` after eMule's load-time sanitisation
-    /// (`PR_AUTO` → `PR_HIGH` here; the auto flag is lost — eMule
-    /// recomputes it dynamically anyway).
+    /// `FT_ULPRIORITY` tras la desinfección en tiempo de carga de eMule
+    /// (`PR_AUTO` → `PR_HIGH` aquí; el indicador auto se pierde — eMule
+    /// lo recalcula dinámicamente de todas formas).
     pub up_priority: Option<u8>,
     /// `FT_FLAGS & 0x0F` (`m_uMetaDataVer`).
     pub meta_data_ver: u32,
-    /// `FT_KADLASTPUBLISHSRC` — reset to 0 by eMule when wildly in the
-    /// future (`KnownFile.cpp:671-676`); we keep the raw value.
+    /// `FT_KADLASTPUBLISHSRC` — reiniciado a 0 por eMule cuando está absurdamente en el
+    /// futuro (`KnownFile.cpp:671-676`); conservamos el valor sin procesar.
     pub kad_last_publish_src: Option<u32>,
     /// `FT_KADLASTPUBLISHNOTES`.
     pub kad_last_publish_notes: Option<u32>,
-    /// Tags eMule would route to `m_taglist` (`ConvertED2KTag` +
-    /// default branch) — media/meta tags and unknown fields.
+    /// Etiquetas que eMule encaminaría a `m_taglist` (`ConvertED2KTag` +
+    /// rama default) — etiquetas de medios/metadatos y campos desconocidos.
     pub extra_tags: Vec<Tag>,
 }
 
 impl KnownFileRecord {
-    /// eMule `GetTheoreticalMD4PartHashCount`
-    /// (`FileIdentifier.cpp:223`): `floor(size/PARTSIZE) + 1` for
-    /// `size > 0` (the `+1` covers the trailing empty-part digest for
-    /// exact multiples).
+    /// `GetTheoreticalMD4PartHashCount` de eMule
+    /// (`FileIdentifier.cpp:223`): `floor(size/PARTSIZE) + 1` para
+    /// `size > 0` (el `+1` cubre el resumen de la parte vacía final para
+    /// múltiplos exactos).
     pub fn expected_part_hash_count(&self) -> Option<u16> {
         let size = self.file_size?;
         if size == 0 {
@@ -117,16 +117,16 @@ impl KnownFileRecord {
     }
 }
 
-/// Parsed `known.met` content.
+/// Contenido analizado de `known.met`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnownMetFile {
-    /// `true` when the file uses the `MET_HEADER_I64TAGS` (0x0F)
-    /// layout — 64-bit integers were already decoded by the tag reader.
+    /// `true` cuando el archivo utiliza la disposición `MET_HEADER_I64TAGS` (0x0F)
+    /// — los enteros de 64 bits ya fueron decodificados por el lector de etiquetas.
     pub i64_tags: bool,
-    /// Records that passed eMule's final hash-set verification.
+    /// Registros que superaron la verificación final del conjunto de hashes de eMule.
     pub records: Vec<KnownFileRecord>,
-    /// Records eMule would drop (`LoadFromFile` returned false —
-    /// part-hash count mismatch or root-hash inconsistency).
+    /// Registros que eMule descartaría (`LoadFromFile` devolvió false —
+    /// discordancia en el recuento de hashes de partes o incoherencia en el hash raíz).
     pub dropped_records: usize,
 }
 
@@ -180,8 +180,8 @@ impl KnownMetFile {
     }
 }
 
-/// `CKnownFile::LoadFromFile` — returns `None` where eMule deletes the
-/// record (failed final verification), keeping the stream aligned.
+/// `CKnownFile::LoadFromFile` — devuelve `None` donde eMule elimina el
+/// registro (verificación final fallida), manteniendo el flujo alineado.
 fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRecord>, MetError> {
     let last_modified_utc = cr.read_u32_le("record date")?;
     let file_hash = read_hash16(cr, "file hash")?;
@@ -247,8 +247,8 @@ fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRe
                 }
             }
             FT_FILESIZE_HI => {
-                // eMule 0.72a writes FILESIZE as a single u64 tag; the
-                // _HI companion appears in foreign .met files.
+                // eMule 0.72a escribe FILESIZE como una sola etiqueta u64; la
+                // compañera _HI aparece en archivos .met foráneos.
                 if let Some(hi) = tag.as_u64() {
                     let lo = rec.file_size.unwrap_or(0) & 0xFFFF_FFFF;
                     rec.file_size = Some((hi << 32) | lo);
@@ -277,8 +277,8 @@ fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRe
             }
             FT_ULPRIORITY => {
                 if let Some(v) = tag.as_u64() {
-                    // KnownFile.cpp:662 — PR_AUTO resolves to PR_HIGH +
-                    // auto flag; invalid values fall back to PR_NORMAL.
+                    // KnownFile.cpp:662 — PR_AUTO se resuelve en PR_HIGH +
+                    // indicador auto; los valores no válidos recurren a PR_NORMAL.
                     rec.up_priority = Some(match v as u8 {
                         PR_AUTO => PR_HIGH,
                         p @ (PR_VERYLOW | PR_LOW | PR_NORMAL | PR_HIGH | PR_VERYHIGH) => p,
@@ -312,14 +312,14 @@ fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRe
                 }
             }
             FT_AICHHASHSET => {
-                // eMule loads and immediately verifies the AICH part
-                // hashset (`KnownFile.cpp:718-727`). Our shared-file
-                // model only needs the root — kept as a normal extra tag
-                // would duplicate a multi-KB blob; skip storing it.
+                // eMule carga e inmediatamente verifica el conjunto de hashes
+                // de partes AICH (`KnownFile.cpp:718-727`). Nuestro modelo
+                // de archivos compartidos solo necesita la raíz — conservarlo como etiqueta extra normal
+                // duplicaría un blob de varios KB; se omite su almacenamiento.
             }
             _ => {
-                // ConvertED2KTag path — media tags, FT_PERMISSIONS,
-                // FT_KADLASTPUBLISHKEY and unknown fields.
+                // Ruta ConvertED2KTag — etiquetas multimedia, FT_PERMISSIONS,
+                // FT_KADLASTPUBLISHKEY y campos desconocidos.
                 rec.extra_tags.push(tag);
             }
         }
@@ -327,10 +327,10 @@ fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRe
 
     rec.transferred_bytes |= transferred_hi << 32;
 
-    // Final verification (KnownFile.cpp:775-777):
-    // `ret && HasExpectedMD4HashCount` — part count must match the
-    // theoretical count derived from the (tag-provided) file size, and
-    // the stored root must equal the hash computed from the hashset.
+    // Verificación final (KnownFile.cpp:775-777):
+    // `ret && HasExpectedMD4HashCount` — el recuento de partes debe coincidir con el
+    // recuento teórico derivado del tamaño del archivo (proporcionado por etiqueta), y
+    // la raíz almacenada debe ser igual al hash calculado a partir del conjunto de hashes.
     if let Some(expected) = rec.expected_part_hash_count() {
         if rec.part_hashes.len() != expected as usize {
             return Ok(None);
@@ -342,9 +342,9 @@ fn read_record<R: Read>(cr: &mut CountingReader<R>) -> Result<Option<KnownFileRe
     Ok(Some(rec))
 }
 
-/// `CFileIdentifier::CalculateMD4HashByHashSet` verification path:
-/// empty hashset → OK; one hash → root must equal it; ≥2 hashes → root
-/// must equal MD4(concatenation).
+/// Ruta de verificación de `CFileIdentifier::CalculateMD4HashByHashSet`:
+/// conjunto de hashes vacío → OK; un hash → la raíz debe ser igual a él; ≥2 hashes → la raíz
+/// debe ser igual a MD4(concatenación).
 fn verify_root_from_hashset(file_hash: &Ed2kHash, part_hashes: &[Ed2kHash]) -> bool {
     match part_hashes.len() {
         0 => true,

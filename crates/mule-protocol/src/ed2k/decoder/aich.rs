@@ -8,9 +8,9 @@ use crate::ed2k::packet::{
     Ed2kAichAnswer, Ed2kAichFileHashReq, Ed2kAichFileHashRes, Ed2kAichRecovery, Ed2kAichRequest,
 };
 
-/// Maximum number of AICH recovery entries accepted in one answer.
-/// A part has at most 53 blocks plus a handful of sibling hashes; the bound is
-/// generous but keeps malformed counts from causing large allocations.
+/// Número máximo de entradas de recuperación AICH aceptadas en una respuesta.
+/// Una parte tiene como máximo 53 bloques más un puñado de hashes hermanos; el límite es
+/// generoso pero evita que recuentos malformados causen asignaciones de memoria excesivas.
 const MAX_AICH_RECOVERY_ENTRIES: usize = 4096;
 
 fn eof(
@@ -46,7 +46,7 @@ fn malformed(
     )
 }
 
-/// Decodes an `OP_AICHFILEHASHREQ` (`0x9E`, eMule 0.72a) payload: bare 16-byte file hash.
+/// Decodifica una carga útil `OP_AICHFILEHASHREQ` (`0x9E`, eMule 0.72a): hash de archivo simple de 16 bytes.
 pub fn decode_aich_file_hash_req(
     protocol: u8,
     opcode: u8,
@@ -77,7 +77,7 @@ pub fn decode_aich_file_hash_req(
     Ok(Ed2kAichFileHashReq { file_hash })
 }
 
-/// Decodes an `OP_AICHFILEHASHANS` (`0x9D`, eMule 0.72a) payload: `file_hash` + 20-byte AICH root.
+/// Decodifica una carga útil `OP_AICHFILEHASHANS` (`0x9D`, eMule 0.72a): `file_hash` + raíz AICH de 20 bytes.
 pub fn decode_aich_file_hash_res(
     protocol: u8,
     opcode: u8,
@@ -113,14 +113,14 @@ pub fn decode_aich_file_hash_res(
     })
 }
 
-/// Decodes an `OP_AICHREQUEST` (`0x9B`, eMule 0.72a) payload: `file_hash` + `u16 part` + `master_hash`.
+/// Decodifica una carga útil `OP_AICHREQUEST` (`0x9B`, eMule 0.72a): `file_hash` + `u16 part` + `master_hash`.
 pub fn decode_aich_request(
     protocol: u8,
     opcode: u8,
     payload: &[u8],
     base_offset: usize,
 ) -> Result<Ed2kAichRequest, Ed2kParseError> {
-    // eMule ProcessAICHRequest requires exactly 16 + 2 + 20 bytes.
+    // ProcessAICHRequest de eMule requiere exactamente 16 + 2 + 20 bytes.
     if payload.len() != 38 {
         return Err(malformed(
             protocol,
@@ -163,11 +163,11 @@ pub fn decode_aich_request(
     })
 }
 
-/// Decodes an `OP_AICHANSWER` (`0x9C`, eMule 0.72a) payload.
+/// Decodifica una carga útil `OP_AICHANSWER` (`0x9C`, eMule 0.72a).
 ///
-/// Bare 16-byte payload = failed answer. Otherwise:
-/// `file_hash` + `u16 part` + `master_hash` + `u16 count16` + entries +
-/// `u16 count32` + entries.
+/// Carga útil simple de 16 bytes = respuesta fallida. En caso contrario:
+/// `file_hash` + `u16 part` + `master_hash` + `u16 count16` + entradas +
+/// `u16 count32` + entradas.
 pub fn decode_aich_answer(
     protocol: u8,
     opcode: u8,

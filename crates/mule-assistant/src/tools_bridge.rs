@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::llm::ToolSchema;
 
-/// Conversion `ToolDefinition` MCP → schéma neutre pour le modèle.
+/// Conversión `ToolDefinition` MCP → esquema neutro para el modelo.
 pub fn from_tool_definition(def: &ToolDefinition) -> ToolSchema {
     ToolSchema {
         name: def.name.clone(),
@@ -21,10 +21,10 @@ pub fn from_tool_definition(def: &ToolDefinition) -> ToolSchema {
     }
 }
 
-/// Rendu compact d'un résultat d'outil pour le contexte du modèle :
-/// JSON minifié (le `ToolCallResult::json` MCP est pretty-printé, trop
-/// coûteux en tokens) puis tronqué à `max_chars` avec le total réel
-/// indiqué. L'UI reçoit la version complète via [`crate::AssistantEvent`].
+/// Representación compacta de un resultado de herramienta para el contexto del modelo:
+/// JSON minificado (el `ToolCallResult::json` MCP está formateado con sangría, demasiado
+/// costoso en tokens) y luego truncado a `max_chars` con el total real
+/// indicado. La interfaz de usuario recibe la versión completa mediante [`crate::AssistantEvent`].
 pub fn compact_tool_result(result: &ToolCallResult, max_chars: usize) -> String {
     let raw = result
         .content
@@ -33,8 +33,8 @@ pub fn compact_tool_result(result: &ToolCallResult, max_chars: usize) -> String 
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Minifie uniquement si le contenu est du JSON valide — sinon le
-    // texte brut est renvoyé tel quel (messages d'erreur MCP).
+    // Minifica únicamente si el contenido es JSON válido; de lo contrario, el
+    // texto sin formato se devuelve tal cual (mensajes de error MCP).
     let compact = serde_json::from_str::<Value>(&raw)
         .map(|v| v.to_string())
         .unwrap_or(raw);

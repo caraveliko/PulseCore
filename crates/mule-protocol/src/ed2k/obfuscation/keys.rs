@@ -7,15 +7,15 @@ use md5::{Digest, Md5};
 
 use super::rc4::Rc4Cipher;
 
-/// Modification of the requester-send and server-receive key (`34` = `0x22`).
+/// Modificación de la clave de envío del solicitante y recepción del servidor (`34` = `0x22`).
 pub const MAGICVALUE_REQUESTER: u8 = 34;
 
-/// Modification of the server-send and requester-receive key (`203` = `0xCB`).
+/// Modificación de la clave de envío del servidor y recepción del solicitante (`203` = `0xCB`).
 pub const MAGICVALUE_SERVER: u8 = 203;
 
-/// Derives RC4-drop1024 ciphers for Client A (outgoing peer connection initiator).
+/// Deriva cifradores RC4-drop1024 para el Cliente A (iniciador de la conexión de par saliente).
 ///
-/// Returns `(send_cipher, recv_cipher)`.
+/// Devuelve `(send_cipher, recv_cipher)`.
 pub fn derive_initiator_peer_ciphers(
     target_user_hash: &[u8; 16],
     random_key_part: u32,
@@ -27,7 +27,7 @@ pub fn derive_initiator_peer_ciphers(
     )
 }
 
-/// Derives raw 16-byte keys `(send_key, recv_key)` for Client A (initiator).
+/// Deriva las claves sin procesar de 16 bytes `(send_key, recv_key)` para el Cliente A (iniciador).
 pub fn derive_initiator_peer_raw_keys(
     target_user_hash: &[u8; 16],
     random_key_part: u32,
@@ -49,9 +49,9 @@ pub fn derive_initiator_peer_raw_keys(
     (send_key, recv_key)
 }
 
-/// Derives RC4-drop1024 ciphers for Client B (inbound peer connection receiver).
+/// Deriva cifradores RC4-drop1024 para el Cliente B (receptor de la conexión de par entrante).
 ///
-/// Returns `(send_cipher, recv_cipher)`.
+/// Devuelve `(send_cipher, recv_cipher)`.
 pub fn derive_responder_peer_ciphers(
     local_user_hash: &[u8; 16],
     random_key_part: u32,
@@ -63,7 +63,7 @@ pub fn derive_responder_peer_ciphers(
     )
 }
 
-/// Derives raw 16-byte keys `(send_key, recv_key)` for Client B (responder).
+/// Deriva las claves sin procesar de 16 bytes `(send_key, recv_key)` para el Cliente B (respondedor).
 pub fn derive_responder_peer_raw_keys(
     local_user_hash: &[u8; 16],
     random_key_part: u32,
@@ -85,9 +85,9 @@ pub fn derive_responder_peer_raw_keys(
     (send_key, recv_key)
 }
 
-/// Derives RC4-drop1024 ciphers for a Client <-> Server connection from DH shared secret.
+/// Deriva cifradores RC4-drop1024 para una conexión Cliente <-> Servidor a partir del secreto compartido DH.
 ///
-/// Returns `(send_cipher, recv_cipher)`.
+/// Devuelve `(send_cipher, recv_cipher)`.
 pub fn derive_server_ciphers(shared_secret: &[u8; 96]) -> (Rc4Cipher, Rc4Cipher) {
     let mut mat_send = [0u8; 97];
     mat_send[..96].copy_from_slice(shared_secret);

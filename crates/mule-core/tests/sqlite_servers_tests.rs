@@ -8,11 +8,11 @@ use mule_core::persistence::Database;
 fn test_ed2k_servers_crud_operations() {
     let mut db = Database::open_in_memory().expect("open DB in memory");
 
-    // Initially empty
+    // Inicialmente vacío
     let list = db.list_servers().expect("list servers");
     assert_eq!(list.len(), 0);
 
-    // Upsert two servers
+    // Insertar o actualizar dos servidores
     let s1 = Ed2kServer {
         address: "192.168.1.10:49661".to_string(),
         ip: "192.168.1.10".to_string(),
@@ -54,13 +54,13 @@ fn test_ed2k_servers_crud_operations() {
 
     let list = db.list_servers().expect("list servers");
     assert_eq!(list.len(), 2);
-    // Ordered by preference DESC: s1 (preference 10) comes first
+    // Ordenado por preference DESC: s1 (preference 10) va primero
     assert_eq!(list[0].address, "192.168.1.10:49661");
     assert_eq!(list[0].filter_status, ServerFilterStatus::Allowed);
     assert_eq!(list[1].address, "10.0.0.5:4242");
     assert_eq!(list[1].filter_status, ServerFilterStatus::BlockedByFilter);
 
-    // Toggle enabled -> disabled on s1
+    // Alternar habilitado -> deshabilitado en s1
     let updated = db
         .set_server_enabled("192.168.1.10:49661", false)
         .expect("disable server");
@@ -69,10 +69,10 @@ fn test_ed2k_servers_crud_operations() {
     let list = db.list_servers().expect("list servers");
     assert_eq!(list[0].filter_status, ServerFilterStatus::Disabled);
 
-    // Upsert again should preserve disabled status
+    // Insertar/actualizar de nuevo debe conservar el estado deshabilitado
     let s1_update = Ed2kServer {
         name: "Test Server 1 Renamed".to_string(),
-        filter_status: ServerFilterStatus::Allowed, // Re-imported file might say allowed
+        filter_status: ServerFilterStatus::Allowed, // El archivo reimportado podría indicar permitido
         ..s1
     };
     db.upsert_servers(&[s1_update]).expect("upsert updated");
@@ -85,18 +85,18 @@ fn test_ed2k_servers_crud_operations() {
         "Should preserve manually disabled status"
     );
 
-    // Toggle back to enabled
+    // Alternar de nuevo a habilitado
     db.set_server_enabled("192.168.1.10:49661", true)
         .expect("enable server");
     let list = db.list_servers().expect("list servers");
     assert_eq!(list[0].filter_status, ServerFilterStatus::Allowed);
 
-    // Delete single server
+    // Eliminar un solo servidor
     let deleted = db.delete_server("10.0.0.5:4242").expect("delete server");
     assert!(deleted);
     assert_eq!(db.list_servers().expect("list").len(), 1);
 
-    // Clear servers
+    // Limpiar servidores
     let cleared = db.clear_servers().expect("clear servers");
     assert_eq!(cleared, 1);
     assert_eq!(db.list_servers().expect("list").len(), 0);

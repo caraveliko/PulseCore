@@ -18,30 +18,30 @@ fn create_part_met_file(
     gaps: &[(u64, u64)],
 ) {
     let mut bytes = Vec::new();
-    // Header
+    // Encabezado
     bytes.push(PARTFILE_VERSION); // 0xe0
     bytes.extend_from_slice(&1_700_000_000u32.to_le_bytes()); // mod date
     bytes.extend_from_slice(&file_hash); // file hash
 
-    // Part hashes count
+    // Cantidad de hashes de partes
     bytes.extend_from_slice(&(part_hashes.len() as u16).to_le_bytes());
     for h in part_hashes {
         bytes.extend_from_slice(h);
     }
 
-    // Tags count: 3 (filename, filesize, transferred) + optional filesize_hi + gaps (2 tags per gap)
+    // Cantidad de etiquetas: 3 (filename, filesize, transferred) + filesize_hi opcional + intervalos (gaps) (2 etiquetas por intervalo)
     let has_hi = file_size > u32::MAX as u64;
     let tag_count = 3 + (if has_hi { 1 } else { 0 }) + (gaps.len() as u32 * 2);
     bytes.extend_from_slice(&tag_count.to_le_bytes());
 
-    // Tag: FT_FILENAME
+    // Etiqueta: FT_FILENAME
     bytes.push(0x82); // string
     bytes.push(FT_FILENAME);
     let fn_bytes = filename.as_bytes();
     bytes.extend_from_slice(&(fn_bytes.len() as u16).to_le_bytes());
     bytes.extend_from_slice(fn_bytes);
 
-    // Tag: FT_FILESIZE
+    // Etiqueta: FT_FILESIZE
     bytes.push(0x83); // uint32
     bytes.push(FT_FILESIZE);
     bytes.extend_from_slice(&(file_size as u32).to_le_bytes());
@@ -52,12 +52,12 @@ fn create_part_met_file(
         bytes.extend_from_slice(&((file_size >> 32) as u32).to_le_bytes());
     }
 
-    // Tag: FT_TRANSFERRED
+    // Etiqueta: FT_TRANSFERRED
     bytes.push(0x83); // uint32
     bytes.push(FT_TRANSFERRED);
     bytes.extend_from_slice(&(transferred as u32).to_le_bytes());
 
-    // Gaps
+    // Intervalos (gaps)
     for &(s, e) in gaps {
         // GAPSTART
         bytes.push(0x83);
@@ -83,7 +83,7 @@ fn test_part_met_inspection_and_import_nominal() {
     let db_path = temp_dir.path().join("mule.db");
     let mut service = DownloadService::new(&db_path, temp_dir.path().join("temp")).unwrap();
 
-    // Create 1000 bytes file data and its eD2K hash
+    // Crear datos de archivo de 1000 bytes y su hash eD2K
     let part_data = vec![0x42u8; 1000];
     let mut hasher = mule_format::ed2k::hash::Ed2kHasher::new();
     hasher.update(&part_data);
@@ -92,10 +92,10 @@ fn test_part_met_inspection_and_import_nominal() {
     let met_path = external_dir.path().join("001.part.met");
     let part_path = external_dir.path().join("001.part");
 
-    // Create .part file
+    // Crear archivo .part
     std::fs::write(&part_path, &part_data).unwrap();
 
-    // Create .part.met with no gaps (100% complete single part)
+    // Crear .part.met sin intervalos (parte única 100 % completa)
     create_part_met_file(
         &met_path,
         "sample.bin",
@@ -106,7 +106,7 @@ fn test_part_met_inspection_and_import_nominal() {
         &[], // no gaps
     );
 
-    // 1. Test inspect_part_met
+    // 1. Probar inspect_part_met
     let inspection = service.inspect_part_met(&met_path, None).unwrap();
     assert_eq!(inspection.file_name, "sample.bin");
     assert_eq!(inspection.total_size, 1000);
@@ -115,36 +115,36 @@ fn test_part_met_inspection_and_import_nominal() {
     assert_eq!(inspection.part_file_size, Some(1000));
     assert_eq!(inspection.estimated_transferred_bytes, 1000);
 
-    // 2. Test import_part_met
+    // 2. Probar import_part_met
     let result = service
         .import_part_met(&met_path, None, download_target_dir.path(), None)
         .unwrap();
 
-    // Guaranteed invariants:
-    // Status MUST be paused!
+    // Invariantes garantizados:
+    // ¡El estado DEBE estar en pausa (paused)!
     assert_eq!(result.download.status, "paused");
     assert_eq!(result.total_parts, 1);
     assert_eq!(result.verified_parts, 1);
     assert_eq!(result.corrupted_parts, 0);
     assert_eq!(result.transferred_bytes, 1000);
 
-    // Verify temp file exists in internal temp directory
+    // Verificar que el archivo temporal exista en el directorio temporal interno
     let internal_part = temp_dir
         .path()
         .join("temp")
         .join(format!("{}.part", result.download.id));
     assert!(internal_part.exists());
 
-    // Verify external file is still intact
+    // Verificar que el archivo externo siga intacto
     assert!(part_path.exists());
     assert_eq!(std::fs::metadata(&part_path).unwrap().len(), 1000);
 
-    // Verify verified_parts in DB
+    // Verificar verified_parts en la BD
     let db = Database::open(&db_path).unwrap();
     let verified = db.get_verified_parts(&result.download.id).unwrap();
     assert_eq!(verified, vec![0]);
 
-    // Verify history event "imported" recorded
+    // Verificar que el evento de historial "imported" haya sido registrado
     let history = service
         .query_history(&mule_core::HistoryFilter {
             limit: Some(10),
@@ -165,7 +165,7 @@ fn test_part_met_import_with_corrupted_part() {
     let db_path = temp_dir.path().join("mule.db");
     let mut service = DownloadService::new(&db_path, temp_dir.path().join("temp")).unwrap();
 
-    // .part data has 0x99 bytes, but .part.met has hash for 0x42 bytes
+    // Los datos de .part tienen bytes 0x99, pero .part.met tiene el hash para bytes 0x42
     let part_data = vec![0x99u8; 1000];
     let fake_expected_hash = [0x55u8; 16];
 
@@ -188,7 +188,7 @@ fn test_part_met_import_with_corrupted_part() {
         .import_part_met(&met_path, None, download_target_dir.path(), None)
         .unwrap();
 
-    // Corrupted part was detected and evicted from ranges!
+    // ¡La parte corrupta fue detectada y expulsada de los rangos!
     assert_eq!(result.verified_parts, 0);
     assert_eq!(result.corrupted_parts, 1);
     assert_eq!(result.transferred_bytes, 0); // evicted from range set
@@ -282,10 +282,10 @@ fn test_part_met_import_persists_across_daemon_restart() {
         assert!(report.contains("Verified Valid Parts: 1"));
 
         imported_id = result.download.id;
-        // Service dropped here, simulating daemon shutdown
+        // El servicio se descarta aquí, simulando el apagado del daemon
     }
 
-    // Reboot / restart daemon by recreating DownloadService on the same persistent database and temp dir
+    // Reiniciar el daemon recreando DownloadService sobre la misma base de datos persistente y directorio temporal
     {
         let fresh_service = DownloadService::new(&db_path, temp_staging_dir).unwrap();
         let downloads = fresh_service.list_downloads();
@@ -300,12 +300,12 @@ fn test_part_met_import_persists_across_daemon_restart() {
         assert_eq!(dl.received_bytes, 1000);
         assert_eq!(dl.source_count, 0);
 
-        // Check verified parts in SQLite
+        // Comprobar las partes verificadas en SQLite
         let db = Database::open(&db_path).unwrap();
         let verified = db.get_verified_parts(&imported_id).unwrap();
         assert_eq!(verified, vec![0]);
 
-        // Check history persistence
+        // Comprobar la persistencia del historial
         let history = fresh_service
             .query_history(&mule_core::HistoryFilter {
                 limit: Some(10),
@@ -335,7 +335,7 @@ fn test_part_met_import_safety_limits_enforced() {
     let part_path = external_dir.path().join("005.part");
     std::fs::write(&part_path, b"dummy").unwrap();
 
-    // 2 TB declared size (> 1 TB safety limit)
+    // Tamaño declarado de 2 TB (> límite de seguridad de 1 TB)
     create_part_met_file(
         &met_path,
         "too_large.bin",

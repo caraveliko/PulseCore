@@ -28,35 +28,35 @@ pub use tracker::{
 };
 pub use types::{Ed2kSessionError, Ed2kSessionState, SessionSnapshot};
 
-/// Pure deterministic state machine governing an eD2K peer session.
+/// Máquina de estados determinista pura que gobierna una sesión entre pares eD2K.
 #[derive(Debug, Clone)]
 pub struct Ed2kSession {
-    /// Current state of the session.
+    /// Estado actual de la sesión.
     pub state: Ed2kSessionState,
-    /// True if this node initiated the handshake.
+    /// True si este nodo inició el protocolo de enlace.
     pub is_initiator: bool,
-    /// Local 16-byte MD4 user hash.
+    /// Hash de usuario MD4 local de 16 bytes.
     pub local_user_hash: [u8; 16],
-    /// Local client ID.
+    /// ID de cliente local.
     pub local_client_id: u32,
-    /// Local listening TCP port.
+    /// Puerto TCP de escucha local.
     pub local_tcp_port: u16,
-    /// Wire decoder with safety bounds.
+    /// Decodificador de cable con límites de seguridad.
     pub decoder: Ed2kDecoder,
-    /// Wire encoder with safety bounds.
+    /// Codificador de cable con límites de seguridad.
     pub encoder: Ed2kEncoder,
-    /// Pending file status requests tracker.
+    /// Rastreador de peticiones de estado de archivo pendientes.
     pub status_tracker: FileStatusTracker,
-    /// Pending block requests tracker.
+    /// Rastreador de peticiones de bloques pendientes.
     pub block_tracker: BlockRequestTracker,
-    /// Counter of unhandled, non-state-mutating raw or extension frames observed.
+    /// Contador de tramas sin procesar o de extensión observadas que no mutan el estado y no han sido gestionadas.
     pub unhandled_packets_count: usize,
-    /// Cached eMule info received before or alongside handshake answer.
+    /// Información de eMule en caché recibida antes o junto con la respuesta del protocolo de enlace.
     pub pending_emule_info: Option<Ed2kEmuleInfo>,
 }
 
 impl Ed2kSession {
-    /// Takes a deterministic snapshot of the session state and tracker counters.
+    /// Toma una instantánea determinista del estado de la sesión y los contadores de rastreo.
     pub fn snapshot(&self) -> SessionSnapshot {
         SessionSnapshot {
             state_name: self.state.name(),
@@ -67,7 +67,7 @@ impl Ed2kSession {
         }
     }
 
-    /// Creates a new session configured as the connection initiator with default profile (`Emule072a`).
+    /// Crea una nueva sesión configurada como iniciador de conexión con el perfil por defecto (`Emule072a`).
     pub fn new_initiator(
         local_user_hash: [u8; 16],
         local_client_id: u32,
@@ -81,7 +81,7 @@ impl Ed2kSession {
         )
     }
 
-    /// Creates a new session configured as the connection initiator with an explicit profile.
+    /// Crea una nueva sesión configurada como iniciador de conexión con un perfil explícito.
     pub fn new_initiator_with_profile(
         local_user_hash: [u8; 16],
         local_client_id: u32,
@@ -103,7 +103,7 @@ impl Ed2kSession {
         }
     }
 
-    /// Creates a new session configured as a listener awaiting an incoming handshake with default profile.
+    /// Crea una nueva sesión configurada como oyente a la espera de un protocolo de enlace entrante con el perfil por defecto.
     pub fn new_listener(
         local_user_hash: [u8; 16],
         local_client_id: u32,
@@ -117,7 +117,7 @@ impl Ed2kSession {
         )
     }
 
-    /// Creates a new session configured as a listener with an explicit profile.
+    /// Crea una nueva sesión configurada como oyente con un perfil explícito.
     pub fn new_listener_with_profile(
         local_user_hash: [u8; 16],
         local_client_id: u32,
@@ -139,7 +139,7 @@ impl Ed2kSession {
         }
     }
 
-    /// Transitions to `AwaitingHelloAnswer` and constructs the outgoing `Ed2kHello` message.
+    /// Pasa al estado `AwaitingHelloAnswer` y construye el mensaje `Ed2kHello` saliente.
     pub fn create_hello(
         &mut self,
         tags: Vec<Ed2kTag>,
@@ -281,7 +281,7 @@ impl Ed2kSession {
         }
     }
 
-    /// Processes any raw packet received from the wire transport.
+    /// Procesa cualquier paquete en bruto recibido del transporte de cable.
     pub fn on_packet_received(
         &mut self,
         packet: &RawPacket,
@@ -436,7 +436,7 @@ impl Ed2kSession {
         }
     }
 
-    /// Initiates an `OP_FILESTATUSREQ` exchange and returns the raw wire packet to transmit.
+    /// Inicia un intercambio `OP_FILESTATUSREQ` y devuelve el paquete de cable en bruto a transmitir.
     pub fn send_file_status_request(
         &mut self,
         file_hash: [u8; 16],
@@ -466,10 +466,10 @@ impl Ed2kSession {
         }
 
         // Note: In official eD2K wire protocol (eMule/aMule), part_count == 0 indicates
-        // that the remote peer possesses 100% of the completed file (CKnownFile),
+        // que el par remoto posee el 100% del archivo completado (CKnownFile),
         // meaning all parts are available and no bitfield is transmitted.
 
-        // Must match an in-flight request and remove it
+        // Debe coincidir con una petición en vuelo y eliminarla
         if let Err(err) = self.status_tracker.validate_and_remove(&status.file_hash) {
             self.fail(err.clone());
             return Err(err);
@@ -487,7 +487,7 @@ impl Ed2kSession {
         self.status_tracker.expire_timed_out(timeout, now)
     }
 
-    /// Initiates an `OP_REQUESTPARTS` block request and returns the raw wire packet to transmit.
+    /// Inicia una solicitud de bloques `OP_REQUESTPARTS` y devuelve el paquete de cable en bruto a transmitir.
     pub fn send_block_request(
         &mut self,
         file_hash: [u8; 16],
@@ -528,7 +528,7 @@ impl Ed2kSession {
         self.encoder.encode_request_parts(&req).map_err(Into::into)
     }
 
-    /// Processes an incoming `Ed2kSendingPart` block and removes the correlated pending request.
+    /// Procesa un bloque entrante `Ed2kSendingPart` y elimina la petición pendiente correlacionada.
     pub fn on_sending_part_received(
         &mut self,
         part: &Ed2kSendingPart,
@@ -546,7 +546,7 @@ impl Ed2kSession {
         )
     }
 
-    /// Purges timed-out block requests and returns them for replanning.
+    /// Purga solicitudes de bloques que han expirado por tiempo y las devuelve para replanificación.
     pub fn expire_block_requests(
         &mut self,
         timeout: Duration,
@@ -595,7 +595,7 @@ impl Ed2kSession {
         self.state = Ed2kSessionState::Failed { reason };
     }
 
-    /// Returns true if the session has successfully completed the handshake and is ready.
+    /// Devuelve true si la sesión ha completado con éxito el saludo y está lista.
     pub fn is_ready(&self) -> bool {
         matches!(self.state, Ed2kSessionState::Ready { .. })
     }

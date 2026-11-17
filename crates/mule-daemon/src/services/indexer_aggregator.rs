@@ -11,11 +11,11 @@ use crate::services::downloads::now_ms;
 use crate::services::scorer::{evaluate_release, ScoredRelease};
 use crate::state::AppState;
 
-/// Timeout HTTP par indexeur Torznab (en secondes).
+/// Tiempo de espera HTTP por indexador Torznab (en segundos).
 const INDEXER_HTTP_TIMEOUT_SECS: u64 = 10;
-/// Durée de vie du cache de résultats d'indexeurs en mémoire (10 minutes).
+/// Tiempo de vida de la caché de resultados de indexadores en memoria (10 minutos).
 const SEARCH_CACHE_TTL_MS: i64 = 10 * 60 * 1000;
-/// Nombre maximal de requêtes conservées dans le cache d'indexeurs.
+/// Número máximo de peticiones conservadas en la caché de indexadores.
 const SEARCH_CACHE_MAX_ENTRIES: usize = 256;
 
 #[derive(Clone)]
@@ -67,13 +67,13 @@ impl IndexerAggregator {
         )
     }
 
-    /// Vide explicitement le cache mémoire de l'agrégateur (utile lors d'un forçage manuel).
+    /// Vacía explícitamente la caché en memoria del agregador (útil en caso de forzado manual).
     pub async fn invalidate_cache(&self) {
         let mut guard = shared_search_cache().lock().await;
         guard.clear();
     }
 
-    /// Search across Kad DHT + all configured External Torznab indexers in parallel
+    /// Busca en Kad DHT + todos los indexadores externos Torznab configurados en paralelo
     pub async fn search_all(
         &self,
         state: &AppState,
@@ -96,7 +96,7 @@ impl IndexerAggregator {
             }
         }
 
-        // 1. Snapshot des indexeurs externes activés (verrou SQLite très court)
+        // 1. Instantánea de los indexadores externos activados (bloqueo SQLite muy corto)
         let enabled_indexers: Vec<_> = {
             let dl_svc = state.downloads.lock().await;
             dl_svc
@@ -112,7 +112,7 @@ impl IndexerAggregator {
         let cat = if is_movie { "2000" } else { "5000" };
         let profile_owned = quality_profile.to_string();
 
-        // 2. Préparer la requête Kad DHT et toutes les requêtes HTTP Torznab en parallèle
+        // 2. Preparar la petición Kad DHT y todas las peticiones HTTP Torznab en paralelo
         let kad_fut = state.kad.search_keywords(query, None, None);
 
         let torznab_futs = enabled_indexers.into_iter().map(|idx| {
@@ -173,7 +173,7 @@ impl IndexerAggregator {
             }
         }
 
-        // Sort results: Valid releases first, ordered by score descending, then sources descending
+        // Ordenar resultados: versiones válidas primero, ordenadas por puntuación descendente, luego fuentes descendentes
         results.sort_by(|a, b| {
             b.score
                 .cmp(&a.score)
@@ -202,7 +202,7 @@ impl IndexerAggregator {
     }
 }
 
-/// Lightweight parser for Torznab/Newznab RSS XML feeds
+/// Analizador ligero para fuentes RSS XML de Torznab/Newznab
 fn parse_torznab_feed(
     xml: &str,
     indexer_name: &str,
@@ -238,7 +238,7 @@ fn parse_torznab_feed(
             .or_else(|| extract_torznab_attr(item_str, "peers"))
             .unwrap_or(1);
 
-        // Extract hash from magnet (xt=urn:btih:<hash>) or guid
+        // Extraer hash de enlace magnet (xt=urn:btih:<hash>) o guid
         let hash = if let Some(pos) = link.to_lowercase().find("urn:btih:") {
             let rest = &link[pos + 9..];
             rest.split('&').next().unwrap_or("").to_lowercase()
@@ -277,7 +277,7 @@ fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
     let start = xml.find(&open)? + open.len();
     let end = xml[start..].find(&close)? + start;
     let val = xml[start..end].trim();
-    // Decode basic entities
+    // Decodificar entidades básicas
     Some(
         val.replace("&amp;", "&")
             .replace("&lt;", "<")

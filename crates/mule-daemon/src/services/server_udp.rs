@@ -25,12 +25,12 @@ use mule_protocol::ed2k::server_udp::{self, ServerUdpMessage};
 
 use crate::services::downloads::DownloadService;
 
-/// Snapshot of the server UDP service state.
+/// Instantánea del estado del servicio UDP de servidor.
 #[derive(Debug, Clone)]
 pub struct ServerUdpSnapshot {
-    /// Whether the UDP socket is bound.
+    /// Si el socket UDP está enlazado.
     pub is_active: bool,
-    /// Local bind address, when bound.
+    /// Dirección de enlace local, cuando está enlazado.
     pub bind_address: Option<String>,
 }
 
@@ -38,23 +38,23 @@ struct ServerUdpInner {
     socket: Option<Arc<UdpSocket>>,
     bind_addr: Option<SocketAddr>,
     listen_task: Option<JoinHandle<()>>,
-    /// Per-server UDP capabilities learned from `OP_GLOBSERVSTATRES`,
-    /// keyed by the server's UDP address (IP + TCP+4). Mirrors eMule's
-    /// `CServer::GetUDPFlags()` storage.
+    /// Capacidades UDP por servidor aprendidas de `OP_GLOBSERVSTATRES`,
+    /// indexadas por la dirección UDP del servidor (IP + TCP+4). Refleja el
+    /// almacenamiento `CServer::GetUDPFlags()` de eMule.
     server_udp_flags: std::collections::HashMap<SocketAddr, u32>,
-    /// Challenges sent in pending `OP_GLOBSERVSTATREQ` pings.
+    /// Desafíos enviados en pings `OP_GLOBSERVSTATREQ` pendientes.
     pending_statreq: std::collections::HashMap<SocketAddr, u32>,
-    /// eMule `CServer::lastdescpingedcout` — incremented on each accepted
-    /// `GLOBSERVSTATRES`; an `OP_SERVER_DESC_REQ` is sent while `< 2` and
-    /// the counter resets at 2 (so roughly every other stat ping asks for
-    /// a description, `UDPSocket.cpp:420-437`).
+    /// `CServer::lastdescpingedcout` de eMule — incrementado con cada
+    /// `GLOBSERVSTATRES` aceptado; se envía un `OP_SERVER_DESC_REQ` mientras sea `< 2` y
+    /// el contador se reinicia en 2 (aproximadamente uno de cada dos pings de estadísticas solicita
+    /// una descripción, `UDPSocket.cpp:420-437`).
     desc_ping_counts: std::collections::HashMap<SocketAddr, u8>,
-    /// eMule `CServer::m_uDescReqChallenge` — challenge of the pending
-    /// `OP_SERVER_DESC_REQ`, validated on new-format `DESC_RES`.
+    /// `CServer::m_uDescReqChallenge` de eMule — desafío del
+    /// `OP_SERVER_DESC_REQ` pendiente, validado en `DESC_RES` de formato nuevo.
     desc_req_challenges: std::collections::HashMap<SocketAddr, u32>,
 }
 
-/// Canal d'événements broadcast + compteur de séquence partagé.
+/// Canal de eventos broadcast + contador de secuencia compartido.
 type EventChannel = Arc<
     std::sync::RwLock<
         Option<(
@@ -64,7 +64,7 @@ type EventChannel = Arc<
     >,
 >;
 
-/// Shared server UDP service (cloneable handle).
+/// Servicio UDP de servidor compartido (manejador clonable).
 #[derive(Clone)]
 pub struct ServerUdpService {
     policy_mgr: NetworkPolicyManager,
@@ -74,7 +74,7 @@ pub struct ServerUdpService {
 }
 
 impl ServerUdpService {
-    /// Creates a new server UDP service.
+    /// Crea un nuevo servicio UDP de servidor.
     pub fn new(policy_mgr: NetworkPolicyManager) -> Self {
         Self {
             policy_mgr,
@@ -92,13 +92,13 @@ impl ServerUdpService {
         }
     }
 
-    /// Injects the download service (source ingestion).
+    /// Inyecta el servicio de descargas (ingesta de fuentes).
     pub fn set_downloads(&self, downloads: Arc<Mutex<DownloadService>>) {
         *self.downloads.write().unwrap() = Some(downloads);
     }
 
-    /// Injects the daemon event channel so `OP_GLOBSEARCHRES` answers can be
-    /// surfaced as `server.searchResult` notifications like TCP results.
+    /// Inyecta el canal de eventos del daemon para que las respuestas `OP_GLOBSEARCHRES` puedan
+    /// presentarse como notificaciones `server.searchResult` al igual que los resultados TCP.
     pub fn set_event_channel(
         &self,
         event_tx: tokio::sync::broadcast::Sender<String>,
@@ -107,7 +107,7 @@ impl ServerUdpService {
         *self.event_channel.write().unwrap() = Some((event_tx, sequence));
     }
 
-    /// Starts the server UDP socket on an ephemeral port of `bind_ip`.
+    /// Inicia el socket UDP de servidor en un puerto efímero de `bind_ip`.
     pub async fn start(&self, bind_ip: std::net::IpAddr) -> Result<SocketAddr, String> {
         let mut inner = self.inner.write().await;
         if let Some(addr) = inner.bind_addr {
@@ -147,7 +147,7 @@ impl ServerUdpService {
                         if len < 2 {
                             continue;
                         }
-                        // Policy-based IP classification (same rules as Kad UDP).
+                        // Clasificación de IP basada en políticas (mismas reglas que Kad UDP).
                         let cat = classify_ip(peer_addr.ip());
                         let policy_allowed = match policy_mgr_clone.profile() {
                             NetworkProfile::LocalLab => cat == IpCategory::Loopback,
@@ -176,9 +176,9 @@ impl ServerUdpService {
                                 tcp_obfuscation_port,
                                 udp_obfuscation_port,
                             }) => {
-                                // Only accept answers to challenges we issued
-                                // (eMule `GetChallenge()` check) — unsolicited
-                                // stat replies are dropped.
+                                // Solo aceptar respuestas a desafíos emitidos por nosotros
+                                // (comprobación `GetChallenge()` de eMule) — respuestas
+                                // de estadísticas no solicitadas se descartan.
                                 let accepted = {
                                     let mut inr = inner_for_task.write().await;
                                     match inr.pending_statreq.get(&peer_addr) {
@@ -194,11 +194,11 @@ impl ServerUdpService {
                                     tracing::info!(
                                         "Server UDP: GlobServStatRes from {server} (users={users}, files={files}, udp_flags=0x{udp_flags:08X}, obf_tcp={tcp_obfuscation_port}, obf_udp={udp_obfuscation_port})"
                                     , server = log_server_addr(peer_addr));
-                                    // eMule UDPSocket.cpp:418-437 — after a
-                                    // stat answer, ask for the server
-                                    // description while count < 2 (the
-                                    // counter resets at 2, so the request
-                                    // goes out on ~every other ping).
+                                    // eMule UDPSocket.cpp:418-437 — tras una
+                                    // respuesta de estadísticas, solicitar la descripción
+                                    // del servidor mientras el recuento < 2 (el
+                                    // contador se reinicia en 2, por lo que la petición
+                                    // sale aproximadamente en pings alternos).
                                     maybe_send_desc_req(
                                         &socket_for_task,
                                         &inner_for_task,
@@ -212,8 +212,8 @@ impl ServerUdpService {
                                 }
                             }
                             Ok(ServerUdpMessage::GlobSearchRes(payload)) => {
-                                // UDP 0x99 has NO u32 count prefix — bare
-                                // entry stream until packet end.
+                                // UDP 0x99 NO tiene prefijo de recuento u32 — flujo de
+                                // entradas directo hasta el final del paquete.
                                 match server_udp::decode_glob_search_res(
                                     &payload,
                                     &mule_protocol::ed2k::Ed2kLimits::for_server(),
@@ -284,8 +284,8 @@ impl ServerUdpService {
         Ok(local_addr)
     }
 
-    /// Sends `OP_GLOBGETSOURCES2` to a server's UDP port for `file_hash`.
-    /// `server_udp_addr` is conventionally `server_tcp_addr` with port + 4.
+    /// Envía `OP_GLOBGETSOURCES2` al puerto UDP de un servidor para `file_hash`.
+    /// Convencionalmente, `server_udp_addr` es `server_tcp_addr` con puerto + 4.
     pub async fn send_glob_get_sources(
         &self,
         server_udp_addr: SocketAddr,
@@ -310,9 +310,9 @@ impl ServerUdpService {
         }
     }
 
-    /// Sends `OP_GLOBSERVSTATREQ` to learn the server's UDP capability flags
-    /// (`SRV_UDPFLG_*`) and obfuscation ports — the answer is a
-    /// `GLOBSERVSTATRES` whose challenge must echo the one we send.
+    /// Envía `OP_GLOBSERVSTATREQ` para conocer los indicadores de capacidad UDP del servidor
+    /// (`SRV_UDPFLG_*`) y puertos de ofuscación — la respuesta es un
+    /// `GLOBSERVSTATRES` cuyo desafío debe reflejar el que enviamos.
     pub async fn send_servstat_req(&self, server_udp_addr: SocketAddr) -> bool {
         let (socket, challenge) = {
             let mut inner = self.inner.write().await;
@@ -336,17 +336,17 @@ impl ServerUdpService {
         }
     }
 
-    /// Sends a global UDP search to a server's UDP port, choosing the wire
-    /// form like eMule `SearchResultsWnd.cpp:277-310`:
-    /// `OP_GLOBSEARCHREQ3` when the server advertised both
-    /// `SRV_UDPFLG_EXT_GETFILES` and `SRV_UDPFLG_LARGEFILES`, otherwise
-    /// `OP_GLOBSEARCHREQ2`. When the flags are still unknown, a
-    /// `GLOBSERVSTATREQ` ping is sent first so a later search can upgrade.
-    /// `search_payload` is the raw payload of an encoded `SearchQuery`
-    /// packet (eMule reuses the TCP search bytes verbatim).
+    /// Envía una búsqueda UDP global al puerto UDP de un servidor, eligiendo la forma
+    /// en cable al estilo de eMule `SearchResultsWnd.cpp:277-310`:
+    /// `OP_GLOBSEARCHREQ3` cuando el servidor anunció tanto
+    /// `SRV_UDPFLG_EXT_GETFILES` como `SRV_UDPFLG_LARGEFILES`, de lo contrario
+    /// `OP_GLOBSEARCHREQ2`. Cuando los indicadores aún son desconocidos, se envía primero
+    /// un ping `GLOBSERVSTATREQ` para que una búsqueda posterior pueda actualizarse.
+    /// `search_payload` es la carga útil sin procesar de un paquete `SearchQuery`
+    /// codificado (eMule reutiliza los bytes de búsqueda TCP literalmente).
     ///
-    /// Returns the wire form actually sent (`"REQ3"`/`"REQ2"`) so the RPC
-    /// layer can report it for testing, `None` when nothing was sent.
+    /// Devuelve la forma en cable efectivamente enviada (`"REQ3"`/`"REQ2"`) para que la capa
+    /// RPC pueda reportarla en pruebas, `None` si no se envió nada.
     pub async fn send_glob_search(
         &self,
         server_udp_addr: SocketAddr,
@@ -361,9 +361,9 @@ impl ServerUdpService {
             )
         };
         let Some(flags) = flags else {
-            // Flags unknown — probe the server first, then send REQ1, the
-            // lowest common denominator (eMule sends GLOBSEARCHREQ 0x98 to
-            // servers without EXT_GETFILES; REQ2 would be ignored there).
+            // Indicadores desconocidos — sondear primero al servidor, luego enviar REQ1, el
+            // mínimo común denominador (eMule envía GLOBSEARCHREQ 0x98 a
+            // servidores sin EXT_GETFILES; REQ2 sería ignorado allí).
             self.send_servstat_req(server_udp_addr).await;
             let pkt = server_udp::encode_glob_search_req(search_payload);
             return match socket.send_to(&pkt, server_udp_addr).await {
@@ -378,8 +378,8 @@ impl ServerUdpService {
             };
         };
 
-        // eMule SearchResultsWnd.cpp:277-310 — three wire forms:
-        // EXT_GETFILES+LARGEFILES → REQ3, EXT_GETFILES → REQ2, else REQ1.
+        // eMule SearchResultsWnd.cpp:277-310 — tres formas en cable:
+        // EXT_GETFILES+LARGEFILES → REQ3, EXT_GETFILES → REQ2, resto REQ1.
         let ext_getfiles = flags & server_udp::SRV_UDPFLG_EXT_GETFILES != 0;
         let (pkt, form) = if ext_getfiles && flags & server_udp::SRV_UDPFLG_LARGEFILES != 0 {
             (server_udp::encode_glob_search_req3(search_payload), "REQ3")
@@ -404,7 +404,7 @@ impl ServerUdpService {
         }
     }
 
-    /// Stops the socket and receive task.
+    /// Detiene el socket y la tarea de recepción.
     pub async fn stop(&self) {
         let mut inner = self.inner.write().await;
         if let Some(task) = inner.listen_task.take() {
@@ -414,7 +414,7 @@ impl ServerUdpService {
         inner.bind_addr = None;
     }
 
-    /// Status snapshot.
+    /// Instantánea de estado.
     pub async fn snapshot(&self) -> ServerUdpSnapshot {
         let inner = self.inner.read().await;
         ServerUdpSnapshot {
@@ -424,12 +424,12 @@ impl ServerUdpService {
     }
 }
 
-/// Sends `OP_SERVER_DESC_REQ` to `server_udp_addr` following eMule's
-/// `LastDescPingedCount` cycle (`UDPSocket.cpp:418-437`): each accepted
-/// stat answer increments the counter; while it is `< 2` a challenged
-/// description request goes out, and the counter resets at 2. The
-/// challenge — `(rand16 << 16) | 0xF0FF` — is stored so the new-format
-/// answer can be validated (`CServer::m_uDescReqChallenge`).
+/// Envía `OP_SERVER_DESC_REQ` a `server_udp_addr` siguiendo el ciclo
+/// `LastDescPingedCount` de eMule (`UDPSocket.cpp:418-437`): cada respuesta de
+/// estadísticas aceptada incrementa el contador; mientras sea `< 2` sale una
+/// petición de descripción con desafío, y el contador se reinicia en 2. El
+/// desafío — `(rand16 << 16) | 0xF0FF` — se almacena para poder validar
+/// la respuesta de nuevo formato (`CServer::m_uDescReqChallenge`).
 async fn maybe_send_desc_req(
     socket: &UdpSocket,
     inner: &RwLock<ServerUdpInner>,
@@ -456,15 +456,15 @@ async fn maybe_send_desc_req(
     }
 }
 
-/// Applies an `OP_SERVER_DESC_RES` to the matching `Ed2kServer` record
-/// (`UDPSocket.cpp:438-496` + `CServerList::GetServerByIPUDP` — the server
-/// is matched on `ip` with `udp_port == tcp_port + 4`).
+/// Aplica un `OP_SERVER_DESC_RES` al registro `Ed2kServer` coincidente
+/// (`UDPSocket.cpp:438-496` + `CServerList::GetServerByIPUDP` — el servidor
+/// se empareja por `ip` con `udp_port == tcp_port + 4`).
 ///
-/// New-format answers are only applied when their challenge echoes a
-/// pending request (unsolicited ones are dropped like eMule). Old-format
-/// answers carry no challenge and are applied directly. `dyn_ip` is kept
-/// only when it is a DNS name — eMule rejects bare dotted-quad strings
-/// via `inet_addr() == INADDR_NONE`.
+/// Las respuestas de nuevo formato solo se aplican cuando su desafío refleja una
+/// petición pendiente (las no solicitadas se descartan como en eMule). Las respuestas de formato
+/// antiguo no portan desafío y se aplican directamente. `dyn_ip` se conserva
+/// solo cuando es un nombre DNS — eMule rechaza cadenas de direcciones IP directas
+/// mediante `inet_addr() == INADDR_NONE`.
 #[allow(clippy::too_many_arguments)]
 async fn handle_server_desc_res(
     downloads: &Arc<std::sync::RwLock<Option<Arc<Mutex<DownloadService>>>>>,
@@ -500,9 +500,9 @@ async fn handle_server_desc_res(
     let Ok(servers) = dl_guard.list_servers() else {
         return;
     };
-    // GetServerByIPUDP: same IP and udp_port == tcp_port + 4 (the
-    // dedicated-obfuscation-port alternative is not modelled — we do not
-    // track per-server obfuscation ports).
+    // GetServerByIPUDP: misma IP y udp_port == tcp_port + 4 (la alternativa
+    // de puerto de ofuscación dedicado no está modelada — no rastreamos
+    // puertos de ofuscación por servidor).
     let ip_str = peer_addr.ip().to_string();
     let Some(mut server) = servers
         .into_iter()
@@ -536,11 +536,11 @@ async fn handle_server_desc_res(
     }
 }
 
-/// Ingests `OP_GLOBFOUNDSOURCES` entries into the peer source DB —
-/// same filtering as the TCP `FoundSources` path (invalid IPs rejected,
-/// LowID sources kept as `lowid:<id>` for server callback). The responder's
-/// IP is recorded as the sources' server (eMule `m_dwServerIP`) so the
-/// dialer can tell local-server LowIDs from foreign ones.
+/// Ingiere entradas `OP_GLOBFOUNDSOURCES` en la BD de fuentes de pares —
+/// mismo filtrado que la ruta TCP `FoundSources` (IPs inválidas rechazadas,
+/// fuentes LowID conservadas como `lowid:<id>` para devolución de llamada del servidor). La IP
+/// del respondedor se registra como el servidor de las fuentes (`m_dwServerIP` de eMule) para que
+/// el marcador distinga las LowID del servidor local de las foráneas.
 async fn handle_glob_found_sources(
     downloads: &Arc<std::sync::RwLock<Option<Arc<Mutex<DownloadService>>>>>,
     entries: Vec<server_udp::GlobFoundSourcesEntry>,
@@ -596,8 +596,8 @@ async fn handle_glob_found_sources(
                 buddy_id: None,
                 software: None,
                 availability: None,
-                // Serveur répondant (IP seule — son port TCP est inconnu du
-                // canal UDP ; la localité se compare alors sur l'IP).
+                // Servidor que responde (solo IP — su puerto TCP es desconocido para
+                // el canal UDP; la localidad se compara entonces por la IP).
                 server_ip: responder_ip,
                 server_port: 0,
                 udp_port: 0,
@@ -629,7 +629,7 @@ mod tests {
         ))
     }
 
-    /// Receives the next datagram on `recv` and returns its opcode byte.
+    /// Recibe el siguiente datagrama en `recv` y devuelve su byte de opcode.
     async fn next_opcode(recv: &UdpSocket) -> u8 {
         let mut buf = [0u8; 2048];
         tokio::time::timeout(Duration::from_secs(2), recv.recv_from(&mut buf))
@@ -684,7 +684,7 @@ mod tests {
 
         let form = svc.send_glob_search(server_addr, &[0xAA]).await;
         assert_eq!(form, Some("REQ1"));
-        // First datagram: GLOBSERVSTATREQ probe (0x96), second: REQ1 (0x98).
+        // Primer datagrama: sondeo GLOBSERVSTATREQ (0x96), segundo: REQ1 (0x98).
         assert_eq!(next_opcode(&server).await, 0x96);
         assert_eq!(next_opcode(&server).await, 0x98);
     }
@@ -707,7 +707,7 @@ mod tests {
         assert_eq!(next_opcode(&server).await, 0x98);
     }
 
-    /// Receives a datagram and returns `(payload, sender)`.
+    /// Recibe un datagrama y devuelve `(payload, sender)`.
     async fn recv_pkt(recv: &UdpSocket) -> (Vec<u8>, SocketAddr) {
         let mut buf = [0u8; 4096];
         let (len, from) = tokio::time::timeout(Duration::from_secs(2), recv.recv_from(&mut buf))
@@ -717,8 +717,8 @@ mod tests {
         (buf[..len].to_vec(), from)
     }
 
-    /// Answers the pending `GLOBSERVSTATREQ` from `server` with a minimal
-    /// stat answer echoing its challenge.
+    /// Responde al `GLOBSERVSTATREQ` pendiente desde `server` con una respuesta de
+    /// estadísticas mínima que refleja su desafío.
     async fn answer_statreq(server: &UdpSocket) -> SocketAddr {
         let (pkt, daemon) = recv_pkt(server).await;
         assert_eq!(pkt[0], mule_protocol::ed2k::protocol::PR_ED2K);
@@ -741,8 +741,8 @@ mod tests {
         let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let server_addr = server.local_addr().unwrap();
 
-        // Wire a DownloadService holding the server record: the UDP peer
-        // resolves to tcp_port = udp_port - 4 (GetServerByIPUDP).
+        // Conectar un DownloadService que contiene el registro del servidor: el par UDP
+        // resuelve a tcp_port = udp_port - 4 (GetServerByIPUDP).
         let tmp = tempfile::tempdir().unwrap();
         let mut dl = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
         let now_ms = std::time::SystemTime::now()
@@ -769,7 +769,7 @@ mod tests {
         .unwrap();
         svc.set_downloads(Arc::new(Mutex::new(dl)));
 
-        // 1st stat ping → DESC_REQ expected (count 1 < 2).
+        // 1.er ping de estadísticas → se espera DESC_REQ (contador 1 < 2).
         assert!(svc.send_servstat_req(server_addr).await);
         answer_statreq(&server).await;
         let (pkt, _) = recv_pkt(&server).await;
@@ -789,14 +789,14 @@ mod tests {
             Some(desc_challenge)
         );
 
-        // Unsolicited new-format answer with a wrong challenge is dropped.
+        // Se descarta una respuesta de nuevo formato no solicitada con un desafío incorrecto.
         let mut wrong = vec![
             mule_protocol::ed2k::protocol::PR_ED2K,
             server_udp::OP_SERVER_DESC_RES,
         ];
-        // Flip one high bit — keeps the INV_SERV_DESC_LEN marker so the
-        // packet is a valid new-format RES, but never equals the pending
-        // challenge.
+        // Alternar un bit alto — mantiene el marcador INV_SERV_DESC_LEN para que el
+        // paquete sea un RES de nuevo formato válido, pero nunca igual al desafío
+        // pendiente.
         wrong.extend_from_slice(&(desc_challenge ^ 0x0001_0000).to_le_bytes());
         wrong.extend_from_slice(&1u32.to_le_bytes());
         wrong.push(mule_protocol::ed2k::tags::TAGTYPE_STRING | 0x80);
@@ -809,7 +809,7 @@ mod tests {
             .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Matching challenge → the record is updated.
+        // Desafío coincidente → el registro se actualiza.
         let mut res = vec![
             mule_protocol::ed2k::protocol::PR_ED2K,
             server_udp::OP_SERVER_DESC_RES,
@@ -830,7 +830,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Wait for the update to land.
+        // Esperar a que la actualización se asiente.
         let downloads = svc.downloads.read().unwrap().clone().unwrap();
         for _ in 0..50 {
             let updated = {
@@ -848,7 +848,7 @@ mod tests {
         assert_eq!(rec.dyn_ip.as_deref(), Some("loop.example.org"));
         drop(guard);
 
-        // 2nd stat ping → counter hits 2, resets: NO desc_req.
+        // 2.º ping de estadísticas → el contador alcanza 2, se reinicia: SIN desc_req.
         assert!(svc.send_servstat_req(server_addr).await);
         answer_statreq(&server).await;
         let mut buf = [0u8; 256];

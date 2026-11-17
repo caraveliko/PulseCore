@@ -30,44 +30,44 @@ use mule_protocol::framing::PacketCodec;
 use super::KadService;
 use crate::services::kad_udp::{FirewallUdpResult, UdpFirewallStatus};
 
-/// Number of contacts asked per check round (eMule
+/// Número de contactos consultados por ronda de comprobación (eMule
 /// `UDP_FIREWALLTEST_CLIENTSTOASK = 2`).
 const UDP_FW_CLIENTS_TO_ASK: usize = 2;
-/// Minimum Kad version a candidate must announce to serve a UDP firewall
-/// check (eMule `KADEMLIA_VERSION6_49aBETA`).
+/// Versión mínima de Kad que un candidato debe anunciar para atender una
+/// comprobación de cortafuegos UDP (eMule `KADEMLIA_VERSION6_49aBETA`).
 const MIN_FW_TEST_KAD_VERSION: u8 = 6;
-/// Kad version we advertise — eMule `KADEMLIA_VERSION` (0x0a, eMule
-/// 0.72a). Includes the v9 feature (`TAG_KADAICHHASHPUB` /
-/// `TAG_KADAICHHASHRESULT` AICH keyword storage); v10 itself adds no new
-/// wire behavior beyond the identity bump.
+/// Versión de Kad que anunciamos — eMule `KADEMLIA_VERSION` (0x0a, eMule
+/// 0.72a). Incluye la característica v9 (`TAG_KADAICHHASHPUB` /
+/// almacenamiento de palabras clave AICH `TAG_KADAICHHASHRESULT`); v10 en sí no añade
+/// nuevo comportamiento de red más allá del incremento de identidad.
 pub(crate) const OUR_KAD_VERSION: u8 = mule_protocol::kad::KADEMLIA_VERSION_CURRENT;
 
 const FW_TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const FW_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-/// How long to wait for the FIREWALLUDP datagram after sending the request.
+/// Cuánto tiempo esperar el datagrama FIREWALLUDP tras enviar la solicitud.
 const FW_UDP_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
-/// Overall check budget (eMule: ~6 minutes before declaring timed-out
-/// firewalled).
+/// Presupuesto global de comprobación (eMule: ~6 minutos antes de declarar
+/// agotado el tiempo y clasificar como tras cortafuegos).
 const FW_OVERALL_TIMEOUT: Duration = Duration::from_secs(360);
 
 impl KadService {
-    /// Sets the local user hash used in test-connection hellos.
+    /// Establece el hash de usuario local empleado en los saludos de conexiones de prueba.
     pub fn set_fw_check_identity(&self, user_hash: [u8; 16]) {
         *self.fw_user_hash.write().unwrap() = user_hash;
     }
 
-    /// Current UDP firewall status (Unverified/Testing/Open/Firewalled).
+    /// Estado actual del cortafuegos UDP (Unverified/Testing/Open/Firewalled).
     pub async fn udp_firewall_status(&self) -> UdpFirewallStatus {
         self.udp.firewall_tracker().lock().await.status
     }
 
-    /// Runs one UDP firewall check round against suitable routing contacts.
-    /// Returns the resulting status. No-op if a check is already running or
-    /// the UDP socket is down.
+    /// Ejecuta una ronda de comprobación de cortafuegos UDP contra contactos de enrutamiento adecuados.
+    /// Devuelve el estado resultante. Sin efecto si ya hay una comprobación en curso o
+    /// si el socket UDP está inactivo.
     pub async fn run_udp_firewall_check(&self) -> UdpFirewallStatus {
         let tracker = self.udp.firewall_tracker();
 
-        // Mark testing (or bail if a round is already in progress).
+        // Marcar en pruebas (o salir si ya hay una ronda en curso).
         {
             let mut fw = tracker.lock().await;
             if fw.status == UdpFirewallStatus::Testing {
@@ -110,8 +110,8 @@ impl KadService {
         };
         let extern_port = tracker.lock().await.extern_port;
 
-        // Candidate selection (eMule FindNodeFWCheckUDP + suitability rules):
-        // verified contacts, Kad version >= 6, known TCP port, distinct IPs.
+        // Selección de candidatos (FindNodeFWCheckUDP de eMule + reglas de idoneidad):
+        // contactos verificados, versión Kad >= 6, puerto TCP conocido, IPs distintas.
         let candidates: Vec<KadContact> = {
             let table = self.routing_table.lock().await;
             let mut seen = HashSet::new();
@@ -142,15 +142,15 @@ impl KadService {
                 .await
             {
                 Ok(res) => {
-                    // eMule SetUDPFWCheckResult: a datagram is only conclusive
-                    // when error_code == 0 and the probed port is a port we
-                    // actually advertised (intern or known extern).
+                    // SetUDPFWCheckResult de eMule: un datagrama solo es concluyente
+                    // cuando error_code == 0 y el puerto sondeado es un puerto que
+                    // realmente hayamos anunciado (interno o externo conocido).
                     let valid_port =
                         res.port_tested == intern_port || (extern_port == Some(res.port_tested));
                     if res.error_code == 0 && valid_port {
                         let mut fw = tracker.lock().await;
                         if res.port_tested != intern_port {
-                            // Reached us through the NAT-mapped extern port.
+                            // Nos alcanzó a través del puerto externo mapeado por NAT.
                             fw.extern_port = Some(res.port_tested);
                             fw.use_extern = true;
                             tracing::info!(
@@ -188,8 +188,8 @@ impl KadService {
         UdpFirewallStatus::Firewalled
     }
 
-    /// Performs a single check against one contact: TCP connect → OP_HELLO →
-    /// OP_FWCHECKUDPREQ (PR_EMULE) → wait for the FIREWALLUDP datagram.
+    /// Ejecuta una comprobación individual contra un contacto: conexión TCP → OP_HELLO →
+    /// OP_FWCHECKUDPREQ (PR_EMULE) → esperar el datagrama FIREWALLUDP.
     async fn fw_test_candidate(
         &self,
         contact: &KadContact,
@@ -201,12 +201,12 @@ impl KadService {
         let tcp_port = contact.tcp_port.ok_or("candidate has no TCP port")?;
         let addr = SocketAddr::new(ip, tcp_port);
 
-        // Per-candidate UDP verify key (eMule GetUDPVerifyKey): remote peers
-        // encrypt their FIREWALLUDP reply with it — stored in the tracker so
-        // the UDP receive loop can try decryption.
+        // Clave de verificación UDP por candidato (GetUDPVerifyKey de eMule): los pares remotos
+        // cifran su respuesta FIREWALLUDP con ella — almacenada en el rastreador para
+        // que el bucle de recepción UDP pueda intentar descifrarla.
         let udp_verify_key: u32 = rand::random::<u32>().wrapping_add(1);
 
-        // Register before connecting so an early datagram is never missed.
+        // Registrar antes de conectar para no perder nunca un datagrama temprano.
         let rx = tracker.lock().await.register_candidate(ip, udp_verify_key);
 
         let result = self
@@ -235,8 +235,8 @@ impl KadService {
             .map_err(|_| format!("TCP connect to {addr} timed out"))?
             .map_err(|e| format!("TCP connect to {addr} refused: {e}"))?;
 
-        // OP_HELLO — the remote peer checks our advertised Kad version
-        // (MiscOptions2 bits 0-3) before accepting OP_FWCHECKUDPREQ.
+        // OP_HELLO — el par remoto comprueba nuestra versión Kad anunciada
+        // (bits 0-3 de MiscOptions2) antes de aceptar OP_FWCHECKUDPREQ.
         let hello = self.build_fw_hello(intern_port);
         let encoder = Ed2kEncoder::default();
         let hello_pkt = encoder
@@ -252,8 +252,8 @@ impl KadService {
             .await
             .map_err(|e| format!("failed to send OP_HELLO: {e}"))?;
 
-        // Wait for OP_HELLO_ANSWER (or a bare OP_HELLO — some clients
-        // initiate their own hello first).
+        // Esperar OP_HELLO_ANSWER (o un OP_HELLO simple — algunos clientes
+        // inician su propio saludo primero).
         let codec = PacketCodec::new();
         let mut read_buf = BytesMut::with_capacity(8192);
         let mut raw_buf = [0u8; 4096];
@@ -284,7 +284,7 @@ impl KadService {
             }
         }
 
-        // OP_FWCHECKUDPREQ (PR_EMULE): u16 intern + u16 extern + u32 key.
+        // OP_FWCHECKUDPREQ (PR_EMULE): u16 interno + u16 externo + clave u32.
         let mut payload = Vec::with_capacity(8);
         payload.extend_from_slice(&intern_port.to_le_bytes());
         payload.extend_from_slice(&extern_port.unwrap_or(0).to_le_bytes());
@@ -304,17 +304,17 @@ impl KadService {
             extern_port.unwrap_or(0)
         , peer = log_peer_addr(addr));
 
-        // Keep the TCP connection open while waiting for the datagram (eMule
-        // drops the test if the requesting client disconnects).
+        // Mantener abierta la conexión TCP mientras se espera el datagrama (eMule
+        // descarta la prueba si el cliente solicitante se desconecta).
         tokio::time::timeout(FW_UDP_WAIT_TIMEOUT, rx)
             .await
             .map_err(|_| "no FIREWALLUDP datagram within timeout".to_string())?
             .map_err(|_| "firewall test channel dropped".to_string())
     }
 
-    /// Minimal OP_HELLO for firewall-test connections — same capability flags
-    /// as the regular peer handshake, with Kad version >= 6 in MiscOptions2
-    /// (remote peers reject OP_FWCHECKUDPREQ from older clients).
+    /// OP_HELLO mínimo para conexiones de prueba de cortafuegos — mismos flags de capacidad
+    /// que el saludo normal de pares, con versión Kad >= 6 en MiscOptions2
+    /// (los pares remotos rechazan OP_FWCHECKUDPREQ procedente de clientes más antiguos).
     fn build_fw_hello(&self, intern_port: u16) -> Ed2kHello {
         use mule_protocol::ed2k::tags::*;
         let user_hash = *self.fw_user_hash.read().unwrap();

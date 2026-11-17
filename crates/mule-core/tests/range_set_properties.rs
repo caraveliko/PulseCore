@@ -9,28 +9,28 @@ use rand::SeedableRng;
 proptest! {
     #[test]
     fn prop_range_set_permutation_invariance(
-        // Generate between 1 and 25 disjoint valid intervals
+        // Generar entre 1 y 25 intervalos válidos disjuntos
         raw_intervals in prop::collection::vec((1u64..10_000, 1u64..5_000), 1..25),
         seed in any::<u64>(),
     ) {
-        // Construct non-overlapping intervals by stepping forward
+        // Construir intervalos no solapados avanzando hacia adelante
         let mut intervals = Vec::new();
         let mut cursor = 0u64;
         for (gap, len) in raw_intervals {
             cursor += gap;
             let start = cursor;
             let end = cursor + len;
-            cursor = end + 10; // ensure gap >= 10 so they don't touch
+            cursor = end + 10; // asegurar hueco >= 10 para que no se toquen
             intervals.push(start..end);
         }
 
-        // Set A: Insert in original sorted order
+        // Conjunto A: insertar en el orden clasificado original
         let mut set_a = RangeSet::new();
         for r in &intervals {
             prop_assert!(set_a.insert(r.clone()).is_ok());
         }
 
-        // Set B: Insert in randomly shuffled permutation
+        // Conjunto B: insertar en permutación barajada aleatoriamente
         let mut shuffled = intervals.clone();
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         shuffled.shuffle(&mut rng);
@@ -40,17 +40,17 @@ proptest! {
             prop_assert!(set_b.insert(r).is_ok());
         }
 
-        // Invariants:
-        // 1. Exact canonical range equivalence
+        // Invariantes:
+        // 1. Equivalencia canónica exacta de rangos
         prop_assert_eq!(set_a.ranges(), set_b.ranges());
-        // 2. Exact covered length equivalence
+        // 2. Equivalencia exacta de longitud cubierta
         prop_assert_eq!(set_a.covered_len(), set_b.covered_len());
-        // 3. Every inserted interval is contained
+        // 3. Cada intervalo insertado está contenido
         for r in &intervals {
             prop_assert!(set_a.contains(r.clone()));
             prop_assert!(set_b.contains(r.clone()));
         }
-        // 4. Identical missing gaps
+        // 4. Huecos faltantes idénticos
         let max_end = cursor + 1000;
         prop_assert_eq!(set_a.missing_within(0..max_end), set_b.missing_within(0..max_end));
     }
@@ -72,7 +72,7 @@ proptest! {
         prop_assert!(set.insert(r2.clone()).is_ok());
         let covered_after = set.covered_len();
 
-        // Adding more ranges must never decrease covered length
+        // Añadir más rangos nunca debe disminuir la longitud cubierta
         prop_assert!(covered_after >= covered_before);
         prop_assert!(set.contains(r1));
         prop_assert!(set.contains(r2));

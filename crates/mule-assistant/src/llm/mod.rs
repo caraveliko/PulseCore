@@ -21,55 +21,55 @@ use serde_json::Value;
 
 use crate::error::AssistantError;
 
-/// Rôle d'un message de conversation.
+/// Rol de un mensaje de conversación.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
-    /// Consignes système initiales.
+    /// Directrices iniciales del sistema.
     System,
-    /// Entrée utilisateur.
+    /// Entrada del usuario.
     User,
-    /// Réponse du modèle (texte et/ou appels d'outils).
+    /// Respuesta del modelo (texto y/o llamadas a herramientas).
     Assistant,
-    /// Résultat d'un outil renvoyé au modèle.
+    /// Resultado de una herramienta devuelto al modelo.
     Tool,
 }
 
-/// Appel d'outil émis par le modèle.
+/// Llamada a herramienta emitida por el modelo.
 ///
-/// `id` est **optionnel** : l'API native Ollama n'exige pas
-/// d'identifiant d'appel contrairement au format OpenAI — chaque
-/// backend conserve son identifiant éventuel sans qu'on le suppose.
+/// `id` es **opcional**: la API nativa de Ollama no exige
+/// identificador de llamada a diferencia del formato OpenAI; cada
+/// backend conserva su identificador eventual sin presuponerlo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
-    /// Identifiant d'appel éventuel (OpenAI) — absent côté Ollama natif.
+    /// Identificador eventual de llamada (OpenAI); ausente en Ollama nativo.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// Nom de l'outil (`emule_*`).
+    /// Nombre de la herramienta (`emule_*`).
     pub name: String,
-    /// Arguments JSON proposés par le modèle.
+    /// Argumentos JSON propuestos por el modelo.
     #[serde(default)]
     pub args: Value,
 }
 
-/// Message d'historique échangé avec le backend.
+/// Mensaje de historial intercambiado con el backend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    /// Rôle de l'émetteur.
+    /// Rol del emisor.
     pub role: Role,
-    /// Contenu textuel (vide pour un tour d'appels purs).
+    /// Contenido textual (vacío en un turno de llamadas puras).
     #[serde(default)]
     pub content: String,
-    /// Appels d'outils demandés — présents uniquement sur `Assistant`.
+    /// Llamadas a herramientas solicitadas: presentes únicamente en `Assistant`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCall>,
-    /// Nom de l'outil dont ce message porte le résultat — `Tool` uniquement.
+    /// Nombre de la herramienta cuyo resultado porta este mensaje: únicamente en `Tool`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
 }
 
 impl ChatMessage {
-    /// Message système (consignes).
+    /// Mensaje del sistema (directrices).
     pub fn system(content: impl Into<String>) -> Self {
         Self {
             role: Role::System,
@@ -79,7 +79,7 @@ impl ChatMessage {
         }
     }
 
-    /// Entrée utilisateur.
+    /// Entrada del usuario.
     pub fn user(content: impl Into<String>) -> Self {
         Self {
             role: Role::User,
@@ -89,8 +89,8 @@ impl ChatMessage {
         }
     }
 
-    /// Réponse du modèle — poussée dans l'historique AVANT les résultats
-    /// d'outils, complète avec ses `tool_calls` (exigence Ollama/OpenAI).
+    /// Respuesta del modelo: agregada al historial ANTES de los resultados
+    /// de herramientas, completa con sus `tool_calls` (requisito de Ollama/OpenAI).
     pub fn assistant(turn: &AssistantTurn) -> Self {
         Self {
             role: Role::Assistant,
@@ -100,7 +100,7 @@ impl ChatMessage {
         }
     }
 
-    /// Résultat d'outil — `tool_name` identifie l'outil côté Ollama.
+    /// Resultado de herramienta: `tool_name` identifica la herramienta en Ollama.
     pub fn tool(tool_name: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             role: Role::Tool,
@@ -111,57 +111,57 @@ impl ChatMessage {
     }
 }
 
-/// Tour de réponse complet du modèle.
+/// Turno de respuesta completo del modelo.
 #[derive(Debug, Clone, Default)]
 pub struct AssistantTurn {
-    /// Texte destiné à l'utilisateur.
+    /// Texto destinado al usuario.
     pub content: String,
-    /// Appels d'outils demandés — vide = réponse finale.
+    /// Llamadas a herramientas solicitadas: vacío = respuesta final.
     pub tool_calls: Vec<ToolCall>,
-    /// Contenu « thinking » des modèles qui en émettent : collecté pour
-    /// diagnostic mais jamais affiché à l'utilisateur par défaut.
+    /// Contenido de pensamiento («thinking») de los modelos que lo emiten: recopilado
+    /// para diagnóstico pero nunca mostrado al usuario por defecto.
     pub thinking: String,
-    /// Métriques rapportées par le backend (durées Ollama…).
+    /// Métricas reportadas por el backend (tiempos de Ollama…).
     pub metrics: Option<LlmMetrics>,
 }
 
-/// Métriques d'inférence rapportées par le backend (ms / tokens).
+/// Métricas de inferencia reportadas por el backend (ms / tokens).
 #[derive(Debug, Clone, Default)]
 pub struct LlmMetrics {
-    /// Durée de chargement du modèle.
+    /// Duración de la carga del modelo.
     pub load_duration_ms: Option<u64>,
-    /// Durée d'évaluation du prompt.
+    /// Duración de la evaluación del prompt.
     pub prompt_eval_duration_ms: Option<u64>,
-    /// Durée de génération.
+    /// Duración de la generación.
     pub eval_duration_ms: Option<u64>,
-    /// Nombre de tokens générés.
+    /// Cantidad de tokens generados.
     pub eval_count: Option<u64>,
 }
 
-/// Schéma d'outil présenté au modèle — format neutre que chaque backend
-/// sérialise à sa façon (Ollama `{type:"function", function:{…}}`).
+/// Esquema de herramienta presentado al modelo: formato neutro que cada backend
+/// serializa a su manera (Ollama `{type:"function", function:{…}}`).
 #[derive(Debug, Clone)]
 pub struct ToolSchema {
-    /// Nom de l'outil.
+    /// Nombre de la herramienta.
     pub name: String,
-    /// Description fonctionnelle.
+    /// Descripción funcional.
     pub description: String,
-    /// JSON Schema des paramètres.
+    /// JSON Schema de los parámetros.
     pub parameters: Value,
 }
 
-/// Sink de tokens : retourne `false` quand le consommateur est parti —
-/// le backend doit alors interrompre le streaming au plus tôt.
+/// Sumidero (sink) de tokens: devuelve `false` cuando el consumidor se ha desconectado;
+/// el backend debe entonces interrumpir el streaming cuanto antes.
 pub type TokenSink<'a> = dyn Fn(&str) -> bool + Send + Sync + 'a;
 
-/// Backend d'inférence interchangeable (Ollama, mock de test…).
+/// Backend de inferencia intercambiable (Ollama, mock de pruebas…).
 ///
-/// Object-safety : la future est boxée pour permettre
-/// `Box<dyn LlmBackend>` — le backend est choisi à l'exécution selon la
-/// configuration.
+/// Seguridad de objetos (object-safety): el future se empaqueta en Box para permitir
+/// `Box<dyn LlmBackend>`; el backend se selecciona en tiempo de ejecución según la
+/// configuración.
 pub trait LlmBackend: Send + Sync {
-    /// Un tour de chat : streamer `content` vers `sink`, accumuler
-    /// `tool_calls`, retourner le tour complet.
+    /// Un turno de conversación: transmitir `content` en flujo hacia `sink`, acumular
+    /// `tool_calls` y devolver el turno completo.
     fn chat<'a>(
         &'a self,
         history: &'a [ChatMessage],
@@ -170,8 +170,8 @@ pub trait LlmBackend: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<AssistantTurn, AssistantError>> + Send + 'a>>;
 }
 
-/// Délégation pour `Arc<T>` : permet aux tests de conserver une poignée
-/// sur le backend après injection dans la session (`Box<dyn>`).
+/// Delegación para `Arc<T>`: permite a las pruebas conservar un manejador
+/// del backend tras inyectarlo en la sesión (`Box<dyn>`).
 impl<T: LlmBackend + ?Sized> LlmBackend for std::sync::Arc<T> {
     fn chat<'a>(
         &'a self,

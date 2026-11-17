@@ -3,17 +3,17 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Connectivity profile defining address boundary restrictions and protocol capabilities.
+/// Perfil de conectividad que define restricciones de límites de direcciones y capacidades protocolarias.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum NetworkProfile {
-    /// Strict lab confinement: only loopback addresses (127.0.0.0/8, ::1) are allowed.
+    /// Confinamiento estricto de laboratorio: solo se permiten direcciones de bucle local (loopback) (127.0.0.0/8, ::1).
     LocalLab,
-    /// Controlled preview: allows connection to public eD2K servers and peers.
-    /// Strictly rejects private LAN, loopback, link-local, multicast, etc. (anti-SSRF).
+    /// Vista previa controlada: permite la conexión a servidores y pares eD2K públicos.
+    /// Rechaza estrictamente LAN privadas, loopback, enlace local, multidifusión, etc. (anti-SSRF).
     PublicEd2kPreview,
-    /// Controlled preview with UDP support for Kademlia.
-    /// Same address filtering rules as PublicEd2kPreview.
+    /// Vista previa controlada con soporte UDP para Kademlia.
+    /// Mismas reglas de filtrado de direcciones que PublicEd2kPreview.
     #[default]
     PublicEd2kKadPreview,
 }
@@ -42,17 +42,17 @@ impl std::str::FromStr for NetworkProfile {
 }
 
 impl NetworkProfile {
-    /// Whether this profile restricts all traffic exclusively to loopback addresses.
+    /// Indica si este perfil restringe todo el tráfico exclusivamente a direcciones de bucle local (loopback).
     pub fn is_loopback_only(&self) -> bool {
         matches!(self, Self::LocalLab)
     }
 
-    /// Whether this profile permits UDP operations for Kademlia routing.
+    /// Indica si este perfil permite operaciones UDP para el enrutamiento de Kademlia.
     pub fn allows_udp_kad(&self) -> bool {
         matches!(self, Self::LocalLab | Self::PublicEd2kKadPreview)
     }
 
-    /// Whether this profile is an external preview profile.
+    /// Indica si este perfil es un perfil de vista previa externa.
     pub fn is_preview(&self) -> bool {
         matches!(self, Self::PublicEd2kPreview | Self::PublicEd2kKadPreview)
     }

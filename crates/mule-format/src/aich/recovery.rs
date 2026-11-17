@@ -25,16 +25,16 @@ use crate::error::FormatError;
 
 use super::hash_tree::{AichHash, AichNode, AICH_BLOCK_SIZE};
 
-/// One recovery-data entry: tree path identifier + SHA-1 hash.
+/// Una entrada de datos de recuperación: identificador de ruta en el árbol + hash SHA-1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AichRecoveryEntry {
-    /// Hash identifier (tree path encoding, MSB marker included).
+    /// Identificador de hash (codificación de ruta en el árbol, marcador MSB incluido).
     pub ident: u32,
-    /// SHA-1 hash of the addressed tree node.
+    /// Hash SHA-1 del nodo direccionado del árbol.
     pub hash: AichHash,
 }
 
-/// Builds the complete AICH hash tree over `data` (all node hashes computed).
+/// Construye el árbol de hashes AICH completo sobre `data` (todos los hashes de nodos calculados).
 pub fn build_aich_tree(data: &[u8]) -> Result<AichNode, FormatError> {
     if data.is_empty() {
         return Err(FormatError::EmptyInput);
@@ -56,8 +56,8 @@ pub fn build_aich_tree(data: &[u8]) -> Result<AichNode, FormatError> {
     Ok(tree)
 }
 
-/// Builds the complete AICH hash tree by streaming `file_size` bytes from `r`.
-/// Memory usage stays bounded to the tree structure, not the file contents.
+/// Construye el árbol de hashes AICH completo leyendo en flujo `file_size` bytes de `r`.
+/// El uso de memoria permanece acotado a la estructura del árbol, no al contenido del archivo.
 pub fn build_aich_tree_from_reader<R: Read>(
     r: &mut R,
     file_size: u64,
@@ -93,8 +93,8 @@ pub fn build_aich_tree_from_reader<R: Read>(
     Ok(tree)
 }
 
-/// Depth of the part subtree below the root (eMule `FindHash(..., &nLevel)`).
-/// The part subtree is the node covering `[part_start, part_start + part_size)`.
+/// Profundidad del subárbol de parte bajo la raíz (`FindHash(..., &nLevel)` de eMule).
+/// El subárbol de parte es el nodo que cubre `[part_start, part_start + part_size)`.
 fn find_part_node(root: &AichNode, part_start: u64, part_size: u64) -> Option<(&AichNode, u8)> {
     fn walk(node: &AichNode, start: u64, size: u64, level: u8) -> Option<(&AichNode, u8)> {
         if start == 0 && size == node.data_size {
@@ -122,10 +122,10 @@ fn find_part_node(root: &AichNode, part_start: u64, part_size: u64) -> Option<(&
     walk(root, part_start, part_size, 0)
 }
 
-/// Serializes the sibling hashes along the path to the part subtree plus all
-/// lowest-level (block) hashes of the part, in eMule wire order.
+/// Serializa los hashes hermanos a lo largo de la ruta hacia el subárbol de parte más todos
+/// los hashes del nivel más bajo (bloque) de la parte, en orden de cable de eMule.
 ///
-/// Equivalent to `CAICHRecoveryHashSet::CreatePartRecoveryData`:
+/// Equivalente a `CAICHRecoveryHashSet::CreatePartRecoveryData`:
 /// `nHashesToWrite = (nLevel - 1) + ceil(partSize / EMBLOCKSIZE)`.
 pub fn create_part_recovery_data(
     root: &AichNode,
@@ -133,7 +133,7 @@ pub fn create_part_recovery_data(
     part_index: u32,
 ) -> Result<Vec<AichRecoveryEntry>, FormatError> {
     if file_size == 0 || file_size <= AICH_BLOCK_SIZE as u64 {
-        // eMule: no AICH recovery for files smaller than one block.
+        // eMule: no hay recuperación AICH para archivos menores que un bloque.
         return Err(FormatError::AichVerificationFailed(
             "file too small for AICH recovery data".to_string(),
         ));
@@ -160,7 +160,7 @@ pub fn create_part_recovery_data(
 
     let (_, level) = find_part_node(root, part_start, part_size)
         .ok_or_else(|| FormatError::AichVerificationFailed("part node not found".to_string()))?;
-    // eMule: nHashesToWrite = (nLevel - 1) + blocks, where nLevel = depth + 1.
+    // eMule: nHashesToWrite = (nLevel - 1) + blocks, donde nLevel = depth + 1.
     let expected = level as usize + part_size.div_ceil(AICH_BLOCK_SIZE as u64) as usize;
     if out.len() != expected {
         return Err(FormatError::AichVerificationFailed(format!(
@@ -171,14 +171,14 @@ pub fn create_part_recovery_data(
     Ok(out)
 }
 
-/// Returns the per-part AICH subtree root hashes in part order — the
-/// `m_aAICHPartHashSet` serialized by `CFileIdentifier::WriteAICHHashsetToFile`
-/// (`FileIdentifier.cpp` 0.72a) inside `OP_HASHSETANSWER2`.
+/// Devuelve los hashes raíz del subárbol AICH por parte en orden de partes — el
+/// `m_aAICHPartHashSet` serializado por `CFileIdentifier::WriteAICHHashsetToFile`
+/// (`FileIdentifier.cpp` 0.72a) dentro de `OP_HASHSETANSWER2`.
 ///
-/// `root` must be a fully hashed tree covering exactly `file_size` bytes.
-/// eMule's `GetTheoreticalAICHPartHashCount` yields no AICH part set for
-/// files of at most one eD2K part, so an empty `Vec` is returned in that
-/// case (callers then omit the `0x02` option bit on the wire).
+/// `root` debe ser un árbol completamente hasheado que cubra exactamente `file_size` bytes.
+/// `GetTheoreticalAICHPartHashCount` de eMule produce ningún conjunto de partes AICH para
+/// archivos de a lo sumo una parte eD2K, por lo que se devuelve un `Vec` vacío en ese
+/// caso (los llamadores omiten entonces el bit de opción `0x02` en el cable).
 pub fn aich_part_hashes(
     root: &AichNode,
     file_size: u64,
@@ -206,8 +206,8 @@ pub fn aich_part_hashes(
     Ok(out)
 }
 
-/// `CAICHHashTree::CreatePartRecoveryData`: writes sibling hashes along the
-/// descent, then the part's lowest-level hashes left to right.
+/// `CAICHHashTree::CreatePartRecoveryData`: escribe los hashes hermanos a lo largo del
+/// descenso, y luego los hashes del nivel más bajo de la parte de izquierda a derecha.
 fn create_recovery_inner(
     node: &AichNode,
     part_start: u64,
@@ -247,7 +247,7 @@ fn create_recovery_inner(
     create_recovery_inner(right, part_start - left_size, part_size, ident, out)
 }
 
-/// `CAICHHashTree::WriteHash`: `(ident << 1) | is_left_branch` then hash.
+/// `CAICHHashTree::WriteHash`: `(ident << 1) | is_left_branch` seguido del hash.
 fn write_ident_hash(node: &AichNode, ident: u32, out: &mut Vec<AichRecoveryEntry>) -> bool {
     let ident = (ident << 1) | (node.is_left_branch as u32);
     match node.hash {
@@ -259,7 +259,7 @@ fn write_ident_hash(node: &AichNode, ident: u32, out: &mut Vec<AichRecoveryEntry
     }
 }
 
-/// `CAICHHashTree::WriteLowestLevelHashes` with identifiers.
+/// `CAICHHashTree::WriteLowestLevelHashes` con identificadores.
 fn write_lowest_level_hashes(
     node: &AichNode,
     ident: u32,
@@ -281,9 +281,9 @@ fn write_lowest_level_hashes(
     write_lowest_level_hashes(left, ident, out) && write_lowest_level_hashes(right, ident, out)
 }
 
-/// Sets a hash in the skeleton tree addressed by `ident`
-/// (`CAICHHashTree::SetHash`). Returns false if the ident does not address a
-/// valid node or attempts to overwrite the master hash (ident == 1).
+/// Establece un hash en el árbol esqueleto direccionado por `ident`
+/// (`CAICHHashTree::SetHash`). Devuelve falso si el ident no direcciona un
+/// nodo válido o intenta sobrescribir el hash maestro (ident == 1).
 pub fn set_hash_by_ident(
     root: &mut AichNode,
     ident: u32,
@@ -313,16 +313,16 @@ pub fn set_hash_by_ident(
         };
     }
     if node.hash.is_some() && !allow_overwrite {
-        // Hash already present: eMule skips the write but accepts the entry.
+        // Hash ya presente: eMule omite la escritura pero acepta la entrada.
         return node.hash == Some(hash);
     }
     node.hash = Some(hash);
     true
 }
 
-/// Recomputes parent hashes bottom-up for nodes whose subtree is fully hashed
-/// (`CAICHHashTree::VerifyHashTree` semantics). Returns the resulting root hash
-/// if determinable.
+/// Recalcula los hashes de los padres de abajo hacia arriba para nodos cuyo subárbol está completamente hasheado
+/// (semántica de `CAICHHashTree::VerifyHashTree`). Devuelve el hash raíz resultante
+/// si es determinable.
 fn recalculate_partial(node: &mut AichNode) -> Option<AichHash> {
     if let Some(h) = node.hash {
         return Some(h);
@@ -344,9 +344,9 @@ fn recalculate_partial(node: &mut AichNode) -> Option<AichHash> {
     }
 }
 
-/// Reads recovery data received for `part_index` of a `file_size`-byte file and
-/// returns the expected SHA-1 hash of every 180 KiB block of that part, after
-/// verifying the reconstructed tree against `master_hash`
+/// Lee los datos de recuperación recibidos para `part_index` de un archivo de `file_size` bytes y
+/// devuelve el hash SHA-1 esperado de cada bloque de 180 KiB de esa parte, tras
+/// verificar el árbol reconstruido frente a `master_hash`
 /// (`CAICHRecoveryHashSet::ReadRecoveryData` + `VerifyHashTree`).
 pub fn read_recovery_data(
     file_size: u64,
@@ -395,7 +395,7 @@ pub fn read_recovery_data(
         }
     }
 
-    // Extract the part's leaf block hashes in left-to-right order.
+    // Extraer los hashes de los bloques hoja de la parte en orden de izquierda a derecha.
     let mut block_hashes = Vec::with_capacity(blocks_in_part);
     collect_part_block_hashes(&tree, part_start, part_size, &mut block_hashes);
     if block_hashes.len() != blocks_in_part {
@@ -437,7 +437,7 @@ fn collect_part_block_hashes(node: &AichNode, start: u64, size: u64, out: &mut V
     }
 }
 
-/// SHA-1 hash of a single AICH block (<= 180 KiB of file data).
+/// Hash SHA-1 de un único bloque AICH (<= 180 KiB de datos de archivo).
 pub fn aich_block_hash(block: &[u8]) -> AichHash {
     AichHash(Sha1::digest(block).into())
 }
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn recovery_roundtrip_full_part() {
-        // 3 AICH blocks in a single (partial) eD2K part.
+        // 3 bloques AICH en una única parte eD2K (parcial).
         let data = sample_data(3);
         let tree = build_aich_tree(&data).unwrap();
         let root = tree.root_hash().unwrap();
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn recovery_roundtrip_last_partial_block() {
-        // 2 full blocks + a 100-byte trailing block.
+        // 2 bloques completos + un bloque final de 100 bytes.
         let mut data = sample_data(2);
         data.extend_from_slice(&[0x55u8; 100]);
         let tree = build_aich_tree(&data).unwrap();
@@ -504,12 +504,12 @@ mod tests {
         let tree = build_aich_tree(&data).unwrap();
         let root = tree.root_hash().unwrap();
         let mut entries = create_part_recovery_data(&tree, data.len() as u64, 0).unwrap();
-        // ident 0 / 1 address the master hash itself — forbidden.
+        // ident 0 / 1 direccionan el hash maestro mismo — prohibido.
         entries[0].ident = 1;
         assert!(read_recovery_data(data.len() as u64, 0, root, &entries).is_err());
         entries[0].ident = 0;
         assert!(read_recovery_data(data.len() as u64, 0, root, &entries).is_err());
-        // ident pointing beyond the tree depth.
+        // ident que apunta más allá de la profundidad del árbol.
         entries[0].ident = 0x7FFF_FFFF;
         assert!(read_recovery_data(data.len() as u64, 0, root, &entries).is_err());
     }
@@ -526,19 +526,19 @@ mod tests {
 
     #[test]
     fn recovery_multi_part_tree() {
-        // File spanning 2 eD2K parts worth of AICH blocks is too large for a
-        // test; emulate a 60-block file (1 full part boundary semantics kept).
+        // Un archivo que abarca el equivalente a 2 partes eD2K de bloques AICH es demasiado grande para una
+        // prueba; emular un archivo de 60 bloques (manteniendo la semántica de límite de 1 parte completa).
         let data = sample_data(60);
         let tree = build_aich_tree(&data).unwrap();
         let root = tree.root_hash().unwrap();
 
         let entries = create_part_recovery_data(&tree, data.len() as u64, 0).unwrap();
-        // Part 0 covers blocks 0..53; sibling hashes for the remaining 7 blocks
-        // are included.
+        // La parte 0 cubre los bloques 0..53; se incluyen los hashes hermanos
+        // para los 7 bloques restantes.
         let block_hashes = read_recovery_data(data.len() as u64, 0, root, &entries).unwrap();
         assert_eq!(block_hashes.len(), 53);
-        // Block boundaries are part-aligned: block 52 covers only 143,360
-        // bytes (rest of part 0).
+        // Los límites de bloque están alineados por partes: el bloque 52 cubre solo 143 360
+        // bytes (resto de la parte 0).
         let mut expected = Vec::new();
         AichNode::for_each_block_range(data.len() as u64, |start, len| {
             expected.push(aich_block_hash(
@@ -559,9 +559,9 @@ mod tests {
 
     #[test]
     fn part_hashes_return_part_subtree_roots() {
-        // Synthetic tree for a 2-part + tail file: `aich_part_hashes` must
-        // return each part subtree's root hash in part order (eMule
-        // `m_aAICHPartHashSet`, `WriteAICHHashsetToFile`).
+        // Árbol sintético para un archivo de 2 partes + resto: `aich_part_hashes` debe
+        // devolver el hash raíz del subárbol de cada parte en orden de partes (`m_aAICHPartHashSet`,
+        // `WriteAICHHashsetToFile` de eMule).
         let file_size = 2 * ED2K_PART_SIZE as u64 + 1234;
         let mut tree = AichNode::new_tree(file_size).unwrap();
         let mut i = 0u8;
@@ -573,7 +573,7 @@ mod tests {
 
         let parts = aich_part_hashes(&tree, file_size).unwrap();
         assert_eq!(parts.len(), 3, "ceil(size/PARTSIZE) part hashes");
-        // Each entry must be the actual subtree root covering that part.
+        // Cada entrada debe ser la raíz real del subárbol que cubre esa parte.
         for (idx, h) in parts.iter().enumerate() {
             let start = idx as u64 * ED2K_PART_SIZE as u64;
             let size = (ED2K_PART_SIZE as u64).min(file_size - start);
@@ -581,7 +581,7 @@ mod tests {
             assert_eq!(node.hash.as_ref().unwrap(), h);
         }
 
-        // Single-part file: eMule `GetTheoreticalAICHPartHashCount` == 0.
+        // Archivo de una sola parte: `GetTheoreticalAICHPartHashCount` de eMule == 0.
         let small = sample_data(2);
         let small_tree = build_aich_tree(&small).unwrap();
         assert!(aich_part_hashes(&small_tree, small.len() as u64)

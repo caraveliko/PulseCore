@@ -6,87 +6,87 @@
 use std::fmt;
 use thiserror::Error;
 
-/// Specific category of an eD2K parsing failure.
+/// Categoría específica de un fallo de análisis sintáctico de eD2K.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ed2kErrorKind {
-    /// Unexpected end of input buffer while reading a required field.
+    /// Fin inesperado del búfer de entrada al leer un campo obligatorio.
     UnexpectedEof {
-        /// Number of bytes needed.
+        /// Número de bytes necesarios.
         needed: usize,
-        /// Number of bytes actually available.
+        /// Número de bytes realmente disponibles.
         available: usize,
     },
-    /// Protocol byte is not recognized as valid eD2K or eMule.
+    /// El byte de protocolo no se reconoce como un eD2K o eMule válido.
     UnsupportedProtocol {
-        /// Rejected protocol byte value.
+        /// Valor del byte de protocolo rechazado.
         byte: u8,
     },
-    /// Compressed protocol (0xD4) is explicitly rejected pending bounded decompression stage.
+    /// El protocolo comprimido (0xD4) se rechaza explícitamente a la espera de la etapa de descompresión acotada.
     CompressedProtocolUnsupported,
-    /// Frame length field is smaller than the minimum 1 byte for opcode.
+    /// El campo de longitud de trama es menor que el mínimo de 1 byte para el código de operación.
     FrameTooSmall {
-        /// Parsed frame length.
+        /// Longitud de trama analizada.
         size: usize,
     },
-    /// Frame size exceeds the configured safety limit.
+    /// El tamaño de trama supera el límite de seguridad configurado.
     FrameTooLarge {
-        /// Parsed frame length.
+        /// Longitud de trama analizada.
         size: usize,
-        /// Safety ceiling.
+        /// Techo de seguridad.
         limit: usize,
     },
-    /// A string field exceeds the configured maximum length.
+    /// Un campo de texto supera la longitud máxima configurada.
     OversizedString {
-        /// String byte length.
+        /// Longitud en bytes de la cadena.
         size: usize,
-        /// Safety limit.
+        /// Límite de seguridad.
         limit: usize,
     },
-    /// Number of tags exceeds the maximum permissible limit.
+    /// El número de etiquetas supera el límite máximo admisible.
     TooManyTags {
-        /// Declared tag count.
+        /// Recuento declarado de etiquetas.
         count: usize,
-        /// Safety limit.
+        /// Límite de seguridad.
         limit: usize,
     },
-    /// Tag type byte is unhandled or invalid.
+    /// El byte de tipo de etiqueta no está gestionado o no es válido.
     InvalidTagType {
-        /// Tag type byte.
+        /// Byte de tipo de etiqueta.
         tag_type: u8,
     },
-    /// Malformed field or semantic constraint violation.
+    /// Campo malformado o violación de restricción semántica.
     MalformedField {
-        /// Diagnostic message.
+        /// Mensaje de diagnóstico.
         message: String,
     },
-    /// Trailing bits in the last byte of an availability bitfield are non-zero.
+    /// Los bits finales en el último byte de un mapa de bits de disponibilidad no son cero.
     InvalidBitfieldTrailingBits {
-        /// Remainder part count modulo 8.
+        /// Resto del recuento de partes módulo 8.
         remainder: usize,
-        /// Actual trailing bits mask value found.
+        /// Valor real de la máscara de bits finales encontrado.
         trailing_bits: u8,
     },
-    /// Block start offset is greater than or equal to end offset.
+    /// El desplazamiento de inicio del bloque es mayor o igual que el desplazamiento de fin.
     InvalidBlockOffsets {
-        /// Start byte offset.
+        /// Desplazamiento de byte de inicio.
         start: u64,
-        /// End byte offset.
+        /// Desplazamiento de byte de fin.
         end: u64,
     },
-    /// Block payload byte length does not match declared (end - start) range.
+    /// La longitud en bytes de la carga útil del bloque no coincide con el rango declarado (end - start).
     BlockPayloadMismatch {
-        /// Expected byte length based on (end - start).
+        /// Longitud en bytes esperada basada en (end - start).
         expected: usize,
-        /// Actual byte length in frame payload.
+        /// Longitud en bytes real en la carga útil de la trama.
         actual: usize,
     },
-    /// An opcode is ambiguous or invalid for the active compatibility profile.
+    /// Un código de operación es ambiguo o no válido para el perfil de compatibilidad activo.
     AmbiguousOpcodeForProfile {
-        /// The opcode that could not be disambiguated.
+        /// El código de operación que no pudo desambiguarse.
         opcode: u8,
-        /// The compatibility profile active during decoding.
+        /// El perfil de compatibilidad activo durante la decodificación.
         profile: super::profile::Ed2kCompatibilityProfile,
-        /// Reason / context description.
+        /// Descripción del motivo / contexto.
         reason: &'static str,
     },
 }
@@ -162,23 +162,23 @@ impl fmt::Display for Ed2kErrorKind {
     }
 }
 
-/// Rich, contextual error for eD2K wire decoding failures.
+/// Error enriquecido y contextual para fallos de decodificación de red eD2K.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct Ed2kParseError {
-    /// Wire protocol byte (e.g. 0xE3, 0xC5, 0xD4).
+    /// Byte de protocolo en cable (p. ej. 0xE3, 0xC5, 0xD4).
     pub protocol: u8,
-    /// Operation code if known at the time of error.
+    /// Código de operación si se conoce en el momento del error.
     pub opcode: Option<u8>,
-    /// Byte offset in the input buffer where the failure occurred.
+    /// Desplazamiento de byte en el búfer de entrada donde ocurrió el fallo.
     pub offset: usize,
-    /// High-level context or field name where parsing failed.
+    /// Contexto de alto nivel o nombre de campo donde falló el análisis sintáctico.
     pub context: &'static str,
-    /// Specific failure category.
+    /// Categoría específica de fallo.
     pub kind: Ed2kErrorKind,
 }
 
 impl Ed2kParseError {
-    /// Creates a new `Ed2kParseError`.
+    /// Crea un nuevo `Ed2kParseError`.
     pub fn new(
         protocol: u8,
         opcode: Option<u8>,
@@ -210,19 +210,19 @@ impl fmt::Display for Ed2kParseError {
     }
 }
 
-/// Rich, contextual error for eD2K wire encoding failures.
+/// Error enriquecido y contextual para fallos de codificación de red eD2K.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct Ed2kEncodeError {
-    /// Operation code being encoded.
+    /// Código de operación que se está codificando.
     pub opcode: u8,
-    /// High-level context or field name where encoding failed.
+    /// Contexto de alto nivel o nombre de campo donde falló la codificación.
     pub field: &'static str,
-    /// Specific failure category.
+    /// Categoría específica de fallo.
     pub kind: Ed2kErrorKind,
 }
 
 impl Ed2kEncodeError {
-    /// Creates a new `Ed2kEncodeError`.
+    /// Crea un nuevo `Ed2kEncodeError`.
     pub fn new(opcode: u8, field: &'static str, kind: Ed2kErrorKind) -> Self {
         Self {
             opcode,

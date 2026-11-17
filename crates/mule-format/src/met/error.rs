@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 
-/// Granular, offset-aware errors for parsing eMule binary metadata files (.met).
+/// Errores detallados y conscientes del desplazamiento para el análisis de archivos de metadatos binarios (.met) de eMule.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum MetError {
     #[error("unsupported .met header 0x{value:02x} at offset {offset}")]

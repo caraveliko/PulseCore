@@ -15,7 +15,7 @@ async fn test_sonarr_transmission_handshake_and_lifecycle() {
     let rpc_url = format!("http://{addr}/transmission/rpc");
     let client = reqwest::Client::new();
 
-    // 1. Initial request without CSRF token -> MUST return 409 Conflict with X-Transmission-Session-Id header
+    // 1. Petición inicial sin token CSRF -> DEBE devolver 409 Conflict con cabecera X-Transmission-Session-Id
     let res = client
         .post(&rpc_url)
         .header("content-type", "application/json")
@@ -36,7 +36,7 @@ async fn test_sonarr_transmission_handshake_and_lifecycle() {
 
     assert!(!session_header.is_empty());
 
-    // 2. Retry with captured session header -> MUST return 200 OK and session details (Sonarr "Test" button check)
+    // 2. Reintento con cabecera de sesión capturada -> DEBE devolver 200 OK y detalles de sesión (comprobación del botón "Test" de Sonarr)
     let res = client
         .post(&rpc_url)
         .header("x-transmission-session-id", &session_header)
@@ -272,7 +272,7 @@ async fn test_embedded_web_ui_serving() {
         spawn_test_daemon_with_mode("web_test_token_123", WorkDirMode::Portable).await;
     let client = reqwest::Client::new();
 
-    // 1. GET / should return index.html with 200 OK
+    // 1. GET / debe devolver index.html con 200 OK
     let res = client
         .get(format!("http://{addr}/"))
         .send()
@@ -283,7 +283,7 @@ async fn test_embedded_web_ui_serving() {
     let html = res.text().await.unwrap();
     assert!(html.contains("eMule-Rust"));
 
-    // 2. GET /session-config.js should return 200 OK with window.MULE_SESSION
+    // 2. GET /session-config.js debe devolver 200 OK con window.MULE_SESSION
     let res = client
         .get(format!("http://{addr}/session-config.js"))
         .send()

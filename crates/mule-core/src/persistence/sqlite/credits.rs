@@ -53,8 +53,8 @@ pub fn get_peer_credit(
     }
 }
 
-/// Ajoute `bytes` au compteur `column` (`uploaded_bytes` ou `downloaded_bytes`).
-/// Le nom de colonne est une constante interne — jamais d'entrée utilisateur.
+/// Añade `bytes` al contador `column` (`uploaded_bytes` o `downloaded_bytes`).
+/// El nombre de columna es una constante interna — nunca una entrada del usuario.
 fn record_credit_delta(
     conn: &mut Connection,
     pubkey_hash: &str,

@@ -23,7 +23,7 @@ pub use types::{
 use crate::state::AppState;
 
 impl SwarmCoordinator {
-    /// Spawns the autonomous swarm coordinator loop as a background task.
+    /// Genera el bucle autónomo del coordinador de enjambre como una tarea en segundo plano.
     pub fn start(state: AppState) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut coordinator = Self {
@@ -44,10 +44,10 @@ impl SwarmCoordinator {
         })
     }
 
-    /// Primary execution loop listening for ticks or daemon shutdown.
-    /// Le kill switch n'arrête pas la boucle : `tick()` court-circuite
-    /// tant que l'état réseau est `Disabled`, puis reprend seul à
-    /// `network.enable` (le token annulé serait sinon définitif).
+    /// Bucle principal de ejecución a la escucha de ticks o del apagado del daemon.
+    /// El interruptor de corte (kill switch) no detiene el bucle: `tick()` se cortocircuita
+    /// mientras el estado de la red sea `Disabled`, y luego se reanuda por sí solo al
+    /// emitir `network.enable` (el token cancelado sería de lo contrario definitivo).
     pub async fn run_loop(&mut self) {
         let shutdown_notify = self.state.shutdown_notify.clone();
         let mut interval = tokio::time::interval(COORDINATOR_TICK_INTERVAL);

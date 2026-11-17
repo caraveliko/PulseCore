@@ -16,7 +16,7 @@ use crate::validator::{validate_connect_address, validate_listen_address, Policy
 
 use mule_filter::{IpFilter, RateLimitsConfig, SessionPseudonymizer, TokenBucket};
 
-/// Errors encountered when requesting network permits or updating policy.
+/// Errores encontrados al solicitar permisos de red o actualizar la política.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum PolicyError {
     #[error("Network is disabled (Kill Switch active)")]
@@ -54,7 +54,7 @@ struct PolicyManagerInner {
     cancel_token: CancellationToken,
 }
 
-/// Rate limiters managed by policy.
+/// Limitadores de tasa administrados por la política.
 pub struct PolicyRateLimiters {
     pub download_bucket: TokenBucket,
     pub upload_bucket: TokenBucket,
@@ -65,7 +65,7 @@ pub struct PolicyRateLimiters {
 
 impl PolicyRateLimiters {
     pub fn new(cfg: &RateLimitsConfig) -> Self {
-        // connections_per_minute -> tokens per second: cfg.connections_per_minute / 60
+        // connections_per_minute -> tokens por segundo: cfg.connections_per_minute / 60
         let conn_per_sec = (cfg.connections_per_minute as u64 / 60).max(1);
         let conn_burst = (cfg.connections_per_minute as u64 / 10).max(5);
 
@@ -113,9 +113,9 @@ impl PolicyRateLimiters {
     }
 }
 
-/// Central network policy coordinator for eMuleRust.
-/// Mandatory single choke point for validating addresses, issuing RAII permits,
-/// enforcing resource budgets, and triggering atomic global disconnection.
+/// Coordinador central de políticas de red para eMuleRust.
+/// Punto de estrangulamiento único obligatorio para validar direcciones, emitir permisos RAII,
+/// hacer cumplir los presupuestos de recursos y activar la desconexión global atómica.
 #[derive(Clone)]
 pub struct NetworkPolicyManager {
     inner: Arc<RwLock<PolicyManagerInner>>,
@@ -126,7 +126,7 @@ pub struct NetworkPolicyManager {
 }
 
 impl NetworkPolicyManager {
-    /// Creates a new manager with the specified initial profile and resource budgets.
+    /// Crea un nuevo administrador con el perfil inicial y los presupuestos de recursos especificados.
     pub fn new(profile: NetworkProfile, budgets: ResourceBudgets) -> Self {
         let rate_limits_cfg = RateLimitsConfig::default();
         Self {
@@ -145,29 +145,29 @@ impl NetworkPolicyManager {
         }
     }
 
-    /// Access the underlying IP filter.
+    /// Accede al filtro IP subyacente.
     pub fn ip_filter(&self) -> Arc<IpFilter> {
         self.filter.clone()
     }
 
-    /// Access the underlying rate limiters.
+    /// Accede a los limitadores de tasa subyacentes.
     pub fn rate_limiters(&self) -> Arc<PolicyRateLimiters> {
         self.rate_limiters.clone()
     }
 
-    /// Access the underlying session pseudonymizer.
+    /// Accede al seudonimizador de sesión subyacente.
     pub fn pseudonymizer(&self) -> Arc<SessionPseudonymizer> {
         self.pseudonymizer.clone()
     }
 
-    /// Returns the currently active network profile.
+    /// Devuelve el perfil de red actualmente activo.
     pub fn profile(&self) -> NetworkProfile {
         self.inner.read().unwrap().profile
     }
 
-    /// Updates the network profile, recording the transition in the audit log.
-    /// Invariant: if transitioning back to `local-lab` with active external sockets,
-    /// those sockets are cancelled atomically via the cancel token.
+    /// Actualiza el perfil de red, registrando la transición en el registro de auditoría.
+    /// Invariante: si se regresa a `local-lab` con sockets externos activos,
+    /// dichos sockets se cancelan atómicamente a través del token de cancelación.
     pub fn set_profile(&self, new_profile: NetworkProfile) {
         let mut inner = self.inner.write().unwrap();
         let old = inner.profile;
@@ -183,7 +183,7 @@ impl NetworkPolicyManager {
             );
             tracing::info!(from = %old, to = %new_profile, "Network profile updated");
 
-            // Invariant: if switching to local-lab, cancel active permits permanently and instantiate new token
+            // Invariante: si se cambia a local-lab, cancelar los permisos activos permanentemente e instanciar un nuevo token
             if new_profile == NetworkProfile::LocalLab {
                 inner.cancel_token.cancel();
                 inner.cancel_token = CancellationToken::new();
@@ -191,7 +191,7 @@ impl NetworkPolicyManager {
         }
     }
 
-    /// Returns the current dynamic network state.
+    /// Devuelve el estado de red dinámico actual.
     pub fn state(&self) -> NetworkState {
         let inner = self.inner.read().unwrap();
         match inner.state {
@@ -210,12 +210,12 @@ impl NetworkPolicyManager {
         }
     }
 
-    /// Returns the configured resource budgets.
+    /// Devuelve los presupuestos de recursos configurados.
     pub fn budgets(&self) -> ResourceBudgets {
         self.inner.read().unwrap().budgets.clone()
     }
 
-    /// Updates resource budgets after validating parameter bounds.
+    /// Actualiza los presupuestos de recursos tras validar los límites de los parámetros.
     pub fn set_budgets(&self, budgets: ResourceBudgets) -> Result<(), PolicyError> {
         budgets.validate().map_err(PolicyError::InvalidBudgets)?;
         let mut inner = self.inner.write().unwrap();
@@ -223,10 +223,10 @@ impl NetworkPolicyManager {
         Ok(())
     }
 
-    /// Requests an outbound TCP socket permit for a target address and purpose.
-    /// Fails if the network is disabled, the address violates profile constraints,
-    /// the IP is blocked by the IP filter, connection rate limits are exceeded,
-    /// or active connection budgets are exhausted.
+    /// Solicita un permiso de socket TCP saliente para una dirección de destino y propósito.
+    /// Falla si la red está deshabilitada, la dirección infringe las restricciones del perfil,
+    /// la IP está bloqueada por el filtro IP, se superan los límites de tasa de conexión,
+    /// o se agotan los presupuestos de conexiones activas.
     pub fn request_tcp_connect(
         &self,
         addr: SocketAddr,
@@ -243,7 +243,7 @@ impl NetworkPolicyManager {
             ConnectionPurpose::Listener => format!("listener:{}", addr.port()),
         };
 
-        // 1. Check lifecycle state
+        // 1. Comprobar el estado del ciclo de vida
         if inner.state == NetworkState::Disabled {
             inner.audit_log.record(
                 AuditEventType::ConnectAttempt,
@@ -259,7 +259,7 @@ impl NetworkPolicyManager {
             return Err(PolicyError::ShuttingDown);
         }
 
-        // 2. Check protocol capability (Kademlia UDP in preview)
+        // 2. Comprobar capacidad protocolaria (Kademlia UDP en vista previa)
         if purpose == ConnectionPurpose::KadNode && !profile.allows_udp_kad() {
             let reason = format!("Kademlia UDP not allowed in profile {profile}");
             inner.audit_log.record(
@@ -273,7 +273,7 @@ impl NetworkPolicyManager {
             return Err(PolicyError::KadNotAllowedInProfile(profile));
         }
 
-        // 3. Check IP Filter (High-performance in-memory lookup)
+        // 3. Comprobar filtro IP (búsqueda en memoria de alto rendimiento)
         if let Some(range) = self.filter.check_ip(addr.ip()) {
             let reason = format!(
                 "Blocked by IP filter (level {}: '{}' - [{} - {}])",
@@ -298,7 +298,7 @@ impl NetworkPolicyManager {
             ));
         }
 
-        // 4. Check Connection Rate Limiter (Token Bucket)
+        // 4. Comprobar limitador de tasa de conexión (Token Bucket)
         let rate_allowed = match purpose {
             ConnectionPurpose::KadNode => self.rate_limiters.kad_bucket.try_acquire(1),
             _ => self.rate_limiters.conn_bucket.try_acquire(1),
@@ -319,7 +319,7 @@ impl NetworkPolicyManager {
             return Err(PolicyError::ConnectionRateLimited);
         }
 
-        // 5. Validate destination address
+        // 5. Validar dirección de destino
         if let Err(violation) = validate_connect_address(&addr, profile) {
             let reason = violation.to_string();
             inner.audit_log.record(
@@ -333,7 +333,7 @@ impl NetworkPolicyManager {
             return Err(PolicyError::AddressViolation(violation));
         }
 
-        // 6. Validate resource budgets
+        // 6. Validar presupuestos de recursos
         match purpose {
             ConnectionPurpose::Ed2kPeer => {
                 let active = self.tracker.active_peer_conns.load(Ordering::SeqCst);
@@ -354,8 +354,8 @@ impl NetworkPolicyManager {
                 }
             }
             ConnectionPurpose::KadNode => {
-                // KadNode is connectionless UDP datagram operations; tracked by kad_bucket,
-                // not bounded by persistent TCP peer connection capacity.
+                // KadNode son operaciones de datagramas UDP sin conexión; rastreado por kad_bucket,
+                // no limitado por la capacidad de conexiones TCP de pares persistentes.
             }
             ConnectionPurpose::Ed2kServer => {
                 let active = self.tracker.active_server_conns.load(Ordering::SeqCst);
@@ -385,7 +385,7 @@ impl NetworkPolicyManager {
             }
         }
 
-        // 7. Issue permit
+        // 7. Emitir permiso
         let permit_id = inner.next_permit_id;
         inner.next_permit_id = inner.next_permit_id.wrapping_add(1);
 
@@ -405,7 +405,7 @@ impl NetworkPolicyManager {
         Ok(permit)
     }
 
-    /// Requests a listener socket permit for binding to an address.
+    /// Solicita un permiso de socket de escucha para vincularse a una dirección.
     pub fn request_tcp_listen(
         &self,
         addr: SocketAddr,
@@ -461,9 +461,9 @@ impl NetworkPolicyManager {
         Ok(permit)
     }
 
-    /// Global Kill Switch ("Disconnect All").
-    /// Atomically marks the network as Disabled, triggers cancellation of all outstanding
-    /// socket tasks, and writes an audit event.
+    /// Interruptor de corte global ("Desconectar todo").
+    /// Marca atómicamente la red como Deshabilitada (Disabled), activa la cancelación de todas las
+    /// tareas de socket pendientes y escribe un evento de auditoría.
     pub fn disconnect_all(&self) {
         let (profile, token_to_cancel) = {
             let mut inner = self.inner.write().unwrap();
@@ -481,16 +481,16 @@ impl NetworkPolicyManager {
             (profile, inner.cancel_token.clone())
         };
 
-        // Trigger cancellation to all active permits
+        // Activar la cancelación para todos los permisos activos
         token_to_cancel.cancel();
 
-        // Finalize state to Disabled
+        // Finalizar el estado a Disabled
         let mut inner = self.inner.write().unwrap();
         inner.state = NetworkState::Disabled;
         let _ = profile;
     }
 
-    /// Re-enables the network from Disabled state.
+    /// Vuelve a habilitar la red desde el estado Deshabilitada (Disabled).
     pub fn enable(&self) {
         let mut inner = self.inner.write().unwrap();
         if inner.state == NetworkState::Disabled || inner.state == NetworkState::ShuttingDown {
@@ -509,44 +509,44 @@ impl NetworkPolicyManager {
         }
     }
 
-    /// Retrieves the most recent network audit log entries.
+    /// Recupera las entradas más recientes del registro de auditoría de red.
     pub fn audit_entries(&self, limit: usize) -> Vec<NetworkAuditEntry> {
         let inner = self.inner.read().unwrap();
         inner.audit_log.recent(limit)
     }
 
-    /// Returns the cancellation token associated with the network manager.
+    /// Devuelve el token de cancelación asociado con el administrador de red.
     pub fn cancellation_token(&self) -> CancellationToken {
         self.inner.read().unwrap().cancel_token.clone()
     }
 
-    /// Returns the number of currently active peer connections.
+    /// Devuelve el número de conexiones de pares actualmente activas.
     pub fn active_peer_connections_count(&self) -> usize {
         self.tracker.active_peer_conns.load(Ordering::SeqCst)
     }
 
-    /// Returns the number of currently active server connections.
+    /// Devuelve el número de conexiones de servidor actualmente activas.
     pub fn active_server_connections_count(&self) -> usize {
         self.tracker.active_server_conns.load(Ordering::SeqCst)
     }
 
-    /// Returns the number of currently active listeners.
+    /// Devuelve el número de escuchas actualmente activas.
     pub fn active_listeners_count(&self) -> usize {
         self.tracker.active_listeners.load(Ordering::SeqCst)
     }
 }
 
-/// eMule `Preferences::GetMaxDownloadInBytesPerSec` (Preferences.cpp:694,
-/// « don't be a Lam3r :) ») — ratio anti-leech upload/download : quand la
-/// limite upload descend sous 20 Ko/s, le download effectif est plafonné
-/// à `coef × upload` (3× si <4 Ko/s, 4× si <10, 5× si <20). Une limite
-/// download à 0 (illimitée) est elle aussi plafonnée à `coef × upload` —
-/// eMule calcule `min(coef × maxup, maxdown)` avec maxdown = ∞.
-/// Upload 0 (illimité) ou ≥ 20 Ko/s → pas de plafond ratio.
+/// `Preferences::GetMaxDownloadInBytesPerSec` de eMule (Preferences.cpp:694,
+/// « don't be a Lam3r :) ») — ratio anti-leech subida/descarga: cuando el
+/// límite de subida desciende por debajo de 20 KB/s, la descarga efectiva se limita
+/// a `coef × upload` (3× si <4 KB/s, 4× si <10, 5× si <20). Un límite de
+/// descarga a 0 (ilimitado) también se limita a `coef × upload` —
+/// eMule calcula `min(coef × maxup, maxdown)` con maxdown = ∞.
+/// Subida 0 (ilimitada) o ≥ 20 KB/s → sin límite de ratio.
 ///
-/// La valeur *configurée* reste inchangée dans les settings : comme eMule,
-/// le ratio est un plafond recalculé à chaque application, jamais
-/// réécrit dans les préférences.
+/// El valor *configurado* permanece inalterado en los ajustes: como en eMule,
+/// el ratio es un límite recalculado en cada aplicación, nunca
+/// rescrito en las preferencias.
 pub fn emule_ud_ratio(download_bps: u64, upload_bps: u64) -> u64 {
     // don't be a Lam3r :)
     if upload_bps == 0 || upload_bps >= 20 * 1024 {
@@ -573,29 +573,29 @@ mod tests {
 
     #[test]
     fn ratio_tiers_match_emule() {
-        // < 4 Ko/s → coef 3
+        // < 4 KB/s → coef 3
         assert_eq!(emule_ud_ratio(100 * 1024, 3 * 1024), 9 * 1024);
-        // 4..10 Ko/s → coef 4
+        // 4..10 KB/s → coef 4
         assert_eq!(emule_ud_ratio(100 * 1024, 5 * 1024), 20 * 1024);
-        // 10..20 Ko/s → coef 5
+        // 10..20 KB/s → coef 5
         assert_eq!(emule_ud_ratio(100 * 1024, 15 * 1024), 75 * 1024);
-        // ≥ 20 Ko/s → pas de ratio
+        // ≥ 20 KB/s → sin ratio
         assert_eq!(emule_ud_ratio(100 * 1024, 20 * 1024), 100 * 1024);
         assert_eq!(emule_ud_ratio(100 * 1024, 500 * 1024), 100 * 1024);
     }
 
     #[test]
     fn ratio_keeps_configured_when_lower() {
-        // Download configuré sous le plafond → inchangé.
+        // Descarga configurada por debajo del límite → sin cambios.
         assert_eq!(emule_ud_ratio(10 * 1024, 5 * 1024), 10 * 1024);
     }
 
     #[test]
     fn ratio_caps_unlimited_download() {
-        // Download illimité (0) + upload 5 Ko/s → effectif 4× = 20 Ko/s
-        // (eMule : min(coef × up, ∞)).
+        // Descarga ilimitada (0) + subida 5 KB/s → efectivo 4× = 20 KB/s
+        // (eMule: min(coef × up, ∞)).
         assert_eq!(emule_ud_ratio(0, 5 * 1024), 20 * 1024);
-        // Upload illimité (0) → download intact.
+        // Subida ilimitada (0) → descarga intacta.
         assert_eq!(emule_ud_ratio(0, 0), 0);
         assert_eq!(emule_ud_ratio(100 * 1024, 0), 100 * 1024);
     }

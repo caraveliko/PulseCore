@@ -6,7 +6,7 @@
 use num_bigint::BigUint;
 use rand::RngCore;
 
-/// Fixed 768-bit (96-byte) prime modulus used by eMule (`dh768_p`).
+/// Módulo primo fijo de 768 bits (96 bytes) utilizado por eMule (`dh768_p`).
 pub const DH768_P: [u8; 96] = [
     0xF2, 0xBF, 0x52, 0xC5, 0x5F, 0x58, 0x7A, 0xDD, 0x53, 0x71, 0xA9, 0x36, 0xE8, 0x86, 0xEB, 0x3C,
     0x62, 0x17, 0xA3, 0x3E, 0xC3, 0x4C, 0xB4, 0x0D, 0xC7, 0x3A, 0x41, 0xA6, 0x43, 0xAF, 0xFC, 0xE7,
@@ -16,24 +16,24 @@ pub const DH768_P: [u8; 96] = [
     0x42, 0xFB, 0x42, 0x68, 0x8F, 0x05, 0x15, 0x0F, 0x54, 0x8B, 0x5F, 0x43, 0x6A, 0xF7, 0x0D, 0xF3,
 ];
 
-/// Generator $g = 2$.
+/// Generador $g = 2$.
 pub const DH768_G: u32 = 2;
 
-/// A Diffie-Hellman 768-bit key pair.
+/// Par de claves Diffie-Hellman de 768 bits.
 #[derive(Clone, Debug)]
 pub struct Dh768KeyPair {
-    /// 128-bit random private exponent $a$.
+    /// Exponente privado aleatorio de 128 bits $a$.
     pub private_key: [u8; 16],
-    /// 768-bit (96-byte) public key $A = g^a \pmod p$.
+    /// Clave pública de 768 bits (96 bytes) $A = g^a \pmod p$.
     pub public_key: [u8; 96],
 }
 
 impl Dh768KeyPair {
-    /// Generates a new DH-768 key pair using the provided random generator.
+    /// Genera un nuevo par de claves DH-768 utilizando el generador aleatorio proporcionado.
     pub fn generate<R: RngCore>(rng: &mut R) -> Self {
         let mut priv_bytes = [0u8; 16];
         rng.fill_bytes(&mut priv_bytes);
-        // Ensure private key is non-zero
+        // Asegurar que la clave privada no sea cero
         priv_bytes[0] |= 1;
 
         let p = BigUint::from_bytes_be(&DH768_P);
@@ -49,7 +49,7 @@ impl Dh768KeyPair {
         }
     }
 
-    /// Computes the shared secret $S = B^a \pmod p$ from the remote 96-byte public key $B$.
+    /// Calcula el secreto compartido $S = B^a \pmod p$ a partir de la clave pública remota de 96 bytes $B$.
     pub fn compute_shared_secret(&self, remote_public_bytes: &[u8; 96]) -> [u8; 96] {
         let p = BigUint::from_bytes_be(&DH768_P);
         let a = BigUint::from_bytes_be(&self.private_key);
@@ -60,14 +60,14 @@ impl Dh768KeyPair {
     }
 }
 
-/// Helper to format a `BigUint` as a fixed 96-byte big-endian array.
+/// Auxiliar para dar formato a un `BigUint` como una matriz big-endian fija de 96 bytes.
 fn encode_biguint_96(num: &BigUint) -> [u8; 96] {
     let mut out = [0u8; 96];
     let bytes = num.to_bytes_be();
     if bytes.len() <= 96 {
         out[96 - bytes.len()..].copy_from_slice(&bytes);
     } else {
-        // Truncate from the end if somehow larger
+        // Truncar desde el final si de algún modo es mayor
         out.copy_from_slice(&bytes[bytes.len() - 96..]);
     }
     out

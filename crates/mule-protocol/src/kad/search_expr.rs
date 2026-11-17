@@ -24,78 +24,78 @@ use crate::ed2k::tags::{Ed2kTag, TagName, TagValue};
 use crate::ed2k::{Ed2kErrorKind, Ed2kParseError};
 use crate::kad::types::KadKeywordEntryWire;
 
-/// Maximum expression tree depth — eMule rejects trees at `iLevel >= 24`
+/// Profundidad máxima del árbol de expresiones — eMule rechaza árboles con `iLevel >= 24`
 /// (`KademliaUDPListener.cpp:887`).
 pub const MAX_SEARCH_EXPR_DEPTH: usize = 24;
 
-/// Tag id compared against the file name extension without being stored
-/// (eMule `TAG_FILEFORMAT` special case, `Entry.cpp:260`).
+/// Id de etiqueta comparado contra la extensión del nombre de archivo sin almacenarse
+/// (caso especial `TAG_FILEFORMAT` de eMule, `Entry.cpp:260`).
 const TAG_ID_FILEFORMAT: u8 = 0x04;
 
-/// Tag id resolved to the entry's `file_size` field
-/// (eMule `TAG_FILESIZE` virtual tag, `Entry.cpp:101`).
+/// Id de etiqueta resuelto al campo `file_size` de la entrada
+/// (etiqueta virtual `TAG_FILESIZE` de eMule, `Entry.cpp:101`).
 const TAG_ID_FILESIZE: u8 = 0x02;
 
-/// Delimiter set splitting unquoted filename terms
+/// Conjunto de delimitadores para dividir términos de nombres sin entrecomillar
 /// (eMule `INV_KAD_KEYWORD_CHARS`, `SearchManager.cpp:54`).
 const INV_KAD_KEYWORD_CHARS: [char; 20] = [
     ' ', '(', ')', '[', ']', '{', '}', '<', '>', ',', '.', '_', '-', '!', '?', ':', ';', '\\', '/',
     '"',
 ];
 
-/// Expression leaf node kinds parsed from the wire.
+/// Tipos de nodos hoja de expresión analizados desde el cable.
 #[derive(Debug, Clone, PartialEq)]
 pub enum KadSearchTerm {
     /// Filename term — every pre-tokenized word must be a substring of the
     /// lowercased file name (eMule `SSearchTerm::String`).
     Str(Vec<String>),
-    /// Metadata string equality (eMule `SSearchTerm::MetaTag`).
+    /// Igualdad de cadena de metadatos (eMule `SSearchTerm::MetaTag`).
     MetaStr {
-        /// Raw tag name bytes (1 byte = tag id, longer = name string).
+        /// Bytes en bruto del nombre de etiqueta (1 byte = id de etiqueta, más largo = cadena de nombre).
         name: Vec<u8>,
-        /// Lowercased expected value.
+        /// Valor esperado en minúsculas.
         value: String,
     },
     /// Integer metadata relation (eMule `OpEqual`…`OpNotEqual` over
     /// `CKadTagUInt64`; float expression terms are never produced by
     /// `CreateSearchExpressionTree`, so only int terms exist on the wire).
     Num {
-        /// Raw tag name bytes (1 byte = tag id, longer = name string).
+        /// Bytes en bruto del nombre de etiqueta (1 byte = id de etiqueta, más largo = cadena de nombre).
         name: Vec<u8>,
-        /// Comparison operator (wire codes 0x00–0x05).
+        /// Operador de comparación (códigos de cable 0x00–0x05).
         op: KadSearchNumOp,
-        /// Right-hand comparison value.
+        /// Valor de comparación derecho.
         value: u64,
     },
 }
 
-/// Integer comparison operators (`mmop` wire codes, `Entry.cpp:284`).
+/// Operadores de comparación entera (códigos de cable `mmop`, `Entry.cpp:284`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KadSearchNumOp {
-    /// `0x00` — equal.
+    /// `0x00` — igual.
     Equal,
-    /// `0x01` — strictly greater.
+    /// `0x01` — estrictamente mayor.
     Greater,
-    /// `0x02` — strictly less.
+    /// `0x02` — estrictamente menor.
     Less,
-    /// `0x03` — greater or equal.
+    /// `0x03` — mayor o igual.
     GreaterEqual,
-    /// `0x04` — less or equal.
+    /// `0x04` — menor o igual.
     LessEqual,
-    /// `0x05` — not equal.
+    /// `0x05` — distinto.
     NotEqual,
 }
 
-/// Parsed restrictive search-expression tree.
+/// Árbol analizado de expresiones de búsqueda restrictivas.
 #[derive(Debug, Clone, PartialEq)]
 pub enum KadSearchExpression {
-    /// `AND` — both children must match.
+    /// `AND` — ambos hijos deben coincidir.
     And(Box<KadSearchExpression>, Box<KadSearchExpression>),
-    /// `OR` — at least one child must match.
+    /// `OR` — al menos un hijo debe coincidir.
     Or(Box<KadSearchExpression>, Box<KadSearchExpression>),
-    /// `NOT` — left child must match and right child must not match.
+    /// `NOT` — el hijo izquierdo debe coincidir y el derecho no.
     Not(Box<KadSearchExpression>, Box<KadSearchExpression>),
-    /// Leaf term.
+    /// Término hoja.
     Term(KadSearchTerm),
 }
 
@@ -104,7 +104,7 @@ impl KadSearchExpression {
     /// (`CreateSearchExpressionTree`). Trailing bytes after a complete tree
     /// are ignored, like eMule reading from a stream. Returns an
     /// `Ed2kParseError` on malformed or truncated input, unknown operators,
-    /// or trees deeper than `MAX_SEARCH_EXPR_DEPTH` — the caller must drop
+    /// o árboles más profundos que `MAX_SEARCH_EXPR_DEPTH` — el llamador debe descartar
     /// the datagram, like eMule's `try/catch` in
     /// `Process_KADEMLIA2_SEARCH_KEY_REQ`.
     pub fn parse(protocol: u8, opcode: u8, data: &[u8]) -> Result<Self, Ed2kParseError> {
@@ -130,22 +130,22 @@ impl KadSearchExpression {
     }
 }
 
-/// Evaluation context for one stored keyword entry: lowercased file name,
-/// file size and the published tag list (eMule `CKeyEntry` fields
+/// Contexto de evaluación para una entrada de palabra clave almacenada: nombre de archivo en minúsculas,
+/// tamaño de archivo y lista de etiquetas publicada (campos de eMule `CKeyEntry`:
 /// `m_strSearchTermCacheCommonFileNameLowerCase`, `m_uSize`, `m_listTag`).
 #[derive(Debug)]
 pub struct KadKeywordSearchView<'a> {
     /// File name lowercased once per evaluation (eMule caches it on the
     /// entry for the duration of the match).
     file_name_lower: String,
-    /// Entry file size — virtual `TAG_FILESIZE` value.
+    /// Tamaño del archivo de la entrada — valor virtual de `TAG_FILESIZE`.
     file_size: u64,
-    /// Published metadata tag list.
+    /// Lista de etiquetas de metadatos publicada.
     tags: &'a [Ed2kTag],
 }
 
 impl<'a> KadKeywordSearchView<'a> {
-    /// Builds the evaluation view of a stored keyword entry.
+    /// Construye la vista de evaluación de una entrada de palabra clave almacenada.
     pub fn new(entry: &'a KadKeywordEntryWire) -> Self {
         Self {
             file_name_lower: entry.file_name.to_lowercase(),
@@ -169,7 +169,7 @@ impl KadSearchTerm {
             Self::MetaStr { name, value } => {
                 if name.as_slice() == [TAG_ID_FILEFORMAT] {
                     // eMule: `fileformat` is part of the file name — compare
-                    // the extension (after the last '.') case-insensitively.
+                    // la extensión (tras el último '.') sin distinguir mayúsculas.
                     if let Some(ext) = view.file_name_lower.rsplit('.').next() {
                         if view.file_name_lower.contains('.') && ext == value {
                             return true;
@@ -183,7 +183,7 @@ impl KadSearchTerm {
             }
             Self::Num { name, op, value } => {
                 // eMule `GetIntTagValue`: first matching int tag by exact
-                // name; `TAG_FILESIZE` resolves to the entry size when no
+                // nombre; `TAG_FILESIZE` resuelve al tamaño de entrada cuando no hay
                 // stored tag matches.
                 let entry_value = view
                     .tags
@@ -211,9 +211,9 @@ impl KadSearchTerm {
     }
 }
 
-/// eMule `pTag->m_name.Compare(name) == 0` — exact byte comparison: a 1-byte
-/// expression name matches `TagName::Id`, longer names match `TagName::Text`
-/// byte for byte.
+/// eMule `pTag->m_name.Compare(name) == 0` — comparación exacta de bytes: un nombre
+/// de expresión de 1 byte coincide con `TagName::Id`, nombres más largos coinciden con `TagName::Text`
+/// byte a byte.
 fn tag_name_matches(tag_name: &TagName, expr_name: &[u8]) -> bool {
     match tag_name {
         TagName::Id(id) => expr_name == [*id].as_slice(),
@@ -221,7 +221,7 @@ fn tag_name_matches(tag_name: &TagName, expr_name: &[u8]) -> bool {
     }
 }
 
-/// Integer value of a stored tag (eMule `CKadTag::IsInt()`).
+/// Valor entero de una etiqueta almacenada (eMule `CKadTag::IsInt()`).
 fn tag_int_value(value: &TagValue) -> Option<u64> {
     match value {
         TagValue::UInt64(v) => Some(*v),
@@ -232,7 +232,7 @@ fn tag_int_value(value: &TagValue) -> Option<u64> {
     }
 }
 
-/// Bounded cursor over the expression byte stream.
+/// Cursor acotado sobre el flujo de bytes de la expresión.
 struct Cursor<'a> {
     data: &'a [u8],
     pos: usize,
@@ -283,7 +283,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// `CFileDataIO::ReadStringUTF8` — `u16` raw length + bytes, decoded as
-    /// UTF-8 with lossy fallback (eMule falls back to the local codepage).
+    /// UTF-8 con reserva con pérdida (eMule recurre a la página de códigos local).
     fn utf8_string(&mut self, field: &'static str) -> Result<String, Ed2kParseError> {
         let len = self.u16(field)? as usize;
         let bytes = self.take(len, field)?;
@@ -292,7 +292,7 @@ impl<'a> Cursor<'a> {
 }
 
 fn parse_term(cur: &mut Cursor<'_>, level: usize) -> Result<KadSearchExpression, Ed2kParseError> {
-    // eMule `iLevel >= 24` -> NULL (the caller's level 0 is the root).
+    // eMule `iLevel >= 24` -> NULL (el nivel 0 del llamador es la raíz).
     if level >= MAX_SEARCH_EXPR_DEPTH {
         return Err(cur.err(
             "search_expr_depth",
@@ -376,17 +376,16 @@ fn parse_term(cur: &mut Cursor<'_>, level: usize) -> Result<KadSearchExpression,
     }
 }
 
-/// `u16` tag-name length + raw name bytes (not UTF-8 — eMule reads them into
-/// a `CStringA`).
+/// Longitud `u16` del nombre de etiqueta + bytes en bruto (no UTF-8 — eMule los lee en un `CStringA`).
 fn read_tag_name(cur: &mut Cursor<'_>) -> Result<Vec<u8>, Ed2kParseError> {
     let len = cur.u16("search_expr_tag_name_len")? as usize;
     Ok(cur.take(len, "search_expr_tag_name")?.to_vec())
 }
 
 /// eMule `TokenizeOptQuotedSearchTerm` (`KademliaUDPListener.cpp:848`):
-/// splits on `INV_KAD_KEYWORD_CHARS`; a `"` starts a quoted section taken
-/// verbatim until the next `"` (an unterminated quote is skipped); empty
-/// tokens are dropped. The input is already lowercased.
+/// divide por `INV_KAD_KEYWORD_CHARS`; una comilla `"` inicia una sección entrecomillada
+/// literal hasta la siguiente `"` (las comillas sin cerrar se omiten); se descartan
+/// los tokens vacíos. La entrada ya está en minúsculas.
 fn tokenize_search_term(input: &str) -> Vec<String> {
     let chars: Vec<char> = input.chars().collect();
     let mut tokens = Vec::new();
@@ -503,19 +502,19 @@ mod tests {
 
     #[test]
     fn str_term_multiple_words_are_anded() {
-        // "a b" behaves as a AND b (substring of the lowercased name).
+        // "a b" se comporta como a AND b (subcadena del nombre en minúsculas).
         assert_str_term("movie x264", "a.movie.2024.x264.mkv", "a.movie.2024.mkv");
     }
 
     #[test]
     fn str_term_quoted_part_kept_verbatim() {
-        // Quoted "movie x" stays one token; unquoted b is a second token.
+        // El entrecomillado "movie x" permanece como un único token; b sin entrecomillar es un segundo token.
         let e = KadSearchExpression::parse(PROTO, OP, &str_leaf("\"movie x\" b")).unwrap();
         assert!(eval(&e, &entry("the movie x b.mkv", 1, 1, vec![])));
         // eMule matches on substrings: "movie x" is a prefix of "movie xb"
         // and "b" appears in "xb" — both tokens match here.
         assert!(eval(&e, &entry("movie xb.mkv", 1, 1, vec![])));
-        // No "b" token at all -> no match.
+        // Sin token "b" en absoluto -> sin coincidencia.
         assert!(!eval(&e, &entry("movie x cd.mkv", 1, 1, vec![])));
     }
 
@@ -652,13 +651,13 @@ mod tests {
 
     #[test]
     fn depth_limit_rejected() {
-        // Depth 24+ nested AND nodes -> error (eMule iLevel >= 24).
+        // Nodos AND anidados de profundidad 24+ -> error (eMule iLevel >= 24).
         let mut expr = str_leaf("x");
         for _ in 0..MAX_SEARCH_EXPR_DEPTH + 2 {
             expr = bool_node(0x00, &expr.clone(), &str_leaf("y"));
         }
         assert!(KadSearchExpression::parse(PROTO, OP, &expr).is_err());
-        // Depth exactly 23 is accepted.
+        // Profundidad de exactamente 23 es aceptada.
         let mut ok = str_leaf("x");
         for _ in 0..22 {
             ok = bool_node(0x00, &ok.clone(), &str_leaf("y"));

@@ -34,7 +34,7 @@ use super::opcodes::{
 use super::protocol::PR_ED2K;
 use super::tags::TagReader;
 
-/// Decodes a server packet payload given its opcode and protocol.
+/// Decodifica la carga útil de un paquete del servidor según su código de operación y protocolo.
 pub fn decode_server_response(
     protocol: u8,
     opcode: u8,
@@ -241,8 +241,8 @@ pub fn decode_server_response(
             }))
         }
 
-        // eMule `OP_REJECT` (`(null)` payload) — server-side refusal of the
-        // last command; payload bytes, if any, are ignored.
+        // OP_REJECT de eMule (carga útil (null)): rechazo del último comando en el servidor;
+        // los bytes de carga útil, si los hay, se ignoran.
         OP_REJECT => Ok(ServerResponse::Rejected),
 
         OP_CALLBACK_FAIL => {

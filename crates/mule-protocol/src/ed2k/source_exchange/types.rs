@@ -3,31 +3,31 @@
 
 //! Estructuras de datos y definiciones de constantes para eMule Source Exchange (SX/SX2).
 
-/// Default version of Source Exchange 2 implemented by modern eMule clients.
+/// Versión predeterminada de Source Exchange 2 implementada por clientes modernos de eMule.
 pub const SOURCE_EXCHANGE2_VERSION: u8 = 4;
 
-/// Maximum version advertised by eMule through the SX1 (`ET_SOURCEEXCHANGE`)
-/// hello tag — eMule 0.72a sends `CTag(ET_SOURCEEXCHANGE, 3)`
-/// (`BaseClient.cpp:715`). SX1 v3+ entries carry the user hash and use the
-/// little-endian "hybrid" IP format.
+/// Versión máxima anunciada por eMule a través de la etiqueta hello SX1 (`ET_SOURCEEXCHANGE`)
+/// — eMule 0.72a envía `CTag(ET_SOURCEEXCHANGE, 3)`
+/// (`BaseClient.cpp:715`). Las entradas SX1 v3+ llevan el hash de usuario y utilizan
+/// el formato IP "híbrido" en little-endian.
 pub const SOURCE_EXCHANGE1_MAX_VERSION: u8 = 3;
 
-/// Maximum number of sources allowed in a single SX response packet to prevent DoS.
+/// Número máximo de fuentes permitidas en un único paquete de respuesta SX para prevenir DoS.
 pub const MAX_SX_SOURCES_PER_PACKET: usize = 1000;
 
-/// Request for sources of a given file hash.
+/// Petición de fuentes para un hash de archivo determinado.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kRequestSources {
-    /// 16-byte MD4 hash of the requested file.
+    /// Hash MD4 de 16 bytes del archivo solicitado.
     pub file_hash: [u8; 16],
-    /// Requested SX version (e.g. 4 for SX2, or 1 for legacy).
+    /// Versión SX solicitada (p. ej., 4 para SX2 o 1 para la heredada).
     pub version: u8,
-    /// Requested SX options (reserved, typically 0).
+    /// Opciones SX solicitadas (reservado, normalmente 0).
     pub options: u16,
 }
 
 impl Ed2kRequestSources {
-    /// Creates a standard SX2 source request for a file hash.
+    /// Crea una petición de fuentes SX2 estándar para un hash de archivo.
     pub fn new_v2(file_hash: [u8; 16]) -> Self {
         Self {
             file_hash,
@@ -36,7 +36,7 @@ impl Ed2kRequestSources {
         }
     }
 
-    /// Creates a legacy SX1 source request for a file hash.
+    /// Crea una petición de fuentes SX1 heredada para un hash de archivo.
     pub fn new_v1(file_hash: [u8; 16]) -> Self {
         Self {
             file_hash,
@@ -46,30 +46,30 @@ impl Ed2kRequestSources {
     }
 }
 
-/// Representation of a single peer source transmitted over Source Exchange.
+/// Representación de una única fuente de par transmitida a través de Source Exchange.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SxSource {
-    /// IPv4 address as 4 raw octets [A, B, C, D] in standard network order.
+    /// Dirección IPv4 en 4 octetos sin procesar [A, B, C, D] en orden de red estándar.
     pub ip_bytes: [u8; 4],
-    /// Little-endian integer representation of IPv4 address matching the eD2K standard.
+    /// Representación entera little-endian de la dirección IPv4 que coincide con el estándar eD2K.
     pub ip: u32,
-    /// Client TCP listening port.
+    /// Puerto de escucha TCP del cliente.
     pub port: u16,
-    /// Connected server IPv4 address as u32.
+    /// Dirección IPv4 del servidor conectado como u32.
     pub server_ip: u32,
-    /// Connected server port.
+    /// Puerto del servidor conectado.
     pub server_port: u16,
-    /// Remote user hash MD4, if available (SX v2+).
+    /// Hash MD4 del usuario remoto, si está disponible (SX v2+).
     pub user_hash: Option<[u8; 16]>,
-    /// Protocol obfuscation and encryption options (SX v4):
-    /// - bit 0: supports protocol encryption layer
-    /// - bit 1: requests protocol encryption layer
-    /// - bit 2: requires protocol encryption layer
+    /// Opciones de ofuscación y cifrado de protocolo (SX v4):
+    /// - bit 0: admite la capa de cifrado de protocolo
+    /// - bit 1: solicita la capa de cifrado de protocolo
+    /// - bit 2: requiere la capa de cifrado de protocolo
     pub crypt_options: u8,
 }
 
 impl SxSource {
-    /// Creates a source entry with IPv4 octets, port, user hash, and crypt options.
+    /// Crea una entrada de fuente con octetos IPv4, puerto, hash de usuario y opciones criptográficas.
     pub fn new(
         ip_bytes: [u8; 4],
         port: u16,
@@ -88,7 +88,7 @@ impl SxSource {
         }
     }
 
-    /// Returns the IPv4 address string (e.g. "192.168.1.1").
+    /// Devuelve la cadena con la dirección IPv4 (p. ej., "192.168.1.1").
     pub fn ip_string(&self) -> String {
         format!(
             "{}.{}.{}.{}",
@@ -96,30 +96,30 @@ impl SxSource {
         )
     }
 
-    /// Returns the socket address string (e.g. "192.168.1.1:49662").
+    /// Devuelve la cadena de dirección del socket (p. ej., "192.168.1.1:49662").
     pub fn address_string(&self) -> String {
         format!("{}:{}", self.ip_string(), self.port)
     }
 
-    /// Returns true if this source is a LowID (< 16_777_216).
+    /// Devuelve verdadero si esta fuente es un LowID (< 16_777_216).
     pub fn is_low_id(&self) -> bool {
         self.ip < 16_777_216
     }
 }
 
-/// Response containing sources for a given file hash.
+/// Respuesta que contiene fuentes para un hash de archivo determinado.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ed2kAnswerSources {
-    /// SX version of the packet (e.g. 4 for SX2 v4, or 1..3).
+    /// Versión SX del paquete (p. ej., 4 para SX2 v4, o 1..3).
     pub version: u8,
-    /// 16-byte MD4 hash of the file.
+    /// Hash MD4 de 16 bytes del archivo.
     pub file_hash: [u8; 16],
-    /// Discovered or shared peer sources.
+    /// Fuentes de pares descubiertas o compartidas.
     pub sources: Vec<SxSource>,
 }
 
 impl Ed2kAnswerSources {
-    /// Creates a new SX2 answer payload.
+    /// Crea una nueva carga útil de respuesta SX2.
     pub fn new(file_hash: [u8; 16], sources: Vec<SxSource>) -> Self {
         Self {
             version: SOURCE_EXCHANGE2_VERSION,
@@ -128,9 +128,9 @@ impl Ed2kAnswerSources {
         }
     }
 
-    /// Creates an answer payload with an explicit SX version, matching eMule
-    /// `byUsedVersion = min(byRequestedVersion, SOURCEEXCHANGE2_VERSION)` for
-    /// SX2 or `GetSourceExchange1Version()` for SX1 (`PartFile.cpp:3631-3646`).
+    /// Crea una carga útil de respuesta con una versión SX explícita, coincidiendo con eMule
+    /// `byUsedVersion = min(byRequestedVersion, SOURCEEXCHANGE2_VERSION)` para
+    /// SX2 o `GetSourceExchange1Version()` para SX1 (`PartFile.cpp:3631-3646`).
     pub fn new_v(version: u8, file_hash: [u8; 16], sources: Vec<SxSource>) -> Self {
         Self {
             version,

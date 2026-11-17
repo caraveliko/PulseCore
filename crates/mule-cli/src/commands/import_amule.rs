@@ -54,7 +54,7 @@ pub fn run_import_amule(
         std::fs::create_dir_all(data_dir)?;
     }
 
-    // 1. Identity & RSA Keypair (cryptkey.dat + preferences.dat)
+    // 1. Identidad y par de claves RSA (cryptkey.dat + preferences.dat)
     let cryptkey_path = amule_dir.join("cryptkey.dat");
     let preferences_path = amule_dir.join("preferences.dat");
     if cryptkey_path.is_file() || preferences_path.is_file() {
@@ -79,11 +79,11 @@ pub fn run_import_amule(
         }
     }
 
-    // Prepare temp dir and DownloadService
+    // Preparar directorio temporal y DownloadService
     let temp_dir = data_dir.join("temp");
     let db_path = data_dir.join("mule.db");
 
-    // 2. Peer Credits (clients.met)
+    // 2. Créditos de pares (clients.met)
     let clients_met = amule_dir.join("clients.met");
     if clients_met.is_file() {
         print!("💳 Importando créditos acumulados (clients.met)... ");
@@ -102,7 +102,7 @@ pub fn run_import_amule(
         }
     }
 
-    // 3. Friends List (emfriends.met)
+    // 3. Lista de amigos (emfriends.met)
     let friends_met = amule_dir.join("emfriends.met");
     if friends_met.is_file() {
         print!("👥 Importando lista de amigos (emfriends.met)... ");
@@ -121,7 +121,7 @@ pub fn run_import_amule(
         }
     }
 
-    // 4. Cancelled Files Mask (cancelled.met)
+    // 4. Máscara de archivos cancelados (cancelled.met)
     let cancelled_met = amule_dir.join("cancelled.met");
     if cancelled_met.is_file() {
         print!("🚫 Importando filtros de archivos cancelados (cancelled.met)... ");
@@ -140,7 +140,7 @@ pub fn run_import_amule(
         }
     }
 
-    // 5. Kad DHT Contacts (nodes.dat)
+    // 5. Contactos Kad DHT (nodes.dat)
     let nodes_dat = amule_dir.join("nodes.dat");
     if nodes_dat.is_file() {
         print!("🌐 Copiando contactos Kademlia DHT (nodes.dat)... ");
@@ -158,7 +158,7 @@ pub fn run_import_amule(
         }
     }
 
-    // 5b. Server List (server.met)
+    // 5b. Lista de servidores (server.met)
     let server_met = amule_dir.join("server.met");
     if server_met.is_file() {
         print!("🖥️  Importando lista de servidores eD2k (server.met)... ");
@@ -206,8 +206,8 @@ pub fn run_import_amule(
         }
     }
 
-    // 6. Incomplete downloads (*.part.met & *.part)
-    // aMule stores temp files either in ~/.aMule/Temp, custom TempDir in amule.conf, or ~/.aMule
+    // 6. Descargas incompletas (*.part.met & *.part)
+    // aMule almacena los archivos temporales en ~/.aMule/Temp, en el TempDir personalizado de amule.conf o en ~/.aMule
     let mut candidate_temp_dirs = vec![
         amule_dir.join("Temp"),
         amule_dir.join("temp"),
@@ -259,7 +259,7 @@ pub fn run_import_amule(
             continue;
         };
         let stem = met_fname.to_string_lossy();
-        // stem is e.g. "001.part.met" -> corresponding data file is "001.part"
+        // La raíz es, p. ej., "001.part.met" -> el archivo de datos correspondiente es "001.part"
         let part_data_name = stem.trim_end_matches(".met");
         let part_data_file = parent.join(part_data_name);
 
@@ -282,7 +282,7 @@ pub fn run_import_amule(
             }
             if part_data_file.is_file() && !target_data.exists() {
                 if link_parts {
-                    // Try hardlinking, fallback to copying
+                    // Intentar enlace duro, recurrir a copia en caso de fallo
                     if std::fs::hard_link(&part_data_file, &target_data).is_err() {
                         let _ = std::fs::copy(&part_data_file, &target_data);
                     }

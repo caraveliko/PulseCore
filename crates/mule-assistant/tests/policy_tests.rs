@@ -9,8 +9,8 @@ use mule_assistant::policy::{
 use mule_daemon::rpc::capabilities::daemon_capabilities;
 use mule_mcp::tools::{list_tools, ToolProfile};
 
-/// L'allowlist ne doit référencer que des outils existants — sinon un
-/// renommage d'outil MCP passerait inaperçu.
+/// La lista de permitidos solo debe hacer referencia a herramientas existentes; de lo contrario, un
+/// cambio de nombre de herramienta MCP pasaría desapercibido.
 #[test]
 fn test_allowlist_references_known_tools() {
     let known: std::collections::HashSet<String> =
@@ -24,10 +24,10 @@ fn test_allowlist_references_known_tools() {
     }
 }
 
-/// Toute capacité référencée par le mapping existe dans
-/// `daemon_capabilities()` — sinon un outil serait masqué à tort.
-/// Avec toutes les capacités réelles présentes, toute l'allowlist est
-/// visible (profil full).
+/// Cada capacidad referenciada por la correspondencia existe en
+/// `daemon_capabilities()`; de lo contrario, una herramienta quedaría oculta por error.
+/// Con todas las capacidades reales presentes, toda la lista de permitidos es
+/// visible (perfil full).
 #[test]
 fn test_mapped_capabilities_exist_in_daemon() {
     let caps = daemon_capabilities();
@@ -52,43 +52,43 @@ fn test_mapped_capabilities_exist_in_daemon() {
     }
 }
 
-/// Les outils dont la capacité est absente sont masqués.
+/// Las herramientas cuya capacidad esté ausente se ocultan.
 #[test]
 fn test_missing_capability_hides_tool() {
     let visible = visible_tools(ToolProfile::Full, &[]);
-    // "downloads" absent → les outils downloads sont masqués.
+    // "downloads" ausente → las herramientas de descargas se ocultan.
     assert!(!visible.iter().any(|t| t.name == "emule_add_link"));
-    // emule_status n'a pas de capacité requise → reste visible.
+    // emule_status no requiere capacidad → permanece visible.
     assert!(visible.iter().any(|t| t.name == "emule_status"));
 }
 
-/// check_call : allowlist, profil et capacités sont tous revérifiés.
+/// check_call: lista de permitidos, perfil y capacidades son todos recomprobados.
 #[test]
 fn test_check_call_enforces_all_layers() {
     let caps = caps_strs(&daemon_capabilities());
 
-    // Hors allowlist → refus même si l'outil existe et est Read.
+    // Fuera de la lista de permitidos → rechazo incluso si la herramienta existe y es Read.
     assert!(check_call(ToolProfile::Full, &caps, "emule_clear_history").is_err());
 
-    // Allowlist + profil read → refus des mutations.
+    // Lista de permitidos + perfil read → rechazo de mutaciones.
     assert!(check_call(ToolProfile::Read, &caps, "emule_add_link").is_err());
 
-    // Allowlist + capacité absente → refus.
+    // Lista de permitidos + capacidad ausente → rechazo.
     assert!(check_call(ToolProfile::Full, &[], "emule_add_link").is_err());
 
-    // Tout aligné → accepté.
+    // Todo alineado → aceptado.
     assert!(check_call(ToolProfile::Full, &caps, "emule_status").is_ok());
     assert!(check_call(ToolProfile::Full, &caps, "emule_add_link").is_ok());
 }
 
-/// Confirmations : les outils à effets externes et les destructifs.
+/// Confirmaciones: las herramientas con efectos externos y las destructivas.
 #[test]
 fn test_requires_confirmation() {
     assert!(requires_confirmation("emule_add_link"));
     assert!(requires_confirmation("emule_connect_server"));
-    // Destructif : confirmation même si présent dans un profil full.
+    // Destructiva: confirmación incluso si está presente en un perfil full.
     assert!(requires_confirmation("emule_shutdown"));
-    // Réversible local : pas de confirmation.
+    // Reversible local: sin confirmación.
     assert!(!requires_confirmation("emule_pause_download"));
     assert!(!requires_confirmation("emule_status"));
 }

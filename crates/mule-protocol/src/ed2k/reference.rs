@@ -28,70 +28,70 @@ use crate::ed2k::profile::Ed2kCompatibilityProfile;
 use crate::ed2k::session::Ed2kSessionError;
 use crate::ed2k::tags::{Ed2kTag, TagName, TagValue, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION};
 
-/// In-process emulated reference peer for Tier 2 loopback compliance testing.
+/// Par de referencia emulado en proceso para pruebas de conformidad en bucle local de Nivel 2.
 pub type EmulatedReferencePeer = crate::ed2k::loopback::Ed2kTestPeer;
 
-/// Alias for `EmulatedReferencePeer` denoting compatibility testing against eMule/aMule patterns.
+/// Alias para `EmulatedReferencePeer` que denota pruebas de compatibilidad frente a patrones de eMule/aMule.
 pub type ReferenceCompatibleTestPeer = crate::ed2k::loopback::Ed2kTestPeer;
 
-/// Direction of a recorded wire trace frame.
+/// Dirección de una trama de traza de cable registrada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceDirection {
-    /// Inbound packet received from remote loopback peer.
+    /// Paquete entrante recibido del par remoto en bucle local.
     Inbound,
-    /// Outbound packet transmitted to remote loopback peer.
+    /// Paquete saliente transmitido al par remoto en bucle local.
     Outbound,
 }
 
-/// Anonymized wire trace record of an eD2K frame exchanged on loopback.
-/// Contains no user tokens, no raw IP addresses outside loopback, and no filesystem paths.
+/// Registro de traza de cable anonimizado de una trama eD2K intercambiada en bucle local.
+/// No contiene tokens de usuario, direcciones IP directas fuera de bucle local ni rutas del sistema de archivos.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceRecord {
-    /// Monotonically increasing sequence index of the trace record.
+    /// Índice de secuencia estrictamente creciente del registro de traza.
     pub seq: usize,
-    /// Elapsed milliseconds since session start.
+    /// Milisegundos transcurridos desde el inicio de la sesión.
     pub elapsed_ms: u64,
-    /// Attestation test tier (2 for local emulated reference peer, 3 for pinned external binary).
+    /// Nivel de prueba de atestación (2 para par de referencia emulado local, 3 para binario externo fijado).
     pub test_tier: u8,
-    /// Kind of reference environment ("emulated-reference-peer" for Tier 2).
+    /// Tipo de entorno de referencia ("emulated-reference-peer" para Nivel 2).
     pub reference_kind: &'static str,
-    /// Explicit compatibility profile active when recording this frame.
+    /// Perfil de compatibilidad explícito activo al registrar esta trama.
     pub compatibility_profile: Ed2kCompatibilityProfile,
-    /// Transmission direction (inbound or outbound).
+    /// Dirección de transmisión (entrante o saliente).
     pub direction: TraceDirection,
-    /// Numerical operation code byte.
+    /// Byte del código de operación numérico.
     pub opcode: u8,
-    /// Symbolic human-readable opcode label.
+    /// Etiqueta simbólica legible del código de operación.
     pub opcode_name: &'static str,
-    /// Raw payload length in bytes.
+    /// Longitud de la carga útil sin procesar en bytes.
     pub payload_len: usize,
-    /// Anonymized list of tag descriptions without sensitive tokens or paths.
+    /// Lista anonimizada de descripciones de etiquetas sin tokens confidenciales ni rutas.
     pub tags_summary: Vec<String>,
-    /// Hex-encoded file hash (if applicable to the frame).
+    /// Hash del archivo codificado en hexadecimal (si corresponde a la trama).
     pub file_hash_hex: Option<String>,
-    /// Start and end offsets range (if applicable to the frame).
+    /// Rango de desplazamientos de inicio y fin (si corresponde a la trama).
     pub range_summary: Option<(u32, u32)>,
 }
 
-/// Returns true if a character is a Unicode bidirectional override/isolate, invisible/zero-width formatting character, or control code.
+/// Devuelve true si un carácter es una anulación/aislamiento bidireccional Unicode, un carácter de formato invisible/de ancho cero o un código de control.
 pub fn is_bidi_or_formatting_control(c: char) -> bool {
     let cp = c as u32;
     matches!(
         cp,
-        // Bidi controls and directional formatting
+        // Controles bidi y formato direccional
         0x061C | 0x200E | 0x200F | 0x202A..=0x202E | 0x2066..=0x2069 |
-        // Zero-width and invisible formatting
+        // Formato invisible y de ancho cero
         0x00AD | 0x200B..=0x200D | 0x2060 | 0xFEFF | 0xFFF9..=0xFFFB
     )
 }
 
-/// Sanitizes a string for safe display in CI reports and terminal logs:
-/// 1. Applies Unicode Normalization Form C (NFC).
-/// 2. Preserves standard international text (Latin, Cyrillic, Greek, Arabic, Hebrew, CJK, Emojis).
-/// 3. Escapes dangerous or visually deceptive characters into \u{XXXX} format:
-///    - Bidi control characters and directional formatting/overrides
-///    - Invisible/zero-width formatting characters
-///    - Control characters (c.is_control(), U+0000..=U+001F, U+007F..=U+009F).
+/// Sanea una cadena para su visualización segura en informes de CI y registros de terminal:
+/// 1. Aplica la Forma de Normalización Unicode C (NFC).
+/// 2. Conserva el texto internacional estándar (latino, cirílico, griego, árabe, hebreo, CJK, emojis).
+/// 3. Escapa caracteres peligrosos o visualmente engañosos al formato \u{XXXX}:
+///    - Caracteres de control bidi y anulaciones/formato direccional
+///    - Caracteres de formato invisibles/de ancho cero
+///    - Caracteres de control (c.is_control(), U+0000..=U+001F, U+007F..=U+009F).
 pub fn sanitize_unicode_for_display(raw: &str) -> String {
     let nfc: String = raw.nfc().collect();
     let mut out = String::with_capacity(nfc.len());
@@ -109,7 +109,7 @@ pub fn sanitize_unicode_for_display(raw: &str) -> String {
 }
 
 impl TraceRecord {
-    /// Verifies that this trace record is strictly anonymized and free of user paths, tokens, control characters, or bidi overrides.
+    /// Comprueba que este registro de traza esté estrictamente anonimizado y libre de rutas de usuario, tokens, caracteres de control o anulaciones bidi.
     pub fn is_clean(&self) -> bool {
         for tag in &self.tags_summary {
             let lower = tag.to_ascii_lowercase();
@@ -136,7 +136,7 @@ impl TraceRecord {
         true
     }
 
-    /// Returns the sanitized list of tag summaries with NFC normalization and escaped formatting/bidi controls.
+    /// Devuelve la lista saneada de resúmenes de etiquetas con normalización NFC y controles bidi/formato escapados.
     pub fn sanitized_tags_summary(&self) -> Vec<String> {
         self.tags_summary
             .iter()
@@ -144,7 +144,7 @@ impl TraceRecord {
             .collect()
     }
 
-    /// Produces a normalized, anonymized JSON representation conforming to test harness expectations.
+    /// Produce una representación JSON normalizada y anonimizada conforme a las expectativas del arnés de pruebas.
     pub fn to_normalized_json(&self, outcome: &str) -> String {
         format!(
             "{{\"schemaVersion\":1,\"testTier\":{},\"referenceKind\":\"{}\",\"compatibilityProfile\":\"{}\",\"protocolByte\":\"0xE3\",\"opcode\":\"0x{:02X}\",\"direction\":\"{}\",\"payloadLength\":{},\"outcome\":\"{}\"}}",
@@ -162,7 +162,7 @@ impl TraceRecord {
     }
 }
 
-/// Maps an opcode byte to a human-readable protocol label.
+/// Asigna un byte de código de operación a una etiqueta de protocolo legible.
 pub fn opcode_to_str(opcode: u8) -> &'static str {
     match opcode {
         OP_HELLO => "OP_HELLO (0x01)",
@@ -178,24 +178,24 @@ pub fn opcode_to_str(opcode: u8) -> &'static str {
     }
 }
 
-/// Configuration for connecting to a local reference peer instance.
+/// Configuración para conectarse a una instancia local de un par de referencia.
 #[derive(Debug, Clone)]
 pub struct ReferencePeerConfig {
-    /// Target socket address on loopback (127.0.0.1).
+    /// Dirección de socket de destino en bucle local (127.0.0.1).
     pub peer_addr: SocketAddr,
-    /// Handshake completion timeout.
+    /// Tiempo de espera límite para completar el protocolo de enlace.
     pub handshake_timeout: Duration,
-    /// Request/response transaction timeout.
+    /// Tiempo de espera límite para la transacción de petición/respuesta.
     pub request_timeout: Duration,
-    /// Maximum number of in-flight block requests.
+    /// Número máximo de peticiones de bloques en vuelo.
     pub max_in_flight_blocks: usize,
-    /// Explicit compatibility profile (defaults to Emule072a).
+    /// Perfil de compatibilidad explícito (por defecto Emule072a).
     pub profile: Ed2kCompatibilityProfile,
 }
 
 impl ReferencePeerConfig {
-    /// Creates and validates a reference peer configuration.
-    /// Strictly rejects any non-loopback address.
+    /// Crea y valida una configuración de par de referencia.
+    /// Rechaza estrictamente cualquier dirección que no sea de bucle local.
     pub fn new(peer_addr: SocketAddr) -> Result<Self, Ed2kSessionError> {
         if !peer_addr.ip().is_loopback() {
             return Err(Ed2kSessionError::Io(format!(
@@ -217,48 +217,48 @@ impl ReferencePeerConfig {
         })
     }
 
-    /// Sets the explicit compatibility profile.
+    /// Establece el perfil de compatibilidad explícito.
     pub fn with_profile(mut self, profile: Ed2kCompatibilityProfile) -> Self {
         self.profile = profile;
         self
     }
 
-    /// Sets the handshake completion timeout duration.
+    /// Establece la duración del tiempo de espera límite del protocolo de enlace.
     pub fn with_handshake_timeout(mut self, timeout: Duration) -> Self {
         self.handshake_timeout = timeout;
         self
     }
 
-    /// Sets the request/response transaction timeout duration.
+    /// Establece la duración del tiempo de espera límite de la transacción de petición/respuesta.
     pub fn with_request_timeout(mut self, timeout: Duration) -> Self {
         self.request_timeout = timeout;
         self
     }
 }
 
-/// Comprehensive interoperability and divergence report between eMuleRust and reference peer.
+/// Informe exhaustivo de interoperabilidad y divergencia entre eMuleRust y el par de referencia.
 #[derive(Debug, Clone)]
 pub struct DivergenceReport {
-    /// Explicit compatibility profile active during the session.
+    /// Perfil de compatibilidad explícito activo durante la sesión.
     pub profile: Ed2kCompatibilityProfile,
-    /// Attestation test tier (2 for local emulated reference peer, 3 for pinned external binary).
+    /// Nivel de prueba de atestación (2 para par de referencia emulado local, 3 para binario externo fijado).
     pub test_tier: u8,
-    /// Kind of reference environment ("emulated-reference-peer" for Tier 2).
+    /// Tipo de entorno de referencia ("emulated-reference-peer" para Nivel 2).
     pub reference_kind: &'static str,
-    /// Recorded chronologic trace records.
+    /// Registros cronológicos de traza registrados.
     pub traces: Vec<TraceRecord>,
-    /// Unique set of opcodes observed during session.
+    /// Conjunto único de códigos de operación observados durante la sesión.
     pub opcodes_observed: Vec<u8>,
-    /// Whether canonical eMule request parts opcode (0x47) was detected.
+    /// Indica si se detectó el código de operación canónico de eMule para pedir partes (0x47).
     pub canonical_request_parts_detected: bool,
-    /// Whether canonical eMule set requested file ID opcode (0x4F) was detected.
+    /// Indica si se detectó el código de operación canónico de eMule para establecer el ID de archivo solicitado (0x4F).
     pub canonical_file_status_req_detected: bool,
-    /// Descriptive audit and verification notes.
+    /// Notas descriptivas de auditoría y verificación.
     pub notes: Vec<String>,
 }
 
 impl DivergenceReport {
-    /// Validates that all traces in the report are fully anonymized.
+    /// Valida que todas las trazas del informe estén completamente anonimizadas.
     pub fn validate_anonymity(&self) -> Result<(), String> {
         for trace in &self.traces {
             if !trace.is_clean() {
@@ -272,7 +272,7 @@ impl DivergenceReport {
         Ok(())
     }
 
-    /// Generates a human- and CI-readable summary of the interop session.
+    /// Genera un resumen legible por humanos y sistemas de CI de la sesión de interoperabilidad.
     pub fn format_ci_summary(&self) -> String {
         let mut out = String::new();
         out.push_str("=== ED2K REFERENCE INTEROP SUMMARY ===\n");
@@ -308,7 +308,7 @@ impl DivergenceReport {
         out
     }
 
-    /// Serializes all recorded traces into normalized JSON strings.
+    /// Serializa todas las trazas registradas en cadenas JSON normalizadas.
     pub fn to_normalized_json_lines(&self) -> Vec<String> {
         self.traces
             .iter()
@@ -316,8 +316,8 @@ impl DivergenceReport {
             .collect()
     }
 
-    /// Writes the CI divergence report and trace records to the target directory ONLY if anonymity is verified.
-    /// Fails immediately and refuses to create files if any trace contains non-anonymized data.
+    /// Escribe el informe de divergencia de CI y los registros de traza en el directorio de destino ÚNICAMENTE si se verifica el anonimato.
+    /// Falla inmediatamente y se niega a crear archivos si alguna traza contiene datos no anonimizados.
     pub fn write_ci_report_secure(
         &self,
         target_dir: &std::path::Path,
@@ -341,7 +341,7 @@ impl DivergenceReport {
     }
 }
 
-/// Loopback-confined client for exercising reference peer interoperability with automated trace logging.
+/// Cliente confinado a bucle local para ejercitar la interoperabilidad con pares de referencia con registro automatizado de trazas.
 pub struct ReferenceInteropClient {
     client: Ed2kLoopbackClient,
     config: ReferencePeerConfig,
@@ -351,13 +351,13 @@ pub struct ReferenceInteropClient {
 }
 
 impl ReferenceInteropClient {
-    /// Connects to a reference peer on loopback, validates confinement, and completes handshake.
+    /// Se conecta a un par de referencia en bucle local, valida el confinamiento y completa el protocolo de enlace.
     pub async fn connect_and_handshake(
         config: ReferencePeerConfig,
         local_user_hash: [u8; 16],
         client_name: &str,
     ) -> Result<(Self, Ed2kPeerInfo), Ed2kSessionError> {
-        // Enforce loopback check prior to connection
+        // Fuerza la comprobación de bucle local antes de la conexión
         if !config.peer_addr.ip().is_loopback() {
             return Err(Ed2kSessionError::Io(format!(
                 "Non-loopback address {} rejected before connection",
@@ -391,7 +391,7 @@ impl ReferenceInteropClient {
 
         let profile = config.profile;
         let mut traces = Vec::new();
-        // Outbound Hello trace (anonymized)
+        // Traza Hello saliente (anonimizada)
         traces.push(TraceRecord {
             seq: 0,
             elapsed_ms: 0,
@@ -410,7 +410,7 @@ impl ReferenceInteropClient {
             range_summary: None,
         });
 
-        // Inbound HelloAnswer trace (anonymized tags)
+        // Traza HelloAnswer entrante (etiquetas anonimizadas)
         let elapsed = start_time.elapsed().as_millis() as u64;
         let mut inbound_tags = Vec::new();
         if let Some(ref name) = peer_info.name {
@@ -449,7 +449,7 @@ impl ReferenceInteropClient {
         Ok((interop, peer_info))
     }
 
-    /// Queries file availability from the reference peer via OP_SETREQFILEID / OP_FILESTATUSREQ.
+    /// Consulta la disponibilidad del archivo al par de referencia mediante OP_SETREQFILEID / OP_FILESTATUSREQ.
     pub async fn request_file_status(
         &mut self,
         file_hash: [u8; 16],
@@ -458,7 +458,7 @@ impl ReferenceInteropClient {
         let elapsed = self.start_time.elapsed().as_millis() as u64;
         let profile = self.config.profile;
 
-        // Trace outbound request
+        // Registra la petición saliente
         self.traces.push(TraceRecord {
             seq: self.seq_counter,
             elapsed_ms: elapsed,
@@ -500,7 +500,7 @@ impl ReferenceInteropClient {
         Ok(status)
     }
 
-    /// Requests a block range via OP_REQUESTPARTS and receives the corresponding OP_SENDINGPART.
+    /// Solicita un rango de bloques mediante OP_REQUESTPARTS y recibe el OP_SENDINGPART correspondiente.
     pub async fn request_and_receive_block(
         &mut self,
         file_hash: [u8; 16],
@@ -557,12 +557,12 @@ impl ReferenceInteropClient {
         Ok(part)
     }
 
-    /// Accesses the collected wire traces.
+    /// Accede a las trazas de cable recopiladas.
     pub fn traces(&self) -> &[TraceRecord] {
         &self.traces
     }
 
-    /// Finalizes the reference interop session and builds a divergence report.
+    /// Finaliza la sesión de interoperabilidad de referencia y genera un informe de divergencia.
     pub async fn finish(self) -> DivergenceReport {
         let mut opcodes = Vec::new();
         let mut canonical_req_parts = false;

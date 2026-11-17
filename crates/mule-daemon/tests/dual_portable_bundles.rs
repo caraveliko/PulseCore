@@ -9,13 +9,13 @@ use tempfile::tempdir;
 
 #[tokio::test]
 async fn test_dual_portable_bundles_independent_execution() {
-    // 1. Ensure default port 4660 is occupied so both daemons must use ephemeral ports.
-    // If a live dev daemon is already running on 4660, that also satisfies the requirement.
+    // 1. Asegurar que el puerto predeterminado 4660 esté ocupado para que ambos daemons deban usar puertos efímeros.
+    // Si un daemon de desarrollo ya se está ejecutando en el 4660, eso también satisface el requisito.
     let _occupier = TcpListener::bind("127.0.0.1:4660").ok();
 
     let daemon_bin = env!("CARGO_BIN_EXE_mule-daemon");
 
-    // 2. Setup Bundle A with portable.flag and packaged layout (bin/mule-daemon.exe)
+    // 2. Configurar Bundle A con portable.flag y estructura empaquetada (bin/mule-daemon.exe)
     let temp_a = tempdir().unwrap();
     let bundle_a = temp_a.path().join("BundleA");
     let bin_a = bundle_a.join("bin");
@@ -28,7 +28,7 @@ async fn test_dual_portable_bundles_independent_execution() {
     });
     std::fs::copy(daemon_bin, &daemon_a_exe).unwrap();
 
-    // 3. Setup Bundle B with portable.flag and packaged layout (bin/mule-daemon.exe)
+    // 3. Configurar Bundle B con portable.flag y estructura empaquetada (bin/mule-daemon.exe)
     let temp_b = tempdir().unwrap();
     let bundle_b = temp_b.path().join("BundleB");
     let bin_b = bundle_b.join("bin");
@@ -41,7 +41,7 @@ async fn test_dual_portable_bundles_independent_execution() {
     });
     std::fs::copy(daemon_bin, &daemon_b_exe).unwrap();
 
-    // 4. Launch Daemon A from inside Bundle A (without --workdir, relying on portable.flag)
+    // 4. Lanzar daemon A desde el interior de Bundle A (sin --workdir, dependiendo de portable.flag)
     let current_pid = std::process::id().to_string();
     let mut proc_a = Command::new(&daemon_a_exe)
         .current_dir(&bundle_a)
@@ -49,7 +49,7 @@ async fn test_dual_portable_bundles_independent_execution() {
         .spawn()
         .expect("Failed to spawn daemon A");
 
-    // 5. Launch Daemon B from inside Bundle B
+    // 5. Lanzar daemon B desde el interior de Bundle B
     let mut proc_b = Command::new(&daemon_b_exe)
         .current_dir(&bundle_b)
         .args(["--parent-pid", &current_pid])
@@ -59,7 +59,7 @@ async fn test_dual_portable_bundles_independent_execution() {
     let data_a = bundle_a.join("data");
     let data_b = bundle_b.join("data");
 
-    // 6. Wait for session.json in both bundles (up to 6s)
+    // 6. Esperar a session.json en ambos bundles (hasta 6s)
     let start = std::time::Instant::now();
     let mut session_a = None;
     let mut session_b = None;
@@ -77,12 +77,12 @@ async fn test_dual_portable_bundles_independent_execution() {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    // Teardown processes early if timeout
+    // Terminar procesos anticipadamente en caso de tiempo de espera agotado
     let s_a = session_a.expect("Daemon A failed to create session.json in BundleA/data");
     let s_b = session_b.expect("Daemon B failed to create session.json in BundleB/data");
 
-    // 7. Verifications
-    // A. Both bundles have their own lock, sqlite db, and tokens
+    // 7. Verificaciones
+    // A. Ambos bundles tienen su propio cerrojo, base de datos sqlite y tokens
     assert!(
         data_a.join("mule.lock").exists(),
         "Bundle A lock must exist"
@@ -101,10 +101,10 @@ async fn test_dual_portable_bundles_independent_execution() {
         "Tokens between bundles must be independent"
     );
 
-    // B. Instance IDs must be distinct
+    // B. Los IDs de instancia deben ser distintos
     assert_ne!(s_a.instance_id, s_b.instance_id, "Instance IDs must differ");
 
-    // C. Endpoints must differ (distinct ephemeral ports)
+    // C. Los extremos (endpoints) deben diferir (puertos efímeros distintos)
     assert_ne!(
         s_a.endpoint, s_b.endpoint,
         "Ephemeral endpoints must differ"
@@ -118,7 +118,7 @@ async fn test_dual_portable_bundles_independent_execution() {
         "Endpoint B must not collide on 4660"
     );
 
-    // 8. Clean up
+    // 8. Limpieza
     let _ = proc_a.kill();
     let _ = proc_b.kill();
     let _ = proc_a.wait();

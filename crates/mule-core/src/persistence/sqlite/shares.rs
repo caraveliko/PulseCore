@@ -63,7 +63,7 @@ pub fn upsert_shared_file(conn: &mut Connection, file: &SharedFile) -> Result<()
     Ok(())
 }
 
-/// Insertion ou mise à jour en lot (batch) de fichiers partagés dans une transaction unique.
+/// Inserción o actualización por lotes (batch) de archivos compartidos en una sola transacción.
 pub fn upsert_shared_files_batch(
     conn: &mut Connection,
     files: &[SharedFile],
@@ -106,7 +106,7 @@ pub fn upsert_shared_files_batch(
     Ok(count)
 }
 
-/// Caches the computed AICH root hash of a shared file.
+/// Almacena en caché el hash raíz AICH calculado de un archivo compartido.
 pub fn set_shared_aich_root(
     conn: &mut Connection,
     file_hash: &str,
@@ -159,7 +159,7 @@ pub fn delete_shared_file(conn: &mut Connection, file_hash: &str) -> Result<bool
     Ok(rows > 0)
 }
 
-/// Updates the eMule upload priority (`PR_*`) of a shared file:
+/// Actualiza la prioridad de subida de eMule (`PR_*`) de un archivo compartido:
 /// "verylow" | "low" | "normal" | "high" | "veryhigh" (= powershare).
 pub fn set_shared_up_priority(
     conn: &mut Connection,
@@ -185,9 +185,9 @@ pub fn set_shared_file_enabled(
     Ok(rows > 0)
 }
 
-/// Associe (ou retire, `None`) une catégorie à un partage persisté.
-/// UPDATE direct — contrairement à l'upsert COALESCE, permet de
-/// désassigner explicitement (`category_id` → NULL).
+/// Asocia (o desvincula, `None`) una categoría a un recurso compartido persistido.
+/// UPDATE directo — a diferencia del upsert COALESCE, permite
+/// desasignar explícitamente (`category_id` → NULL).
 pub fn set_shared_file_category(
     conn: &mut Connection,
     file_hash: &str,
@@ -200,9 +200,9 @@ pub fn set_shared_file_category(
     Ok(rows > 0)
 }
 
-/// Ajoute `delta` octets au total uploadé persisté d'un fichier partagé
-/// (`share_upload_stats` — table séparée car les partages partiels
-/// `CPartFile` n'ont pas de ligne dans `shared_files`).
+/// Añade `delta` bytes al total subido persistido de un archivo compartido
+/// (`share_upload_stats` — tabla separada ya que los recursos compartidos parciales
+/// `CPartFile` no tienen fila en `shared_files`).
 pub fn add_share_uploaded_bytes(
     conn: &mut Connection,
     file_hash: &str,
@@ -217,7 +217,7 @@ pub fn add_share_uploaded_bytes(
     Ok(())
 }
 
-/// Totaux uploadés persistés par hash de fichier (clés en minuscules).
+/// Totales subidos persistidos por hash de archivo (claves en minúsculas).
 pub fn list_share_uploaded_bytes(
     conn: &Connection,
 ) -> Result<std::collections::HashMap<String, u64>, CoreError> {

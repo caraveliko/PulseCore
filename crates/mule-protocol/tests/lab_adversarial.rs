@@ -115,7 +115,7 @@ fn test_reap_timeouts_and_late_block_rejection() {
     assert_eq!(expired[0].length, 5000);
     assert_eq!(tracker.len(), 0);
 
-    // If the peer delivers the block late after timeout
+    // Si el par entrega el bloque tarde tras el tiempo de espera
     let err = tracker
         .validate_and_remove(&DUMMY_HASH_A, 10_000, 5000)
         .unwrap_err();

@@ -19,7 +19,7 @@ async fn test_download_details_part_map_and_boundaries() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake
+    // 1. Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -36,7 +36,7 @@ async fn test_download_details_part_map_and_boundaries() {
     let resp = recv_response_by_id(&mut read, 1).await;
     assert_eq!(resp["result"]["workdirMode"], "Portable");
 
-    // 2. Add 9_728_001 bytes file (1 full part of 9_728_000 + 1 residual byte part of 1 byte)
+    // 2. Añadir archivo de 9_728_001 bytes (1 parte completa de 9_728_000 + 1 parte residual de 1 byte)
     let link_9728001 = "ed2k://|file|boundary_test.bin|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     let req_add = json!({
         "jsonrpc": "2.0",
@@ -53,7 +53,7 @@ async fn test_download_details_part_map_and_boundaries() {
     let resp = recv_response_by_id(&mut read, 2).await;
     let dl_id = resp["result"]["downloadId"].as_str().unwrap().to_string();
 
-    // 3. Query details via downloads.get
+    // 3. Consultar detalles mediante downloads.get
     let req_get = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -69,7 +69,7 @@ async fn test_download_details_part_map_and_boundaries() {
     let resp = recv_response_by_id(&mut read, 3).await;
     let detail = resp["result"].clone();
 
-    // Verify fields
+    // Verificar campos
     assert_eq!(detail["fileName"], "boundary_test.bin");
     assert_eq!(detail["totalBytes"], 9728001);
     assert_eq!(detail["remainingBytes"], 9728001);
@@ -79,11 +79,11 @@ async fn test_download_details_part_map_and_boundaries() {
         .unwrap()
         .contains("ed2k://|file|boundary_test.bin|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/"));
 
-    // Verify parts map: exactly 2 parts
+    // Verificar mapa de partes: exactamente 2 partes
     let parts = detail["parts"].as_array().expect("parts array");
     assert_eq!(parts.len(), 2);
 
-    // Part 0: full part [0, 9728000)
+    // Parte 0: parte completa [0, 9728000)
     assert_eq!(parts[0]["partIndex"], 0);
     assert_eq!(parts[0]["startOffset"], 0);
     assert_eq!(parts[0]["endOffset"], 9728000);
@@ -91,7 +91,7 @@ async fn test_download_details_part_map_and_boundaries() {
     assert_eq!(parts[0]["receivedBytes"], 0);
     assert_eq!(parts[0]["state"], "missing");
 
-    // Part 1: residual part [9728000, 9728001)
+    // Parte 1: parte residual [9728000, 9728001)
     assert_eq!(parts[1]["partIndex"], 1);
     assert_eq!(parts[1]["startOffset"], 9728000);
     assert_eq!(parts[1]["endOffset"], 9728001);
@@ -110,7 +110,7 @@ async fn test_downloads_set_destination_and_retry_connection() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake
+    // 1. Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -123,7 +123,7 @@ async fn test_downloads_set_destination_and_retry_connection() {
         .unwrap();
     let _ = recv_response_by_id(&mut read, 1).await;
 
-    // 2. Add sample download
+    // 2. Añadir descarga de muestra
     let link = "ed2k://|file|test_dest.txt|100|0123456789abcdef0123456789abcdef|/";
     let req_add = json!({
         "jsonrpc": "2.0",
@@ -138,7 +138,7 @@ async fn test_downloads_set_destination_and_retry_connection() {
     let resp = recv_response_by_id(&mut read, 2).await;
     let dl_id = resp["result"]["downloadId"].as_str().unwrap().to_string();
 
-    // 3. Change destination
+    // 3. Cambiar destino
     let custom_dest_dir = dir.path().join("my_custom_folder");
     let req_set_dest = json!({
         "jsonrpc": "2.0",
@@ -159,10 +159,10 @@ async fn test_downloads_set_destination_and_retry_connection() {
         .as_str()
         .unwrap()
         .contains("my_custom_folder"));
-    // The tempPath must remain untouched in data/temp
+    // La tempPath debe permanecer intacta en data/temp
     assert!(detail["tempPath"].as_str().unwrap().contains(".part"));
 
-    // 4. Retry connection
+    // 4. Reintentar conexión
     let req_retry = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -187,7 +187,7 @@ async fn test_settings_rpc_get_set_reset() {
         .expect("WebSocket connection failed");
     let (mut write, mut read) = ws_stream.split();
 
-    // 1. Handshake
+    // 1. Negociación (handshake)
     let req_hello = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -200,7 +200,7 @@ async fn test_settings_rpc_get_set_reset() {
         .unwrap();
     let _ = recv_response_by_id(&mut read, 1).await;
 
-    // 2. Query initial settings
+    // 2. Consultar ajustes iniciales
     let req_get = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -213,7 +213,7 @@ async fn test_settings_rpc_get_set_reset() {
     let resp = recv_response_by_id(&mut read, 2).await;
     assert_eq!(resp["result"]["isCustom"], false);
 
-    // 3. Set custom download directory
+    // 3. Establecer directorio de descargas personalizado
     let custom_dl = dir.path().join("custom_downloads_global");
     let req_set = json!({
         "jsonrpc": "2.0",
@@ -230,7 +230,7 @@ async fn test_settings_rpc_get_set_reset() {
     let resp = recv_response_by_id(&mut read, 3).await;
     assert_eq!(resp["result"]["success"], true);
 
-    // 4. Query settings again to confirm updated
+    // 4. Consultar ajustes de nuevo para confirmar actualización
     let req_get2 = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -247,7 +247,7 @@ async fn test_settings_rpc_get_set_reset() {
         custom_dl.to_string_lossy().as_ref()
     );
 
-    // 5. Reset download directory
+    // 5. Restablecer directorio de descargas
     let req_reset = json!({
         "jsonrpc": "2.0",
         "id": 5,
@@ -269,9 +269,9 @@ fn test_get_pending_verifications_does_not_trigger_on_sparse_file_length() {
     std::fs::create_dir_all(&temp_dir).unwrap();
     std::fs::create_dir_all(&target_dir).unwrap();
 
-    // The file hash must match the injected data: the incremental part-hash
-    // check in inject_range uses the file hash as part hash for files smaller
-    // than one eD2K part, and evicts the range on mismatch.
+    // El hash de archivo debe coincidir con los datos inyectados: la comprobación
+    // incremental del hash de parte en inject_range usa el hash de archivo como hash de parte para archivos
+    // menores que una parte eD2K, y descarta el rango en caso de discrepancia.
     let tail = vec![0xaa; 1000];
     let head = vec![0xbb; 999_000];
     let mut full = head.clone();
@@ -292,26 +292,26 @@ fn test_get_pending_verifications_does_not_trigger_on_sparse_file_length() {
         )
         .unwrap();
 
-    // Simulate writing only the last 1,000 bytes (offset 999_000 to 1_000_000).
-    // On NTFS/filesystems, this extends the file length on disk to 1_000_000 bytes!
+    // Simular la escritura únicamente de los últimos 1.000 bytes (desplazamiento 999_000 a 1_000_000).
+    // En NTFS/sistemas de archivos, ¡esto amplía la longitud del archivo en disco a 1_000_000 bytes!
     let _ = service.inject_range(&snap.id, 999_000, &tail, None).unwrap();
 
-    // Verify that covered_len is only 1,000 bytes
+    // Verificar que covered_len sea únicamente de 1.000 bytes
     assert_eq!(service.get_covered_len(&snap.id), Some(1000));
 
-    // Even though file length on disk is 1,000,000 bytes (total_size),
-    // get_pending_verifications MUST NOT queue it for verification because ranges are incomplete!
+    // Aunque la longitud del archivo en disco sea de 1.000_000 bytes (total_size),
+    // ¡get_pending_verifications NO DEBE encolarlo para verificación porque los rangos están incompletos!
     let pending = service.get_pending_verifications();
     assert!(
         pending.is_empty(),
         "Sparse file must not trigger premature verification!"
     );
 
-    // Now inject the remaining 0..999_000 bytes
+    // Inyectar ahora los 0..999_000 bytes restantes
     let _ = service.inject_range(&snap.id, 0, &head, None).unwrap();
     assert_eq!(service.get_covered_len(&snap.id), Some(1_000_000));
 
-    // Now that all 1,000,000 bytes are covered, it MUST trigger verification!
+    // Ahora que todos los 1.000_000 bytes están cubiertos, ¡DEBE activar la verificación!
     let pending = service.get_pending_verifications();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].0, snap.id);
@@ -335,7 +335,7 @@ fn test_add_duplicate_ed2k_link_rejected() {
     );
     assert!(res1.is_ok(), "First add must succeed");
 
-    // Attempting to add the exact same ed2k hash again must fail
+    // Intentar añadir exactamente el mismo hash ed2k de nuevo debe fallar
     let ed2k_duplicate = "ed2k://|file|sample_renamed.txt|1000|abcdefabcdefabcdefabcdefabcdefab|/";
     let res2 = service.add_ed2k_link(
         ed2k_duplicate,
@@ -361,8 +361,8 @@ fn test_inject_range_after_completed_does_not_regress_status() {
 
     let mut service = DownloadService::new(&dir.path().join("mule.db"), temp_dir).unwrap();
 
-    // File hash must match the injected bytes (single-part files verify the
-    // part against the file hash on completion).
+    // El hash del archivo debe coincidir con los bytes inyectados (los archivos de parte única
+    // verifican la parte contra el hash del archivo al completarse).
     let data = vec![0x42; 50000];
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&data);
@@ -378,15 +378,15 @@ fn test_inject_range_after_completed_does_not_regress_status() {
         )
         .unwrap();
 
-    // 1. Inject all 50,000 bytes -> reaches 100% and Verifying
+    // 1. Inyectar los 50.000 bytes completos -> alcanza el 100% y estado Verifying
     let snap_verif = service.inject_range(&snap.id, 0, &data, None).unwrap();
     assert_eq!(snap_verif.status.to_lowercase(), "verifying");
 
-    // 2. Finalize download -> Completed
+    // 2. Finalizar descarga -> Completed
     let snap_completed = service.finalize_download(&snap.id).unwrap();
     assert_eq!(snap_completed.status.to_lowercase(), "completed");
 
-    // 3. Late duplicate packet arrives from peer session
+    // 3. Llega un paquete duplicado tardío desde la sesión del par
     let late_data = vec![0x42; 1000];
     let snap_after_late = service.inject_range(&snap.id, 0, &late_data, None).unwrap();
     assert_eq!(
@@ -395,7 +395,7 @@ fn test_inject_range_after_completed_does_not_regress_status() {
         "Late packet must NOT regress Completed download to Verifying!"
     );
 
-    // 4. get_pending_verifications must be empty
+    // 4. get_pending_verifications debe estar vacío
     let pending = service.get_pending_verifications();
     assert!(
         pending.is_empty(),
@@ -422,12 +422,12 @@ fn test_startup_self_heal_completed() {
             )
             .unwrap();
 
-        // Inject full data
+        // Inyectar datos completos
         let data = vec![0x11; 2048];
         let _ = service.inject_range(&snap.id, 0, &data, None).unwrap();
         let _ = service.finalize_download(&snap.id).unwrap();
 
-        // Force status back to verifying in DB to simulate old bug
+        // Forzar el estado de nuevo a verifying en la BD para simular el fallo antiguo
         service
             .db_mut()
             .update_status(&snap.id, mule_core::model::DownloadStatus::Verifying)
@@ -435,7 +435,7 @@ fn test_startup_self_heal_completed() {
         snap.id
     };
 
-    // Reopen service: startup should self-heal since target file exists with size 2048
+    // Reabrir servicio: el inicio debe autorepararse ya que el archivo de destino existe con tamaño 2048
     let service = DownloadService::new(&db_path, temp_dir).unwrap();
     let dl = service.get_download(&download_id).unwrap();
     assert_eq!(

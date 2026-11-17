@@ -23,11 +23,11 @@ fn test_encode_server_login_request() {
     assert_eq!(&packet.payload[0..16], &user_hash);
 }
 
-/// Vecteur filaire eMule 0.72a (`ServerConnect.cpp:170-198`) : le login
-/// contient exactement 4 tags dans l'ordre `CT_NAME`, `CT_VERSION`,
-/// `CT_SERVER_FLAGS`, `CT_EMULE_VERSION` ; les flags de base sont
-/// `SRVCAP_ZLIB | SRVCAP_NEWTAGS | SRVCAP_LARGEFILES | SRVCAP_UNICODE` et la
-/// version eMule est encodée `(mjr << 17) | (min << 10) | (upd << 7)`.
+/// Vector de cable de eMule 0.72a (`ServerConnect.cpp:170-198`): el inicio de sesión
+/// contiene exactamente 4 etiquetas en el orden `CT_NAME`, `CT_VERSION`,
+/// `CT_SERVER_FLAGS`, `CT_EMULE_VERSION`; los flags base son
+/// `SRVCAP_ZLIB | SRVCAP_NEWTAGS | SRVCAP_LARGEFILES | SRVCAP_UNICODE` y la
+/// versión de eMule se codifica como `(mjr << 17) | (min << 10) | (upd << 7)`.
 #[test]
 fn test_encode_server_login_request_emule_wire_layout() {
     use mule_protocol::ed2k::tags::{
@@ -496,7 +496,7 @@ fn test_offer_files_highid_vs_lowid_and_large_file() {
     let of = OfferedFile::for_server([1u8; 16], "a.bin", 100, 5, 4662, 0, false).unwrap();
     assert_eq!((of.client_id, of.client_port), (0, 0));
 
-    // Large file skipped without LARGEFILES flag, sent with split size tags else.
+    // Archivo grande omitido sin el indicador LARGEFILES, enviado con etiquetas de tamaño divididas en caso contrario.
     let big = 5_000_000_000u64;
     assert!(OfferedFile::for_server([1u8; 16], "big.iso", big, 0, 0, 0, false).is_none());
     let of =
@@ -510,7 +510,7 @@ fn test_offer_files_partial_marker() {
     use mule_protocol::ed2k::{OfferedFile, SRV_TCPFLG_COMPRESSION};
 
     // eMule CreateOfferedFilePacket: incomplete (part) files are published
-    // with the 0xFCFCFCFC/0xFCFC marker pair when the server supports TCP
+    // con el par de marcadores 0xFCFCFCFC/0xFCFC cuando el servidor soporta TCP
     // compression; on legacy servers they carry the real HighID like
     // complete files.
     let partial = OfferedFile::for_server(

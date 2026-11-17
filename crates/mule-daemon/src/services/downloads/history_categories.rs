@@ -9,8 +9,8 @@ use uuid::Uuid;
 use super::{db_err, types::{now_ms, ActiveDownload}};
 use crate::error::DaemonError;
 
-/// eMule `IsRememberingCancelledFiles`/`IsRememberingDownloadedFiles`
-/// gate — `true` unless the setting is explicitly `0`/`false`/`off`.
+/// Puerta `IsRememberingCancelledFiles`/`IsRememberingDownloadedFiles` de eMule
+/// — `true` a menos que el ajuste sea explícitamente `0`/`false`/`off`.
 pub fn setting_enabled(db: &Database, key: &str) -> bool {
     db.get_setting(key)
         .ok()
@@ -29,8 +29,8 @@ pub fn record_history_event(
     verification_result: &str,
     error_message: Option<String>,
 ) {
-    // eMule `RememberCancelledFiles`/`RememberDownloadedFiles`: skip the
-    // history entry when the corresponding toggle is disabled.
+    // `RememberCancelledFiles`/`RememberDownloadedFiles` de eMule: omite la
+    // entrada del historial cuando la opción correspondiente está desactivada.
     let gate = match event_type {
         "cancelled" => Some("remember_cancelled"),
         "completed" => Some("remember_downloaded"),
@@ -139,7 +139,7 @@ pub fn export_history(
     }
 }
 
-// ── Categories Management ──────────────────────────────────────────────────
+// ── Gestión de categorías ──────────────────────────────────────────────────
 
 pub fn list_categories(db: &Database) -> Result<Vec<DownloadCategory>, DaemonError> {
     db.get_categories()

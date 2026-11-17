@@ -32,7 +32,7 @@ fn check_frame(limits: &Ed2kLimits, opcode: u8, payload_len: usize) -> Result<()
     Ok(())
 }
 
-/// Encodes an `OP_AICHFILEHASHREQ` (`0x9E`): bare 16-byte file hash.
+/// Codifica un `OP_AICHFILEHASHREQ` (`0x9E`): hash de archivo simple de 16 bytes.
 pub fn encode_aich_file_hash_req(
     limits: &Ed2kLimits,
     req: &Ed2kAichFileHashReq,
@@ -45,7 +45,7 @@ pub fn encode_aich_file_hash_req(
     ))
 }
 
-/// Encodes an `OP_AICHFILEHASHANS` (`0x9D`): `file_hash` + 20-byte AICH root.
+/// Codifica un `OP_AICHFILEHASHANS` (`0x9D`): `file_hash` + raíz AICH de 20 bytes.
 pub fn encode_aich_file_hash_res(
     limits: &Ed2kLimits,
     res: &Ed2kAichFileHashRes,
@@ -61,7 +61,7 @@ pub fn encode_aich_file_hash_res(
     ))
 }
 
-/// Encodes an `OP_AICHREQUEST` (`0x9B`): `file_hash` + `u16 part` + `master_hash`.
+/// Codifica un `OP_AICHREQUEST` (`0x9B`): `file_hash` + `u16 part` + `master_hash`.
 pub fn encode_aich_request(
     limits: &Ed2kLimits,
     req: &Ed2kAichRequest,
@@ -78,11 +78,11 @@ pub fn encode_aich_request(
     ))
 }
 
-/// Encodes an `OP_AICHANSWER` (`0x9C`).
+/// Codifica un `OP_AICHANSWER` (`0x9C`).
 ///
-/// With recovery data: `file_hash` + `u16 part` + `master_hash` +
-/// `u16 count16` + entries + `u16 count32` + entries.
-/// Failed answer: bare 16-byte `file_hash` (eMule fallback packet).
+/// Con datos de recuperación: `file_hash` + `u16 part` + `master_hash` +
+/// `u16 count16` + entradas + `u16 count32` + entradas.
+/// Respuesta fallida: `file_hash` simple de 16 bytes (paquete de respaldo de eMule).
 pub fn encode_aich_answer(
     limits: &Ed2kLimits,
     ans: &Ed2kAichAnswer,

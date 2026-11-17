@@ -60,9 +60,9 @@ fn emfriends_parses_full_records() {
         Some("Ami eMule"),
         Some(kad),
     ));
-    // IP-only friend (zero userhash), no tags.
+    // Amigo solo por IP (userhash en cero), sin etiquetas.
     buf.extend(emfriends_record(&[0; 16], u32::from_le_bytes([1, 2, 3, 4]), 49661, 0, 0, None, None));
-    // Named friend without KadID.
+    // Amigo con nombre sin KadID.
     buf.extend(emfriends_record(&uh2, 0, 0, 42, 7, Some("Second"), None));
 
     let parsed = EmfriendsMetFile::read_from(&mut Cursor::new(&buf)).unwrap();
@@ -112,7 +112,7 @@ fn emfriends_keeps_first_name_only() {
     buf.extend_from_slice(&1u32.to_le_bytes());
     buf.extend_from_slice(&rec);
     let parsed = EmfriendsMetFile::read_from(&mut Cursor::new(&buf)).unwrap();
-    // eMule `m_strName.IsEmpty()` guard — the first FF_NAME wins.
+    // Guardia `m_strName.IsEmpty()` de eMule — el primer FF_NAME gana.
     assert_eq!(parsed.records[0].name.as_deref(), Some("Premier"));
 }
 
@@ -147,7 +147,7 @@ fn cancelled_parses_legacy_format_as_real_hashes() {
     let parsed = CancelledMetFile::read_from(&mut Cursor::new(&buf)).unwrap();
     assert!(parsed.legacy_format);
     assert_eq!(parsed.seed, None);
-    // Old layout stores the REAL file hash — masking is the importer's job.
+    // La disposición antigua almacena el hash de archivo REAL — el enmascaramiento es tarea del importador.
     assert_eq!(parsed.entries[0], CancelledEntry::Real([0x77; 16]));
 }
 
@@ -165,16 +165,16 @@ fn cancelled_rejects_future_version_and_wrong_header() {
 
 #[test]
 fn cancelled_mask_matches_emule_semantics() {
-    // eMule `AddCancelledFileID` : MD5(seed_u32_LE || file_hash).
+    // `AddCancelledFileID` de eMule: MD5(seed_u32_LE || file_hash).
     let seed = 0x0102_0304u32;
     let hash = [0x55u8; 16];
     let masked = cancelled_mask(seed, &hash);
-    // Independently computed: MD5 over 20 bytes [04 03 02 01][55×16].
+    // Calculado independientemente: MD5 sobre 20 bytes [04 03 02 01][55×16].
     let mut buf = vec![0x04, 0x03, 0x02, 0x01];
     buf.extend_from_slice(&[0x55; 16]);
     let expect: [u8; 16] = md5::Md5::digest(&buf).into();
     assert_eq!(masked, expect);
-    // Same seed+hash is deterministic; different seed differs.
+    // Misma semilla+hash es determinista; diferente semilla difiere.
     assert_eq!(cancelled_mask(seed, &hash), masked);
     assert_ne!(cancelled_mask(seed + 1, &hash), masked);
 }
@@ -205,7 +205,7 @@ fn clients_met_parses_v12_records() {
 #[test]
 fn clients_met_parses_legacy_29a_layout() {
     use mule_format::met::ClientsMetFile;
-    // 0x11 records stop at nReserved3 — 38 bytes, no pubkey fields.
+    // Los registros 0x11 se detienen en nReserved3 — 38 bytes, sin campos de pubkey.
     let mut rec = Vec::new();
     rec.extend_from_slice(&[0x33; 16]);
     rec.extend_from_slice(&10u32.to_le_bytes());
@@ -228,7 +228,7 @@ fn clients_met_rejects_unknown_version_and_truncation() {
     use mule_format::met::ClientsMetFile;
     let err = ClientsMetFile::read_from(&mut Cursor::new(&clients_met(0x99, &[]))).unwrap_err();
     assert!(matches!(err, MetError::UnsupportedHeader { .. }));
-    // Declared record but missing bytes → EOF error, not a partial read.
+    // Registro declarado pero faltan bytes → error EOF, no una lectura parcial.
     let mut buf = vec![0x12];
     buf.extend_from_slice(&1u32.to_le_bytes());
     buf.extend_from_slice(&[0u8; 10]);
@@ -239,8 +239,8 @@ fn clients_met_rejects_unknown_version_and_truncation() {
 #[test]
 fn clients_met_rejects_oversized_pubkey_field() {
     use mule_format::met::ClientsMetFile;
-    // nKeySize > MAXPUBKEYSIZE(80) — eMule `MAXPUBKEYSIZE < nIdentLen`
-    // invalidates secure ident → record carries no usable key.
+    // nKeySize > MAXPUBKEYSIZE(80) — `MAXPUBKEYSIZE < nIdentLen` de eMule
+    // invalida la identificación segura → el registro no porta clave utilizable.
     let mut rec = credit_record(&[0x44; 16], 1, 2, 1_700_000_000, None);
     rec[38] = 0x51; // 81 > 80
     let buf = clients_met(0x12, &[rec]);
@@ -263,7 +263,7 @@ fn preferences_dat_extracts_userhash_and_rejects_bad() {
     assert_eq!(parsed.version, PREFFILE_VERSION);
     assert_eq!(parsed.user_hash, user_hash);
 
-    // Degenerate hash (isbadhash) → corrupt file, rejected.
+    // Hash degenerado (isbadhash) → archivo corrupto, rechazado.
     let mut bad = vec![PREFFILE_VERSION];
     bad.extend_from_slice(&[0u8; 16]);
     let err = PreferencesDat::read_from(&mut Cursor::new(&bad)).unwrap_err();
@@ -271,7 +271,7 @@ fn preferences_dat_extracts_userhash_and_rejects_bad() {
     assert!(is_bad_hash(&[0u8; 16]));
     assert!(!is_bad_hash(&user_hash));
 
-    // Truncated file → EOF.
+    // Archivo truncado → EOF.
     let err = PreferencesDat::read_from(&mut Cursor::new(&[0x14, 1, 2, 3])).unwrap_err();
     assert!(matches!(err, MetError::UnexpectedEof { .. }));
 }

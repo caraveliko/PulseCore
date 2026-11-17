@@ -11,8 +11,8 @@ use crate::state::AppState;
 /// Longitud máxima permitida para la contraseña opcional de la WebUI.
 const MAX_WEBUI_PASSWORD_LEN: usize = 128;
 
-/// Clés camelCase reconnues par `settings.set` — toute autre clé est
-/// ignorée (un warning est émis pour faciliter le diagnostic des typos).
+/// Claves camelCase reconocidas por `settings.set` — cualquier otra clave es
+/// ignorada (se emite una advertencia para facilitar el diagnóstico de erratas).
 const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "defaultDownloadDir",
     "historyRetentionDays",
@@ -462,7 +462,7 @@ fn parse_nas_telemetry(raw: &str) -> Value {
 }
 
 pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
-    // 1. Check cache (60s TTL to prevent CPU wakeups on Raspberry Pi)
+    // 1. Comprobar la caché (TTL de 60s para evitar reactivaciones de CPU en Raspberry Pi)
     if let Ok(cache) = NAS_TELEMETRY_CACHE.read() {
         if let Some((ts, ref val)) = *cache {
             if ts.elapsed() < std::time::Duration::from_secs(60) {
@@ -471,7 +471,7 @@ pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
         }
     }
 
-    // 2. Query via multiplexed passwordless SSH to NAS if configured
+    // 2. Consultar mediante SSH multiplexado sin contraseña al NAS si está configurado
     if let Some(ref ssh_target) = state.config.nas_ssh_target {
         let port_str = state.config.nas_ssh_port.to_string();
         let ssh_res = tokio::time::timeout(
@@ -511,7 +511,7 @@ pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
         }
     }
 
-    // Fallback: If cached value exists, return with stale flag
+    // Respaldo: si existe un valor en caché, devolverlo con la marca de desactualizado (stale)
     if let Ok(cache) = NAS_TELEMETRY_CACHE.read() {
         if let Some((_, ref val)) = *cache {
             let mut stale_val = val.clone();
@@ -522,7 +522,7 @@ pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
         }
     }
 
-    // Fallback 2: NFS mount disk space (cached & non-blocking)
+    // Respaldo 2: espacio en disco del montaje NFS (en caché y sin bloqueo)
     let (free_b, total_b) = get_cached_nas_disk_space(state.config.nas_root_dir.clone());
     Ok(json!({
         "reachable": false,
@@ -544,11 +544,11 @@ pub async fn handle_stop(state: &AppState) -> Result<Value, JsonRpcError> {
     Ok(json!({ "stopping": true }))
 }
 
-/// `stats.resetLifetimeTotals` — remet à zéro les compteurs cumulés
-/// « depuis l'installation » (download + upload) : les compteurs en
-/// mémoire alimentant `statsTick` ET les valeurs persistées. Les totaux
-/// de session ne sont pas touchés ; les octets émis après le reset
-/// recommencent à s'accumuler à partir de zéro.
+/// `stats.resetLifetimeTotals` — restablece a cero los contadores acumulados
+/// «desde la instalación» (descarga + subida): los contadores en
+/// memoria que alimentan `statsTick` Y los valores persistidos. Los totales
+/// de sesión no se tocan; los bytes transmitidos tras el restablecimiento
+/// vuelven a acumularse a partir de cero.
 pub async fn handle_stats_reset_lifetime_totals(state: &AppState) -> Result<Value, JsonRpcError> {
     state
         .lifetime_downloaded_bytes
@@ -692,10 +692,10 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             "serverAutoremoveDead": read("server_autoremove_dead", true),
             "serverAutoupdateList": read("server_autoupdate_list", false),
             "safeConnect": read("safe_connect", false),
-            // eMule `DAPPref`/`UAPPref` — défauts `true` dans les deux cas.
+            // eMule `DAPPref`/`UAPPref` — por defecto `true` en ambos casos.
             "autoPriorityNewDownloads": read("auto_priority_new_downloads", true),
             "autoPriorityUploads": read("auto_priority_uploads", true),
-            // Options propres à eMuleRust (pas d'équivalent eMule).
+            // Opciones propias de eMuleRust (sin equivalente en eMule).
             "identityRotationHours": u64_setting("identity_rotation_hours"),
             "dailyUploadQuotaGb": u64_setting("daily_upload_quota_gb"),
             "uploadQuotaUsedBytes": u64_setting("upload_quota_used_bytes"),
@@ -792,8 +792,8 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         "upnpEnabled": upnp_enabled,
         "capacityDownloadKbs": cap_dl,
         "capacityUploadKbs": cap_ul,
-        // Runtime uniquement — reflète la spec EnvFilter effective, pas
-        // un setting persisté.
+        // Solo en tiempo de ejecución — refleja la especificación EnvFilter efectiva, no
+        // un ajuste persistido.
         "logLevel": state.current_log_level(),
     });
     if let (Some(out), Some(extra)) = (result.as_object_mut(), bools.as_object()) {
@@ -818,7 +818,7 @@ pub async fn handle_settings_set(
 
     if let Some(dir_str) = params["defaultDownloadDir"].as_str() {
         let dir = std::path::PathBuf::from(dir_str);
-        // Validate directory is creatable & writable
+        // Validar que el directorio sea creable y editable
         std::fs::create_dir_all(&dir)
             .map_err(|e| JsonRpcError::business(format!("Cannot create directory: {e}")))?;
 
@@ -943,13 +943,13 @@ pub async fn handle_settings_set(
     if obf_changed {
         let (enabled, required) = state.effective_obfuscation().await;
         state.inbound_listener.set_obfuscation(enabled, required);
-        // Propager la préférence à la session serveur (eMule
-        // IsServerCryptLayerConnection) — sinon le réglage n'agit que sur
-        // les pairs entrants.
+        // Propagar la preferencia a la sesión del servidor (eMule
+        // IsServerCryptLayerConnection) — de lo contrario el ajuste solo actúa sobre
+        // los pares entrantes.
         state
             .server_session
             .set_obfuscation_preference(enabled || required, state.config.obfuscation_padding_max);
-        // Update the buddy-relay connect-options byte announced over Kad.
+        // Actualizar el byte de opciones de conexión buddy-relay anunciado en Kad.
         let connect_opts: u8 = if enabled { 0x03 } else { 0 } | if required { 0x04 } else { 0 };
         state
             .kad
@@ -960,12 +960,12 @@ pub async fn handle_settings_set(
     let mut budgets = state.network_policy.budgets();
     let mut budgets_changed = false;
     if let Some(val) = params.get("maxConnections") {
-        // Même borne qu'au démarrage (`state.rs`) : le budget réseau est
-        // plafonné à [1, 65000] — eMule ne borne pas MaxConnections sous
-        // NT+, on garde un garde-fou anti-faute de frappe. On clampe avant
-        // de persister pour que la valeur stockée reste identique à celle
-        // réellement appliquée — sinon `set_budgets` rejetait après
-        // l'écriture en base.
+        // Mismo límite que en el arranque (`state.rs`): el presupuesto de red está
+        // limitado a [1, 65000] — eMule no limita MaxConnections bajo
+        // NT+, mantenemos una salvaguarda contra errores tipográficos. Se restringe antes
+        // de persistir para que el valor almacenado permanezca idéntico al
+        // realmente aplicado — de lo contrario `set_budgets` rechazaba tras
+        // la escritura en la base de datos.
         let v = val
             .as_u64()
             .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'maxConnections'"))?
@@ -1110,13 +1110,13 @@ pub async fn handle_settings_set(
         }
     }
     if let Some(v) = params.get("capacityUploadKbs").and_then(|v| v.as_u64()) {
-        // Upload capacity = reference line speed used by USS as its
-        // baseline manual limit (eMule uses it for slot computations).
+        // Capacidad de subida = velocidad de línea de referencia utilizada por USS como su
+        // límite manual de base (eMule la utiliza para el cálculo de ranuras).
         state.uss.note_manual_limit(v.saturating_mul(1024));
     }
     if params.get("capacityDownloadKbs").is_some() || params.get("capacityUploadKbs").is_some() {
-        // eMule borne les limites effectives à la capacité déclarée :
-        // une baisse de capacité réduit la limite en conséquence.
+        // eMule limita los límites efectivos a la capacidad declarada:
+        // una reducción de capacidad reduce el límite en consecuencia.
         crate::rpc::handlers::network::apply_capacity_clamp(state).await?;
     }
     if let Some(val) = params.get("minUploadKbs") {
@@ -1427,9 +1427,9 @@ pub async fn handle_settings_set(
             keys.push(camel);
         }
     }
-    // Niveau de log à chaud — runtime uniquement, jamais persisté (un
-    // `trace` survivant à un reboot remplirait les fichiers). Accepte un
-    // niveau simple (« debug ») ou une spec EnvFilter complète.
+    // Nivel de registro en caliente — únicamente en tiempo de ejecución, nunca persistido (un
+    // `trace` persistente tras reiniciar llenaría los archivos). Acepta un
+    // nivel simple («debug») o una especificación EnvFilter completa.
     if let Some(val) = params.get("logLevel") {
         let spec = val
             .as_str()
@@ -1603,11 +1603,11 @@ pub async fn handle_settings_reset_download_dir(state: &AppState) -> Result<Valu
     }))
 }
 
-/// Applies a TCP/UDP port change at runtime (eMule « Port client »):
-/// persisted values are reloaded into the effective-port atomics, the
-/// inbound TCP listener is rebound if it was listening, the Kad UDP socket
-/// is re-bound on the new port (when UDP is on), and buddy/UPnP advertised
-/// ports are updated.
+/// Aplica un cambio de puerto TCP/UDP en tiempo de ejecución (eMule «Puerto cliente»):
+/// los valores persistidos se recargan en los atómicos de puerto efectivo, el
+/// listener TCP entrante se revincula si estaba escuchando, el socket Kad UDP
+/// se revincula en el nuevo puerto (cuando UDP está activo), y se actualizan los puertos
+/// anunciados para buddy/UPnP.
 async fn apply_port_change(state: &AppState) -> Result<(), JsonRpcError> {
     let (tcp, udp) = {
         let dl = state.downloads.lock().await;
@@ -1635,7 +1635,7 @@ async fn apply_port_change(state: &AppState) -> Result<(), JsonRpcError> {
         "0.0.0.0"
     };
 
-    // Rebind the inbound TCP listener when it was already listening.
+    // Revincular el listener TCP entrante si ya estaba escuchando.
     if state.inbound_listener.snapshot().await.is_listening {
         state.inbound_listener.stop().await;
         let addr: std::net::SocketAddr = format!("{bind_ip}:{tcp}")
@@ -1648,7 +1648,7 @@ async fn apply_port_change(state: &AppState) -> Result<(), JsonRpcError> {
             .map_err(|e| JsonRpcError::business(format!("TCP rebind failed: {e}")))?;
     }
 
-    // Rebind Kad UDP on the new port when UDP is enabled and allowed.
+    // Revincular Kad UDP en el nuevo puerto cuando UDP esté habilitado y permitido.
     if state.udp_enabled() && profile.allows_udp_kad() {
         if let Ok(addr) = format!("{bind_ip}:{udp}").parse::<std::net::SocketAddr>() {
             let current_addr = state.kad.udp().bind_addr().await;
@@ -1663,9 +1663,9 @@ async fn apply_port_change(state: &AppState) -> Result<(), JsonRpcError> {
     Ok(())
 }
 
-/// Starts/stops the UDP services per the `udp_enabled` toggle (eMule
-/// « UDP désactivé »). Kad UDP + server UDP share the toggle; the client
-/// UDP layer rides the Kad socket so it follows automatically.
+/// Inicia/detiene los servicios UDP según el selector `udp_enabled` (eMule
+/// «UDP desactivado»). Kad UDP + servidor UDP comparten el selector; la capa UDP
+/// de clientes va montada sobre el socket Kad, por lo que lo sigue automáticamente.
 pub(crate) async fn apply_udp_state(state: &AppState, enabled: bool) {
     let profile = state.network_policy.profile();
     if enabled && profile.allows_udp_kad() {
@@ -1691,7 +1691,7 @@ pub(crate) async fn apply_udp_state(state: &AppState, enabled: bool) {
     }
 }
 
-/// Returns daemon log entries parsed from rolling JSON log files
+/// Devuelve entradas de registro del daemon procesadas a partir de archivos JSON rotativos
 pub async fn handle_logs(state: &AppState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let limit = params
         .as_ref()
@@ -1736,7 +1736,7 @@ pub async fn handle_logs(state: &AppState, params: Option<Value>) -> Result<Valu
             .unwrap_or_default();
 
         files.sort();
-        files.reverse(); // newest first
+        files.reverse(); // los más recientes primero
 
         for file_path in files {
             if entries.len() >= limit {

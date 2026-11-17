@@ -9,7 +9,7 @@ use crate::error::JsonRpcError;
 use crate::services::downloads::now_ms;
 use crate::state::AppState;
 
-/// Search for movies or TV series across metadata providers (Radarr/Sonarr proxies/TMDB)
+/// Busca películas o series de TV en los proveedores de metadatos (proxies Radarr/Sonarr/TMDB)
 pub async fn handle_media_search(
     state: &AppState,
     params: Option<Value>,
@@ -52,7 +52,7 @@ pub async fn handle_media_search(
     }
 }
 
-/// List items in the local media library (movies & series)
+/// Lista los elementos de la biblioteca multimedia local (películas y series)
 pub async fn handle_media_list(
     state: &AppState,
     params: Option<Value>,
@@ -70,7 +70,7 @@ pub async fn handle_media_list(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Get a single media item with its full episode list (for series) and rich credits/metadata
+/// Obtiene un único elemento multimedia con su lista completa de episodios (para series) y créditos/metadatos detallados
 pub async fn handle_media_get(
     state: &AppState,
     params: Option<Value>,
@@ -118,7 +118,7 @@ pub async fn handle_media_get(
         item.imdb_id = details.imdb_id.clone();
         needs_db_update = true;
     }
-    // Si le titre enregistré est resté en anglais et qu'une traduction officielle espagnole existe
+    // Si el título registrado quedó en inglés y existe una traducción oficial en español
     if item.title.eq_ignore_ascii_case(item.original_title.as_deref().unwrap_or("")) {
         let es_variants = crate::services::scorer::spanish_title_search_variants(
             &item.title,
@@ -164,7 +164,7 @@ pub async fn handle_media_get(
     }))
 }
 
-/// Add a movie or TV show to the library (marking as 'wanted' and monitoring)
+/// Añade una película o serie de TV a la biblioteca (marcada como 'buscada' y monitorizada)
 pub async fn handle_media_add(
     state: &AppState,
     params: Option<Value>,
@@ -210,7 +210,7 @@ pub async fn handle_media_add(
     let id = Uuid::new_v4().to_string();
     let now = now_ms();
 
-    // Fetch episodes before acquiring the lock if it's a TV show
+    // Obtener episodios antes de adquirir el bloqueo si es una serie de TV
     let episodes_to_insert = if media_type == "tv" {
         if let Some(tv_id) = tvdb_id {
             state.media_metadata.get_show_episodes(tv_id).await.ok()
@@ -274,7 +274,7 @@ pub async fn handle_media_add(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Delete a movie or TV show from the library (with optional download cancellation and file cleanup)
+/// Elimina una película o serie de TV de la biblioteca (con cancelación opcional de descargas y limpieza de archivos)
 pub async fn handle_media_delete(
     state: &AppState,
     params: Option<Value>,
@@ -373,7 +373,7 @@ pub async fn handle_media_delete(
         .delete_media_item(id)
         .map_err(|e| JsonRpcError::business(format!("Database error: {e}")))?;
 
-    // Synchronize deletion with Sonarr / Radarr to prevent re-downloads
+    // Sincronizar eliminación con Sonarr / Radarr para evitar nuevas descargas
     if let Some((mtype, title, tvdb, tmdb, _)) = item_info {
         sync_delete_with_servarr(state, &mtype, &title, tvdb, tmdb, delete_files).await;
     }
@@ -482,7 +482,7 @@ async fn sync_delete_with_servarr(
     }
 }
 
-/// Statistics of library: wanted, downloading, completed
+/// Estadísticas de la biblioteca: buscados, descargando, completados
 pub async fn handle_media_stats(state: &AppState) -> Result<Value, JsonRpcError> {
     let dl_svc = state.downloads.lock().await;
     let items = dl_svc
@@ -521,7 +521,7 @@ pub async fn handle_media_stats(state: &AppState) -> Result<Value, JsonRpcError>
     }))
 }
 
-/// Search all releases across Kad and external Torznab indexers for a library item
+/// Busca todos los lanzamientos en Kad y en indexadores Torznab externos para un elemento de la biblioteca
 pub async fn handle_media_search_releases(
     state: &AppState,
     params: Option<Value>,
@@ -643,7 +643,7 @@ pub async fn handle_media_search_releases(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Manually grab a specific release candidate for a media item
+/// Descarga manualmente un candidato de lanzamiento específico para un elemento multimedia
 pub async fn handle_media_grab_release(
     state: &AppState,
     params: Option<Value>,
@@ -662,13 +662,13 @@ pub async fn handle_media_grab_release(
     }
 }
 
-/// Trigger an on-demand scan of local directories (/cineseries/Peliculas and /Series)
+/// Desencadena un escaneo bajo demanda de directorios locales (/cineseries/Peliculas y /Series)
 pub async fn handle_media_scan_disk(state: &AppState) -> Result<Value, JsonRpcError> {
     let summary = crate::services::DiskScanner::scan_all(state).await;
     Ok(summary)
 }
 
-/// Trigger an on-demand pass of the auto-grab scheduler (globally or for a specific media/episode/blacklist)
+/// Desencadena una pasada bajo demanda del programador de auto-descarga (global o para un medio/episodio/lista negra específico)
 pub async fn handle_media_auto_grab(
     state: &AppState,
     params: Option<Value>,
@@ -703,7 +703,7 @@ pub async fn handle_media_auto_grab(
     Ok(res)
 }
 
-/// List all configured external Torznab indexers
+/// Lista todos los indexadores Torznab externos configurados
 pub async fn handle_indexer_list(state: &AppState) -> Result<Value, JsonRpcError> {
     let dl_svc = state.downloads.lock().await;
     let list = dl_svc
@@ -714,7 +714,7 @@ pub async fn handle_indexer_list(state: &AppState) -> Result<Value, JsonRpcError
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Add an external Torznab indexer (e.g. Jackett / Prowlarr feed)
+/// Añade un indexador Torznab externo (ej.: feed de Jackett / Prowlarr)
 pub async fn handle_indexer_add(
     state: &AppState,
     params: Option<Value>,
@@ -748,7 +748,7 @@ pub async fn handle_indexer_add(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Delete an external indexer
+/// Elimina un indexador externo
 pub async fn handle_indexer_delete(
     state: &AppState,
     params: Option<Value>,
@@ -767,7 +767,7 @@ pub async fn handle_indexer_delete(
     Ok(json!({ "success": ok }))
 }
 
-/// Trigger organization pass to hardlink completed downloads into media library
+/// Desencadena la pasada de organización para enlazar (hardlink) descargas completadas en la biblioteca multimedia
 pub async fn handle_media_organize(
     state: &AppState,
     _params: Option<Value>,
@@ -776,7 +776,7 @@ pub async fn handle_media_organize(
     Ok(result)
 }
 
-/// Search subtitle candidates for a media item (Bazarr feature)
+/// Busca candidatos de subtítulos para un elemento multimedia (funcionalidad estilo Bazarr)
 pub async fn handle_subtitles_search(
     state: &AppState,
     params: Option<Value>,
@@ -826,7 +826,7 @@ pub async fn handle_subtitles_search(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Download a specific subtitle candidate
+/// Descarga un candidato de subtítulo específico
 pub async fn handle_subtitles_download(
     state: &AppState,
     params: Option<Value>,
@@ -868,7 +868,7 @@ pub async fn handle_subtitles_download(
     }))
 }
 
-/// Check existing companion subtitles for a media item
+/// Comprueba subtítulos acompañantes existentes para un elemento multimedia
 pub async fn handle_subtitles_check(
     state: &AppState,
     params: Option<Value>,
@@ -897,7 +897,7 @@ pub async fn handle_subtitles_check(
     }))
 }
 
-/// Auto-fetch all missing subtitles for library items
+/// Obtiene automáticamente todos los subtítulos faltantes para elementos de la biblioteca
 pub async fn handle_subtitles_auto_fetch(
     state: &AppState,
     params: Option<Value>,
@@ -911,13 +911,13 @@ pub async fn handle_subtitles_auto_fetch(
     Ok(result)
 }
 
-/// Manually or automatically refresh and enrich metadata / posters for library items
+/// Actualiza y enriquece manual o automáticamente metadatos y pósteres de elementos de la biblioteca
 pub async fn handle_media_refresh_metadata(state: &AppState) -> Result<Value, JsonRpcError> {
     let count = crate::services::DiskScanner::enrich_library(state).await;
     Ok(json!({ "itemsEnriched": count }))
 }
 
-/// Get episodes calendar filtered by date range
+/// Obtiene el calendario de episodios filtrado por rango de fechas
 pub async fn handle_media_calendar(
     state: &AppState,
     params: Option<Value>,
@@ -935,7 +935,7 @@ pub async fn handle_media_calendar(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
-/// Run duplicate and residue cleaner across library and incoming directories
+/// Ejecuta el limpiador de duplicados y residuos en la biblioteca y en los directorios de entrada
 pub async fn handle_media_clean(
     state: &AppState,
     params: Option<Value>,
@@ -945,10 +945,10 @@ pub async fn handle_media_clean(
         .and_then(|p| p["dryRun"].as_bool())
         .unwrap_or(false);
 
-    // Run sweep and organize first so incoming downloads get linked
+    // Ejecutar barrido y organización primero para que las descargas entrantes queden enlazadas
     let org_res = crate::services::MediaOrganizer::sweep_and_organize(state).await;
 
-    // Run deep deduplication and junk/residue cleaner
+    // Ejecutar deduplicación profunda y limpiador de residuos/basura
     let mut clean_res = crate::services::MediaCleaner::clean_all(state, dry_run).await;
     if let Some(obj) = clean_res.as_object_mut() {
         obj.insert("organizedBeforeClean".to_string(), org_res["organized"].clone());

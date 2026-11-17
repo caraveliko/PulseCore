@@ -32,7 +32,7 @@ pub fn insert_download(conn: &mut Connection, dl: &Download) -> Result<(), CoreE
     Ok(())
 }
 
-/// Persists the per-download priority ("low" | "normal" | "high").
+/// Persiste la prioridad por descarga ("low" | "normal" | "high").
 pub fn update_priority(
     conn: &mut Connection,
     download_id: &Uuid,
@@ -45,8 +45,8 @@ pub fn update_priority(
     Ok(())
 }
 
-/// Persists the per-file source limit (eMule FT_MAXSOURCES). `None` clears
-/// it back to the global default.
+/// Persiste el límite de fuentes por archivo (`FT_MAXSOURCES` de eMule). `None`
+/// lo restablece al valor predeterminado global.
 pub fn update_max_sources(
     conn: &mut Connection,
     download_id: &Uuid,
@@ -59,7 +59,7 @@ pub fn update_max_sources(
     Ok(())
 }
 
-/// Persists the trusted AICH root hash for a download.
+/// Persiste el hash raíz AICH de confianza para una descarga.
 pub fn update_aich_root(
     conn: &mut Connection,
     download_id: &Uuid,
@@ -72,9 +72,9 @@ pub fn update_aich_root(
     Ok(())
 }
 
-/// Réécriture complète des ranges persistées (DELETE + INSERT de tout le
-/// RangeSet). Réservée aux points de compaction/éviction : le hot path de
-/// réception utilise [`append_received_range`] (delta O(1) par bloc).
+/// Reescritura completa de los rangos persistidos (DELETE + INSERT de todo el
+/// RangeSet). Reservada para los puntos de compactación/desalojo: la ruta crítica de
+/// recepción utiliza [`append_received_range`] (delta O(1) por bloque).
 pub fn sync_received_ranges(
     conn: &mut Connection,
     download_id: &Uuid,
@@ -103,12 +103,12 @@ pub fn sync_received_ranges(
     Ok(())
 }
 
-/// Persiste une seule range nouvellement reçue (hot path par bloc) sans
-/// réécrire la table entière : upsert qui étend `end_offset` au maximum
-/// quand une ligne partage déjà `start_offset`. Les lignes résultantes
-/// peuvent se chevaucher — `load_received_ranges` les refusionne via
-/// `RangeSet::insert`, et la réécriture complète ([`sync_received_ranges`],
-/// cadence `PART_PERSIST_INTERVAL` + évictions) recompacte la table.
+/// Persiste un solo rango recién recibido (ruta crítica por bloque) sin
+/// reescribir la tabla entera: upsert que amplía `end_offset` al máximo
+/// cuando una fila ya comparte `start_offset`. Las filas resultantes
+/// pueden solaparse — `load_received_ranges` las refusiona mediante
+/// `RangeSet::insert`, y la reescritura completa ([`sync_received_ranges`],
+/// cadencia `PART_PERSIST_INTERVAL` + desalojos) recompacta la tabla.
 pub fn append_received_range(
     conn: &mut Connection,
     download_id: &Uuid,
@@ -184,7 +184,7 @@ pub fn get_verified_parts(conn: &Connection, download_id: &Uuid) -> Result<Vec<u
     Ok(parts)
 }
 
-/// Stores the full per-part MD4 hashset for a file (keyed by lowercase hex ed2k hash).
+/// Almacena el conjunto completo de hashes MD4 por parte para un archivo (indexado por el hash eD2K hexadecimal en minúsculas).
 pub fn store_part_hashes(
     conn: &mut Connection,
     file_hash: &str,
@@ -207,7 +207,7 @@ pub fn store_part_hashes(
     Ok(())
 }
 
-/// Loads the stored per-part MD4 hashset for a file, ordered by part index.
+/// Carga el conjunto de hashes MD4 por parte almacenado para un archivo, ordenado por índice de parte.
 pub fn get_part_hashes(conn: &Connection, file_hash: &str) -> Result<Vec<[u8; 16]>, CoreError> {
     let mut stmt = conn.prepare(
         "SELECT part_index, hash FROM file_part_hashes WHERE file_hash = ?1 ORDER BY part_index ASC",
@@ -226,7 +226,7 @@ pub fn get_part_hashes(conn: &Connection, file_hash: &str) -> Result<Vec<[u8; 16
     Ok(hashes)
 }
 
-/// Deletes the stored per-part hashset for a file.
+/// Elimina el conjunto de hashes por parte almacenado para un archivo.
 pub fn delete_part_hashes(conn: &mut Connection, file_hash: &str) -> Result<(), CoreError> {
     conn.execute(
         "DELETE FROM file_part_hashes WHERE file_hash = ?1",
@@ -413,8 +413,8 @@ pub fn update_target_path(
     Ok(())
 }
 
-/// Renames a download: display name + finalization target path derived
-/// from it (the `.part` temp file keeps its UUID name).
+/// Cambia el nombre de una descarga: nombre para mostrar + ruta de destino de finalización derivada
+/// de este (el archivo temporal `.part` mantiene su nombre basado en UUID).
 pub fn update_download_name_and_target(
     conn: &mut Connection,
     download_id: &Uuid,

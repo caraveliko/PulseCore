@@ -8,7 +8,7 @@ use super::super::limits::Ed2kLimits;
 use super::super::packet::{Ed2kEmuleInfo, Ed2kHello, Ed2kHelloAnswer};
 use super::super::tags::TagReader;
 
-/// Decodes an `OP_HELLO` payload.
+/// Decodifica una carga útil `OP_HELLO`.
 pub fn decode_hello(
     limits: &Ed2kLimits,
     protocol: u8,
@@ -18,8 +18,8 @@ pub fn decode_hello(
 ) -> Result<Ed2kHello, Ed2kParseError> {
     let mut reader = TagReader::new(payload, 0, protocol, Some(opcode));
 
-    // In standard eD2K client-to-client handshake, OP_HELLO payload begins with hash length (0x10 = 16).
-    // If present, consume it. If absent (e.g. legacy/synthetic fixtures), read hash directly.
+    // En el saludo cliente a cliente estándar de eD2K, la carga útil de OP_HELLO comienza con la longitud del hash (0x10 = 16).
+    // Si está presente, se consume. Si está ausente (p. ej. pruebas heredadas/sintéticas), se lee el hash directamente.
     if reader.remaining() >= 17 && reader.peek_u8() == Some(0x10) {
         let _ = reader.read_u8("hello_user_hash_len")?;
     }
@@ -74,7 +74,7 @@ pub fn decode_hello(
     })
 }
 
-/// Decodes an `OP_HELLO_ANSWER` payload.
+/// Decodifica una carga útil `OP_HELLO_ANSWER`.
 pub fn decode_hello_answer(
     limits: &Ed2kLimits,
     protocol: u8,
@@ -134,7 +134,7 @@ pub fn decode_hello_answer(
     })
 }
 
-/// Decodes an `OP_EMULE_INFO` (`0xC5 0x01`) payload.
+/// Decodifica una carga útil `OP_EMULE_INFO` (`0xC5 0x01`).
 pub fn decode_emule_info(
     limits: &Ed2kLimits,
     protocol: u8,

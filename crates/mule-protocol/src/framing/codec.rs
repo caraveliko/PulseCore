@@ -10,14 +10,14 @@ use crate::error::FramingError;
 use crate::limits::{HEADER_SIZE, MAX_BUFFERED_BYTES, MAX_FRAME_BYTES};
 use crate::types::is_valid_protocol;
 
-/// Streaming codec for eD2K framing.
+/// Códec de flujo para el entramado eD2K.
 #[derive(Debug, Clone)]
 pub struct PacketCodec {
-    /// Maximum allowed packet frame size (opcode + payload).
+    /// Tamaño máximo permitido de trama de paquete (código de operación + carga útil).
     pub max_frame_bytes: usize,
-    /// Maximum allowable bytes in accumulator buffer before overflow disconnect.
+    /// Máximo de bytes permitidos en el búfer acumulador antes de la desconexión por desbordamiento.
     pub max_buffered_bytes: usize,
-    /// If true, reject unknown protocol magic bytes.
+    /// Si es true, rechaza bytes mágicos de protocolo desconocidos.
     pub strict_protocol: bool,
 }
 
@@ -32,12 +32,12 @@ impl Default for PacketCodec {
 }
 
 impl PacketCodec {
-    /// Creates a codec with default production limits.
+    /// Crea un códec con los límites predeterminados de producción.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates a codec with customized frame and buffer limits.
+    /// Crea un códec con límites de trama y búfer personalizados.
     pub fn with_limits(max_frame_bytes: usize, max_buffered_bytes: usize) -> Self {
         Self {
             max_frame_bytes,
@@ -46,19 +46,19 @@ impl PacketCodec {
         }
     }
 
-    /// Configures whether strict protocol byte validation is enforced.
+    /// Configura si se aplica una validación estricta del byte de protocolo.
     pub fn strict_protocol(mut self, strict: bool) -> Self {
         self.strict_protocol = strict;
         self
     }
 
-    /// Attempts to decode a single `RawPacket` from the accumulator buffer `src`.
+    /// Intenta decodificar un único `RawPacket` del búfer acumulador `src`.
     ///
-    /// - Returns `Ok(Some(packet))` when a full frame is decoded and consumed from `src`.
-    /// - Returns `Ok(None)` when `src` does not yet contain a complete frame (need more bytes).
-    /// - Returns `Err(FramingError)` if protocol limits, invalid sizes, or buffer overflow occur.
+    /// - Devuelve `Ok(Some(packet))` cuando se decodifica y consume una trama completa de `src`.
+    /// - Devuelve `Ok(None)` cuando `src` aún no contiene una trama completa (se necesitan más bytes).
+    /// - Devuelve `Err(FramingError)` si se producen límites de protocolo, tamaños no válidos o desbordamiento de búfer.
     pub fn decode(&self, src: &mut BytesMut) -> Result<Option<RawPacket>, FramingError> {
-        // Enforce maximum buffer capacity to prevent unconstrained memory accumulation.
+        // Aplica la capacidad máxima de búfer para evitar la acumulación ilimitada de memoria.
         if src.len() > self.max_buffered_bytes {
             return Err(FramingError::BufferOverflow {
                 buffered: src.len(),
@@ -66,7 +66,7 @@ impl PacketCodec {
             });
         }
 
-        // Need at least 5 header bytes (1 byte protocol + 4 bytes LE length).
+        // Se necesitan al menos 5 bytes de cabecera (1 byte de protocolo + 4 bytes de longitud LE).
         if src.len() < HEADER_SIZE {
             return Ok(None);
         }
@@ -76,12 +76,12 @@ impl PacketCodec {
             return Err(FramingError::UnsupportedProtocol { protocol });
         }
 
-        // Read 4-byte little-endian frame length without consuming yet.
+        // Lee la longitud de trama en little-endian de 4 bytes sin consumirla todavía.
         let mut len_bytes = [0u8; 4];
         len_bytes.copy_from_slice(&src[1..5]);
         let frame_len = u32::from_le_bytes(len_bytes) as usize;
 
-        // In eD2K, frame_len must be at least 1 byte (for the opcode).
+        // En eD2K, frame_len debe ser de al menos 1 byte (para el código de operación).
         if frame_len < 1 {
             return Err(FramingError::FrameTooSmall { size: frame_len });
         }
@@ -95,17 +95,17 @@ impl PacketCodec {
 
         let total_required = HEADER_SIZE + frame_len;
         if src.len() < total_required {
-            // Partial packet: wait for remaining bytes.
+            // Paquete parcial: esperar a los bytes restantes.
             return Ok(None);
         }
 
-        // Advance past header (5 bytes).
+        // Avanzar más allá de la cabecera (5 bytes).
         src.advance(HEADER_SIZE);
 
-        // First byte of frame is opcode.
+        // El primer byte de la trama es el código de operación.
         let opcode = src.split_to(1)[0];
 
-        // Remaining bytes of frame are payload.
+        // Los bytes restantes de la trama corresponden a la carga útil.
         let payload_len = frame_len - 1;
         let payload = src.split_to(payload_len).freeze();
 
@@ -116,7 +116,7 @@ impl PacketCodec {
         }))
     }
 
-    /// Encodes a `RawPacket` into `dst`.
+    /// Codifica un `RawPacket` en `dst`.
     pub fn encode(&self, packet: &RawPacket, dst: &mut BytesMut) -> Result<(), FramingError> {
         let frame_len = packet.frame_len();
         if frame_len > self.max_frame_bytes {
@@ -135,7 +135,7 @@ impl PacketCodec {
         Ok(())
     }
 
-    /// Encodes a `RawPacket` directly into a new immutable `Bytes` buffer.
+    /// Codifica un `RawPacket` directamente en un nuevo búfer inmutable `Bytes`.
     pub fn encode_to_bytes(&self, packet: &RawPacket) -> Result<Bytes, FramingError> {
         let total = packet.total_wire_len();
         let mut buf = BytesMut::with_capacity(total);

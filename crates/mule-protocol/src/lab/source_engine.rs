@@ -10,37 +10,37 @@ use bytes::Bytes;
 use super::messages::{LabMessage, LabRejectReason};
 use crate::limits::MAX_BLOCK_BYTES;
 
-/// A fixture file hosted by the laboratory source engine.
+/// Un archivo de prueba alojado por el motor de fuentes de laboratorio.
 #[derive(Debug, Clone)]
 pub struct HostedFile {
-    /// 16-byte eD2K file hash.
+    /// Hash de archivo eD2K de 16 bytes.
     pub file_hash: [u8; 16],
-    /// Total file size in bytes.
+    /// Tamaño total del archivo en bytes.
     pub file_size: u64,
-    /// Display name.
+    /// Nombre para mostrar.
     pub name: String,
-    /// In-memory binary data payload.
+    /// Carga útil de datos binarios en memoria.
     pub data: Bytes,
 }
 
-/// In-memory source server for laboratory testing.
+/// Servidor de fuentes en memoria para pruebas de laboratorio.
 ///
-/// Disallows filesystem path inputs from the network and serves strictly
-/// from an internal registry indexed by 16-byte hashes.
+/// Rechaza entradas de rutas del sistema de archivos procedentes de la red y sirve estrictamente
+/// desde un registro interno indexado por hashes de 16 bytes.
 #[derive(Debug, Clone, Default)]
 pub struct LabSourceEngine {
     files: HashMap<[u8; 16], HostedFile>,
 }
 
 impl LabSourceEngine {
-    /// Creates a new empty `LabSourceEngine`.
+    /// Crea un nuevo `LabSourceEngine` vacío.
     pub fn new() -> Self {
         Self {
             files: HashMap::new(),
         }
     }
 
-    /// Registers a fixture file into the source engine.
+    /// Registra un archivo de prueba en el motor de fuentes.
     pub fn host_file(&mut self, file_hash: [u8; 16], name: impl Into<String>, data: Bytes) {
         let file_size = data.len() as u64;
         self.files.insert(
@@ -54,12 +54,12 @@ impl LabSourceEngine {
         );
     }
 
-    /// Returns the hashes of all hosted files.
+    /// Devuelve los hashes de todos los archivos alojados.
     pub fn hosted_hashes(&self) -> Vec<[u8; 16]> {
         self.files.keys().copied().collect()
     }
 
-    /// Generates a `FileOffer` message for the specified hash if hosted.
+    /// Genera un mensaje `FileOffer` para el hash especificado si está alojado.
     pub fn offer_file(&self, file_hash: &[u8; 16]) -> Option<LabMessage> {
         self.files.get(file_hash).map(|f| LabMessage::FileOffer {
             file_hash: f.file_hash,
@@ -68,7 +68,7 @@ impl LabSourceEngine {
         })
     }
 
-    /// Serves a block request safely according to protocol bounds.
+    /// Sirve una petición de bloque de forma segura según los límites del protocolo.
     pub fn serve_block(&self, file_hash: &[u8; 16], start_offset: u64, length: u32) -> LabMessage {
         let file = match self.files.get(file_hash) {
             Some(f) => f,

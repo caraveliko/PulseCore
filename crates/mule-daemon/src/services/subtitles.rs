@@ -13,13 +13,13 @@ use tracing::{info, warn};
 use crate::services::media_probe::probe_video_file;
 use crate::state::AppState;
 
-/// Taille minimale de fichier requise pour le hash OpenSubtitles 64-bit (128 Ko).
+/// Tamaño mínimo de archivo requerido para el hash de 64 bits de OpenSubtitles (128 KiB).
 const MIN_OPENSUBTITLES_HASH_FILE_SIZE: u64 = 131_072;
-/// Nombre de mots 64-bit lus au début et à la fin du fichier (64 Ko = 8192 * 8 octets).
+/// Número de palabras de 64 bits leídas al inicio y al final del archivo (64 KiB = 8192 * 8 bytes).
 const OPENSUBTITLES_CHUNK_WORDS: usize = 8192;
-/// Décalage de fin pour les 64 derniers Ko.
+/// Desplazamiento final para los últimos 64 KiB.
 const OPENSUBTITLES_END_OFFSET: i64 = -65_536;
-/// Timeout HTTP pour OpenSubtitles (en secondes).
+/// Tiempo de espera HTTP para OpenSubtitles (en segundos).
 const OPENSUBTITLES_HTTP_TIMEOUT_SECS: u64 = 10;
 
 static SUBTITLE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -70,7 +70,7 @@ struct OpenSubtitlesRawItem {
     sub_hearing_impaired: Option<String>,
 }
 
-/// Computes the standard OpenSubtitles 64-bit hash (first 64KB + last 64KB + filesize)
+/// Calcula el hash estándar de 64 bits de OpenSubtitles (primeros 64 KiB + últimos 64 KiB + tamaño de archivo)
 pub fn compute_opensubtitles_hash(path: &Path) -> std::io::Result<(String, u64)> {
     let mut file = File::open(path)?;
     let file_size = file.metadata()?.len();
@@ -84,13 +84,13 @@ pub fn compute_opensubtitles_hash(path: &Path) -> std::io::Result<(String, u64)>
     let mut hash = file_size;
     let mut buf = [0u8; 8];
 
-    // Read first 64 KB (8192 64-bit words)
+    // Leer primeros 64 KiB (8192 palabras de 64 bits)
     for _ in 0..OPENSUBTITLES_CHUNK_WORDS {
         file.read_exact(&mut buf)?;
         hash = hash.wrapping_add(u64::from_le_bytes(buf));
     }
 
-    // Seek to last 64 KB
+    // Desplazarse a los últimos 64 KiB
     file.seek(SeekFrom::End(OPENSUBTITLES_END_OFFSET))?;
     for _ in 0..OPENSUBTITLES_CHUNK_WORDS {
         file.read_exact(&mut buf)?;
@@ -100,7 +100,7 @@ pub fn compute_opensubtitles_hash(path: &Path) -> std::io::Result<(String, u64)>
     Ok((format!("{:016x}", hash), file_size))
 }
 
-/// Version asynchrone non-bloquante (`spawn_blocking`) du calcul de hash OpenSubtitles.
+/// Versión asíncrona no bloqueante (`spawn_blocking`) del cálculo de hash de OpenSubtitles.
 pub async fn compute_opensubtitles_hash_async(path: &Path) -> std::io::Result<(String, u64)> {
     let p = path.to_path_buf();
     tokio::task::spawn_blocking(move || compute_opensubtitles_hash(&p))
@@ -108,13 +108,13 @@ pub async fn compute_opensubtitles_hash_async(path: &Path) -> std::io::Result<(S
         .unwrap_or_else(|e| Err(std::io::Error::other(e)))
 }
 
-/// Decode subtitle bytes converting legacy Windows-1252 / ISO-8859-1 encodings into clean UTF-8
+/// Decodifica bytes de subtítulos convirtiendo codificaciones heredadas Windows-1252 / ISO-8859-1 a UTF-8 limpio
 pub fn decode_subtitle_bytes(raw: &[u8]) -> String {
     if let Ok(s) = std::str::from_utf8(raw) {
         return s.strip_prefix('\u{feff}').unwrap_or(s).to_string();
     }
 
-    // Windows-1252 / ISO-8859-1 character table mapping
+    // Mapeo de tabla de caracteres Windows-1252 / ISO-8859-1
     raw.iter()
         .map(|&b| match b {
             0x80 => '€',
@@ -152,7 +152,7 @@ pub fn decode_subtitle_bytes(raw: &[u8]) -> String {
 pub struct SubtitleService;
 
 impl SubtitleService {
-    /// Detect which companion subtitle files already exist alongside the video file
+    /// Detecta qué archivos de subtítulos complementarios ya existen junto al archivo de vídeo
     pub fn detect_existing_subtitles(video_path: &Path) -> Vec<String> {
         let parent = match video_path.parent() {
             Some(p) => p,
@@ -200,7 +200,7 @@ impl SubtitleService {
             .unwrap_or_default()
     }
 
-    /// Search subtitle candidates on OpenSubtitles REST API
+    /// Busca candidatos a subtítulos en la API REST de OpenSubtitles
     pub async fn search_subtitles(
         video_path: Option<&Path>,
         title: &str,
@@ -218,7 +218,7 @@ impl SubtitleService {
 
         let client = subtitle_http_client();
 
-        // Strategy 1: Hash match (100% sync, non-blocking I/O)
+        // Estrategia 1: Coincidencia por hash (100% sincronizado, E/S no bloqueante)
         if let Some(p) = video_path {
             if let Ok((hash, _size)) = compute_opensubtitles_hash_async(p).await {
                 let url = format!(
@@ -238,7 +238,7 @@ impl SubtitleService {
             }
         }
 
-        // Strategy 2: IMDb ID match
+        // Estrategia 2: Coincidencia por ID de IMDb
         if let Some(imdb) = imdb_id {
             let clean_imdb = imdb.trim_start_matches("tt");
             if !clean_imdb.is_empty() {
@@ -259,7 +259,7 @@ impl SubtitleService {
             }
         }
 
-        // Strategy 3: Text query match
+        // Estrategia 3: Coincidencia por consulta de texto
         let clean_title = title.replace([':', '/', '\\', '(', ')', '[', ']', '.', '_', '-'], " ")
             .split_whitespace()
             .collect::<Vec<_>>()
@@ -328,7 +328,7 @@ impl SubtitleService {
             .collect()
     }
 
-    /// Download a subtitle from a URL, decompress gzip if needed, decode to UTF-8, and save to target path
+    /// Descarga un subtítulo desde una URL, descomprime gzip si es necesario, decodifica a UTF-8 y guarda en la ruta de destino
     pub async fn download_and_save_subtitle(
         download_url: &str,
         target_srt_path: &Path,
@@ -339,7 +339,7 @@ impl SubtitleService {
 
         let target_buf = target_srt_path.to_path_buf();
         tokio::task::spawn_blocking(move || -> Result<(), String> {
-            // Gzip decompression if required
+            // Descompresión gzip si es requerida
             let raw_data = if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
                 let mut gz = GzDecoder::new(&bytes[..]);
                 let mut out = Vec::new();
@@ -350,10 +350,10 @@ impl SubtitleService {
                 bytes.to_vec()
             };
 
-            // Normalize character encoding (Windows-1252/ISO-8859-1 -> UTF-8)
+            // Normalizar codificación de caracteres (Windows-1252/ISO-8859-1 -> UTF-8)
             let utf8_text = decode_subtitle_bytes(&raw_data);
 
-            // Ensure parent directory exists
+            // Asegurar que el directorio contenedor exista
             if let Some(parent) = target_buf.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("Failed to create subtitle dir: {e}"))?;
@@ -374,7 +374,7 @@ impl SubtitleService {
         Ok(())
     }
 
-    /// Auto-fetch companion subtitle for a newly organized video file
+    /// Obtiene automáticamente el subtítulo complementario para un archivo de vídeo recién organizado
     pub async fn auto_fetch_for_video(
         video_path: &Path,
         title: &str,
@@ -395,7 +395,7 @@ impl SubtitleService {
             return Ok(None);
         }
 
-        // Vérifier via MediaProbe si le conteneur embarque déjà des sous-titres espagnols ET de l'audio espagnol
+        // Comprobar mediante MediaProbe si el contenedor ya incorpora subtítulos en español Y audio en español
         if normalized_lang == "es" {
             let probe = probe_video_file(video_path).await;
             if probe.has_spanish_subtitles && probe.has_spanish_audio {
@@ -423,9 +423,9 @@ impl SubtitleService {
             return Ok(None);
         }
 
-        // Pick the best candidate:
-        // 1. Matched by moviehash (perfect sync)
-        // 2. Otherwise sort by highest download count
+        // Elegir el mejor candidato:
+        // 1. Coincidencia por moviehash (sincronización perfecta)
+        // 2. En caso contrario, ordenar por mayor recuento de descargas
         let best = candidates
             .iter()
             .find(|c| c.matched_by == "moviehash")
@@ -438,11 +438,11 @@ impl SubtitleService {
         Ok(Some(target_srt))
     }
 
-    /// Sweep entire media library (movies + TV episodes) and auto-fetch missing Spanish subtitles
+    /// Barre toda la mediateca (películas + episodios de TV) y obtiene automáticamente los subtítulos en español faltantes
     pub async fn auto_fetch_all_missing(state: &AppState, lang: &str) -> Value {
         let mut downloaded = Vec::new();
 
-        // 1. Snapshot unique de la base SQLite (movies + shows + episodes complétés)
+        // 1. Instantánea única de la base SQLite (películas + series + episodios completados)
         let (movies, completed_episodes) = {
             let dl_svc = state.downloads.lock().await;
             let db = dl_svc.db();

@@ -63,21 +63,21 @@ impl TransmissionResponse {
     }
 }
 
-/// Convert a download UUID into a deterministic positive 31-bit integer ID for Transmission clients.
+/// Convierte el UUID de una descarga en un identificador entero positivo de 31 bits determinista para los clientes Transmission.
 pub fn uuid_to_transmission_id(id: &Uuid) -> i64 {
     let bytes = id.as_bytes();
     let n = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
     (n & 0x7FFF_FFFF) as i64
 }
 
-/// Main Axum handler for `/transmission/rpc`.
-/// Handles both GET (for simple checks) and POST (JSON-RPC).
+/// Manejador principal de Axum para `/transmission/rpc`.
+/// Gestiona tanto GET (para comprobaciones simples) como POST (JSON-RPC).
 pub async fn handle_transmission_rpc(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    // 0. Validate optional credentials (or mandatory when bound to non-loopback)
+    // 0. Validar credenciales opcionales (o requeridas cuando se vincula a interfaces distintas de loopback)
     let expected_token = state.config.auth_token.as_str();
     let is_loopback_bind = state.config.bind_addr.ip().is_loopback();
     if let Some(auth_val) = headers
@@ -116,8 +116,8 @@ pub async fn handle_transmission_rpc(
             .into_response();
     }
 
-    // 1. Enforce CSRF header check (X-Transmission-Session-Id)
-    // Sonarr/Radarr expects HTTP 409 Conflict with the active session token header on initial handshake.
+    // 1. Aplicar comprobación de cabecera CSRF (X-Transmission-Session-Id)
+    // Sonarr/Radarr esperan HTTP 409 Conflict con la cabecera del token de sesión activo en la negociación inicial.
     let expected_session = state.instance_id.to_string();
     let client_session = headers
         .get(TRANSMISSION_SESSION_HEADER)
@@ -125,10 +125,10 @@ pub async fn handle_transmission_rpc(
 
     match client_session {
         Some(s) if s == expected_session => {
-            // Token matches, continue
+            // El token coincide, continuar
         }
         _ => {
-            // Mismatch or missing: Return 409 Conflict with header so client captures it and retries
+            // Discrepancia o ausente: devolver 409 Conflict con la cabecera para que el cliente la capture y reintente
             return (
                 StatusCode::CONFLICT,
                 [(TRANSMISSION_SESSION_HEADER, expected_session)],
@@ -138,9 +138,9 @@ pub async fn handle_transmission_rpc(
         }
     }
 
-    // 2. Parse request payload
+    // 2. Analizar carga útil de la petición
     if body.is_empty() {
-        // Empty body or GET request after CSRF validated: return session-get default
+        // Cuerpo vacío o petición GET tras validar CSRF: devolver valor predeterminado de session-get
         let resp = handle_session_get(&state, None).await;
         return (
             StatusCode::OK,
@@ -321,7 +321,7 @@ async fn handle_torrent_get(
         .to_string_lossy()
         .to_string();
 
-    // 1. Process eD2k Downloads from mule-core
+    // 1. Procesar descargas eD2k desde mule-core
     for d in details {
         let numeric_id = uuid_to_transmission_id(&d.snapshot.id);
         let hash_lower = d.snapshot.ed2k_hash.to_lowercase();
@@ -414,7 +414,7 @@ async fn handle_torrent_get(
         torrents.push(torrent_obj);
     }
 
-    // 2. Process BitTorrent Downloads from mule-torrent
+    // 2. Procesar descargas BitTorrent desde mule-torrent
     if let Some(engine) = state.torrent.get() {
         for t in engine.list() {
             let numeric_id = (t.id as i64) + TORRENT_ID_OFFSET;
@@ -569,7 +569,7 @@ async fn handle_torrent_add(
         .and_then(|arr| arr.first())
         .and_then(|v| v.as_str());
 
-    // 1. Check for Base64 encoded .torrent payload (metainfo)
+    // 1. Comprobar si hay carga útil de .torrent codificada en Base64 (metainfo)
     if let Some(metainfo_b64) = args["metainfo"].as_str() {
         if let Ok(bytes) = BASE64.decode(metainfo_b64.as_bytes()) {
             let engine = match state.torrent_engine().await {
@@ -617,7 +617,7 @@ async fn handle_torrent_add(
         }
     };
 
-    // 2. Check for padded eD2k magnet URI (amutorrent / Torznab compatibility)
+    // 2. Comprobar URI magnet eD2k con relleno (compatibilidad con amutorrent / Torznab)
     let link_str = if let Some(ed2k_link) = parse_padded_magnet_to_ed2k(filename) {
         ed2k_link
     } else if filename.starts_with("magnet:") || filename.contains("xt=urn:btih:") || filename.ends_with(".torrent") {
@@ -666,7 +666,7 @@ let end = text[pos..]
                         .unwrap_or(text.len() - pos);
                     text[pos..pos + end].to_string()
                 } else if text.starts_with("magnet:") {
-                    // Redirected to a magnet link!
+                    // ¡Redirigido a un enlace magnet!
                     let engine = match state.torrent_engine().await {
                         Ok(eng) => eng,
                         Err(e) => {
@@ -719,7 +719,7 @@ let end = text[pos..]
         .map(PathBuf::from)
         .unwrap_or_else(|| state.config.default_download_dir.clone());
 
-    // Enqueue download in DownloadService via add_ed2k_link
+    // Encolar descarga en DownloadService mediante add_ed2k_link
     let mut dl = state.downloads.lock().await;
     match dl.add_ed2k_link(
         &link_str,
@@ -767,7 +767,7 @@ async fn handle_torrent_start(
 ) -> TransmissionResponse {
     let ids_val = &args["ids"];
 
-    // 1. Resume eD2k downloads
+    // 1. Reanudar descargas eD2k
     let mut dl = state.downloads.lock().await;
     let all = dl.list_download_details();
     for d in all {
@@ -776,7 +776,7 @@ async fn handle_torrent_start(
         }
     }
 
-    // 2. Resume BitTorrent downloads
+    // 2. Reanudar descargas BitTorrent
     if let Some(engine) = state.torrent.get() {
         for t in engine.list() {
             let numeric_id = (t.id as i64) + TORRENT_ID_OFFSET;
@@ -796,7 +796,7 @@ async fn handle_torrent_stop(
 ) -> TransmissionResponse {
     let ids_val = &args["ids"];
 
-    // 1. Pause eD2k downloads
+    // 1. Pausar descargas eD2k
     let mut dl = state.downloads.lock().await;
     let all = dl.list_download_details();
     for d in all {
@@ -805,7 +805,7 @@ async fn handle_torrent_stop(
         }
     }
 
-    // 2. Pause BitTorrent downloads
+    // 2. Pausar descargas BitTorrent
     if let Some(engine) = state.torrent.get() {
         for t in engine.list() {
             let numeric_id = (t.id as i64) + TORRENT_ID_OFFSET;
@@ -826,7 +826,7 @@ async fn handle_torrent_remove(
     let ids_val = &args["ids"];
     let delete_local_data = args["delete-local-data"].as_bool().unwrap_or(false);
 
-    // 1. Remove eD2k downloads
+    // 1. Eliminar descargas eD2k
     let mut dl = state.downloads.lock().await;
     let all = dl.list_download_details();
     for d in all {
@@ -835,7 +835,7 @@ async fn handle_torrent_remove(
         }
     }
 
-    // 2. Remove BitTorrent downloads
+    // 2. Eliminar descargas BitTorrent
     if let Some(engine) = state.torrent.get() {
         for t in engine.list() {
             let numeric_id = (t.id as i64) + TORRENT_ID_OFFSET;
@@ -892,7 +892,7 @@ fn match_torrent_id(
     } else if let Some(s) = ids_val.as_str() {
         s.eq_ignore_ascii_case(&hash_lower) || s.eq_ignore_ascii_case(&uuid_str)
     } else {
-        // If ids is omitted, Transmission operates on all torrents
+        // Si se omite ids, Transmission opera sobre todos los torrents
         true
     }
 }

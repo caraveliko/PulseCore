@@ -8,114 +8,114 @@ use std::time::Duration;
 use super::super::error::{Ed2kEncodeError, Ed2kParseError};
 use super::super::peer_info::Ed2kPeerInfo;
 
-/// Category of an eD2K session protocol violation or failure.
+/// Categoría de una violación de protocolo o fallo de sesión eD2K.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Ed2kSessionError {
-    /// An unexpected message arrived for the current session state.
+    /// Llegó un mensaje inesperado para el estado actual de la sesión.
     #[error("Unexpected opcode 0x{opcode:02X} in state {state}")]
     UnexpectedMessageInState {
-        /// Current state name.
+        /// Nombre del estado actual.
         state: &'static str,
-        /// Operation code received.
+        /// Código de operación recibido.
         opcode: u8,
     },
 
-    /// Hello was received more than once.
+    /// Se recibió Hello más de una vez.
     #[error("Double Hello rejected: session already initialized")]
     DoubleHello,
 
-    /// HelloAnswer was received when a Hello was expected first.
+    /// Se recibió HelloAnswer cuando se esperaba un Hello primero.
     #[error("HelloAnswer received before Hello")]
     HelloAnswerBeforeHello,
 
-    /// A required tag was missing or invalid.
+    /// Falta una etiqueta obligatoria o no es válida.
     #[error("Missing mandatory tag: {0}")]
     MissingRequiredTag(&'static str),
 
-    /// Incompatible peer version or capabilities.
+    /// Versión o capacidades del par incompatibles.
     #[error("Incompatible peer version")]
     IncompatiblePeer,
 
-    /// Remote peer provided an invalid user hash (all zeros).
+    /// El par remoto proporcionó un hash de usuario no válido (todo ceros).
     #[error("Invalid user hash: cannot be all zeros")]
     ZeroUserHash,
 
-    /// Attempted to send a request before the session entered the Ready state.
+    /// Intento de enviar una petición antes de que la sesión entrara en el estado Ready.
     #[error("Cannot send request before session is Ready (current state: {0})")]
     RequestBeforeReady(&'static str),
 
-    /// Received a response before the session entered the Ready state.
+    /// Se recibió una respuesta antes de que la sesión entrara en el estado Ready.
     #[error("Received response before session is Ready (current state: {0})")]
     ResponseBeforeReady(&'static str),
 
-    /// Received a file status without an in-flight request or with mismatched hash.
+    /// Se recibió un estado de archivo sin una petición en curso o con un hash no coincidente.
     #[error("Unsolicited file status received for hash {0}")]
     UnsolicitedFileStatus(String),
 
-    /// Remote peer reported it does not have the requested file (OP_FILEREQANSNOFILE).
+    /// El par remoto informó de que no tiene el archivo solicitado (OP_FILEREQANSNOFILE).
     #[error("Remote peer does not have requested file: {0}")]
     FileNotFound(String),
 
-    /// A duplicate file status request was initiated for an already in-flight file hash.
+    /// Se inició una petición de estado de archivo duplicada para un hash de archivo que ya estaba en curso.
     #[error("Duplicate file status request for hash {0}")]
     DuplicateFileStatusRequest(String),
 
-    /// In-flight requests exceeded the maximum allowed capacity.
+    /// Las peticiones en curso superaron la capacidad máxima permitida.
     #[error("Too many pending file status requests (capacity: {0})")]
     TooManyPendingRequests(usize),
 
-    /// Received a block without an in-flight request or with mismatched hash/range.
+    /// Se recibió un bloque sin una petición en curso o con hash/rango no coincidente.
     #[error("Unsolicited block received: {0}")]
     UnsolicitedBlock(String),
 
-    /// A duplicate or overlapping block request was initiated.
+    /// Se inició una petición de bloque duplicada o superpuesta.
     #[error("Duplicate or overlapping block request: {0}")]
     DuplicateBlockRequest(String),
 
-    /// A duplicate block chunk was received.
+    /// Se recibió un fragmento de bloque duplicado.
     #[error("Duplicate block received: {0}")]
     DuplicateBlock(String),
 
-    /// In-flight block requests exceeded the maximum allowed capacity.
+    /// Las peticiones de bloque en curso superaron la capacidad máxima permitida.
     #[error("Too many pending block requests (capacity: {0})")]
     TooManyPendingBlockRequests(usize),
 
-    /// Block request timed out.
+    /// Expiró el tiempo de espera de la petición de bloque.
     #[error("Block request timed out: {0}")]
     BlockTimeout(String),
 
-    /// Invalid block request parameters.
+    /// Parámetros de petición de bloque no válidos.
     #[error("Invalid block request: {0}")]
     InvalidBlockRequest(String),
 
-    /// Malformed packet structure.
+    /// Estructura de paquete mal formada.
     #[error("Malformed packet: {0}")]
     Malformed(String),
 
-    /// Parse failure on incoming wire buffer.
+    /// Fallo de análisis en el búfer de cable entrante.
     #[error("Parse error: {0}")]
     Parse(String),
 
-    /// Unexpected or unsupported wire protocol byte.
+    /// Byte de protocolo de cable inesperado o no compatible.
     #[error("Unexpected protocol byte 0x{protocol:02X} (expected 0xE3 PR_ED2K or 0xC5 PR_EMULE)")]
     UnexpectedProtocol {
-        /// Rejected protocol byte.
+        /// Byte de protocolo rechazado.
         protocol: u8,
     },
 
-    /// Compressed frame 0xD4 (PR_EMULE_COMPRESSED) is not supported.
+    /// Trama comprimida 0xD4 (PR_EMULE_COMPRESSED) no admitida.
     #[error("Compressed protocol 0xD4 (PR_EMULE_COMPRESSED) is not supported")]
     CompressedProtocolUnsupported,
 
-    /// Handshake negotiation timeout elapsed.
+    /// Expiró el tiempo de espera de negociación del protocolo de enlace.
     #[error("Handshake timeout after {0:?}")]
     Timeout(Duration),
 
-    /// File status request timed out.
+    /// Expiró el tiempo de espera de la petición de estado del archivo.
     #[error("File status request timed out for hash {0}")]
     FileStatusTimeout(String),
 
-    /// Connection reset or I/O failure.
+    /// Reinicio de conexión o fallo de E/S.
     #[error("I/O error: {0}")]
     Io(String),
 }
@@ -132,38 +132,38 @@ impl From<Ed2kEncodeError> for Ed2kSessionError {
     }
 }
 
-/// Lifecycle states of an eD2K peer session.
+/// Estados del ciclo de vida de una sesión entre pares eD2K.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ed2kSessionState {
-    /// Initial disconnected state.
+    /// Estado inicial desconectado.
     Disconnected,
-    /// Actively establishing transport connection.
+    /// Estableciendo activamente la conexión de transporte.
     Connecting,
-    /// Listener waiting for the initiator's `OP_HELLO`.
+    /// Oyente a la espera del `OP_HELLO` del iniciador.
     AwaitingHello,
-    /// Initiator waiting for the receiver's `OP_HELLO_ANSWER`.
+    /// Iniciador a la espera del `OP_HELLO_ANSWER` del receptor.
     AwaitingHelloAnswer {
-        /// Local user hash identifying this client instance in the handshake.
+        /// Hash de usuario local que identifica esta instancia de cliente en el protocolo de enlace.
         local_handshake_id: [u8; 16],
     },
-    /// Handshake successfully completed, ready for peer operations.
+    /// Protocolo de enlace completado con éxito, listo para operaciones de pares.
     Ready {
-        /// Negotiated remote peer identity and metadata.
+        /// Identidad y metadatos del par remoto negociados.
         peer: Ed2kPeerInfo,
     },
-    /// Gracefully closing the session.
+    /// Cerrando la sesión de forma ordenada.
     Closing,
-    /// Cleanly terminated session.
+    /// Sesión terminada limpiamente.
     Closed,
-    /// Irreversible terminal error state.
+    /// Estado de error terminal irreversible.
     Failed {
-        /// Reason for failure.
+        /// Motivo del fallo.
         reason: Ed2kSessionError,
     },
 }
 
 impl Ed2kSessionState {
-    /// Returns a human-readable display string for this state.
+    /// Devuelve una cadena de texto legible para mostrar este estado.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Disconnected => "Disconnected",
@@ -178,17 +178,17 @@ impl Ed2kSessionState {
     }
 }
 
-/// Pure deterministic snapshot capturing the protocol and tracker state of a session.
+/// Instantánea determinista pura que captura el estado del protocolo y del rastreador de una sesión.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionSnapshot {
-    /// Lifecycle state name.
+    /// Nombre del estado del ciclo de vida.
     pub state_name: &'static str,
-    /// Whether session is fully established and ready for data transfer.
+    /// Si la sesión está completamente establecida y lista para la transferencia de datos.
     pub is_ready: bool,
-    /// Active in-flight file status request count.
+    /// Recuento de peticiones de estado de archivo en curso activas.
     pub pending_status_count: usize,
-    /// Active in-flight block request count.
+    /// Recuento de peticiones de bloque en curso activas.
     pub pending_block_count: usize,
-    /// Count of unhandled / raw packets received.
+    /// Recuento de paquetes no gestionados o sin procesar recibidos.
     pub unhandled_packets_count: usize,
 }

@@ -82,7 +82,7 @@ pub async fn handle_lab_add_peer_source(
         .parse()
         .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid socket address: {e}")))?;
 
-    // Spawn the lab downloader task
+    // Lanzar la tarea del descargador de laboratorio
     let state_clone = state.clone();
     let handle = tokio::spawn(async move {
         if let Err(e) = crate::lab::run_lab_download(id, peer_addr, state_clone).await {
@@ -441,8 +441,8 @@ pub async fn handle_lab_cleanup_test_data(state: &AppState) -> Result<Value, Jso
         Err(_) => state.config.data_dir.clone(),
     };
 
-    // Strict allowlist: only fixtures, temp, and part are eligible for cleanup.
-    // Downloads and incoming files are sanctified and never touched.
+    // Lista blanca estricta: solo fixtures, temp y part son susceptibles de limpieza.
+    // Las descargas y los archivos entrantes están protegidos y nunca se tocan.
     let allowed_subfolders = ["fixtures", "temp", "part"];
     let mut cleaned_folders = Vec::new();
     let mut deleted_files_count: usize = 0;
@@ -454,7 +454,7 @@ pub async fn handle_lab_cleanup_test_data(state: &AppState) -> Result<Value, Jso
             continue;
         }
 
-        // Verify target path does not escape canonical workdir
+        // Verificar que la ruta de destino no escape del workdir canónico
         if let Ok(canonical_target) = target_dir.canonicalize() {
             if !canonical_target.starts_with(&canonical_workdir) {
                 tracing::warn!(
@@ -468,7 +468,7 @@ pub async fn handle_lab_cleanup_test_data(state: &AppState) -> Result<Value, Jso
             }
         }
 
-        // Check symlinks / reparse points on the directory itself (do not traverse)
+        // Comprobar enlaces simbólicos / puntos de reanálisis en el propio directorio (no recorrer)
         if let Ok(meta) = std::fs::symlink_metadata(&target_dir) {
             if meta.file_type().is_symlink() {
                 tracing::warn!(
@@ -495,7 +495,7 @@ pub async fn handle_lab_cleanup_test_data(state: &AppState) -> Result<Value, Jso
                             deleted_files_count += 1;
                         }
                     } else if meta.is_dir() {
-                        // Subdirectory inside allowed folder
+                        // Subdirectorio dentro de la carpeta permitida
                         if let Ok(sub_entries) = std::fs::read_dir(&entry_path) {
                             for sub_entry in sub_entries.flatten() {
                                 let sub_path = sub_entry.path();
