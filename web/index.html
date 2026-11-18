@@ -1770,6 +1770,161 @@
       vertical-align: middle;
     }
 
+    /* Monitor detallado de ancho de banda */
+    #statusbar-speed-pill {
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    #statusbar-speed-pill:hover {
+      background: rgba(56, 189, 248, 0.08);
+      border-color: rgba(56, 189, 248, 0.28);
+    }
+    .bw-modal-dialog {
+      max-width: 980px;
+      width: 94vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .bw-modal-body {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-right: 2px;
+    }
+    .bw-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .bw-kpi-card {
+      background: var(--card-sub);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .bw-kpi-title {
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .bw-kpi-main {
+      font-size: 1.38rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      line-height: 1.15;
+    }
+    .bw-kpi-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+    .bw-kpi-meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .bw-kpi-meta-row span:last-child {
+      font-family: var(--font-mono);
+      color: #e2e8f0;
+      text-align: right;
+    }
+    .bw-chart-card {
+      background: var(--card-sub);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .bw-chart-wrap {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+    .bw-y-axis {
+      width: 72px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: right;
+      padding: 4px 8px 4px 0;
+      font-family: var(--font-mono);
+      font-size: 0.71rem;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .bw-svg-box {
+      flex: 1;
+      min-width: 0;
+      height: 220px;
+      position: relative;
+      background: rgba(6, 9, 15, 0.72);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .bw-x-axis {
+      display: flex;
+      justify-content: space-between;
+      padding-left: 72px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .bw-split-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .bw-list-card {
+      background: var(--card-sub);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .bw-transfer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 185px;
+      overflow-y: auto;
+    }
+    .bw-transfer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 0.78rem;
+      min-width: 0;
+    }
+
     /* Media Library (Cine & Series / Servarr NATIVO) */
     .media-grid {
       display: grid;
@@ -2394,6 +2549,21 @@
       .modal-footer button {
         width: 100% !important;
         padding: 10px !important;
+      }
+
+      /* Monitor detallado de ancho de banda en móvil/tablet */
+      .bw-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+      .bw-split-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .bw-y-axis {
+        width: 56px !important;
+        font-size: 0.65rem !important;
+      }
+      .bw-x-axis {
+        padding-left: 56px !important;
       }
 
       /* Barra de estado inferior móvil */
@@ -3873,7 +4043,7 @@
 
     <!-- Centro: Ancho de Banda y Transferencias Globales -->
     <div class="bottom-statusbar-section">
-      <div class="bottom-item hover-tip-cell" data-tip-type="header-speed" title="Velocidades globales de bajada y subida" style="gap: 8px;">
+      <div class="bottom-item hover-tip-cell" id="statusbar-speed-pill" data-tip-type="header-speed" onclick="openBandwidthModal()" title="Velocidades globales de bajada y subida: Clic para abrir gráfica detallada y telemetría" style="gap: 8px;">
         <!-- Down -->
         <div style="display: flex; align-items: center; gap: 4px;">
           <span style="color: #38bdf8; display: inline-flex; align-items: center;">
@@ -4088,6 +4258,186 @@
 
       <div class="modal-footer" style="margin-top: 15px;">
         <button class="btn btn-primary" id="btn-refresh-nas-modal">🔄 Actualizar datos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MONITOR DETALLADO DE ANCHO DE BANDA Y TRÁFICO P2P -->
+  <div class="modal-overlay" id="bandwidth-details-modal" onclick="if (event.target === this) closeBandwidthModal()">
+    <div class="modal bw-modal-dialog">
+      <!-- Cabecera del Monitor -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; gap: 10px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.08rem;">
+            <span>📈</span>
+            <span>Monitor de Ancho de Banda y Tráfico P2P</span>
+          </h3>
+          <span class="badge badge-completed" id="bw-modal-badge">🟢 Sin límites</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-sm" id="btn-bw-turtle-toggle" onclick="toggleTurtleMode()" title="Conmutar Modo Tortuga (500 kB/s bajada / 100 kB/s subida)">🐢 Modo Tortuga: OFF</button>
+          <button class="btn btn-sm" id="btn-close-bw-modal" onclick="closeBandwidthModal()" style="padding: 4px 10px; font-size: 1rem; line-height: 1;" title="Cerrar monitor">✕</button>
+        </div>
+      </div>
+
+      <div class="bw-modal-body">
+        <!-- Fila de 4 tarjetas KPI -->
+        <div class="bw-kpi-grid">
+          <!-- KPI 1: Bajada Global -->
+          <div class="bw-kpi-card">
+            <div class="bw-kpi-title">
+              <span style="color: #38bdf8;">⬇️ Bajada Global</span>
+            </div>
+            <div class="bw-kpi-main" id="bw-cur-down" style="color: #38bdf8;">0 B/s</div>
+            <div class="bw-kpi-meta">
+              <div class="bw-kpi-meta-row"><span>Pico sesión:</span><span id="bw-peak-down">0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Media ventana:</span><span id="bw-avg-down">0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Protocolos:</span><span id="bw-proto-down">eD2K: 0 B/s | BT: 0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Límite efectivo:</span><span id="bw-limit-down">Sin límite</span></div>
+            </div>
+          </div>
+
+          <!-- KPI 2: Subida Global -->
+          <div class="bw-kpi-card">
+            <div class="bw-kpi-title">
+              <span style="color: #34d399;">⬆️ Subida Global</span>
+            </div>
+            <div class="bw-kpi-main" id="bw-cur-up" style="color: #34d399;">0 B/s</div>
+            <div class="bw-kpi-meta">
+              <div class="bw-kpi-meta-row"><span>Pico sesión:</span><span id="bw-peak-up">0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Media ventana:</span><span id="bw-avg-up">0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Protocolos:</span><span id="bw-proto-up">eD2K: 0 B/s | BT: 0 B/s</span></div>
+              <div class="bw-kpi-meta-row"><span>Límite efectivo:</span><span id="bw-limit-up">Sin límite</span></div>
+            </div>
+          </div>
+
+          <!-- KPI 3: Volumen de Sesión -->
+          <div class="bw-kpi-card">
+            <div class="bw-kpi-title">
+              <span style="color: #e2e8f0;">📊 Volumen de Sesión</span>
+            </div>
+            <div class="bw-kpi-main" id="bw-sess-ratio" style="color: #f8fafc;">Ratio 0.00</div>
+            <div class="bw-kpi-meta">
+              <div class="bw-kpi-meta-row"><span>Descargado:</span><span id="bw-sess-down" style="color: #38bdf8;">0 B</span></div>
+              <div class="bw-kpi-meta-row"><span>Subido:</span><span id="bw-sess-up" style="color: #34d399;">0 B</span></div>
+              <div class="bw-kpi-meta-row"><span>Ventana capturada:</span><span id="bw-sess-samples">0 muestras (0s)</span></div>
+            </div>
+          </div>
+
+          <!-- KPI 4: Acumulado Histórico y Enjambre -->
+          <div class="bw-kpi-card">
+            <div class="bw-kpi-title">
+              <span style="color: #c084fc;">🌐 Histórico y Enjambre</span>
+            </div>
+            <div class="bw-kpi-main" id="bw-life-ratio" style="color: #c084fc;">Ratio 0.00</div>
+            <div class="bw-kpi-meta">
+              <div class="bw-kpi-meta-row"><span>Total descargado:</span><span id="bw-life-down">--</span></div>
+              <div class="bw-kpi-meta-row"><span>Total subido:</span><span id="bw-life-up">--</span></div>
+              <div class="bw-kpi-meta-row"><span>Pares / Fuentes:</span><span id="bw-active-peers">0 conectados</span></div>
+              <div class="bw-kpi-meta-row"><span>Ranuras subida:</span><span id="bw-upload-slots">0 activas • 0 en cola</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráfica SVG Detallada e Interactiva -->
+        <div class="bw-chart-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">● Bajada</span>
+              <span style="font-size: 0.78rem; color: #34d399; font-weight: 600;">● Subida</span>
+              <span id="bw-chart-hover-info" style="font-size: 0.76rem; color: var(--text-muted); font-family: var(--font-mono);">Pasa el cursor sobre la gráfica para inspeccionar un instante</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <div class="filter-group" id="bw-series-group">
+                <button class="filter-btn active" data-bw-series="both" onclick="setBandwidthSeries('both')">Ambas (↓↑)</button>
+                <button class="filter-btn" data-bw-series="down" onclick="setBandwidthSeries('down')">Solo Bajada (↓)</button>
+                <button class="filter-btn" data-bw-series="up" onclick="setBandwidthSeries('up')">Solo Subida (↑)</button>
+              </div>
+              <div class="filter-group" id="bw-window-group">
+                <button class="filter-btn" data-bw-window="30" onclick="setBandwidthWindow(30)">1 min</button>
+                <button class="filter-btn active" data-bw-window="60" onclick="setBandwidthWindow(60)">2 min</button>
+                <button class="filter-btn" data-bw-window="150" onclick="setBandwidthWindow(150)">5 min</button>
+                <button class="filter-btn" data-bw-window="300" onclick="setBandwidthWindow(300)">10 min</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bw-chart-wrap">
+            <div class="bw-y-axis">
+              <span id="bw-y-100">10.0 kB/s</span>
+              <span id="bw-y-75">7.5 kB/s</span>
+              <span id="bw-y-50">5.0 kB/s</span>
+              <span id="bw-y-25">2.5 kB/s</span>
+              <span id="bw-y-0">0 B/s</span>
+            </div>
+            <div class="bw-svg-box">
+              <svg id="bw-detail-svg" viewBox="0 0 720 220" preserveAspectRatio="none" style="width: 100%; height: 100%; display: block; cursor: crosshair;" onmousemove="handleBwChartMouseMove(event)" onmouseleave="clearBwChartHover()">
+                <defs>
+                  <linearGradient id="bw-grad-down" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.34" />
+                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02" />
+                  </linearGradient>
+                  <linearGradient id="bw-grad-up" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#34d399" stop-opacity="0.32" />
+                    <stop offset="100%" stop-color="#34d399" stop-opacity="0.02" />
+                  </linearGradient>
+                </defs>
+                <!-- Rejilla horizontal -->
+                <line x1="0" y1="10" x2="720" y2="10" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+                <line x1="0" y1="60" x2="720" y2="60" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+                <line x1="0" y1="110" x2="720" y2="110" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4 4" />
+                <line x1="0" y1="160" x2="720" y2="160" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+                <line x1="0" y1="210" x2="720" y2="210" stroke="rgba(255,255,255,0.1)" />
+                <!-- Rejilla vertical -->
+                <line x1="180" y1="0" x2="180" y2="220" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 4" />
+                <line x1="360" y1="0" x2="360" y2="220" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 4" />
+                <line x1="540" y1="0" x2="540" y2="220" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 4" />
+                <!-- Líneas de referencia de pico en ventana -->
+                <line id="bw-peak-line-down" x1="0" y1="210" x2="720" y2="210" stroke="rgba(56,189,248,0.45)" stroke-width="1" stroke-dasharray="6 4" style="display: none;" />
+                <line id="bw-peak-line-up" x1="0" y1="210" x2="720" y2="210" stroke="rgba(52,211,153,0.45)" stroke-width="1" stroke-dasharray="6 4" style="display: none;" />
+                <!-- Series de bajada y subida -->
+                <path id="bw-down-fill" fill="url(#bw-grad-down)" d="" />
+                <polyline id="bw-down-line" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="" />
+                <path id="bw-up-fill" fill="url(#bw-grad-up)" d="" />
+                <polyline id="bw-up-line" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="" />
+                <!-- Cursor interactivo de inspección -->
+                <line id="bw-hover-line" x1="0" y1="0" x2="0" y2="220" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="3 3" style="display: none;" />
+                <circle id="bw-hover-dot-down" cx="0" cy="0" r="4" fill="#38bdf8" stroke="#08090c" stroke-width="1.5" style="display: none;" />
+                <circle id="bw-hover-dot-up" cx="0" cy="0" r="4" fill="#34d399" stroke="#08090c" stroke-width="1.5" style="display: none;" />
+              </svg>
+            </div>
+          </div>
+          <div class="bw-x-axis">
+            <span id="bw-x-0">-2m</span>
+            <span id="bw-x-1">-1m 30s</span>
+            <span id="bw-x-2">-1m</span>
+            <span id="bw-x-3">-30s</span>
+            <span id="bw-x-4">Ahora</span>
+          </div>
+        </div>
+
+        <!-- Desglose en vivo: Descargas y Subidas activas -->
+        <div class="bw-split-grid">
+          <div class="bw-list-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong style="font-size: 0.84rem; color: #38bdf8;">⬇️ Descargas Activas con Tráfico</strong>
+              <span class="badge badge-dl" id="bw-active-downloads-count">0 activas</span>
+            </div>
+            <div class="bw-transfer-list" id="bw-active-downloads-list">
+              <div style="color: var(--text-muted); font-size: 0.78rem; padding: 12px 0; text-align: center;">Sin descargas transfiriendo en este instante.</div>
+            </div>
+          </div>
+
+          <div class="bw-list-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong style="font-size: 0.84rem; color: #34d399;">⬆️ Subidas y Ranuras Activas</strong>
+              <span class="badge badge-completed" id="bw-active-uploads-count">0 activas • 0 en cola</span>
+            </div>
+            <div class="bw-transfer-list" id="bw-active-uploads-list">
+              <div style="color: var(--text-muted); font-size: 0.78rem; padding: 12px 0; text-align: center;">Sin subidas activas en este instante.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -5011,6 +5361,11 @@
       const lbl = document.getElementById('turtle-status-label');
       const badge = document.getElementById('turtle-tt-badge');
       const desc = document.getElementById('turtle-tt-desc');
+      const bwBtn = document.getElementById('btn-bw-turtle-toggle');
+      if (bwBtn) {
+        bwBtn.textContent = turtleModeActive ? '🐢 Modo Tortuga: ON' : '🐢 Modo Tortuga: OFF';
+        bwBtn.classList.toggle('btn-primary', turtleModeActive);
+      }
       if (!btn) return;
       if (turtleModeActive) {
         btn.classList.add('turtle-active');
@@ -5053,6 +5408,7 @@
           await client.call('limits.set', { downloadLimit: 0, uploadLimit: 0 });
           addLog('info', '🐢 Modo Tortuga desactivado: Restablecida velocidad máxima sin límites.');
         }
+        await refreshBandwidthLimits();
       } catch (e) {
         addLog('error', 'Error configurando límites de velocidad: ' + (e.message || JSON.stringify(e)));
       }
@@ -5286,13 +5642,458 @@
     }
 
 
-    // === SPARKLINES Y SINCRONIZACIÓN DE SIDEBAR ===
+    // === SPARKLINES, MONITOR DETALLADO DE ANCHO DE BANDA Y SINCRONIZACIÓN DE SIDEBAR ===
+    const MAX_BW_HISTORY = 300; // 10 minutos a intervalos de ~2 s
+    const BW_DEFAULT_WINDOW = 60; // 2 minutos por defecto
+    const BW_MIN_SCALE_BPS = 10240; // Escala mínima de 10 kB/s
+
     let downHistory = new Array(15).fill(0);
     let upHistory = new Array(15).fill(0);
-    let perfDownHistory = new Array(60).fill(0);
-    let perfUpHistory = new Array(60).fill(0);
+    let perfDownHistory = new Array(MAX_BW_HISTORY).fill(0);
+    let perfUpHistory = new Array(MAX_BW_HISTORY).fill(0);
+    let bwTimestamps = new Array(MAX_BW_HISTORY).fill(null);
+    let bwSampleCount = 0;
+    let sessionPeakDown = 0;
+    let sessionPeakUp = 0;
+    let lastProtoStats = { ed2kDown: 0, btDown: 0, ed2kUp: 0, btUp: 0 };
+    let cachedUploadsActive = [];
+    let cachedUploadsQueued = [];
+    let cachedLimitsInfo = null;
+    let latestStatsTick = null;
+    let fallbackSessionDownBytes = 0;
+    let fallbackSessionUpBytes = 0;
+    let lastBwSampleMs = null;
+    let totalSourcesCache = 0;
+    let bwWindowSamples = BW_DEFAULT_WINDOW;
+    let bwSeriesMode = 'both';
+    let bwHoverIndex = null;
+    let bwLastChartState = null;
+
+    function formatDurationShort(totalSec) {
+      const s = Math.max(0, Math.round(totalSec));
+      if (s === 0) return 'Ahora';
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      if (m === 0) return `-${rem}s`;
+      return rem === 0 ? `-${m}m` : `-${m}m ${rem}s`;
+    }
+
+    function formatSampleClock(tsMs) {
+      if (!tsMs) return '';
+      const d = new Date(tsMs);
+      return d.toLocaleTimeString('es-ES', { hour12: false });
+    }
+
+    async function refreshBandwidthLimits() {
+      try {
+        cachedLimitsInfo = await client.call('limits.get', {});
+      } catch (e) {
+        // Ignorar silenciosamente si aún no hay conexión RPC
+      }
+      const modal = document.getElementById('bandwidth-details-modal');
+      if (modal && modal.classList.contains('active')) {
+        renderBandwidthModal();
+      }
+    }
+
+    function openBandwidthModal() {
+      const modal = document.getElementById('bandwidth-details-modal');
+      if (!modal) return;
+      hideSmartTooltip();
+      modal.classList.add('active');
+      updateTurtleModeUI();
+      renderBandwidthModal();
+      refreshBandwidthLimits();
+      refreshDownloads().catch(() => {});
+    }
+
+    function closeBandwidthModal() {
+      const modal = document.getElementById('bandwidth-details-modal');
+      if (modal) modal.classList.remove('active');
+      clearBwChartHover();
+    }
+
+    function setBandwidthWindow(samples) {
+      bwWindowSamples = Math.max(15, Math.min(MAX_BW_HISTORY, Number(samples) || BW_DEFAULT_WINDOW));
+      document.querySelectorAll('#bw-window-group .filter-btn').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.bwWindow) === bwWindowSamples);
+      });
+      clearBwChartHover();
+      renderBandwidthModal();
+    }
+
+    function setBandwidthSeries(mode) {
+      bwSeriesMode = (mode === 'down' || mode === 'up') ? mode : 'both';
+      document.querySelectorAll('#bw-series-group .filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.bwSeries === bwSeriesMode);
+      });
+      clearBwChartHover();
+      renderBandwidthModal();
+    }
+
+    function updateBwChartHover(idx) {
+      if (!bwLastChartState) return;
+      const { downSlice, upSlice, tsSlice, maxScale, svgW, padTop, plotH, showDown, showUp } = bwLastChartState;
+      const len = downSlice.length;
+      if (len === 0) return;
+
+      const safeIdx = Math.max(0, Math.min(len - 1, idx));
+      bwHoverIndex = safeIdx;
+      const x = +((safeIdx / Math.max(1, len - 1)) * svgW).toFixed(1);
+      const valDown = downSlice[safeIdx] || 0;
+      const valUp = upSlice[safeIdx] || 0;
+      const yDown = +(padTop + plotH - (Math.max(0, valDown) / maxScale) * plotH).toFixed(1);
+      const yUp = +(padTop + plotH - (Math.max(0, valUp) / maxScale) * plotH).toFixed(1);
+
+      const hoverLine = document.getElementById('bw-hover-line');
+      const dotDown = document.getElementById('bw-hover-dot-down');
+      const dotUp = document.getElementById('bw-hover-dot-up');
+      const hoverInfo = document.getElementById('bw-chart-hover-info');
+
+      if (hoverLine) {
+        hoverLine.setAttribute('x1', x);
+        hoverLine.setAttribute('x2', x);
+        hoverLine.style.display = '';
+      }
+      if (dotDown) {
+        if (showDown) {
+          dotDown.setAttribute('cx', x);
+          dotDown.setAttribute('cy', yDown);
+          dotDown.style.display = '';
+        } else {
+          dotDown.style.display = 'none';
+        }
+      }
+      if (dotUp) {
+        if (showUp) {
+          dotUp.setAttribute('cx', x);
+          dotUp.setAttribute('cy', yUp);
+          dotUp.style.display = '';
+        } else {
+          dotUp.style.display = 'none';
+        }
+      }
+      if (hoverInfo) {
+        const agoSec = (len - 1 - safeIdx) * 2;
+        const tsStr = tsSlice[safeIdx] ? formatSampleClock(tsSlice[safeIdx]) : formatDurationShort(agoSec);
+        const relStr = agoSec === 0 ? 'Ahora' : formatDurationShort(agoSec);
+        const timeLabel = tsSlice[safeIdx] ? `${tsStr} (${relStr})` : relStr;
+        hoverInfo.innerHTML = `<span style="color:#e2e8f0;">${timeLabel}</span> · <span style="color:#38bdf8;">↓ ${formatSpeed(valDown)}</span> · <span style="color:#34d399;">↑ ${formatSpeed(valUp)}</span>`;
+      }
+    }
+
+    function handleBwChartMouseMove(event) {
+      const svg = document.getElementById('bw-detail-svg');
+      if (!svg || !bwLastChartState) return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width) return;
+      const relX = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      const idx = Math.round(relX * Math.max(0, bwLastChartState.downSlice.length - 1));
+      updateBwChartHover(idx);
+    }
+
+    function clearBwChartHover() {
+      bwHoverIndex = null;
+      const hoverLine = document.getElementById('bw-hover-line');
+      const dotDown = document.getElementById('bw-hover-dot-down');
+      const dotUp = document.getElementById('bw-hover-dot-up');
+      const hoverInfo = document.getElementById('bw-chart-hover-info');
+      if (hoverLine) hoverLine.style.display = 'none';
+      if (dotDown) dotDown.style.display = 'none';
+      if (dotUp) dotUp.style.display = 'none';
+      if (hoverInfo) hoverInfo.textContent = 'Pasa el cursor sobre la gráfica para inspeccionar un instante';
+    }
+
+    function renderBandwidthModal() {
+      const modal = document.getElementById('bandwidth-details-modal');
+      if (!modal || !modal.classList.contains('active')) return;
+
+      const downSlice = perfDownHistory.slice(-bwWindowSamples);
+      const upSlice = perfUpHistory.slice(-bwWindowSamples);
+      const tsSlice = bwTimestamps.slice(-bwWindowSamples);
+
+      const curDown = downSlice.length ? downSlice[downSlice.length - 1] : 0;
+      const curUp = upSlice.length ? upSlice[upSlice.length - 1] : 0;
+
+      const validCount = Math.min(bwSampleCount, bwWindowSamples);
+      const avgDown = validCount > 0
+        ? downSlice.slice(-validCount).reduce((acc, v) => acc + v, 0) / validCount
+        : 0;
+      const avgUp = validCount > 0
+        ? upSlice.slice(-validCount).reduce((acc, v) => acc + v, 0) / validCount
+        : 0;
+      const winPeakDown = Math.max(...downSlice, 0);
+      const winPeakUp = Math.max(...upSlice, 0);
+
+      // Tarjetas KPI 1 y 2: Velocidades, picos, protocolos y límites
+      const setText = (id, txt) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = txt;
+      };
+      setText('bw-cur-down', formatSpeed(curDown));
+      setText('bw-peak-down', formatSpeed(sessionPeakDown));
+      setText('bw-avg-down', formatSpeed(avgDown));
+      setText('bw-proto-down', `eD2K: ${formatSpeed(lastProtoStats.ed2kDown)} | BT: ${formatSpeed(lastProtoStats.btDown)}`);
+
+      setText('bw-cur-up', formatSpeed(curUp));
+      setText('bw-peak-up', formatSpeed(sessionPeakUp));
+      setText('bw-avg-up', formatSpeed(avgUp));
+      setText('bw-proto-up', `eD2K: ${formatSpeed(lastProtoStats.ed2kUp)} | BT: ${formatSpeed(lastProtoStats.btUp)}`);
+
+      const dlLimit = cachedLimitsInfo ? (cachedLimitsInfo.downloadBytesPerSec || 0) : (turtleModeActive ? 500 * 1024 : 0);
+      const ulLimit = cachedLimitsInfo ? (cachedLimitsInfo.uploadBytesPerSec || 0) : (turtleModeActive ? 100 * 1024 : 0);
+      const uss = cachedLimitsInfo && cachedLimitsInfo.uss ? cachedLimitsInfo.uss : null;
+
+      setText('bw-limit-down', dlLimit > 0 ? `${formatSpeed(dlLimit)}${cachedLimitsInfo?.downloadRatioApplied ? ' (Ratio eD2K)' : ''}` : 'Sin límite');
+      setText(
+        'bw-limit-up',
+        (uss && uss.enabled && uss.currentLimitBytesPerSec > 0)
+          ? `${formatSpeed(uss.currentLimitBytesPerSec)} (USS)`
+          : (ulLimit > 0 ? formatSpeed(ulLimit) : 'Sin límite')
+      );
+
+      const modalBadge = document.getElementById('bw-modal-badge');
+      if (modalBadge) {
+        if (turtleModeActive) {
+          modalBadge.className = 'badge badge-completing';
+          modalBadge.textContent = '🐢 Modo Tortuga (500/100 kB/s)';
+        } else if (uss && uss.enabled) {
+          modalBadge.className = 'badge badge-dl';
+          modalBadge.textContent = '⚡ USS Dinámico Activo';
+        } else if (dlLimit > 0 || ulLimit > 0) {
+          modalBadge.className = 'badge badge-completing';
+          modalBadge.textContent = '⚡ Límite Activo';
+        } else {
+          modalBadge.className = 'badge badge-completed';
+          modalBadge.textContent = '🟢 Sin límites';
+        }
+      }
+
+      // Tarjeta KPI 3: Volumen de sesión
+      const sessDown = Math.max(latestStatsTick ? (latestStatsTick.sessionDownloadedBytes || 0) : 0, Math.round(fallbackSessionDownBytes));
+      const sessUp = Math.max(latestStatsTick ? (latestStatsTick.sessionUploadedBytes || 0) : 0, Math.round(fallbackSessionUpBytes));
+      const sessRatio = sessDown > 0 ? (sessUp / sessDown).toFixed(2) : (sessUp > 0 ? '∞' : '0.00');
+      const capturedCount = Math.min(bwSampleCount, MAX_BW_HISTORY);
+      const capturedSecs = capturedCount * 2;
+      const capturedDur = capturedSecs >= 60 ? `${Math.floor(capturedSecs / 60)}m ${capturedSecs % 60}s` : `${capturedSecs}s`;
+
+      setText('bw-sess-ratio', `Ratio ${sessRatio}`);
+      setText('bw-sess-down', formatBytes(sessDown));
+      setText('bw-sess-up', formatBytes(sessUp));
+      setText('bw-sess-samples', `${capturedCount} muestras (${capturedDur})`);
+
+      // Tarjeta KPI 4: Acumulado histórico y enjambre
+      const lifeDown = latestStatsTick ? (latestStatsTick.lifetimeDownloadedBytes || 0) : null;
+      const lifeUp = latestStatsTick ? (latestStatsTick.lifetimeUploadedBytes || 0) : null;
+      const lifeRatio = (lifeDown !== null && lifeDown > 0)
+        ? (lifeUp / lifeDown).toFixed(2)
+        : (lifeUp > 0 ? '∞' : '0.00');
+      const peersConn = latestStatsTick ? (latestStatsTick.peersConnected || 0) : 0;
+
+      setText('bw-life-ratio', `Ratio ${lifeRatio}`);
+      setText('bw-life-down', lifeDown !== null ? formatBytes(lifeDown) : 'Sincronizando...');
+      setText('bw-life-up', lifeUp !== null ? formatBytes(lifeUp) : 'Sincronizando...');
+      setText('bw-active-peers', `${peersConn} pares • ${totalSourcesCache} fuentes`);
+      setText('bw-upload-slots', `${cachedUploadsActive.length} activas • ${cachedUploadsQueued.length} en cola`);
+
+      // Gráfica SVG detallada
+      const showDown = bwSeriesMode === 'both' || bwSeriesMode === 'down';
+      const showUp = bwSeriesMode === 'both' || bwSeriesMode === 'up';
+      const maxScale = Math.max(showDown ? winPeakDown : 0, showUp ? winPeakUp : 0, BW_MIN_SCALE_BPS);
+
+      setText('bw-y-100', formatSpeed(maxScale));
+      setText('bw-y-75', formatSpeed(maxScale * 0.75));
+      setText('bw-y-50', formatSpeed(maxScale * 0.5));
+      setText('bw-y-25', formatSpeed(maxScale * 0.25));
+      setText('bw-y-0', '0 B/s');
+
+      const totalWinSec = bwWindowSamples * 2;
+      setText('bw-x-0', formatDurationShort(totalWinSec));
+      setText('bw-x-1', formatDurationShort(totalWinSec * 0.75));
+      setText('bw-x-2', formatDurationShort(totalWinSec * 0.5));
+      setText('bw-x-3', formatDurationShort(totalWinSec * 0.25));
+      setText('bw-x-4', 'Ahora');
+
+      const svgW = 720;
+      const padTop = 10;
+      const plotH = 200;
+      const baseY = padTop + plotH;
+
+      function buildSeriesPaths(arr) {
+        const len = arr.length;
+        const pts = arr.map((val, idx) => {
+          const x = +((idx / Math.max(1, len - 1)) * svgW).toFixed(1);
+          const y = +(padTop + plotH - (Math.max(0, val) / maxScale) * plotH).toFixed(1);
+          return `${x},${y}`;
+        });
+        return {
+          line: pts.join(' '),
+          fill: `M 0,${baseY} L ${pts.join(' L ')} L ${svgW},${baseY} Z`,
+        };
+      }
+
+      const bwDownLine = document.getElementById('bw-down-line');
+      const bwDownFill = document.getElementById('bw-down-fill');
+      const bwUpLine = document.getElementById('bw-up-line');
+      const bwUpFill = document.getElementById('bw-up-fill');
+
+      if (showDown) {
+        const dPaths = buildSeriesPaths(downSlice);
+        if (bwDownLine) bwDownLine.setAttribute('points', dPaths.line);
+        if (bwDownFill) bwDownFill.setAttribute('d', dPaths.fill);
+      } else {
+        if (bwDownLine) bwDownLine.setAttribute('points', '');
+        if (bwDownFill) bwDownFill.setAttribute('d', '');
+      }
+
+      if (showUp) {
+        const uPaths = buildSeriesPaths(upSlice);
+        if (bwUpLine) bwUpLine.setAttribute('points', uPaths.line);
+        if (bwUpFill) bwUpFill.setAttribute('d', uPaths.fill);
+      } else {
+        if (bwUpLine) bwUpLine.setAttribute('points', '');
+        if (bwUpFill) bwUpFill.setAttribute('d', '');
+      }
+
+      const peakLineDown = document.getElementById('bw-peak-line-down');
+      if (peakLineDown) {
+        if (showDown && winPeakDown > 0) {
+          const yPeakD = +(padTop + plotH - (winPeakDown / maxScale) * plotH).toFixed(1);
+          peakLineDown.setAttribute('y1', yPeakD);
+          peakLineDown.setAttribute('y2', yPeakD);
+          peakLineDown.style.display = '';
+        } else {
+          peakLineDown.style.display = 'none';
+        }
+      }
+
+      const peakLineUp = document.getElementById('bw-peak-line-up');
+      if (peakLineUp) {
+        if (showUp && winPeakUp > 0) {
+          const yPeakU = +(padTop + plotH - (winPeakUp / maxScale) * plotH).toFixed(1);
+          peakLineUp.setAttribute('y1', yPeakU);
+          peakLineUp.setAttribute('y2', yPeakU);
+          peakLineUp.style.display = '';
+        } else {
+          peakLineUp.style.display = 'none';
+        }
+      }
+
+      bwLastChartState = { downSlice, upSlice, tsSlice, maxScale, svgW, padTop, plotH, showDown, showUp };
+      if (bwHoverIndex !== null) {
+        updateBwChartHover(bwHoverIndex);
+      }
+
+      // Desglose inferior: Descargas activas con tráfico
+      const dlRows = cachedDownloads
+        .map(item => {
+          const dl = item.snapshot || item;
+          const rawName = dl.fileName || dl.file_name || 'Archivo';
+          const hash = dl.ed2kHash || dl.ed2k_hash || '';
+          const total = dl.totalBytes || dl.total_bytes || 0;
+          const received = dl.receivedBytes || dl.received_bytes || 0;
+          const progress = total > 0 ? ((received / total) * 100).toFixed(1) : (dl.progress ? (dl.progress * 100).toFixed(1) : '0.0');
+          const rate = dl.downloadRateBps || dl.download_rate_bps || 0;
+          const sources = dl.sourceCount || dl.source_count || 0;
+          const status = (dl.status || '').toLowerCase();
+          const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash && (!dl.parts || dl.parts.length === 0));
+          const cleanName = fixMojibake(rawName.replace(/^⚡ \[Torrent\]\s*/i, '').replace(/^\[Torrent\]\s*/i, ''));
+          return { cleanName, isTorrent, progress, rate, sources, status };
+        })
+        .filter(r => r.rate > 0 || r.status === 'downloading')
+        .sort((a, b) => b.rate - a.rate || Number(b.progress) - Number(a.progress));
+
+      setText('bw-active-downloads-count', `${dlRows.length} activas`);
+      const dlListEl = document.getElementById('bw-active-downloads-list');
+      if (dlListEl) {
+        if (dlRows.length === 0) {
+          dlListEl.innerHTML = '<div style="color: var(--text-muted); font-size: 0.78rem; padding: 12px 0; text-align: center;">Sin descargas transfiriendo en este instante.</div>';
+        } else {
+          dlListEl.innerHTML = dlRows.slice(0, 20).map(r => `
+            <div class="bw-transfer-row">
+              <div style="min-width: 0; flex: 1;">
+                <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                  <span class="badge ${r.isTorrent ? 'badge-torrent' : 'badge-ed2k'}">${r.isTorrent ? 'BT' : 'eD2K'}</span>
+                  <span style="font-weight: 600; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(r.cleanName)}">${escapeHtml(r.cleanName)}</span>
+                </div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">${r.progress}% completado • ${r.sources} fuentes</div>
+              </div>
+              <div style="font-family: var(--font-mono); font-weight: 700; color: #38bdf8; white-space: nowrap;">${formatSpeed(r.rate)}</div>
+            </div>
+          `).join('');
+        }
+      }
+
+      // Desglose inferior: Subidas y ranuras activas
+      const uploadRows = [];
+      cachedUploadsActive.forEach(u => {
+        const cleanName = fixMojibake(u.fileName || 'Archivo compartido');
+        uploadRows.push({
+          name: cleanName,
+          proto: u.state === 'trickle' ? 'Goteo' : 'eD2K',
+          isTrickle: u.state === 'trickle',
+          isTorrent: false,
+          subtext: `${u.clientAddress || 'Par remoto'} • ${formatBytes(u.transferredBytes || 0)} enviados`,
+          rate: u.uploadRateBps || 0,
+        });
+      });
+      cachedDownloads.forEach(item => {
+        const dl = item.snapshot || item;
+        const rate = dl.uploadRateBps || dl.upload_rate_bps || 0;
+        if (rate <= 0) return;
+        const rawName = dl.fileName || dl.file_name || 'Archivo';
+        const hash = dl.ed2kHash || dl.ed2k_hash || '';
+        const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash && (!dl.parts || dl.parts.length === 0));
+        if (!isTorrent) return; // Evita duplicar subidas eD2K ya contabilizadas en uploads.list
+        const cleanName = fixMojibake(rawName.replace(/^⚡ \[Torrent\]\s*/i, '').replace(/^\[Torrent\]\s*/i, ''));
+        uploadRows.push({
+          name: cleanName,
+          proto: 'BT',
+          isTrickle: false,
+          isTorrent: true,
+          subtext: `Enjambre BitTorrent • ${formatBytes(dl.uploadedBytes || 0)} enviados`,
+          rate,
+        });
+      });
+      uploadRows.sort((a, b) => b.rate - a.rate);
+
+      setText('bw-active-uploads-count', `${uploadRows.length} activas • ${cachedUploadsQueued.length} en cola`);
+      const ulListEl = document.getElementById('bw-active-uploads-list');
+      if (ulListEl) {
+        if (uploadRows.length === 0) {
+          ulListEl.innerHTML = `<div style="color: var(--text-muted); font-size: 0.78rem; padding: 12px 0; text-align: center;">Sin subidas activas en este instante (${cachedUploadsQueued.length} clientes en cola).</div>`;
+        } else {
+          ulListEl.innerHTML = uploadRows.slice(0, 20).map(u => {
+            const badgeCls = u.isTorrent ? 'badge-torrent' : (u.isTrickle ? 'badge-completing' : 'badge-ed2k');
+            return `
+              <div class="bw-transfer-row">
+                <div style="min-width: 0; flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                    <span class="badge ${badgeCls}">${u.proto}</span>
+                    <span style="font-weight: 600; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>
+                  </div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">${escapeHtml(u.subtext)}</div>
+                </div>
+                <div style="font-family: var(--font-mono); font-weight: 700; color: #34d399; white-space: nowrap;">${formatSpeed(u.rate)}</div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
 
     function updateSparklines(downSpeed, upSpeed) {
+      const nowMs = Date.now();
+      if (lastBwSampleMs !== null) {
+        const dtSec = Math.max(0, Math.min(10, (nowMs - lastBwSampleMs) / 1000));
+        fallbackSessionDownBytes += downSpeed * dtSec;
+        fallbackSessionUpBytes += upSpeed * dtSec;
+      }
+      lastBwSampleMs = nowMs;
+      bwSampleCount++;
+      sessionPeakDown = Math.max(sessionPeakDown, downSpeed);
+      sessionPeakUp = Math.max(sessionPeakUp, upSpeed);
+
       downHistory.push(downSpeed);
       downHistory.shift();
       upHistory.push(upSpeed);
@@ -5302,6 +6103,8 @@
       perfDownHistory.shift();
       perfUpHistory.push(upSpeed);
       perfUpHistory.shift();
+      bwTimestamps.push(nowMs);
+      bwTimestamps.shift();
 
       function pointsToSvg(arr, width = 50, height = 16) {
         const max = Math.max(...arr, 1024);
@@ -5329,7 +6132,9 @@
 
         const perfSvg = document.getElementById('insp-perf-svg');
         if (perfSvg) {
-          const maxPerf = Math.max(...perfDownHistory, ...perfUpHistory, 10240);
+          const inspDownSlice = perfDownHistory.slice(-60);
+          const inspUpSlice = perfUpHistory.slice(-60);
+          const maxPerf = Math.max(...inspDownSlice, ...inspUpSlice, 10240);
           const w = 500;
           const h = 140;
 
@@ -5344,8 +6149,8 @@
             return { polylineStr, fillD };
           }
 
-          const downData = makePathData(perfDownHistory);
-          const upData = makePathData(perfUpHistory);
+          const downData = makePathData(inspDownSlice);
+          const upData = makePathData(inspUpSlice);
 
           const pDownLine = document.getElementById('perf-down-line');
           const pDownFill = document.getElementById('perf-down-fill');
@@ -5358,6 +6163,8 @@
           if (pUpFill) pUpFill.setAttribute('d', upData.fillD);
         }
       }
+
+      renderBandwidthModal();
     }
 
     async function refreshDownloads() {
@@ -5369,6 +6176,7 @@
         // Conteo para los botones de filtro
         let countDownloading = 0, countQueued = 0, countPaused = 0, countCompleted = 0, countCompleting = 0;
         let totalDown = 0, totalUp = 0, totalSources = 0;
+        let ed2kDown = 0, btDown = 0, ed2kUp = 0, btUp = 0;
         let countBt = 0, countEd2k = 0;
 
         list.forEach(item => {
@@ -5380,7 +6188,7 @@
           const transferred = dl.receivedBytes || dl.received_bytes || 0;
           const isComplete = (total > 0 && transferred >= total) || status === 'completed';
 
-          const isTorrent = rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash && (!dl.parts || dl.parts.length === 0));
+          const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash && (!dl.parts || dl.parts.length === 0));
           if (isTorrent) countBt++; else countEd2k++;
 
           if (status === 'completing') {
@@ -5397,22 +6205,45 @@
             countQueued++;
           }
 
-          totalDown += (dl.downloadRateBps || dl.download_rate_bps || 0);
-          totalUp += (dl.uploadRateBps || dl.upload_rate_bps || 0);
+          const dlRate = dl.downloadRateBps || dl.download_rate_bps || 0;
+          const ulRate = dl.uploadRateBps || dl.upload_rate_bps || 0;
+          totalDown += dlRate;
+          totalUp += ulRate;
+          if (isTorrent) {
+            btDown += dlRate;
+            btUp += ulRate;
+          } else {
+            ed2kDown += dlRate;
+            ed2kUp += ulRate;
+          }
           totalSources += (dl.sourceCount || dl.source_count || 0);
         });
+        totalSourcesCache = totalSources;
 
         // Sumar también las subidas activas de archivos compartidos (eD2k/Kad)
+        let activeUploads = [];
+        let queuedUploads = [];
         try {
           const uploadsRes = await client.call('uploads.list', {});
-          if (uploadsRes && uploadsRes.active && Array.isArray(uploadsRes.active)) {
-            uploadsRes.active.forEach(u => {
-              totalUp += (u.uploadRateBps || 0);
-            });
+          if (uploadsRes) {
+            if (Array.isArray(uploadsRes.active)) {
+              activeUploads = uploadsRes.active;
+              uploadsRes.active.forEach(u => {
+                const rate = u.uploadRateBps || 0;
+                totalUp += rate;
+                ed2kUp += rate;
+              });
+            }
+            if (Array.isArray(uploadsRes.queued)) {
+              queuedUploads = uploadsRes.queued;
+            }
           }
         } catch (e) {
           // Ignorar silenciosamente si uploads.list no responde
         }
+        cachedUploadsActive = activeUploads;
+        cachedUploadsQueued = queuedUploads;
+        lastProtoStats = { ed2kDown, btDown, ed2kUp, btUp };
 
         document.getElementById('cnt-all').textContent = `(${list.length})`;
         document.getElementById('cnt-downloading').textContent = `(${countDownloading})`;
@@ -5860,8 +6691,9 @@
           <div class="stt-grid">
             <span class="stt-lbl">Tasa Bajada:</span><span class="stt-val" style="color: #38bdf8; font-weight:700;">${document.getElementById('global-down')?.textContent || '0.0 kB/s'}</span>
             <span class="stt-lbl">Tasa Subida:</span><span class="stt-val" style="color: #34d399; font-weight:700;">${document.getElementById('global-up')?.textContent || '0.0 kB/s'}</span>
-            <span class="stt-lbl">Modo Tortuga:</span><span class="stt-val">${isTurtleMode ? 'Activado (500/100 kB/s)' : 'Desactivado (Sin límites)'}</span>
-            <span class="stt-lbl">Ranuras activas:</span><span class="stt-val">Máx. 4 descargas simultáneas</span>
+            <span class="stt-lbl">Pico Bajada / Subida:</span><span class="stt-val">${formatSpeed(sessionPeakDown)} / ${formatSpeed(sessionPeakUp)}</span>
+            <span class="stt-lbl">Modo Tortuga:</span><span class="stt-val">${turtleModeActive ? 'Activado (500/100 kB/s)' : 'Desactivado (Sin límites)'}</span>
+            <span class="stt-lbl">Monitor en vivo:</span><span class="stt-val" style="color: #38bdf8;">Haz clic para abrir gráfica detallada</span>
           </div>
         `;
       } else if (type === 'header-network') {
@@ -8534,6 +9366,7 @@
       try { refreshServers(); } catch (e) { console.error('Error refreshServers:', e); }
       try { refreshDownloads(); } catch (e) { console.error('Error refreshDownloads:', e); }
       try { refreshStorage(); } catch (e) { console.error('Error refreshStorage:', e); }
+      try { refreshBandwidthLimits(); } catch (e) { console.error('Error refreshBandwidthLimits:', e); }
 
       // Comprobación de aviso legal y primer arranque
       setTimeout(async () => {
@@ -8612,6 +9445,15 @@
     });
     client.on('server.disconnected', () => {
       addLog('warn', 'Desconectado del servidor eD2k.');
+    });
+    client.on('event.statsTick', (d) => {
+      if (d && d.stats) {
+        latestStatsTick = d.stats;
+        const modal = document.getElementById('bandwidth-details-modal');
+        if (modal && modal.classList.contains('active')) {
+          renderBandwidthModal();
+        }
+      }
     });
     client.on('download.downloadAdded', (d) => {
       const name = fixMojibake((d && (d.fileName || d.file_name)) || 'Nuevo archivo');
@@ -10571,6 +11413,13 @@
         } else {
           openSpotlight();
         }
+        return;
+      }
+
+      const bwModal = document.getElementById('bandwidth-details-modal');
+      if (bwModal && bwModal.classList.contains('active') && e.key === 'Escape') {
+        e.preventDefault();
+        closeBandwidthModal();
         return;
       }
 
