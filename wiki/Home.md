@@ -1,7 +1,7 @@
 # Bienvenido a la Wiki de Pulse Core
 
 <div align="center">
-  <img src="../Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="220"/>
+  <img src="https://raw.githubusercontent.com/caraveliko/PulseCore/master/Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="220"/>
   <br/>
   <strong>Documentación técnica oficial de Pulse Core — Motor P2P asíncrono en Rust</strong>
 </div>
