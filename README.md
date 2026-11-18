@@ -4,7 +4,7 @@
 
 # Pulse Core
 
-**Reinvención moderna y asíncrona en Rust de las redes eMule (eD2K + Kad DHT) y BitTorrent, con automatización multimedia nativa e interfaz web integrada.**
+**Reinvención moderna y asíncrona en Rust de las redes eMule (eD2K + Kad DHT) y Torrent, con automatización multimedia nativa e interfaz web integrada.**
 
 [![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/Licencia-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux%20%7C%20aarch64-lightgrey)](README.md)
@@ -23,7 +23,7 @@
 >
 > **Desarrollo técnico riguroso:** Pulse Core es una reimplementación limpia creada en simbiosis entre ingeniería humana experta y agentes de IA avanzados. La totalidad del código, los comentarios y la documentación están redactados en **español de España**, siguiendo estándares inflexibles de seguridad de memoria en Rust: sin pánicos en producción, sin advertencias del compilador (`-D warnings`), con fidelidad milimétrica a las fuentes de eMule 0.72a y suites de prueba que se ejecutan 100 % sin conexión a Internet.
 
-El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **BitTorrent** en un mismo bucle de eventos sin bloqueo.
+El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **Torrent** en un mismo bucle de eventos sin bloqueo.
 
 Está especialmente diseñado para **servidores domésticos, microservidores, NAS (Synology, QNAP, TrueNAS, Unraid) y Raspberry Pi**: opera de manera 100 % *headless* (sin necesidad de monitor ni interfaz gráfica instalada en el sistema) con un consumo mínimo de apenas ~45 MB de RAM en reposo, administrable de forma remota y segura a través de su panel web embebido. En equipos de sobremesa con Windows 11, se integra de forma transparente en la bandeja del sistema.
 
@@ -59,7 +59,7 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
 ## ⚡ Qué hace diferente a Pulse Core
 
 ### 1. Dos redes en un solo motor asíncrono
-Descarga y comparte piezas simultáneamente entre clientes clásicos de eMule y enjambres modernos de BitTorrent. El asignador de almacenamiento disperso asigna espacio dinámicamente y verifica la integridad de cada fragmento mediante sumas de verificación jerárquicas eD2K y árboles AICH.
+Descarga y comparte piezas simultáneamente entre clientes clásicos de eMule y enjambres modernos de Torrent. El asignador de almacenamiento disperso asigna espacio dinámicamente y verifica la integridad de cada fragmento mediante sumas de verificación jerárquicas eD2K y árboles AICH.
 
 ### 2. Organización y catalogación multimedia propia
 Pulse Core incorpora su propio motor de gestión de medios sin depender de programas de terceros ni servicios externos:
@@ -87,7 +87,7 @@ Para despliegues domésticos, servidores dedicados o contenedores NAS, estos son
 | **`4660`** | TCP | WebUI & JSON-RPC | Panel de control web en navegador y APIs de control local. |
 | **`39735`** | TCP | Transferencias eD2K | Conexión con clientes eDonkey/eMule para descarga y subida. |
 | **`39737`** | UDP | Kademlia (Kad DHT) | Búsqueda descentralizada de fuentes y enrutamiento global. |
-| **`6881`** | TCP / UDP | BitTorrent | Tráfico del enjambre Torrent y negociación de piezas. |
+| **`6881`** | TCP / UDP | Transferencias Torrent | Tráfico del enjambre Torrent y negociación de piezas. |
 
 *(Todos los puertos son totalmente configurables en caliente o mediante variables de entorno).*
 
@@ -102,7 +102,7 @@ El proyecto está organizado en un workspace de Cargo modular, donde cada compon
 | **`crates/mule-daemon`** | Servidor principal Tokio/Axum, WebUI embebida, APIs RPC/WebSocket y bandeja de Windows (`src/tray.rs`). |
 | **`crates/mule-protocol`** | Códecs de cable acotados eD2K/Kad con vectores de prueba estrictos basados en eMule 0.72a. |
 | **`crates/mule-core`** | Dominio de negocio, gestor de descargas y motor de almacenamiento disperso. |
-| **`crates/mule-torrent`** | Motor BitTorrent integrado y asignador de enjambre híbrido. |
+| **`crates/mule-torrent`** | Motor Torrent integrado y asignador de enjambre híbrido. |
 | **`crates/mule-crypto`** | Primitivas criptográficas: MD4, árboles de hashing AICH e identificadores P2P. |
 | **`crates/mule-mcp`** | Servidor MCP con más de 85 herramientas para interacción con asistentes y agentes de IA. |
 | **`crates/mule-network-policy`** | Canalización de seguridad anti-SSRF, mitigación de ataques y aislamiento en bucle local. |
@@ -145,7 +145,7 @@ Para resolver cualquier problema con la mayor rapidez posible, comprueba lo sigu
    ```bash
    RUST_LOG=mule_daemon=debug,mule_protocol=debug,mule_core=debug ./target/release/mule-daemon
    ```
-3. **Detalles del entorno**: Especifica tu sistema operativo (p. ej. *Windows 11 23H2* o *Ubuntu 24.04*), arquitectura de procesador (`x86_64` o `aarch64`), y el subsistema afectado (eD2K, Kad, BitTorrent, WebUI o Catalogación multimedia).
+3. **Detalles del entorno**: Especifica tu sistema operativo (p. ej. *Windows 11 23H2* o *Ubuntu 24.04*), arquitectura de procesador (`x86_64` o `aarch64`), y el subsistema afectado (eD2K, Kad, Torrent, WebUI o Catalogación multimedia).
 4. **Pruebas en bucle cerrado**: Si sospechas de un fallo en los códecs de cable, comprueba si pasa las pruebas locales:
    ```bash
    cargo test -p mule-protocol --all-features
