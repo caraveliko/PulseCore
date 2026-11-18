@@ -978,12 +978,19 @@ pub(crate) async fn handle_sx_multipacket(
     // La ext-info `OP_REQFILENAME` (estado de partes del solicitante) sirve como
     // `reqstatus` cuando el subpaquete SX le sigue en el envoltorio.
     let mut ext_mask: Option<Vec<u8>> = None;
+    let mut want_filename = false;
+    let mut want_status = false;
+    let mut want_aich = false;
     for sub in &mp.sub_requests {
         match sub {
-            Ed2kMultiPacketSubRequest::FileName {
-                ext_info: Some(ext),
-            } => {
-                ext_mask = Some(ext.part_status.to_vec());
+            Ed2kMultiPacketSubRequest::FileName { ext_info } => {
+                want_filename = true;
+                if let Some(ext) = ext_info {
+                    ext_mask = Some(ext.part_status.to_vec());
+                }
+            }
+            Ed2kMultiPacketSubRequest::SetReqFileId => {
+                want_status = true;
             }
             Ed2kMultiPacketSubRequest::RequestSources => {
                 let req = Ed2kRequestSources::new_v1(file_hash);
@@ -1023,7 +1030,76 @@ pub(crate) async fn handle_sx_multipacket(
                 )
                 .await;
             }
-            _ => {}
+            Ed2kMultiPacketSubRequest::AichFileHash => {
+                want_aich = true;
+            }
+        }
+    }
+
+    if want_filename || want_status || want_aich {
+        use mule_protocol::ed2k::{
+            expected_mask_bytes, Ed2kMessage, Ed2kMultiPacketAnswer, Ed2kMultiPacketSubAnswer,
+            ED2K_PART_SIZE,
+        };
+        let hash_hex = hex::encode(file_hash);
+        let shared_file = {
+            let dl_svc = downloads.lock().await;
+            dl_svc.get_shared_file(&hash_hex).unwrap_or(None)
+        };
+        if let Some(sf) = shared_file.as_ref().filter(|s| s.enabled) {
+            let mut sub_answers = Vec::new();
+            if want_filename {
+                sub_answers.push(Ed2kMultiPacketSubAnswer::FileName(sf.file_name.clone()));
+            }
+            if want_filename || want_status {
+                let part_size = ED2K_PART_SIZE as u64;
+                let part_count = if sf.file_size == 0 {
+                    1
+                } else {
+                    sf.file_size.div_ceil(part_size).max(1) as u16
+                };
+                let avail: Vec<u16> = if sf.is_partial {
+                    sf.completed_parts.clone()
+                } else {
+                    (0..part_count).collect()
+                };
+                let mut mask = vec![0u8; expected_mask_bytes(part_count)];
+                for p in avail {
+                    mask[(p / 8) as usize] |= 1 << (p % 8);
+                }
+                sub_answers.push(Ed2kMultiPacketSubAnswer::FileStatus {
+                    part_count,
+                    part_status: bytes::Bytes::from(mask),
+                });
+            }
+            if want_aich && sf.file_size > 0 {
+                if let Some(root) = sf.aich_root {
+                    sub_answers.push(Ed2kMultiPacketSubAnswer::AichFileHash(root));
+                }
+            }
+            if !sub_answers.is_empty() {
+                let ans = Ed2kMultiPacketAnswer {
+                    file: mp.file.clone(),
+                    sub_answers,
+                };
+                match encoder.encode_message(&Ed2kMessage::MultiPacketAnswer(ans)) {
+                    Ok(ans_pkt) => {
+                        let mut out = Vec::with_capacity(6 + ans_pkt.payload.len());
+                        out.push(ans_pkt.protocol);
+                        out.extend_from_slice(&(ans_pkt.frame_len() as u32).to_le_bytes());
+                        out.push(ans_pkt.opcode);
+                        out.extend_from_slice(&ans_pkt.payload);
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stream.write_all(&out).await;
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            "Failed to encode outbound multipacket answer for {peer}: {e}",
+                            peer = log_peer_addr(target_addr)
+                        );
+                    }
+                }
+            }
         }
     }
     true

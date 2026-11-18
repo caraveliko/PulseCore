@@ -34,8 +34,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 1).await;
     assert_eq!(resp["result"]["workdirMode"], "Portable");
     assert_eq!(resp["result"]["daemonVersion"], env!("CARGO_PKG_VERSION"));
 
@@ -51,8 +50,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 2).await;
     assert_eq!(resp["result"]["isPortable"], true);
     assert!(resp["result"]["activeLoopbackPeer"].is_null());
     assert_eq!(resp["result"]["fixtures"].as_array().unwrap().len(), 0);
@@ -71,8 +69,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 3).await;
     let fixture_link = resp["result"]["ed2kLink"].as_str().unwrap();
     assert!(fixture_link.starts_with("ed2k://|file|sample_1mb.bin|1048576|"));
     assert_eq!(resp["result"]["sizeBytes"], 1048576);
@@ -94,8 +91,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 4).await;
     let peer_addr = resp["result"]["peerAddr"].as_str().unwrap();
     assert!(peer_addr.starts_with("127.0.0.1:"));
     assert_eq!(resp["result"]["sharedCount"], 1);
@@ -113,8 +109,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 5).await;
     assert_eq!(resp["result"]["activeLoopbackPeer"], peer_addr);
     assert_eq!(resp["result"]["fixtures"].as_array().unwrap().len(), 1);
 
@@ -130,8 +125,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 6).await;
     assert_eq!(resp["result"]["stopped"], true);
 
     // 8. lab.cleanupTestData purga los recursos de prueba en modo Portable
@@ -146,8 +140,7 @@ async fn test_lab_rpc_full_lifecycle() {
         .await
         .unwrap();
 
-    let msg = read.next().await.unwrap().unwrap();
-    let resp: Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+    let resp = recv_response_by_id(&mut read, 7).await;
     assert_eq!(resp["result"]["success"], true);
     assert_eq!(resp["result"]["deletedFilesCount"], 1);
     assert!(resp["result"]["freedBytes"].as_u64().unwrap() > 0);

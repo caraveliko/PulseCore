@@ -189,8 +189,18 @@ impl KadUdpService {
             inner.insert_in_flight(tx_id, in_flight_entry).await?
         };
 
+        // En eMule (`CSearch::PreparePacketForTags` / `CPrefs::GetClientHash`),
+        // `KADEMLIA2_PUBLISH_SOURCE_REQ` anuncia el hash de usuario eD2K en formato
+        // `CUInt128` para que el par que descarga derive la clave RC4 correcta.
+        let user_hash = *self.fw_user_hash.read().unwrap();
+        let source_id = if user_hash != [0u8; 16] {
+            mule_core::kad::KadId::from_hash_be(&user_hash).0
+        } else {
+            self.local_id.read().unwrap().0
+        };
+
         let contact = KadContactWire {
-            kad_id: self.local_id.read().unwrap().0,
+            kad_id: source_id,
             ip: advertised_ip.octets(),
             udp_port: advertised_udp_port,
             tcp_port,

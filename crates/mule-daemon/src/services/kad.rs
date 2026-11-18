@@ -82,6 +82,8 @@ const KAD_SOURCE_REPUBLISH_INTERVAL: std::time::Duration =
 /// `m_tNextKeyPublishTime`, `Kademlia.cpp`).
 const KAD_KEYWORD_REPUBLISH_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(24 * 60 * 60);
+/// Concurrencia máxima para la publicación de fuentes y palabras clave en Kad.
+const KAD_PUBLISH_CONCURRENCY: usize = 4;
 
 impl KadService {
     pub fn new(
@@ -632,8 +634,11 @@ impl KadService {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
             // El primer tick se completa de inmediato; omitirlo para dejar finalizar el bootstrap de inicio
             interval.tick().await;
-            let mut last_source_publish: Option<std::time::Instant> = None;
-            let mut last_keyword_publish: Option<std::time::Instant> = None;
+            let last_source_publish =
+                Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
+            let last_keyword_publish =
+                Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
+            let republish_running = Arc::new(std::sync::atomic::AtomicBool::new(false));
             // Contador de contactos ya notificado — solo se emite
             // `kad.statusChanged` cuando el valor observable cambia.
             let mut last_contacts: Option<usize> = None;
@@ -727,68 +732,130 @@ impl KadService {
                             });
                         }
 
-                        // Republicación periódica de archivos compartidos — eMule ejecuta
-                        // temporizadores independientes para fuentes (5 h) y palabras clave (24 h)
-                        // (`Kademlia.cpp` `m_tNextSrcPublishTime` /
-                        // `m_tNextKeyPublishTime`). Una primera publicación de cada
-                        // tipo también se ejecuta en cuanto la tabla contiene contactos.
+                        // Republicación periódica de archivos compartidos — ejecutada en segundo
+                        // plano con concurrencia acotada para no bloquear el mantenimiento de
+                        // cubetas Kad; prioriza la publicación de fuentes sobre las palabras clave.
                         let source_due = last_source_publish
+                            .lock()
+                            .unwrap()
                             .map(|t| t.elapsed() >= KAD_SOURCE_REPUBLISH_INTERVAL)
                             .unwrap_or(true);
                         let keyword_due = last_keyword_publish
+                            .lock()
+                            .unwrap()
                             .map(|t| t.elapsed() >= KAD_KEYWORD_REPUBLISH_INTERVAL)
                             .unwrap_or(true);
-                        if (source_due || keyword_due) && total_contacts > 0 {
+                        if (source_due || keyword_due)
+                            && total_contacts > 0
+                            && republish_running
+                                .compare_exchange(
+                                    false,
+                                    true,
+                                    std::sync::atomic::Ordering::AcqRel,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                )
+                                .is_ok()
+                        {
                             let tcp_port = kad
                                 .ed2k_tcp_port
                                 .load(std::sync::atomic::Ordering::Relaxed);
-                            let shared = {
-                                let dl = kad.downloads.lock().await;
-                                dl.list_all_shared_files().unwrap_or_default()
-                            };
-                            if tcp_port > 0 {
-                                let mut published = 0usize;
-                                for f in shared.iter().filter(|f| f.enabled).take(200) {
-                                    let hash = f.file_hash.trim().to_string();
-                                    // `CKnownFile::PublishSrc` de eMule: los archivos de partes
-                                    // también se publican como fuentes — los pares pueden
-                                    // descargar las partes que ya hemos completado.
-                                    if source_due {
-                                        if let Ok(n) = kad
-                                            .publish_source(&hash, f.file_size, tcp_port)
-                                            .await
-                                        {
-                                            published += n;
-                                        }
-                                    }
-                                    // La publicación de palabras clave de eMule omite los archivos de partes
-                                    // ("alguien más debería tener el archivo completo
-                                    // para publicar estas palabras clave").
-                                    if keyword_due && !f.is_partial {
-                                        let _ = kad
-                                            .publish_keyword(
-                                                &hash,
-                                                &f.file_name,
-                                                f.file_size,
-                                                f.aich_root,
-                                            )
-                                            .await;
+                            let kad_pub = Arc::clone(&kad);
+                            let cancel_pub = cancel_token.clone();
+                            let running_flag = Arc::clone(&republish_running);
+                            let last_src = Arc::clone(&last_source_publish);
+                            let last_kw = Arc::clone(&last_keyword_publish);
+                            tokio::spawn(async move {
+                                use futures_util::stream::StreamExt as _;
+                                use std::sync::atomic::{AtomicUsize, Ordering};
+
+                                struct RepublishGuard(Arc<std::sync::atomic::AtomicBool>);
+                                impl Drop for RepublishGuard {
+                                    fn drop(&mut self) {
+                                        self.0.store(false, Ordering::Release);
                                     }
                                 }
+                                let _guard = RepublishGuard(running_flag);
+
+                                if tcp_port == 0 {
+                                    return;
+                                }
+                                let shared = {
+                                    let dl = kad_pub.downloads.lock().await;
+                                    dl.list_all_shared_files().unwrap_or_default()
+                                };
+                                let batch: Vec<_> =
+                                    shared.into_iter().filter(|f| f.enabled).take(200).collect();
+                                let batch_len = batch.len();
+                                let published = Arc::new(AtomicUsize::new(0));
+
+                                // Fase 1: publicar todas las fuentes primero para habilitar
+                                // subidas cuanto antes en toda la biblioteca compartida.
+                                if source_due && !cancel_pub.is_cancelled() {
+                                    let kad_src = Arc::clone(&kad_pub);
+                                    let cancel_src = cancel_pub.clone();
+                                    let pub_cnt = Arc::clone(&published);
+                                    futures_util::stream::iter(batch.iter().cloned())
+                                        .for_each_concurrent(KAD_PUBLISH_CONCURRENCY, move |f| {
+                                            let kad = Arc::clone(&kad_src);
+                                            let cancel = cancel_src.clone();
+                                            let pub_cnt = Arc::clone(&pub_cnt);
+                                            async move {
+                                                if cancel.is_cancelled() {
+                                                    return;
+                                                }
+                                                let hash = f.file_hash.trim().to_string();
+                                                if let Ok(n) = kad
+                                                    .publish_source(&hash, f.file_size, tcp_port)
+                                                    .await
+                                                {
+                                                    pub_cnt.fetch_add(n, Ordering::Relaxed);
+                                                }
+                                            }
+                                        })
+                                        .await;
+                                    if !cancel_pub.is_cancelled() {
+                                        *last_src.lock().unwrap() = Some(std::time::Instant::now());
+                                    }
+                                }
+
+                                // Fase 2: publicar palabras clave solo para archivos completos.
+                                if keyword_due && !cancel_pub.is_cancelled() {
+                                    let kad_kw = Arc::clone(&kad_pub);
+                                    let cancel_kw = cancel_pub.clone();
+                                    futures_util::stream::iter(
+                                        batch.into_iter().filter(|f| !f.is_partial),
+                                    )
+                                    .for_each_concurrent(KAD_PUBLISH_CONCURRENCY, move |f| {
+                                        let kad = Arc::clone(&kad_kw);
+                                        let cancel = cancel_kw.clone();
+                                        async move {
+                                            if cancel.is_cancelled() {
+                                                return;
+                                            }
+                                            let hash = f.file_hash.trim().to_string();
+                                            let _ = kad
+                                                .publish_keyword(
+                                                    &hash,
+                                                    &f.file_name,
+                                                    f.file_size,
+                                                    f.aich_root,
+                                                )
+                                                .await;
+                                        }
+                                    })
+                                    .await;
+                                    if !cancel_pub.is_cancelled() {
+                                        *last_kw.lock().unwrap() = Some(std::time::Instant::now());
+                                    }
+                                }
+
                                 tracing::info!(
                                     "[KAD_PUBLISH] Republication round: {} file(s), {} successful source publishes (keywords={})",
-                                    shared.iter().filter(|f| f.enabled).count(),
-                                    published,
+                                    batch_len,
+                                    published.load(Ordering::Relaxed),
                                     keyword_due
                                 );
-                                let now = std::time::Instant::now();
-                                if source_due {
-                                    last_source_publish = Some(now);
-                                }
-                                if keyword_due {
-                                    last_keyword_publish = Some(now);
-                                }
-                            }
+                            });
                         }
                     }
                 }

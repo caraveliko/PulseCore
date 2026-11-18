@@ -19,7 +19,105 @@ use mule_protocol::framing::PacketCodec;
 
 use super::types::{InboundListenerService, MAX_READ_BUFFER_SIZE};
 
+/// Versión base del protocolo eD2K anunciada en `CT_VERSION` (0x3C, eMule estándar).
+const ED2K_CLIENT_VERSION: u32 = 0x3C;
+/// Versión de eMule anunciada en `CT_EMULE_VERSION` para saludos entrantes y callbacks.
+const INBOUND_EMULE_VERSION_TAG: u32 = 70 << 10;
+
 impl InboundListenerService {
+    /// Construye las etiquetas completas de capacidad para `OP_HELLO` y `OP_HELLO_ANSWER`.
+    async fn build_hello_tags(
+        &self,
+        tcp_port: u16,
+        is_low_id: bool,
+    ) -> (Vec<mule_protocol::ed2k::tags::Ed2kTag>, u8) {
+        use mule_protocol::ed2k::tags::{
+            Ed2kTag, TagName, TagValue, TAG_SPECIAL_CT_EMULE_VERSION,
+            TAG_SPECIAL_EMULE_MISCOPTIONS1, TAG_SPECIAL_EMULE_MISCOPTIONS2,
+            TAG_SPECIAL_EMULE_UDPPORTS, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
+        };
+
+        let mut tags = Vec::with_capacity(6);
+        let nickname = self
+            .downloads
+            .lock()
+            .await
+            .get_setting("nickname")
+            .ok()
+            .flatten()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "eMuleRust".to_string());
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_NAME),
+            value: TagValue::String(nickname),
+        });
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_VERSION),
+            value: TagValue::UInt32(ED2K_CLIENT_VERSION),
+        });
+        let udp_ports = ((self.kad_udp_port as u32) << 16) | (tcp_port as u32);
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_EMULE_UDPPORTS),
+            value: TagValue::UInt32(udp_ports),
+        });
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_CT_EMULE_VERSION),
+            value: TagValue::UInt32(INBOUND_EMULE_VERSION_TAG),
+        });
+
+        let sec_ident: u8 = if self
+            .sui_pubkey_der
+            .read()
+            .ok()
+            .and_then(|g| g.as_ref().map(|_| ()))
+            .is_some()
+        {
+            3
+        } else {
+            0
+        };
+        // MultiPacket = 1 (como en eMule), ExtendedRequestsVer = 2, Preview = 0.
+        let misc1: u32 = (1 << 29)
+            | (1 << 28)
+            | (4 << 24)
+            | (1 << 20)
+            | ((sec_ident as u32 & 0x0F) << 16)
+            | (4 << 12)
+            | (2 << 8)
+            | (1 << 4)
+            | (1 << 1);
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS1),
+            value: TagValue::UInt32(misc1),
+        });
+
+        let udp_verified_open = {
+            let svc = self.kad_udp.read().ok().and_then(|g| g.clone());
+            match svc {
+                Some(kad_udp) => {
+                    let tracker = kad_udp.firewall_tracker();
+                    let fw = tracker.lock().await;
+                    fw.verified && fw.status == crate::services::kad_udp::UdpFirewallStatus::Open
+                }
+                None => false,
+            }
+        };
+        let misc2: u32 = crate::services::hello_caps::misc_options2(
+            is_low_id,
+            udp_verified_open,
+            self.obfuscation_enabled
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.obfuscation_required
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
+        tags.push(Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS2),
+            value: TagValue::UInt32(misc2),
+        });
+
+        (tags, sec_ident)
+    }
+
     /// Gestiona una conexión entrante aceptada de un par remoto.
     pub async fn handle_inbound_connection(
         &self,
@@ -91,20 +189,23 @@ impl InboundListenerService {
                 return;
             }
             let local_user_hash = *self.user_hash.read().unwrap();
-            match crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_incoming(
+            let mut fallback_hashes = vec![mule_core::kad::KadId(local_user_hash).to_hash_be()];
+            if let Some(kad_svc) = self.kad.read().unwrap().as_ref() {
+                let kad_id = kad_svc.local_id();
+                fallback_hashes.push(kad_id.to_hash_be());
+                fallback_hashes.push(kad_id.0);
+            }
+            match crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_incoming_with_fallbacks(
                 socket,
                 b,
                 &local_user_hash,
+                &fallback_hashes,
                 self.obfuscation_padding_max,
             )
             .await
             {
                 Ok(s) => s,
                 Err(e) => {
-                    let _ = self
-                        .network_policy
-                        .ip_filter()
-                        .record_protocol_strike(remote_addr.ip(), "obfuscation handshake failed");
                     warn!(
                         "Inbound obfuscation handshake failed from {}: {}",
                         log_addr_str(&remote_str),
@@ -202,105 +303,10 @@ impl InboundListenerService {
                     }
                 }
                 callback_hello = Some(hello);
-                let mut tags = Vec::new();
-
-                // Reflejar el conjunto de etiquetas del OP_HELLO saliente: eMule espera nombre,
-                // versión ed2k, puertos UDP y versión eMule también en HELLOANSWER.
-                use mule_protocol::ed2k::tags::{
-                    Ed2kTag, TagName, TagValue, TAG_SPECIAL_CT_EMULE_VERSION,
-                    TAG_SPECIAL_EMULE_MISCOPTIONS1, TAG_SPECIAL_EMULE_MISCOPTIONS2,
-                    TAG_SPECIAL_EMULE_UDPPORTS, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
-                };
-                // TAG_NAME = el apodo efectivo (preferencia `nick` de eMule —
-                // el HELLOANSWER debe reflejar el seudónimo configurado, no una
-                // constante), con el mismo valor predeterminado que `current_nickname`.
-                let nickname = self
-                    .downloads
-                    .lock()
-                    .await
-                    .get_setting("nickname")
-                    .ok()
-                    .flatten()
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| "eMuleRust".to_string());
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_NAME),
-                    value: TagValue::String(nickname),
-                });
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_VERSION),
-                    value: TagValue::UInt32(0x3C),
-                });
-                let udp_ports =
-                    ((self.kad_udp_port as u32) << 16) | (actual_listen_addr.port() as u32);
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_EMULE_UDPPORTS),
-                    value: TagValue::UInt32(udp_ports),
-                });
-                // Anunciado como eMule 0.70a (ID de software 0, CT_EMULE_VERSION).
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_CT_EMULE_VERSION),
-                    value: TagValue::UInt32(70 << 10),
-                });
-
-                // MiscOptions1 de eMule — SecIdent=3 (v1|v2) en bits 16-19 cuando hay una
-                // clave RSA utilizable cargada, reflejando el HELLO saliente.
-                let sec_ident: u32 = if self.sui_pubkey_der.read().unwrap().is_some() {
-                    3
-                } else {
-                    0
-                };
-                // MultiPacket = 1 (como en eMule), Preview = 0 (no implementado).
-                let misc1: u32 = (1 << 29)
-                    | (1 << 28)
-                    | (4 << 24)
-                    | (1 << 20)
-                    | ((sec_ident & 0x0F) << 16)
-                    | (4 << 12)
-                    | (2 << 8)
-                    | (1 << 4)
-                    | (1 << 1);
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS1),
-                    value: TagValue::UInt32(misc1),
-                });
-                // Identidad ed2k real — enviada antes de MiscOptions2 para
-                // el bit «DirectUDPCallback» (`IsFirewalled` ⇔ sin
-                // HighID).
                 let ids = self.sx_local_ids(actual_listen_addr.port()).await;
-
-                // MiscOptions2 — misma disposición que el HELLO saliente:
-                // FileIdent<<13 | DirectUDPCallback<<12 | SrcExch2<<10 |
-                // CryptReq<<9 | CryptWants<<8 | CryptSup<<7 | ExtMultiPkt<<5
-                // | LargeFiles<<4 | KadVersion<<0.
-                // `BaseClient.cpp:1007` de eMule — bit 12 cuando TCP es
-                // inalcanzable (client_id < 0x01000000) pero el UDP Kad está
-                // comprobado como abierto (NAT full-cone): un par puede entonces
-                // solicitarnos un `OP_DIRECTCALLBACKREQ`.
-                let udp_verified_open = {
-                    let svc = self.kad_udp.read().unwrap().clone();
-                    match svc {
-                        Some(kad_udp) => {
-                            let tracker = kad_udp.firewall_tracker();
-                            let fw = tracker.lock().await;
-                            fw.verified
-                                && fw.status == crate::services::kad_udp::UdpFirewallStatus::Open
-                        }
-                        None => false,
-                    }
-                };
-                let misc2: u32 = crate::services::hello_caps::misc_options2(
-                    ids.client_id < 0x0100_0000,
-                    udp_verified_open,
-                    self.obfuscation_enabled
-                        .load(std::sync::atomic::Ordering::Relaxed),
-                    self.obfuscation_required
-                        .load(std::sync::atomic::Ordering::Relaxed),
-                );
-                tags.push(Ed2kTag {
-                    name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS2),
-                    value: TagValue::UInt32(misc2),
-                });
+                let (tags, sec_ident) = self
+                    .build_hello_tags(actual_listen_addr.port(), ids.client_id < 0x0100_0000)
+                    .await;
 
                 // Identidad ed2k real (ID asignado por el servidor actual,
                 // IP/puerto del servidor) — `SendHelloTypePacket` de eMule escribe
@@ -322,7 +328,7 @@ impl InboundListenerService {
                     if peer_info.is_emule() {
                         let info = crate::services::peer_session::handshake::build_emule_info(
                             self.kad_udp_port,
-                            sec_ident as u8,
+                            sec_ident,
                         );
                         if let Ok(info_pkt) = encoder.encode_emule_info(&info) {
                             let mut out = Vec::with_capacity(6 + info_pkt.payload.len());
@@ -345,6 +351,9 @@ impl InboundListenerService {
                 return;
             }
         }
+
+        // Conservar cualquier paquete ya leído tras OP_HELLO (p. ej. OP_EMULEINFO o petición de archivo)
+        stream.put_back_unread(&read_buf);
 
         // Arranque Kad desde clientes: un par entrante que anuncia un puerto
         // UDP de Kad (palabra alta de CT_EMULE_UDPPORTS) puede sembrar nuestra tabla de enrutamiento
@@ -608,6 +617,7 @@ impl InboundListenerService {
                     .map_err(|e| format!("TCP connect to {target} failed: {e}"))?
             }
         };
+        let _ = stream.set_nodelay(true);
         let local_ip = stream
             .local_addr()
             .map(|a| a.ip())
@@ -619,75 +629,34 @@ impl InboundListenerService {
         let use_obfu = crypt_options & 0x01 != 0
             && self
                 .obfuscation_enabled
-                .load(std::sync::atomic::Ordering::Relaxed)
-            && peer_user_hash.is_some();
-        let mut stream = if use_obfu {
-            crate::services::obfuscation_stream::ObfuscatedStream::connect_peer_outgoing(
-                stream,
-                &peer_user_hash.unwrap(),
-                self.obfuscation_padding_max,
-            )
-            .await
-            .map_err(|e| format!("Callback connect obfuscation handshake failed: {e}"))?
-        } else {
-            crate::services::obfuscation_stream::ObfuscatedStream::plaintext(stream)
+                .load(std::sync::atomic::Ordering::Relaxed);
+        let mut stream = match (use_obfu, peer_user_hash) {
+            (true, Some(uh)) => {
+                crate::services::obfuscation_stream::ObfuscatedStream::connect_peer_outgoing(
+                    stream,
+                    &uh,
+                    self.obfuscation_padding_max,
+                )
+                .await
+                .map_err(|e| format!("Callback connect obfuscation handshake failed: {e}"))?
+            }
+            _ => crate::services::obfuscation_stream::ObfuscatedStream::plaintext(stream),
         };
 
-        // Enviar OP_HELLO (mismas etiquetas de capacidad que en la respuesta entrante).
+        // Enviar OP_HELLO completo (mismas etiquetas de capacidad que en la respuesta entrante)
+        // y a continuación OP_EMULEINFO, igual que SendHelloPacket de eMule.
         let encoder = Ed2kEncoder::default();
         let decoder = Ed2kDecoder::default();
         let codec = PacketCodec::new();
-        let sec_ident: u32 = if self.sui_pubkey_der.read().unwrap().is_some() {
-            3
-        } else {
-            0
-        };
-        let misc1: u32 = (1 << 29)
-            | (1 << 28)
-            | (4 << 24)
-            | (1 << 20)
-            | ((sec_ident & 0x0F) << 16)
-            | (4 << 12)
-            | (1 << 4)
-            | 1;
-        let mut tags = vec![mule_protocol::ed2k::tags::Ed2kTag {
-            name: mule_protocol::ed2k::tags::TagName::Id(
-                mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_MISCOPTIONS1,
-            ),
-            value: mule_protocol::ed2k::tags::TagValue::UInt32(misc1),
-        }];
-        // Mismo MiscOptions2 que en los hellos normales — eMule utiliza el mismo
-        // `SendHelloPacket` para la devolución de llamada conectada.
-        let udp_verified_open = {
-            let svc = self.kad_udp.read().unwrap().clone();
-            match svc {
-                Some(kad_udp) => {
-                    let tracker = kad_udp.firewall_tracker();
-                    let fw = tracker.lock().await;
-                    fw.verified && fw.status == crate::services::kad_udp::UdpFirewallStatus::Open
-                }
-                None => false,
-            }
-        };
-        let misc2: u32 = crate::services::hello_caps::misc_options2(
-            our_client_id < 0x0100_0000,
-            udp_verified_open,
-            self.obfuscation_enabled
-                .load(std::sync::atomic::Ordering::Relaxed),
-            self.obfuscation_required
-                .load(std::sync::atomic::Ordering::Relaxed),
-        );
-        tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-            name: mule_protocol::ed2k::tags::TagName::Id(
-                mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_MISCOPTIONS2,
-            ),
-            value: mule_protocol::ed2k::tags::TagValue::UInt32(misc2),
-        });
+        let our_tcp_port = self.listen_addr.lock().await.map(|a| a.port()).unwrap_or(0);
+        let (tags, sec_ident) = self
+            .build_hello_tags(our_tcp_port, our_client_id < 0x0100_0000)
+            .await;
         let local_user_hash = *self.user_hash.read().unwrap();
         let hello = mule_protocol::ed2k::Ed2kHello {
             user_hash: local_user_hash,
             client_id: our_client_id,
-            tcp_port: self.listen_addr.lock().await.map(|a| a.port()).unwrap_or(0),
+            tcp_port: our_tcp_port,
             tags,
             unknown_tags: vec![],
             server_ip,
@@ -705,6 +674,19 @@ impl InboundListenerService {
             .write_all(&out)
             .await
             .map_err(|e| format!("Failed to send OP_HELLO to {target}: {e}"))?;
+
+        let emule_info = crate::services::peer_session::handshake::build_emule_info(
+            self.kad_udp_port,
+            sec_ident,
+        );
+        if let Ok(info_pkt) = encoder.encode_emule_info(&emule_info) {
+            let mut info_wire = Vec::with_capacity(6 + info_pkt.payload.len());
+            info_wire.push(info_pkt.protocol);
+            info_wire.extend_from_slice(&(info_pkt.frame_len() as u32).to_le_bytes());
+            info_wire.push(info_pkt.opcode);
+            info_wire.extend_from_slice(&info_pkt.payload);
+            let _ = stream.write_all(&info_wire).await;
+        }
 
         // Leer OP_HELLO_ANSWER.
         let mut read_buf = BytesMut::with_capacity(65536);
@@ -742,6 +724,9 @@ impl InboundListenerService {
             Ok(Err(e)) => return Err(format!("Callback handshake with {target} failed: {e}")),
             Err(_) => return Err(format!("Callback handshake with {target} timed out")),
         };
+
+        // Conservar cualquier paquete concatenado tras OP_HELLO_ANSWER antes de despachar
+        stream.put_back_unread(&read_buf);
 
         let peer_info = mule_protocol::ed2k::Ed2kPeerInfo::from_hello_answer(&answer);
         let peer_hash = if answer.user_hash != [0u8; 16] {

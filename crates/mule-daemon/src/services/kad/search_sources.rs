@@ -178,6 +178,14 @@ pub async fn search_sources_iterative(
                     // `DownloadQueue.cpp:1596`). Conservarla cuando exista cualquiera
                     // de las dos rutas; la propia IP del par se utiliza para adoptar la
                     // conexión de devolución de llamada entrante.
+                    // Descartar direcciones especiales no enrutables (permitiendo loopback en perfil LocalLab)
+                    if ip.is_unspecified()
+                        || ip.is_multicast()
+                        || (!profile.is_loopback_only() && ip.is_loopback())
+                    {
+                        continue;
+                    }
+
                     let (peer_addr_str, buddy_hex) = if w.tcp_port == 0 {
                         let direct_cb = w.encryption & client_udp::CONNECT_OPT_DIRECT_CALLBACK != 0;
                         match w.buddy_id {
@@ -211,7 +219,10 @@ pub async fn search_sources_iterative(
                         fail_count: 0,
                         last_error: None,
                         cooldown_until_unix_ms: None,
-                        user_hash: Some(KadId(w.kad_id).to_hash_hex()),
+                        // En `KADEMLIA2_SEARCH_RES` para fuentes, eMule envía `GetClientHash()`
+                        // (el hash de usuario eD2K codificado como `CUInt128`). Convertido
+                        // mediante `to_hash_hex()`, permite derivar la clave RC4 de ofuscación.
+                        user_hash: (w.kad_id != [0u8; 16]).then(|| KadId(w.kad_id).to_hash_hex()),
                         crypt_options: w.encryption,
                         buddy_id: buddy_hex,
                         software: None,

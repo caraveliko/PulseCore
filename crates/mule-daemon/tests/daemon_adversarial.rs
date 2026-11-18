@@ -166,6 +166,8 @@ async fn test_concurrent_downloads_no_crosstalk() {
     // Monitorizar eventos hasta que AMBAS descargas alcancen "Completed"
     let mut id1_completed = false;
     let mut id2_completed = false;
+    let file1_final = client_target_dir.path().join("concurrent_1.txt");
+    let file2_final = client_target_dir.path().join("concurrent_2.txt");
 
     let timeout = Duration::from_secs(10);
     let start = std::time::Instant::now();
@@ -187,15 +189,24 @@ async fn test_concurrent_downloads_no_crosstalk() {
                 }
             }
         }
+        // `read_response(id=5)` pudo haber descartado un evento `completed` previo si la
+        // transferencia local terminó antes de la respuesta de `lab.addPeerSource`.
+        if file1_final.is_file()
+            && fs::metadata(&file1_final).map(|m| m.len()).unwrap_or(0) == 368_640
+        {
+            id1_completed = true;
+        }
+        if file2_final.is_file()
+            && fs::metadata(&file2_final).map(|m| m.len()).unwrap_or(0) == 552_960
+        {
+            id2_completed = true;
+        }
     }
 
     assert!(id1_completed, "Download 1 must reach completed");
     assert!(id2_completed, "Download 2 must reach completed");
 
     // Verificar el aislamiento y la exactitud de los archivos finales en el disco físico
-    let file1_final = client_target_dir.path().join("concurrent_1.txt");
-    let file2_final = client_target_dir.path().join("concurrent_2.txt");
-
     assert!(file1_final.exists(), "File 1 must exist at destination");
     assert!(file2_final.exists(), "File 2 must exist at destination");
 

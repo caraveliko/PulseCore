@@ -248,20 +248,45 @@ impl KBucketTable {
         all_contacts
     }
 
-    /// Encuentra hasta `count` contactos más cercanos, priorizando los contactos verificados.
+    /// Encuentra hasta `count` contactos más cercanos a `target`, combinando
+    /// hasta la mitad de contactos verificados más cercanos por distancia XOR y
+    /// completando con los más cercanos globales para no quedar ciego tras
+    /// importar `nodes.dat` o cuando solo respondieron nodos lejanos.
     pub fn find_closest_verified(&self, target: &KadId, count: usize) -> Vec<KadContact> {
+        if count == 0 {
+            return Vec::new();
+        }
         let mut all_contacts = self.collect_all();
-        all_contacts.sort_by(|a, b| match (a.verified, b.verified) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => {
-                let dist_a = a.kad_id.xor_distance(target);
-                let dist_b = b.kad_id.xor_distance(target);
-                dist_a.cmp(&dist_b)
-            }
+        all_contacts.sort_by(|a, b| {
+            let dist_a = a.kad_id.xor_distance(target);
+            let dist_b = b.kad_id.xor_distance(target);
+            dist_a.cmp(&dist_b)
         });
-        all_contacts.truncate(count);
-        all_contacts
+
+        let verified_quota = count / 2;
+        let mut selected: Vec<KadContact> = Vec::with_capacity(count.min(all_contacts.len()));
+        for c in &all_contacts {
+            if selected.len() >= verified_quota {
+                break;
+            }
+            if c.verified {
+                selected.push(c.clone());
+            }
+        }
+        for c in all_contacts {
+            if selected.len() >= count {
+                break;
+            }
+            if !selected.iter().any(|s| s.kad_id == c.kad_id) {
+                selected.push(c);
+            }
+        }
+        selected.sort_by(|a, b| {
+            let dist_a = a.kad_id.xor_distance(target);
+            let dist_b = b.kad_id.xor_distance(target);
+            dist_a.cmp(&dist_b)
+        });
+        selected
     }
 
     /// Encuentra hasta `count` contactos *verificados* más cercanos a `target`.

@@ -89,6 +89,14 @@ pub(crate) async fn perform_peer_handshake(
     downloads: &Arc<Mutex<DownloadService>>,
     sec_ident_cap: u8,
 ) -> Result<HandshakeResult, PeerError> {
+    // Comprobar antes de abrir el socket TCP si la política local exige ofuscación obligatoria sin hash
+    if obfuscation_required && target_user_hash.is_none() {
+        return Err(PeerError::new(
+            PeerFailureReason::MissingUserHashForObfuscation,
+            "Protocol obfuscation is required locally but peer user hash is unknown",
+        ));
+    }
+
     // 1. Conexión TCP con tiempo de espera y cancel_token
     let stream_res = tokio::select! {
         _ = cancel_token.cancelled() => {
@@ -110,24 +118,16 @@ pub(crate) async fn perform_peer_handshake(
         .unwrap_or_default()
         .as_millis() as i64;
 
-    // Decisión de ofuscación:
+    // Decisión de ofuscación: si nuestra política no exige cifrado y desconocemos el user_hash
+    // (p. ej. fuentes Kad o metadatos sin hash), intentar texto plano en lugar de abortar.
     let peer_requires_crypt = (peer_crypt_options & 0x04) != 0;
     let peer_supports_crypt = (peer_crypt_options & 0x01) != 0 || (peer_crypt_options & 0x02) != 0;
 
-    let use_obfuscation = if obfuscation_required || peer_requires_crypt {
-        if target_user_hash.is_none() {
-            return Err(PeerError::new(
-                PeerFailureReason::MissingUserHashForObfuscation,
-                "Peer requires protocol obfuscation but its user hash is unknown",
-            ));
-        }
-        true
-    } else {
-        obfuscation_enabled && peer_supports_crypt && target_user_hash.is_some()
-    };
+    let obfu_hash = target_user_hash.filter(|_| {
+        obfuscation_required || peer_requires_crypt || (obfuscation_enabled && peer_supports_crypt)
+    });
 
-    let mut stream = if use_obfuscation {
-        let th = target_user_hash.unwrap();
+    let mut stream = if let Some(th) = obfu_hash {
         tracing::info!(
             "Initiating obfuscated handshake to peer {peer} with target user hash {:02X?}",
             &th,
@@ -138,7 +138,7 @@ pub(crate) async fn perform_peer_handshake(
         {
             Ok(s) => s,
             Err(e) => {
-                if !obfuscation_required && !peer_requires_crypt {
+                if !obfuscation_required {
                     tracing::warn!(
                         "Obfuscated handshake to peer {peer} failed ({e}), falling back to plaintext connection"
                     , peer = log_peer_addr(target_addr));
@@ -148,14 +148,29 @@ pub(crate) async fn perform_peer_handshake(
                     )
                     .await
                     {
-                        Ok(Ok(plain_stream)) => ObfuscatedStream::plaintext(plain_stream),
+                        Ok(Ok(plain_stream)) => {
+                            let _ = plain_stream.set_nodelay(true);
+                            ObfuscatedStream::plaintext(plain_stream)
+                        }
                         Ok(Err(reconnect_err)) => {
+                            if peer_requires_crypt {
+                                return Err(PeerError::new(
+                                    PeerFailureReason::ObfuscationNegotiationFailed,
+                                    format!("Protocol obfuscation negotiation failed ({e}) and plaintext fallback failed: {reconnect_err}"),
+                                ));
+                            }
                             return Err(PeerError::new(
                                 PeerFailureReason::ConnectRefused,
                                 format!("Plaintext fallback connect failed: {reconnect_err}"),
                             ));
                         }
                         Err(_) => {
+                            if peer_requires_crypt {
+                                return Err(PeerError::new(
+                                    PeerFailureReason::ObfuscationNegotiationFailed,
+                                    format!("Protocol obfuscation negotiation failed ({e}) and plaintext fallback timed out"),
+                                ));
+                            }
                             return Err(PeerError::new(
                                 PeerFailureReason::TimeoutConnect,
                                 "Plaintext fallback connect timed out",
@@ -175,6 +190,12 @@ pub(crate) async fn perform_peer_handshake(
             }
         }
     } else {
+        if peer_requires_crypt && target_user_hash.is_none() {
+            tracing::debug!(
+                "Peer {peer} advertises required crypt without user_hash — attempting plaintext fallback",
+                peer = log_peer_addr(target_addr)
+            );
+        }
         ObfuscatedStream::plaintext(tcp_stream)
     };
 
@@ -632,6 +653,9 @@ pub(crate) async fn perform_peer_handshake(
             }
         }
     }
+
+    // Preservar paquetes posteriores recibidos en el mismo segmento TCP que OP_HELLO_ANSWER
+    stream.put_back_unread(&read_buf);
 
     Ok(HandshakeResult {
         stream,

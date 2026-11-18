@@ -65,6 +65,27 @@ impl<S> ObfuscatedStream<S> {
     pub fn into_inner(self) -> S {
         self.inner
     }
+
+    /// Reinyecta bytes ya leídos (y ya descifrados si el flujo está ofuscado) al inicio
+    /// del búfer de prefijo para que la siguiente fase de lectura (`poll_read`) los consuma
+    /// sin perder paquetes concatenados en el mismo segmento TCP.
+    pub fn put_back_unread(&mut self, leftover: &[u8]) {
+        if leftover.is_empty() {
+            return;
+        }
+        if self.read_prefix_offset >= self.read_prefix.len() {
+            self.read_prefix.clear();
+            self.read_prefix_offset = 0;
+            self.read_prefix.extend_from_slice(leftover);
+        } else {
+            let remaining = &self.read_prefix[self.read_prefix_offset..];
+            let mut combined = Vec::with_capacity(leftover.len() + remaining.len());
+            combined.extend_from_slice(leftover);
+            combined.extend_from_slice(remaining);
+            self.read_prefix = combined;
+            self.read_prefix_offset = 0;
+        }
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
@@ -270,32 +291,66 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
     ///
     /// Luego recibe la sincronización + parámetros cifrados del iniciador, y responde con su propia sincronización + relleno cifrados.
     pub async fn accept_peer_incoming(
-        mut stream: S,
-        _first_byte: u8,
+        stream: S,
+        first_byte: u8,
         local_user_hash: &[u8; 16],
         max_padding: u8,
     ) -> Result<Self, io::Error> {
-        // 1. Leer los 4 bytes restantes de RandomKeyPart
+        Self::accept_peer_incoming_with_fallbacks(
+            stream,
+            first_byte,
+            local_user_hash,
+            &[],
+            max_padding,
+        )
+        .await
+    }
+
+    /// Variante de [`Self::accept_peer_incoming`] que intenta descifrar el marcador
+    /// `MAGICVALUE_SYNC` probando una lista ordenada de hashes candidatos tras
+    /// `local_user_hash` (p. ej. `KadId(user_hash).to_hash_be()`, ID Kad local).
+    pub async fn accept_peer_incoming_with_fallbacks(
+        mut stream: S,
+        _first_byte: u8,
+        local_user_hash: &[u8; 16],
+        fallback_hashes: &[[u8; 16]],
+        max_padding: u8,
+    ) -> Result<Self, io::Error> {
+        // 1. Leer los 4 bytes restantes de RandomKeyPart y los 4 bytes de sincronización.
         let mut random_key_part_bytes = [0u8; 4];
         stream.read_exact(&mut random_key_part_bytes).await?;
         let random_key_part = u32::from_le_bytes(random_key_part_bytes);
 
-        // 2. Derivar cifradores
-        let (send_cipher, mut recv_cipher) =
-            derive_responder_peer_ciphers(local_user_hash, random_key_part);
-        let mut send_cipher = send_cipher;
-
-        // 3. Leer sincronización y opciones cifradas del iniciador
         let mut magic_bytes = [0u8; 4];
         stream.read_exact(&mut magic_bytes).await?;
-        recv_cipher.process(&mut magic_bytes);
-        let magic = u32::from_le_bytes(magic_bytes);
-        if magic != MAGICVALUE_SYNC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid obfuscation magic sync from incoming peer: 0x{magic:08X}"),
-            ));
+
+        // 2. Derivar cifradores probando primero `local_user_hash` y después los respaldos.
+        let mut first_magic = 0u32;
+        let mut matched = None;
+        for (idx, candidate_hash) in std::iter::once(local_user_hash)
+            .chain(fallback_hashes.iter())
+            .enumerate()
+        {
+            let (send_candidate, mut recv_candidate) =
+                derive_responder_peer_ciphers(candidate_hash, random_key_part);
+            let mut probe = magic_bytes;
+            recv_candidate.process(&mut probe);
+            let magic = u32::from_le_bytes(probe);
+            if idx == 0 {
+                first_magic = magic;
+            }
+            if magic == MAGICVALUE_SYNC {
+                matched = Some((send_candidate, recv_candidate));
+                break;
+            }
         }
+
+        let (mut send_cipher, mut recv_cipher) = matched.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid obfuscation magic sync from incoming peer: 0x{first_magic:08X}"),
+            )
+        })?;
 
         let mut meta = [0u8; 3]; // supported, preferred, pad_len
         stream.read_exact(&mut meta).await?;
@@ -663,5 +718,70 @@ mod tests {
         let (c_res, s_res) = tokio::join!(client_task, server_task);
         s_res.unwrap();
         assert!(c_res.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_put_back_unread_preserves_bytes_without_double_decrypt() {
+        // Caso 1: flujo en texto plano con lecturas concatenadas y prefijo parcial previo
+        {
+            let (mut tx_io, rx_io) = tokio::io::duplex(1024);
+            tokio::spawn(async move {
+                tx_io.write_all(b"CCC").await.unwrap();
+            });
+            let mut stream = ObfuscatedStream::plaintext_with_prefix(rx_io, b"AB".to_vec());
+            let mut one = [0u8; 1];
+            stream.read_exact(&mut one).await.unwrap();
+            assert_eq!(&one, b"A");
+            // Queda "B" en read_prefix; reinyectamos "XX" delante de "B"
+            stream.put_back_unread(b"XX");
+            let mut out = [0u8; 6];
+            stream.read_exact(&mut out).await.unwrap();
+            assert_eq!(&out, b"XXBCCC");
+        }
+
+        // Caso 2: flujo cifrado RC4 (verificar que los bytes reinyectados no se descifran dos veces)
+        let (client_io, server_io) = tokio::io::duplex(4096);
+        let server_user_hash = [0x42u8; 16];
+
+        let client_task = tokio::spawn(async move {
+            let mut stream =
+                ObfuscatedStream::connect_peer_outgoing(client_io, &server_user_hash, 4)
+                    .await
+                    .unwrap();
+            // Simular Fase 1: leer un búfer grande donde llegan dos mensajes juntos
+            let mut buf = [0u8; 32];
+            let n = stream.read(&mut buf).await.unwrap();
+            assert!(n >= 5);
+            // Si llegó parte del segundo mensaje en el mismo segmento, reinyectarlo antes de Fase 2
+            let first = buf[..5].to_vec();
+            assert_eq!(&first, b"FASE1");
+            if n > 5 {
+                stream.put_back_unread(&buf[5..n]);
+            }
+            // Fase 2: leer exactamente el segundo mensaje ("FASE2") + posible tercer bloque ("FASE3")
+            let mut rest = [0u8; 10];
+            stream.read_exact(&mut rest).await.unwrap();
+            assert_eq!(&rest, b"FASE2FASE3");
+        });
+
+        let server_task = tokio::spawn(async move {
+            let mut server_io = server_io;
+            let mut first_byte = [0u8; 1];
+            server_io.read_exact(&mut first_byte).await.unwrap();
+            let mut stream = ObfuscatedStream::accept_peer_incoming(
+                server_io,
+                first_byte[0],
+                &server_user_hash,
+                4,
+            )
+            .await
+            .unwrap();
+            stream.write_all(b"FASE1FASE2FASE3").await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
+        let (c_res, s_res) = tokio::join!(client_task, server_task);
+        c_res.unwrap();
+        s_res.unwrap();
     }
 }

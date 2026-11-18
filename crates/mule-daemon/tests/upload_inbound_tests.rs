@@ -159,9 +159,9 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     out.extend_from_slice(&rp_pkt.payload);
     client_socket.write_all(&out).await.unwrap();
 
-    // 5. Esperar OP_SENDINGPART
-    let mut received_data = false;
-    while !received_data {
+    // 5. Esperar subpaquetes OP_SENDINGPART contiguos hasta completar 0..184320
+    let mut received_end = 0u32;
+    while received_end < 184320 {
         let n = client_socket.read(&mut raw_buf).await.unwrap();
         assert!(n > 0);
         read_buf.extend_from_slice(&raw_buf[..n]);
@@ -170,14 +170,13 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
                 let part = decoder
                     .decode_sending_part(pkt.protocol, pkt.opcode, &pkt.payload, 0)
                     .unwrap();
-                assert_eq!(part.start_offset, 0);
-                assert_eq!(part.end_offset, 184320);
-                assert_eq!(part.data.len(), 184320);
-                received_data = true;
-                break;
+                assert_eq!(part.start_offset, received_end);
+                assert!(part.data.len() <= 10_240);
+                received_end = part.end_offset;
             }
         }
     }
+    assert_eq!(received_end, 184320);
 
     // Verificar el estado de subida mediante RPC
     let status_req = make_req(2, "uploads.status", None);

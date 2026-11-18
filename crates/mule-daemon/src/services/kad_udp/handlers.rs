@@ -751,9 +751,16 @@ pub async fn handle_incoming_message(
             }
             reg.register_pending(peer_addr.ip(), req.buddy_id, req.user_id, req.tcp_port);
             drop(reg);
+            // eMule `Process_KADEMLIA_FINDBUDDY_REQ` responde con `GetClientHash()`,
+            // es decir, el hash de usuario eD2K en formato `CUInt128`.
+            let client_hash = if *our_user_hash != [0u8; 16] {
+                KadId::from_hash_be(our_user_hash).0
+            } else {
+                *local_kad_id
+            };
             let res = KadCodec::encode_findbuddy_res(
                 &req.buddy_id,
-                local_kad_id,
+                &client_hash,
                 buddy_tcp_port,
                 buddy_connect_options,
             );
@@ -1212,7 +1219,13 @@ async fn maybe_tcp_firewall_check(
         return;
     }
     let pkt = if peer_kad_version >= KADEMLIA_VERSION7_49A {
-        KadCodec::encode_firewalled2_req(our_tcp_port, our_user_hash, connect_options)
+        // eMule lee este campo con `ReadUInt128` + `ToByteArray`, invirtiendo cada DWORD de 4 bytes.
+        let wire_hash = if *our_user_hash != [0u8; 16] {
+            KadId::from_hash_be(our_user_hash).0
+        } else {
+            *our_user_hash
+        };
+        KadCodec::encode_firewalled2_req(our_tcp_port, &wire_hash, connect_options)
     } else {
         KadCodec::encode_firewalled_req(our_tcp_port)
     };

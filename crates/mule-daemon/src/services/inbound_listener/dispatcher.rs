@@ -41,6 +41,10 @@ use crate::services::obfuscation_stream::ObfuscatedStream;
 use crate::services::peer_session::source_exchange as sx;
 use crate::services::upload_queue::UploadSlotState;
 
+/// Tamaño máximo de fragmento de carga útil por paquete de subida
+/// (`CreateStandardPackets` / `CreatePackedPackets` de eMule 0.72a).
+const UPLOAD_PACKET_CHUNK_SIZE: usize = 10_240;
+
 /// Convierte una dirección IPv4 al `u32` utilizado en la carga útil firmada SUI V2
 /// (little-endian en el cable). Los pares IPv6 llevan `0`, coincidiendo con eMule que es
 /// solo IPv4 para este campo.
@@ -240,7 +244,7 @@ impl InboundListenerService {
                         ) else {
                             continue;
                         };
-                        if pkt.protocol == PR_EMULE {
+                        if pkt.protocol == PR_EMULE && pkt.opcode != OP_REQUESTPARTS_I64 {
                             match pkt.opcode {
                                 OP_PUBLICKEY => {
                                     if let Ok(pk) = decoder.decode_public_key(pkt.protocol, pkt.opcode, &pkt.payload, 0) {
@@ -1144,7 +1148,9 @@ impl InboundListenerService {
                             continue;
                         }
 
-                        if pkt.protocol != PR_ED2K {
+                        if pkt.protocol != PR_ED2K
+                            && !(pkt.protocol == PR_EMULE && pkt.opcode == OP_REQUESTPARTS_I64)
+                        {
                             continue;
                         }
 
@@ -1693,31 +1699,14 @@ impl InboundListenerService {
                                                      }
                                                  }
                                                  let length = (end.saturating_sub(start)).min(184320);
+                                                 if length == 0 {
+                                                     continue;
+                                                 }
 
                                                  tracing::debug!(
                                                      "[UPLOAD_REQUEST] Inbound peer {} requested block [{}..{}] for file '{}' (hash: {})",
                                                      log_addr_str(&remote_str), start, end, shared_file.file_name, hash_hex
                                                  );
-
-                                                 // Regulación de velocidad mediante el cubo de fichas de subida de la política de red.
-                                                 // Adquirir en cuantos de <=10240 bytes (UploadBandwidthThrottler de eMule
-                                                 // otorga cuantos por ranura): mantiene equidad entre ranuras cuando
-                                                 // MAX_ACTIVE_UPLOADS ranuras comparten el cubo global.
-                                                 let upload_bucket = &self.network_policy.rate_limiters().upload_bucket;
-                                                 let is_cancelled = || cancel_token.is_cancelled();
-                                                 let mut throttled_ok = true;
-                                                 let mut remaining = length;
-                                                 while remaining > 0 {
-                                                     let quantum = remaining.min(10240);
-                                                     if upload_bucket.acquire_tokens(quantum, is_cancelled).await.is_err() {
-                                                         throttled_ok = false;
-                                                         break;
-                                                     }
-                                                     remaining -= quantum;
-                                                 }
-                                                 if !throttled_ok {
-                                                     break;
-                                                 }
 
                                                  // Leer bytes reales del disco — nunca inventar
                                                  // datos: un rango no legible se deja sin responder
@@ -1786,21 +1775,36 @@ impl InboundListenerService {
                                                      None
                                                  };
 
+                                                 let upload_bucket = &self.network_policy.rate_limiters().upload_bucket;
+                                                 let is_cancelled = || cancel_token.is_cancelled();
+                                                 let use_i64 = is_i64_req || (start + length) > u32::MAX as u64;
+                                                 let mut throttled_ok = true;
+                                                 let mut award_bytes = 0u64;
+
                                                  if let Some(compressed) = compressed {
                                                      // OP_COMPRESSEDPART (0x40, OP_EMULEPROT):
                                                      // hash16 + u32 block_start + u32 total
-                                                     // compressed size + <=10240-byte chunks.
-                                                     // I64 variant (0xA1): u64 block_start.
+                                                     // compressed size + fragmentos de <=10240 bytes.
+                                                     // Variante I64 (0xA1): u64 block_start.
                                                      let mut sent = false;
-                                                     for chunk in compressed.chunks(10240) {
-                                                         let hdr_len = if is_i64_req { 28 } else { 24 };
+                                                     for chunk in compressed.chunks(UPLOAD_PACKET_CHUNK_SIZE) {
+                                                         if upload_bucket
+                                                             .acquire_tokens(chunk.len() as u64, is_cancelled)
+                                                             .await
+                                                             .is_err()
+                                                         {
+                                                             throttled_ok = false;
+                                                             sent = false;
+                                                             break;
+                                                         }
+                                                         let hdr_len = if use_i64 { 28 } else { 24 };
                                                          let frame_len = 1 + hdr_len + chunk.len();
                                                          let mut out = Vec::with_capacity(5 + frame_len);
                                                          out.push(PR_EMULE);
                                                          out.extend_from_slice(&(frame_len as u32).to_le_bytes());
-                                                         out.push(if is_i64_req { OP_COMPRESSEDPART_I64 } else { OP_COMPRESSEDPART });
+                                                         out.push(if use_i64 { OP_COMPRESSEDPART_I64 } else { OP_COMPRESSEDPART });
                                                          out.extend_from_slice(&req_file_hash);
-                                                         if is_i64_req {
+                                                         if use_i64 {
                                                              out.extend_from_slice(&start.to_le_bytes());
                                                          } else {
                                                              out.extend_from_slice(&(start as u32).to_le_bytes());
@@ -1814,77 +1818,98 @@ impl InboundListenerService {
                                                          sent = true;
                                                      }
                                                      if sent {
+                                                         let _ = stream.flush().await;
                                                          tracing::debug!(
                                                              "[UPLOAD_BLOCK] Sent compressed block ({} -> {} bytes) to {} for file '{}' (offset {}..{})",
                                                              payload.len(), compressed.len(), log_addr_str(&remote_str), shared_file.file_name, start, start + length
                                                          );
                                                          self.upload_manager.update_progress(&client_key, length).await;
-                                                         if shared_file.file_size > 0 && (start + length) <= shared_file.file_size {
-                                                             if let (Some(ref ph), Some(ref pk_der)) = (&remote_pubkey_hash, &remote_pubkey_der) {
-                                                                 let pk_hex = hex::encode(pk_der);
-                                                                 let mut dl_svc = self.downloads.lock().await;
-                                                                 if dl_svc.record_credit_upload(ph, &pk_hex, length).is_ok() {
-                                                                     let total_up = dl_svc.get_peer_credit(ph).ok().flatten().map(|c| c.uploaded_bytes).unwrap_or(length);
-                                                                     tracing::debug!(
-                                                                         "[CREDITS_AWARDED] Awarded {} uploaded bytes to verified peer {} (pubkey hash: {}, total: {} bytes)",
-                                                                         length, log_addr_str(&remote_str), ph, total_up
-                                                                     );
-                                                                 }
-                                                             }
-                                                         }
+                                                         award_bytes = length;
                                                      }
-                                                     continue;
+                                                 } else {
+                                                     // CreateStandardPackets de eMule: fragmentar
+                                                     // OP_SENDINGPART / OP_SENDINGPART_I64 en subpaquetes
+                                                     // de hasta `UPLOAD_PACKET_CHUNK_SIZE` bytes para no
+                                                     // saturar el socket del par ni retardar el refresco
+                                                     // del temporizador DOWNLOADTIMEOUT.
+                                                     let mut chunk_offset = 0u64;
+                                                     for chunk in payload.chunks(UPLOAD_PACKET_CHUNK_SIZE) {
+                                                         let chunk_len = chunk.len() as u64;
+                                                         if upload_bucket
+                                                             .acquire_tokens(chunk_len, is_cancelled)
+                                                             .await
+                                                             .is_err()
+                                                         {
+                                                             throttled_ok = false;
+                                                             break;
+                                                         }
+                                                         let chunk_start = start + chunk_offset;
+                                                         let chunk_end = chunk_start + chunk_len;
+                                                         chunk_offset += chunk_len;
+
+                                                         let send_pkt = if use_i64 {
+                                                             encoder.encode_sending_part_i64(
+                                                                 &mule_protocol::ed2k::Ed2kSendingPartI64 {
+                                                                     file_hash: req_file_hash,
+                                                                     start_offset: chunk_start,
+                                                                     end_offset: chunk_end,
+                                                                     data: Bytes::copy_from_slice(chunk),
+                                                                 },
+                                                             )
+                                                         } else {
+                                                             encoder.encode_sending_part(
+                                                                 &Ed2kSendingPart::new(
+                                                                     req_file_hash,
+                                                                     chunk_start as u32,
+                                                                     chunk_end as u32,
+                                                                     Bytes::copy_from_slice(chunk),
+                                                                 ),
+                                                             )
+                                                         };
+
+                                                         let Ok(send_pkt) = send_pkt else {
+                                                             break;
+                                                         };
+                                                         let mut out = Vec::with_capacity(6 + send_pkt.payload.len());
+                                                         out.push(send_pkt.protocol);
+                                                         out.extend_from_slice(&(send_pkt.frame_len() as u32).to_le_bytes());
+                                                         out.push(send_pkt.opcode);
+                                                         out.extend_from_slice(&send_pkt.payload);
+                                                         if stream.write_all(&out).await.is_err() {
+                                                             break;
+                                                         }
+                                                         self.upload_manager.update_progress(&client_key, chunk_len).await;
+                                                         award_bytes += chunk_len;
+                                                     }
+                                                     if award_bytes > 0 {
+                                                         let _ = stream.flush().await;
+                                                         tracing::debug!(
+                                                             "[UPLOAD_BLOCK] Sent {} bytes to {} for file '{}' (offset {}..{})",
+                                                             award_bytes, log_addr_str(&remote_str), shared_file.file_name, start, start + award_bytes
+                                                         );
+                                                     }
                                                  }
 
-                                                 let send_pkt = if is_i64_req {
-                                                     encoder.encode_sending_part_i64(
-                                                         &mule_protocol::ed2k::Ed2kSendingPartI64 {
-                                                             file_hash: req_file_hash,
-                                                             start_offset: start,
-                                                             end_offset: start + length,
-                                                             data: Bytes::from(payload),
-                                                         },
-                                                     )
-                                                 } else {
-                                                     encoder.encode_sending_part(
-                                                         &Ed2kSendingPart::new(
-                                                             req_file_hash,
-                                                             start as u32,
-                                                             (start + length) as u32,
-                                                             Bytes::from(payload),
-                                                         ),
-                                                     )
-                                                 };
+                                                 if award_bytes > 0
+                                                     && shared_file.file_size > 0
+                                                     && (start + length) <= shared_file.file_size
+                                                 {
+                                                     if let (Some(ref ph), Some(ref pk_der)) = (&remote_pubkey_hash, &remote_pubkey_der) {
+                                                         let pk_hex = hex::encode(pk_der);
+                                                         let mut dl_svc = self.downloads.lock().await;
+                                                         if dl_svc.record_credit_upload(ph, &pk_hex, award_bytes).is_ok() {
+                                                             let total_up = dl_svc.get_peer_credit(ph).ok().flatten().map(|c| c.uploaded_bytes).unwrap_or(award_bytes);
+                                                             tracing::debug!(
+                                                                 "[CREDITS_AWARDED] Awarded {} uploaded bytes to verified peer {} (pubkey hash: {}, total: {} bytes)",
+                                                                 award_bytes, log_addr_str(&remote_str), ph, total_up
+                                                             );
+                                                         }
+                                                     }
+                                                 }
 
-                                                 if let Ok(send_pkt) = send_pkt {
-                                                     let mut out = Vec::new();
-                                                     out.push(send_pkt.protocol);
-                                                     out.extend_from_slice(&(send_pkt.frame_len() as u32).to_le_bytes());
-                                                     out.push(send_pkt.opcode);
-                                                     out.extend_from_slice(&send_pkt.payload);
-                                                     let _ = stream.write_all(&out).await;
-
-                                                     tracing::debug!(
-                                                         "[UPLOAD_BLOCK] Sent {} bytes to {} for file '{}' (offset {}..{})",
-                                                         length, log_addr_str(&remote_str), shared_file.file_name, start, start + length
-                                                     );
-
-                                                     self.upload_manager.update_progress(&client_key, length).await;
-
-                                                    if shared_file.file_size > 0 && (start + length) <= shared_file.file_size {
-                                                        if let (Some(ref ph), Some(ref pk_der)) = (&remote_pubkey_hash, &remote_pubkey_der) {
-                                                        let pk_hex = hex::encode(pk_der);
-                                                            let mut dl_svc = self.downloads.lock().await;
-                                                            if dl_svc.record_credit_upload(ph, &pk_hex, length).is_ok() {
-                                                                let total_up = dl_svc.get_peer_credit(ph).ok().flatten().map(|c| c.uploaded_bytes).unwrap_or(length);
-                                                                tracing::debug!(
-                                                                    "[CREDITS_AWARDED] Awarded {} uploaded bytes to verified peer {} (pubkey hash: {}, total: {} bytes)",
-                                                                    length, log_addr_str(&remote_str), ph, total_up
-                                                                );
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                                 if !throttled_ok {
+                                                     break;
+                                                 }
                                              }
                                          }
                                         Ok((UploadSlotState::Waiting, Some(rank))) => {

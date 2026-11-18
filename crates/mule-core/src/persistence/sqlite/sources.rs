@@ -24,6 +24,30 @@ pub fn upsert_peer_sources(
                 last_seen_unix_ms = excluded.last_seen_unix_ms,
                 ip = excluded.ip,
                 port = excluded.port,
+                status = CASE
+                    WHEN peer_sources.status = 'failed'
+                     AND excluded.status IN ('candidate', 'allowed')
+                     AND peer_sources.cooldown_until_unix_ms IS NOT NULL
+                     AND peer_sources.cooldown_until_unix_ms <= excluded.last_seen_unix_ms
+                    THEN excluded.status
+                    ELSE peer_sources.status
+                END,
+                last_error = CASE
+                    WHEN peer_sources.status = 'failed'
+                     AND excluded.status IN ('candidate', 'allowed')
+                     AND peer_sources.cooldown_until_unix_ms IS NOT NULL
+                     AND peer_sources.cooldown_until_unix_ms <= excluded.last_seen_unix_ms
+                    THEN NULL
+                    ELSE peer_sources.last_error
+                END,
+                cooldown_until_unix_ms = CASE
+                    WHEN peer_sources.status = 'failed'
+                     AND excluded.status IN ('candidate', 'allowed')
+                     AND peer_sources.cooldown_until_unix_ms IS NOT NULL
+                     AND peer_sources.cooldown_until_unix_ms <= excluded.last_seen_unix_ms
+                    THEN NULL
+                    ELSE peer_sources.cooldown_until_unix_ms
+                END,
                 user_hash = COALESCE(excluded.user_hash, peer_sources.user_hash),
                 crypt_options = CASE WHEN excluded.crypt_options != 0 THEN excluded.crypt_options ELSE peer_sources.crypt_options END,
                 buddy_id = COALESCE(excluded.buddy_id, peer_sources.buddy_id),
@@ -129,10 +153,20 @@ pub fn update_peer_source_status(
         .unwrap_or_default()
         .as_millis() as i64;
 
-    let increment_fail = status == PeerSourceStatus::Failed;
-    let rows = if increment_fail {
+    let reset_fail = status == PeerSourceStatus::Connected
+        || (matches!(
+            status,
+            PeerSourceStatus::Candidate | PeerSourceStatus::Allowed
+        ) && error.is_none());
+    let rows = if status == PeerSourceStatus::Failed {
         conn.execute(
             "UPDATE peer_sources SET status = ?1, fail_count = fail_count + 1, last_error = ?2, last_seen_unix_ms = ?3, cooldown_until_unix_ms = ?4
+             WHERE file_hash = ?5 AND address = ?6",
+            params![status.as_str(), error, now, cooldown_until_unix_ms, file_hash, address],
+        )?
+    } else if reset_fail {
+        conn.execute(
+            "UPDATE peer_sources SET status = ?1, fail_count = 0, last_error = ?2, last_seen_unix_ms = ?3, cooldown_until_unix_ms = ?4
              WHERE file_hash = ?5 AND address = ?6",
             params![status.as_str(), error, now, cooldown_until_unix_ms, file_hash, address],
         )?
@@ -157,7 +191,7 @@ pub fn reset_peer_source_cooldown(
         .as_millis() as i64;
 
     let rows = conn.execute(
-        "UPDATE peer_sources SET cooldown_until_unix_ms = NULL, status = 'allowed', last_error = NULL, last_seen_unix_ms = ?1
+        "UPDATE peer_sources SET cooldown_until_unix_ms = NULL, status = 'allowed', fail_count = 0, last_error = NULL, last_seen_unix_ms = ?1
          WHERE file_hash = ?2 AND address = ?3",
         params![now, file_hash, address],
     )?;

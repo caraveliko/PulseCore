@@ -379,6 +379,18 @@ impl AppState {
             .flatten()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let kad_id = downloads
+            .get_setting("kad_local_id")
+            .ok()
+            .flatten()
+            .and_then(|s| mule_core::kad::KadId::from_hex(s.trim()))
+            .unwrap_or_else(|| {
+                let id = mule_core::kad::KadId::random();
+                if let Err(e) = downloads.set_setting("kad_local_id", &id.to_hex()) {
+                    tracing::warn!("No se pudo persistir kad_local_id: {e}");
+                }
+                id
+            });
         downloads.set_event_channel(event_tx.clone(), Arc::clone(&sequence));
         let dl_arc = Arc::new(Mutex::new(downloads));
         server_session.set_downloads(Arc::clone(&dl_arc));
@@ -426,7 +438,6 @@ impl AppState {
             obf_enabled || obf_required,
             config.obfuscation_padding_max,
         );
-        let kad_id = mule_core::kad::KadId::random();
         let kad = Arc::new(crate::services::KadService::new(
             kad_id,
             Arc::clone(&dl_arc),
@@ -1118,6 +1129,14 @@ impl AppState {
         self.kad.set_fw_check_identity(user_hash);
         self.kad.udp().set_fw_user_hash(user_hash);
         let new_kad_id = self.kad.rotate_local_id().await;
+        if let Err(e) = self
+            .downloads
+            .lock()
+            .await
+            .set_setting("kad_local_id", &new_kad_id.to_hex())
+        {
+            tracing::warn!("[IDENTITY] No se pudo persistir el KadID rotado: {e}");
+        }
         tracing::info!(
             "[IDENTITY] {reason} effectuée — nouveau user_hash {} / KadID {}",
             hex::encode(user_hash),

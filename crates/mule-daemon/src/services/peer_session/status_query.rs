@@ -544,6 +544,7 @@ pub(crate) async fn query_file_status_and_enter_queue(
     // 5. Esperar OP_FILESTATUS u OP_FILEREQANSNOFILE
     let status_deadline = tokio::time::Instant::now() + timeouts.status_timeout;
     let mut file_status_opt = None;
+    let mut accepted_directly = false;
 
     while file_status_opt.is_none() {
         tokio::select! {
@@ -569,6 +570,9 @@ pub(crate) async fn query_file_status_and_enter_queue(
                         let mut expanded: std::collections::VecDeque<RawPacket> =
                             std::collections::VecDeque::new();
                         loop {
+                            if expanded.is_empty() && file_status_opt.is_some() {
+                                break;
+                            }
                             let packet = if let Some(p) = expanded.pop_front() {
                                 p
                             } else {
@@ -650,7 +654,9 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                                 );
                                             }
                                             file_status_opt = Some(status);
-                                            break;
+                                            if expanded.is_empty() {
+                                                break;
+                                            }
                                         }
                                         Err(e) => return Err(PeerError::new(PeerFailureReason::CorruptedData, format!("Malformed OP_FILESTATUS: {e}"))),
                                     }
@@ -668,7 +674,10 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                             part_count: 0,
                                             availability_mask: mule_protocol::ed2k::PartAvailabilityMask::from_parts(&[], 0),
                                         });
-                                        break;
+                                        if expanded.is_empty() {
+                                            break;
+                                        }
+                                        continue;
                                     }
                                     tracing::debug!("Peer {peer} sent OP_REQFILENAME_ANSWER (len={})", packet.payload.len(), peer = log_peer_addr(target_addr));
                                 } else if handle_queue_rank_packet(&packet, address_str, target_addr, &decoder, inner, event_tx, sequence).await {
@@ -677,15 +686,20 @@ pub(crate) async fn query_file_status_and_enter_queue(
                                         part_count: 0,
                                         availability_mask: mule_protocol::ed2k::PartAvailabilityMask::from_parts(&[], 0),
                                     });
-                                    break;
+                                    if expanded.is_empty() {
+                                        break;
+                                    }
                                 } else if packet.opcode == OP_ACCEPTUPLOADREQ {
                                     tracing::info!("Peer {peer} directly accepted upload slot (OP_ACCEPTUPLOADREQ) during status query!", peer = log_peer_addr(target_addr));
+                                    accepted_directly = true;
                                     file_status_opt = Some(mule_protocol::ed2k::Ed2kFileStatus {
                                         file_hash: dl_hash_bytes,
                                         part_count: 0,
                                         availability_mask: mule_protocol::ed2k::PartAvailabilityMask::from_parts(&[], 0),
                                     });
-                                    break;
+                                    if expanded.is_empty() {
+                                        break;
+                                    }
                                 } else if packet.opcode == OP_FILEREQANSNOFILE {
                                     return Err(PeerError::new(PeerFailureReason::FileNotFound, "Remote peer does not share this file (OP_FILEREQANSNOFILE)"));
                                 } else if packet.protocol == PR_ED2K && packet.opcode == OP_CHANGE_CLIENT_ID {
@@ -732,7 +746,12 @@ pub(crate) async fn query_file_status_and_enter_queue(
         }
     }
 
-    let file_status = file_status_opt.unwrap();
+    let Some(file_status) = file_status_opt else {
+        return Err(PeerError::new(
+            PeerFailureReason::TimeoutStatus,
+            "File status missing after status query loop",
+        ));
+    };
 
     // "No Needed Parts" de eMule: si el par anuncia una máscara de partes pero ninguna
     // de sus partes falta localmente, la fuente es inútil para esta descarga —
@@ -835,6 +854,12 @@ pub(crate) async fn query_file_status_and_enter_queue(
 
     // 6. Enviar OP_STARTUPLOADREQ
     send_start_upload_req(stream, dl_hash_bytes, file_hash_str, target_addr).await?;
+
+    // Preservar cualquier paquete restante en `read_buf` antes de pasar a la fase de cola/transferencia
+    stream.put_back_unread(&read_buf);
+    if accepted_directly {
+        return Ok(file_status);
+    }
 
     // 7. Esperar en la cola de subida (DS_ONQUEUE de eMule + repeticiones de petición FILEREASKTIME)
     wait_in_queue(
@@ -1190,6 +1215,9 @@ pub(crate) async fn wait_in_queue(
             }
         }
     }
+
+    // Preservar paquetes concatenados tras `OP_ACCEPTUPLOADREQ` (p. ej. primer bloque) para `run_transfer_loop`
+    stream.put_back_unread(&read_buf);
 
     Ok(file_status)
 }

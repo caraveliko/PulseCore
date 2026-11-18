@@ -155,3 +155,44 @@ fn test_sqlite_kad_contacts_persistence() {
     db.clear_kad_contacts().unwrap();
     assert_eq!(db.count_kad_contacts().unwrap(), 0);
 }
+
+#[test]
+fn test_find_closest_verified_balances_far_verified_and_close_unverified() {
+    let local_id = KadId([0u8; 16]);
+    let target = KadId([0x10; 16]);
+    let mut table = KBucketTable::new(local_id);
+
+    // Insertar 8 contactos verificados pero lejanos respecto a `target`
+    for i in 0..8u8 {
+        let mut id = [0xFF; 16];
+        id[15] = i;
+        let mut c = KadContact::new(KadId(id), Ipv4Addr::new(10, 1, i, 1), 4672, None, 2, 1000);
+        c.verified = true;
+        table.insert_or_update(c);
+    }
+
+    // Insertar 4 contactos no verificados muy cercanos a `target`
+    let mut close_ids = Vec::new();
+    for i in 1..=4u8 {
+        let mut id = [0x10; 16];
+        id[15] = 0x10 ^ i;
+        close_ids.push(KadId(id));
+        let c = KadContact::new(KadId(id), Ipv4Addr::new(10, 2, i, 1), 4672, None, 2, 1000);
+        assert!(!c.verified);
+        table.insert_or_update(c);
+    }
+
+    // Con count = 8: hasta 4 verificados lejanos + los 4 contactos más cercanos sin verificar
+    let picked = table.find_closest_verified(&target, 8);
+    assert_eq!(picked.len(), 8);
+    for close in &close_ids {
+        assert!(
+            picked.iter().any(|c| &c.kad_id == close),
+            "el contacto cercano no verificado debe incluirse como semilla"
+        );
+    }
+    // El resultado debe quedar ordenado estrictamente por distancia XOR a `target`
+    for win in picked.windows(2) {
+        assert!(win[0].kad_id.xor_distance(&target) <= win[1].kad_id.xor_distance(&target));
+    }
+}

@@ -152,7 +152,81 @@ fn test_peer_sources_crud_and_deduplication() {
         .find(|s| s.address == "192.168.1.50:39735")
         .expect("found s1");
     assert_eq!(s1_reset.status, PeerSourceStatus::Allowed);
+    assert_eq!(s1_reset.fail_count, 0);
     assert_eq!(s1_reset.cooldown_until_unix_ms, None);
+
+    // 4c. Varios fallos seguidos de una conexión exitosa deben reiniciar `fail_count` a 0
+    for _ in 0..2 {
+        db.update_peer_source_status(
+            hash,
+            "192.168.1.50:39735",
+            PeerSourceStatus::Failed,
+            Some("Temporary error"),
+            Some(2_000_000),
+        )
+        .expect("mark failed");
+    }
+    db.update_peer_source_status(
+        hash,
+        "192.168.1.50:39735",
+        PeerSourceStatus::Connected,
+        None,
+        None,
+    )
+    .expect("mark connected");
+    let s1_connected = db
+        .list_peer_sources(hash)
+        .expect("list after connected")
+        .into_iter()
+        .find(|s| s.address == "192.168.1.50:39735")
+        .expect("found s1");
+    assert_eq!(s1_connected.status, PeerSourceStatus::Connected);
+    assert_eq!(s1_connected.fail_count, 0);
+
+    // 4d. Al reanunciar una fuente `Failed`, se reactiva solo si su enfriamiento ya venció
+    db.update_peer_source_status(
+        hash,
+        "192.168.1.50:39735",
+        PeerSourceStatus::Failed,
+        Some("Transient disconnect"),
+        Some(5_000_000),
+    )
+    .expect("mark failed again");
+    let re_early = PeerSource {
+        status: PeerSourceStatus::Candidate,
+        last_seen_unix_ms: 4_000_000,
+        cooldown_until_unix_ms: None,
+        last_error: None,
+        ..s1.clone()
+    };
+    db.upsert_peer_sources(hash, &[re_early])
+        .expect("upsert before cooldown expiry");
+    let s1_still_failed = db
+        .list_peer_sources(hash)
+        .expect("list still failed")
+        .into_iter()
+        .find(|s| s.address == "192.168.1.50:39735")
+        .expect("found s1");
+    assert_eq!(s1_still_failed.status, PeerSourceStatus::Failed);
+
+    let re_expired = PeerSource {
+        status: PeerSourceStatus::Candidate,
+        last_seen_unix_ms: 5_000_000,
+        cooldown_until_unix_ms: None,
+        last_error: None,
+        ..s1.clone()
+    };
+    db.upsert_peer_sources(hash, &[re_expired])
+        .expect("upsert after cooldown expiry");
+    let s1_reactivated = db
+        .list_peer_sources(hash)
+        .expect("list reactivated")
+        .into_iter()
+        .find(|s| s.address == "192.168.1.50:39735")
+        .expect("found s1");
+    assert_eq!(s1_reactivated.status, PeerSourceStatus::Candidate);
+    assert_eq!(s1_reactivated.cooldown_until_unix_ms, None);
+    assert_eq!(s1_reactivated.last_error, None);
 
     // 5. Eliminar una sola fuente
     let deleted = db

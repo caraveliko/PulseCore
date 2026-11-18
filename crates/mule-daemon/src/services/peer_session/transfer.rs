@@ -405,6 +405,168 @@ async fn sync_transfer_rates(
     }
 }
 
+/// Resultado de intentar reentrar en la cola remota sobre el mismo socket abierto.
+enum RequeueOutcome {
+    /// El par concedió una nueva ranura de subida y ya se enviaron nuevas peticiones de bloque.
+    Resumed,
+    /// No quedan bloques necesarios pendientes en este par (se envió `OP_END_OF_DOWNLOAD`).
+    NoMoreBlocks,
+}
+
+/// Referencias inmutables compartidas para el reencolado sobre el mismo socket.
+struct RequeueContext<'a> {
+    target_addr: SocketAddr,
+    file_hash_str: &'a str,
+    dl_hash_bytes: [u8; 16],
+    address_str: &'a str,
+    sx_caps: &'a PeerSxCaps,
+    timeouts: &'a PeerTimeouts,
+    cancel_token: &'a mule_network_policy::CancellationToken,
+    inner: &'a Arc<Mutex<SwarmInnerState>>,
+    event_tx: &'a broadcast::Sender<String>,
+    sequence: &'a Arc<AtomicU64>,
+    downloads: &'a Arc<Mutex<DownloadService>>,
+    sx_env: &'a SxEnv,
+    sx_local: &'a SxLocalIds,
+    encoder: &'a Ed2kEncoder,
+    peer_ext_req: u8,
+    peer_supports_aich: bool,
+    is_previewable: bool,
+    is_emule_client: bool,
+    file_size: u64,
+    part_scarcity: &'a Option<Vec<u32>>,
+    file_status_fallback: &'a Ed2kFileStatus,
+}
+
+/// Libera los bloques pendientes, pasa la sesión a `Queued`, conserva bytes no leídos
+/// y espera en la cola de subida remota sobre el mismo socket para reanudar la descarga.
+#[allow(clippy::too_many_arguments)]
+async fn requeue_and_resume_transfer(
+    ctx: &RequeueContext<'_>,
+    stream: &mut ObfuscatedStream<TcpStream>,
+    read_buf: &mut BytesMut,
+    sui: &mut super::sui::OutboundSui,
+    file_status_refreshed: &mut Option<Ed2kFileStatus>,
+    pending: &mut VecDeque<PendingBlock>,
+    zstreams: &mut HashMap<u64, Decompress>,
+    sequencer: &mut Ed2kDownloadSequencer,
+    last_block_data: &mut tokio::time::Instant,
+) -> Result<RequeueOutcome, PeerError> {
+    // Descartar el estado pendiente local y liberar los rangos en vuelo para
+    // que otros pares puedan asumirlos mientras esperamos.
+    pending.clear();
+    zstreams.clear();
+    {
+        let mut g = ctx.inner.lock().await;
+        g.in_flight_blocks.retain(|b| b.peer_id != ctx.address_str);
+        if let Some(session) = g.sessions.get_mut(ctx.address_str) {
+            session.snapshot.status = PeerConnectionStatus::Queued;
+            session.snapshot.queue_rank = None;
+            let snap = session.snapshot.clone();
+            emit_event(ctx.event_tx, ctx.sequence, &snap);
+        }
+    }
+    stream.put_back_unread(read_buf);
+    read_buf.clear();
+
+    let fresh_status = super::status_query::wait_in_queue(
+        stream,
+        ctx.target_addr,
+        ctx.file_hash_str,
+        ctx.dl_hash_bytes,
+        ctx.address_str,
+        ctx.sx_caps,
+        ctx.timeouts,
+        ctx.cancel_token,
+        ctx.inner,
+        ctx.event_tx,
+        ctx.sequence,
+        ctx.downloads,
+        ctx.sx_env,
+        ctx.sx_local,
+        sui,
+        ctx.peer_ext_req,
+        ctx.peer_supports_aich,
+        file_status_refreshed
+            .take()
+            .unwrap_or_else(|| ctx.file_status_fallback.clone()),
+        true,
+    )
+    .await?;
+
+    *file_status_refreshed = Some(fresh_status.clone());
+    // Reconstruir el secuenciador con el mapa de bits de partes actualizado — la
+    // disponibilidad del par pudo haber cambiado mientras estábamos en cola.
+    let mut rebuilt = Ed2kDownloadSequencer::new(ctx.dl_hash_bytes, ctx.file_size, fresh_status)
+        .map_err(|e| {
+            PeerError::new(
+                PeerFailureReason::CorruptedData,
+                format!("Sequencer init error: {e}"),
+            )
+        })?
+        .with_preview_priority(ctx.is_previewable)
+        .with_endgame_threshold(mule_protocol::ed2k::ED2K_PART_SIZE as u64);
+    if let Some(counts) = ctx.part_scarcity {
+        rebuilt = rebuilt.with_part_scarcity(counts.clone());
+    }
+    *sequencer = rebuilt;
+
+    let completed = ctx
+        .downloads
+        .lock()
+        .await
+        .get_completed_ranges_by_hash(ctx.file_hash_str);
+    let peer_bps = ctx
+        .inner
+        .lock()
+        .await
+        .sessions
+        .get(ctx.address_str)
+        .map(|s| s.snapshot.transfer_rate_bps)
+        .unwrap_or(0);
+    fill_and_send_block_requests(
+        stream,
+        ctx.encoder,
+        sequencer,
+        ctx.address_str,
+        ctx.inner,
+        ctx.dl_hash_bytes,
+        ctx.peer_ext_req,
+        &completed,
+        pending,
+        emule_pending_block_count(peer_bps, ctx.is_emule_client),
+        ctx.target_addr,
+        ctx.file_size,
+    )
+    .await?;
+
+    if pending.is_empty() {
+        info!(
+            "Peer {peer}: no more needed blocks after re-queue",
+            peer = log_peer_addr(ctx.target_addr)
+        );
+        let mut end_wire = Vec::with_capacity(6 + 16);
+        end_wire.push(PR_ED2K);
+        end_wire.extend_from_slice(&(17u32).to_le_bytes());
+        end_wire.push(OP_END_OF_DOWNLOAD);
+        end_wire.extend_from_slice(&ctx.dl_hash_bytes);
+        let _ = stream.write_all(&end_wire).await;
+        return Ok(RequeueOutcome::NoMoreBlocks);
+    }
+
+    {
+        let mut g = ctx.inner.lock().await;
+        if let Some(session) = g.sessions.get_mut(ctx.address_str) {
+            session.snapshot.status = PeerConnectionStatus::Transferring;
+            session.snapshot.current_part = pending.front().map(|p| p.part_idx);
+            let snap = session.snapshot.clone();
+            emit_event(ctx.event_tx, ctx.sequence, &snap);
+        }
+    }
+    *last_block_data = tokio::time::Instant::now();
+    Ok(RequeueOutcome::Resumed)
+}
+
 pub(crate) async fn run_transfer_loop(
     stream: &mut ObfuscatedStream<TcpStream>,
     target_addr: SocketAddr,
@@ -644,6 +806,29 @@ pub(crate) async fn run_transfer_loop(
         complete_source: peer_is_complete,
         ..*sx_caps
     };
+    let requeue_ctx = RequeueContext {
+        target_addr,
+        file_hash_str,
+        dl_hash_bytes,
+        address_str,
+        sx_caps,
+        timeouts,
+        cancel_token,
+        inner,
+        event_tx,
+        sequence,
+        downloads,
+        sx_env,
+        sx_local,
+        encoder: &encoder,
+        peer_ext_req,
+        peer_supports_aich,
+        is_previewable,
+        is_emule_client,
+        file_size,
+        part_scarcity: &part_scarcity,
+        file_status_fallback: &file_status_fallback,
+    };
 
     'transfer_loop: loop {
         // DOWNLOADTIMEOUT (100 s) de eMule: sin datos de bloque desde el último envío
@@ -682,86 +867,21 @@ pub(crate) async fn run_transfer_loop(
                 let _ = stream
                     .write_all(&[PR_ED2K, 1, 0, 0, 0, OP_CANCELTRANSFER])
                     .await;
-                // Descartar el estado pendiente local y liberar los rangos en vuelo para
-                // que otros pares puedan asumirlos mientras esperamos.
-                pending.clear();
-                zstreams.clear();
-                {
-                    let mut g = inner.lock().await;
-                    g.in_flight_blocks.retain(|b| b.peer_id != address_str);
-                    if let Some(session) = g.sessions.get_mut(address_str) {
-                        session.snapshot.status = PeerConnectionStatus::Queued;
-                        session.snapshot.queue_rank = None;
-                        let snap = session.snapshot.clone();
-                        emit_event(event_tx, sequence, &snap);
-                    }
-                }
-                match super::status_query::wait_in_queue(
+                match requeue_and_resume_transfer(
+                    &requeue_ctx,
                     stream,
-                    target_addr,
-                    file_hash_str,
-                    dl_hash_bytes,
-                    address_str,
-                    sx_caps,
-                    timeouts,
-                    cancel_token,
-                    inner,
-                    event_tx,
-                    sequence,
-                    downloads,
-                    sx_env,
-                    sx_local,
+                    &mut read_buf,
                     sui,
-                    peer_ext_req,
-                    peer_supports_aich,
-                    file_status_refreshed.take().unwrap_or_else(|| file_status_fallback.clone()),
-                    true,
+                    &mut file_status_refreshed,
+                    &mut pending,
+                    &mut zstreams,
+                    &mut sequencer,
+                    &mut last_block_data,
                 )
-                .await
+                .await?
                 {
-                    Ok(fresh_status) => {
-                        file_status_refreshed = Some(fresh_status.clone());
-                        // Reconstruir el secuenciador con el mapa de bits de partes
-                        // actualizado — la disponibilidad del par pudo haber cambiado
-                        // mientras estábamos en cola.
-                        let mut rebuilt = Ed2kDownloadSequencer::new(dl_hash_bytes, file_size, fresh_status)
-                            .map_err(|e| PeerError::new(PeerFailureReason::CorruptedData, format!("Sequencer init error: {e}")))?
-                            .with_preview_priority(is_previewable)
-                            .with_endgame_threshold(mule_protocol::ed2k::ED2K_PART_SIZE as u64);
-                        if let Some(counts) = &part_scarcity {
-                            rebuilt = rebuilt.with_part_scarcity(counts.clone());
-                        }
-                        sequencer = rebuilt;
-                        let completed = downloads.lock().await.get_completed_ranges_by_hash(file_hash_str);
-                        let peer_bps = inner.lock().await.sessions.get(address_str).map(|s| s.snapshot.transfer_rate_bps).unwrap_or(0);
-                        fill_and_send_block_requests(
-                            stream, &encoder, &mut sequencer, address_str, inner,
-                            dl_hash_bytes, peer_ext_req, &completed, &mut pending,
-                            emule_pending_block_count(peer_bps, is_emule_client), target_addr,
-                            file_size,
-                        ).await?;
-                        if pending.is_empty() {
-                            info!("Peer {peer}: no more needed blocks after re-queue", peer = log_peer_addr(target_addr));
-                            let mut end_wire = Vec::with_capacity(6 + 16);
-                            end_wire.push(PR_ED2K);
-                            end_wire.extend_from_slice(&(17u32).to_le_bytes());
-                            end_wire.push(OP_END_OF_DOWNLOAD);
-                            end_wire.extend_from_slice(&dl_hash_bytes);
-                            let _ = stream.write_all(&end_wire).await;
-                            break 'transfer_loop;
-                        }
-                        {
-                            let mut g = inner.lock().await;
-                            if let Some(session) = g.sessions.get_mut(address_str) {
-                                session.snapshot.status = PeerConnectionStatus::Transferring;
-                                session.snapshot.current_part = pending.front().map(|p| p.part_idx);
-                                let snap = session.snapshot.clone();
-                                emit_event(event_tx, sequence, &snap);
-                            }
-                        }
-                        last_block_data = tokio::time::Instant::now();
-                    }
-                    Err(e) => return Err(e),
+                    RequeueOutcome::Resumed => {}
+                    RequeueOutcome::NoMoreBlocks => break 'transfer_loop,
                 }
             }
             _ = tokio::time::sleep_until(next_sx_check) => {
@@ -1305,9 +1425,42 @@ pub(crate) async fn run_transfer_loop(
                                 info!("Peer {} sent OP_END_OF_DOWNLOAD", log_peer_addr(target_addr));
                                 break;
                             } else if packet.protocol == PR_ED2K && packet.opcode == OP_OUTOFPARTS {
-                                // El subidor nos informa de que actualmente no tiene
-                                // partes solicitadas para nosotros — terminar la sesión
-                                // de forma ordenada para que el enjambre pueda rotar fuentes.
+                                // El subidor rotó la ranura o terminó su cuota actual:
+                                // si ya recibimos datos, intentar reentrar en su cola sobre
+                                // el mismo socket; si cierra el socket, concluir limpiamente.
+                                if total_received > 0
+                                    && consecutive_stall_requeues < MAX_CONSECUTIVE_STALL_REQUEUES
+                                {
+                                    consecutive_stall_requeues += 1;
+                                    info!(
+                                        "Peer {peer} sent OP_OUTOFPARTS after {total_received} bytes — re-queuing on same socket (#{consecutive_stall_requeues})",
+                                        peer = log_peer_addr(target_addr)
+                                    );
+                                    match requeue_and_resume_transfer(
+                                        &requeue_ctx,
+                                        stream,
+                                        &mut read_buf,
+                                        sui,
+                                        &mut file_status_refreshed,
+                                        &mut pending,
+                                        &mut zstreams,
+                                        &mut sequencer,
+                                        &mut last_block_data,
+                                    )
+                                    .await
+                                    {
+                                        Ok(RequeueOutcome::Resumed) => break,
+                                        Ok(RequeueOutcome::NoMoreBlocks) => break 'transfer_loop,
+                                        Err(e) => {
+                                            info!(
+                                                "Peer {peer} ended session after OP_OUTOFPARTS ({})",
+                                                e.message,
+                                                peer = log_peer_addr(target_addr)
+                                            );
+                                            break 'transfer_loop;
+                                        }
+                                    }
+                                }
                                 info!("Peer {peer} sent OP_OUTOFPARTS, ending transfer session", peer = log_peer_addr(target_addr));
                                 break 'transfer_loop;
                             } else if super::status_query::handle_queue_rank_packet(&packet, address_str, target_addr, &decoder, inner, event_tx, sequence).await {

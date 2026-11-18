@@ -393,12 +393,12 @@ pub fn spawn_connection_task(
                                                                     is_connecting = false;
                                                                     g.snapshot.client_id = Some(idc.client_id);
                                                                     g.snapshot.is_high_id = idc.is_high_id();
-                                                                    // Una HighID codifica nuestra IPv4 pública (convención eD2K:
-                                                                    // id = a<<24|b<<16|c<<8|d) — Kad la utiliza como dirección
+                                                                    // Una HighID codifica nuestra IPv4 pública en little-endian (convención eD2K:
+                                                                    // A.B.C.D = A | B<<8 | C<<16 | D<<24) — Kad la utiliza como dirección
                                                                     // anunciada en los contactos PUBLISH_SOURCE.
                                                                     if let Some(kad) = &kad_clone {
                                                                         kad.set_public_ipv4(if idc.is_high_id() {
-                                                                            Some(std::net::Ipv4Addr::from(idc.client_id))
+                                                                            Some(std::net::Ipv4Addr::from(idc.client_id.to_le_bytes()))
                                                                         } else {
                                                                             None
                                                                         });
@@ -470,6 +470,13 @@ pub fn spawn_connection_task(
                                                                             if src.ip == 0 {
                                                                                 rejected_invalid += 1;
                                                                                 continue;
+                                                                            }
+
+                                                                            // Autocomprobación HighID: omitir nuestro propio anuncio repercutido por el servidor
+                                                                            if let Some(our_id) = g.snapshot.client_id {
+                                                                                if our_id >= 16_777_216 && src.ip == our_id && src.port == client_port {
+                                                                                    continue;
+                                                                                }
                                                                             }
 
                                                                             // Fuente LowID: conservarla — accesible solo mediante
@@ -559,6 +566,13 @@ pub fn spawn_connection_task(
                                                                             if src.ip == 0 {
                                                                                 rejected_invalid += 1;
                                                                                 continue;
+                                                                            }
+
+                                                                            // Autocomprobación HighID: omitir nuestro propio anuncio repercutido por el servidor
+                                                                            if let Some(our_id) = g.snapshot.client_id {
+                                                                                if our_id >= 16_777_216 && src.ip == our_id && src.port == client_port {
+                                                                                    continue;
+                                                                                }
                                                                             }
 
                                                                             // Fuente LowID: conservarla — accesible solo mediante
@@ -658,7 +672,7 @@ pub fn spawn_connection_task(
                                                                         let (srv_ip, srv_port) = srv_addr
                                                                             .map(|a| match a.ip() {
                                                                                 std::net::IpAddr::V4(v4) => {
-                                                                                    (u32::from_be_bytes(v4.octets()), a.port())
+                                                                                    (u32::from_le_bytes(v4.octets()), a.port())
                                                                                 }
                                                                                 _ => (0, a.port()),
                                                                             })
