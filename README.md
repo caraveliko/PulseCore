@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="180"/>
+<img src="Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="260"/>
 
 # Pulse Core
 
