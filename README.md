@@ -15,24 +15,28 @@
 
 ---
 
-> [!IMPORTANT]
+> [![Aviso Importante](https://img.shields.io/badge/AVISO-IMPORTANTE-8a2be2.svg)](README.md)
+>
 > **Desarrollo técnico riguroso:** Pulse Core es una reimplementación limpia creada en simbiosis entre ingeniería humana experta y agentes de IA avanzados. La totalidad del código, los comentarios y la documentación están redactados en **español de España**, siguiendo estándares inflexibles de seguridad de memoria en Rust: sin pánicos en producción, sin advertencias del compilador (`-D warnings`), con fidelidad milimétrica a las fuentes de eMule 0.72a y suites de prueba que se ejecutan 100 % sin conexión a Internet.
 
 El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **BitTorrent** en un mismo bucle de eventos sin bloqueo.
 
 Consume una fracción de los recursos habituales y funciona de forma idéntica en un PC de sobremesa con bandeja del sistema en Windows 11 o en una **Raspberry Pi sin monitor** (*headless*) gestionada a través de su interfaz web embebida.
 
-> [!WARNING]
+> [![Advertencia](https://img.shields.io/badge/ADVERTENCIA-DESARROLLO%20ACTIVO-orange.svg)](README.md)
+>
 > **Proyecto en desarrollo activo y pruebas de enjambre:** El núcleo fundamental es 100 % operativo: el cálculo de identificadores eD2K (MD4 + AICH), la canalización anti-SSRF, el filtrado IP (`ipfilter.dat`), la interfaz web y la organización mediante enlaces duros están completamente probados y son estables. Actualmente estamos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
 >
 > **Entornos validados:** Probado con éxito en estaciones de trabajo AMD Ryzen / Intel Core bajo Windows 10/11 x64, Linux x86_64 (Arch, Debian, Ubuntu) y procesadores ARM64 (Raspberry Pi 4 y 5 bajo Raspberry Pi OS, con consumos inferiores a ~45 MB de RAM en reposo).
 
-> [!TIP]
+> [![Consejo](https://img.shields.io/badge/CONSEJO-ACCESO%20R%C3%81PIDO-brightgreen.svg)](README.md)
+>
 > **Panel Web instantáneo sin dependencias:** No necesitas Node.js, Docker ni servidores HTTP externos para controlar Pulse Core. Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar descargas, alternar el Modo Tortuga de velocidad o consultar el estado de los enjambres.
 >
 > Para colaborar o inspeccionar las decisiones de diseño, consulta [`docs/INDEX.md`](docs/INDEX.md) y [`AGENTS.md`](AGENTS.md). Recuerda que cualquier aportación debe superar `cargo test --workspace --all-features` y el linteado estricto sin advertencias.
 
-> [!NOTE]
+> [![Nota](https://img.shields.io/badge/NOTA-EXENCI%C3%93N%20LEGAL-blue.svg)](README.md)
+>
 > **Neutralidad tecnológica absoluta:** Pulse Core **no incluye, no aloja, no indexa ni proporciona acceso a ningún archivo, película, serie o material con derechos de autor**. No suministra listas de servidores de terceros ni rastreadores preconfigurados. Es un motor de transporte de datos agnóstico y descentralizado; el uso y la legalidad del material descargado son responsabilidad exclusiva del usuario final.
 
 ---
