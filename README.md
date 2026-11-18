@@ -25,7 +25,7 @@
 
 El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **BitTorrent** en un mismo bucle de eventos sin bloqueo.
 
-Consume una fracción de los recursos habituales y funciona de forma idéntica en un PC de sobremesa con bandeja del sistema en Windows 11 o en una **Raspberry Pi sin monitor** (*headless*) gestionada a través de su interfaz web embebida.
+Está especialmente diseñado para **servidores domésticos, microservidores, NAS (Synology, QNAP, TrueNAS, Unraid) y Raspberry Pi**: opera de manera 100 % *headless* (sin necesidad de monitor ni interfaz gráfica instalada en el sistema) con un consumo mínimo de apenas ~45 MB de RAM en reposo, administrable de forma remota y segura a través de su panel web embebido. En equipos de sobremesa con Windows 11, se integra de forma transparente en la bandeja del sistema.
 
 > [![Advertencia](https://img.shields.io/badge/ADVERTENCIA-DESARROLLO%20ACTIVO-orange.svg)](README.md)
 >
@@ -63,6 +63,7 @@ Descarga y comparte piezas simultáneamente entre clientes clásicos de eMule y 
 
 ### 2. Organización y catalogación multimedia propia
 Pulse Core incorpora su propio motor de gestión de medios sin depender de programas de terceros ni servicios externos:
+- **Actualización y mejora progresiva de calidades**: Supervisa activamente el catálogo de medios local. Cuando se detecta en la red una versión con mayor resolución, mejor códec o calidad superior para una película o serie ya descargada, el motor la captura automáticamente, la descarga y actualiza la biblioteca sustituyendo el enlace de forma transparente.
 - **Enlaces duros sin duplicar espacio (`hard_link`)**: Organiza y clasifica automáticamente las descargas finalizadas en la estructura requerida por gestores como Plex o Jellyfin (`Películas/Título (Año)/...`) sin consumir ni un solo megabyte extra en disco.
 - **Sincronización de subtítulos**: Cliente REST integrado con OpenSubtitles (VLSub) que calcula el hash exacto de 64 bits (`primeros 64KB + últimos 64KB + tamaño`) para descargar y descomprimir el subtítulo `.es.srt` exacto y sincronizado al milisegundo.
 - **Filtrado y puntuación inteligente**: Algoritmos propios de descarte de falsos positivos y asignación de prioridad por calidad e idioma.
