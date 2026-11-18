@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::state::AppState;
@@ -193,6 +193,7 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> std::io::Result<(
         if src == tgt {
             return Ok(());
         }
+        crate::services::nfs_mount::verify_destination_mount_ready(&tgt, false)?;
         if tgt.exists() {
             if let (Ok(src_meta), Ok(tgt_meta)) = (std::fs::metadata(&src), std::fs::metadata(&tgt)) {
                 if src_meta.len() == tgt_meta.len() {
@@ -407,6 +408,58 @@ async fn copy_companion_subtitles(source_video: &Path, dest_video: &Path) {
     }
 }
 
+/// Verifica de forma asíncrona que el destino no sea un punto de montaje NFS/red caído
+/// ni viole la protección estricta de red antes de escribir o copiar subtítulos.
+async fn ensure_destination_mount_ready(
+    dest_path: &Path,
+    require_network_mount: bool,
+) -> Result<(), String> {
+    let dest = dest_path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        crate::services::nfs_mount::verify_destination_mount_ready(&dest, require_network_mount)
+    })
+    .await
+    .map_err(|e| format!("Error de tarea al verificar montaje NFS: {e}"))?
+    .map_err(|e| {
+        warn!(
+            "[ORGANIZER] Guardián NFS bloqueó la transferencia a '{}': {}",
+            dest_path.display(),
+            e
+        );
+        e.to_string()
+    })
+}
+
+/// Resuelve la carpeta raíz activa de destino sustituyendo rutas obsoletas o locales por defecto
+/// por la ruta efectiva actual (p. ej. tras configurar `nas_root_dir`).
+fn resolve_active_root_folder(
+    state: &AppState,
+    stored_root: &str,
+    effective_root: &Path,
+    default_dl_dir: &Path,
+    default_subdir: &str,
+) -> PathBuf {
+    let trimmed = stored_root.trim();
+    if trimmed.is_empty() {
+        return effective_root.to_path_buf();
+    }
+    let stored_path = Path::new(trimmed);
+    if stored_path == effective_root {
+        return effective_root.to_path_buf();
+    }
+    if state.is_default_local_media_subdir(stored_path, default_dl_dir, default_subdir)
+        || stored_path.starts_with(default_dl_dir.join("media"))
+        || stored_path.starts_with(state.config.default_download_dir.join("media"))
+    {
+        return effective_root.to_path_buf();
+    }
+    let status = crate::services::nfs_mount::inspect_directory_status(stored_path, false);
+    if !status.unmounted_fstab_trap && !status.is_network_mount && !stored_path.exists() {
+        return effective_root.to_path_buf();
+    }
+    stored_path.to_path_buf()
+}
+
 pub struct MediaOrganizer;
 
 impl MediaOrganizer {
@@ -487,6 +540,8 @@ impl MediaOrganizer {
 
         let now = now_ms();
         let quality = detect_quality_tag(&completed_file_path.to_string_lossy());
+        let effective_dl_dir = state.effective_download_dir().await;
+        let require_net = state.nas_require_network_mount().await;
 
         // 1. Comprobar si la descarga corresponde a un episodio de TV
         let ep_match = {
@@ -501,9 +556,19 @@ impl MediaOrganizer {
             };
 
             if let Some(series) = series_item {
+                let effective_series_root = state.effective_series_dir().await;
+                let active_series_root = resolve_active_root_folder(
+                    state,
+                    &series.root_folder,
+                    &effective_series_root,
+                    &effective_dl_dir,
+                    "Series",
+                );
+                ensure_destination_mount_ready(&active_series_root, require_net).await?;
+
                 let series_title = sanitize_name(&series.title);
                 let series_folder = resolve_series_folder_name(
-                    Path::new(&series.root_folder),
+                    &active_series_root,
                     &series.title,
                     series.year,
                     series.tvdb_id,
@@ -524,11 +589,12 @@ impl MediaOrganizer {
                     )
                 };
 
-                let dest_dir = PathBuf::from(&series.root_folder)
+                let dest_dir = active_series_root
                     .join(&series_folder)
                     .join(&season_folder);
                 let dest_file = dest_dir.join(&ep_file_name);
 
+                ensure_destination_mount_ready(&dest_file, require_net).await?;
                 copy_companion_subtitles(completed_file_path, &dest_file).await;
 
                 hardlink_or_copy(completed_file_path, &dest_file)
@@ -623,9 +689,18 @@ impl MediaOrganizer {
                 format!("{} [{}].{}", title_clean, quality, ext)
             };
 
-            let dest_dir = PathBuf::from(&item.root_folder).join(&folder_name);
+            let effective_movies_root = state.effective_movies_dir().await;
+            let active_movies_root = resolve_active_root_folder(
+                state,
+                &item.root_folder,
+                &effective_movies_root,
+                &effective_dl_dir,
+                "Movies",
+            );
+            let dest_dir = active_movies_root.join(&folder_name);
             let dest_file = dest_dir.join(&file_name);
 
+            ensure_destination_mount_ready(&dest_file, require_net).await?;
             copy_companion_subtitles(completed_file_path, &dest_file).await;
 
             hardlink_or_copy(completed_file_path, &dest_file)
@@ -694,21 +769,32 @@ impl MediaOrganizer {
                 });
 
                 if let Some(series) = matched_show {
+                    let existing_ep = db.get_episodes_for_media(&series.id).ok().and_then(|eps| {
+                        eps.into_iter().find(|e| e.season_number == s_num && e.episode_number == ep_num)
+                    });
+                    drop(dl_svc);
+
+                    let effective_series_root = state.effective_series_dir().await;
+                    let active_series_root = resolve_active_root_folder(
+                        state,
+                        &series.root_folder,
+                        &effective_series_root,
+                        &effective_dl_dir,
+                        "Series",
+                    );
+                    ensure_destination_mount_ready(&active_series_root, require_net).await?;
+
                     let series_title = sanitize_name(&series.title);
                     let series_folder = resolve_series_folder_name(
-                        Path::new(&series.root_folder),
+                        &active_series_root,
                         &series.title,
                         series.year,
                         series.tvdb_id,
                     );
                     let season_folder = format!("Season {:02}", s_num);
-                    let dest_dir = PathBuf::from(&series.root_folder)
+                    let dest_dir = active_series_root
                         .join(&series_folder)
                         .join(&season_folder);
-
-                    let existing_ep = db.get_episodes_for_media(&series.id).ok().and_then(|eps| {
-                        eps.into_iter().find(|e| e.season_number == s_num && e.episode_number == ep_num)
-                    });
 
                     let ep_title_clean = existing_ep.as_ref().map(|e| sanitize_name(&e.title)).unwrap_or_default();
                     let ep_file_name = if !ep_title_clean.is_empty() && !ep_title_clean.to_lowercase().starts_with("episode") && !ep_title_clean.ends_with(".mkv") {
@@ -719,8 +805,8 @@ impl MediaOrganizer {
 
                     let dest_file = dest_dir.join(&ep_file_name);
                     let old_ep_fp = existing_ep.as_ref().and_then(|e| e.file_path.clone());
-                    drop(dl_svc);
 
+                    ensure_destination_mount_ready(&dest_file, require_net).await?;
                     copy_companion_subtitles(completed_file_path, &dest_file).await;
 
                     hardlink_or_copy(completed_file_path, &dest_file)
@@ -894,9 +980,17 @@ impl MediaOrganizer {
                 format!("{} [{}].{}", title_clean, quality, ext)
             };
 
-            let dest_dir = PathBuf::from(&final_movie.root_folder).join(&folder_name);
+            let active_movies_root = resolve_active_root_folder(
+                state,
+                &final_movie.root_folder,
+                &effective_movies_root,
+                &effective_dl_dir,
+                "Movies",
+            );
+            let dest_dir = active_movies_root.join(&folder_name);
             let dest_file = dest_dir.join(&file_name);
 
+            ensure_destination_mount_ready(&dest_file, require_net).await?;
             copy_companion_subtitles(completed_file_path, &dest_file).await;
 
             hardlink_or_copy(completed_file_path, &dest_file)
@@ -1103,5 +1197,112 @@ mod tests {
         assert!(tgt_file.exists(), "Target file must exist in organized library");
         assert!(!src_file.exists(), "Source file must be unlinked from incoming directory");
         assert_eq!(std::fs::read(&tgt_file).unwrap(), b"test video data payload");
+    }
+
+    #[tokio::test]
+    async fn test_nas_root_dir_priority_and_localized_autodiscovery() {
+        use tempfile::tempdir;
+        let data_dir = tempdir().unwrap();
+        let nas_dir = tempdir().unwrap();
+        std::fs::create_dir(nas_dir.path().join("Películas")).unwrap();
+        std::fs::create_dir(nas_dir.path().join("TV Shows")).unwrap();
+
+        let cfg = crate::config::DaemonConfig::new(data_dir.path().to_path_buf(), "tok");
+        let stale_local_movies = cfg.default_download_dir.join("media").join("Movies");
+        let dl_svc =
+            crate::services::downloads::DownloadService::in_memory(data_dir.path().join("temp"))
+                .unwrap();
+        let state = AppState::new(cfg, dl_svc);
+
+        // Simular una petición antigua de UI que envía nasRootDir junto al fallback local en moviesDir
+        crate::rpc::handlers::settings::handle_settings_set(
+            &state,
+            Some(json!({
+                "nasRootDir": nas_dir.path().to_string_lossy(),
+                "moviesDir": stale_local_movies.to_string_lossy(),
+            })),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            state.effective_movies_dir().await,
+            nas_dir.path().join("Películas")
+        );
+        assert_eq!(
+            state.effective_series_dir().await,
+            nas_dir.path().join("TV Shows")
+        );
+
+        let settings_resp = crate::rpc::handlers::settings::handle_settings_get(&state)
+            .await
+            .unwrap();
+        assert_eq!(settings_resp["moviesDir"], "");
+        assert_eq!(
+            settings_resp["effectiveMoviesDir"],
+            nas_dir.path().join("Películas").to_string_lossy().as_ref()
+        );
+        assert_eq!(
+            settings_resp["effectiveSeriesDir"],
+            nas_dir.path().join("TV Shows").to_string_lossy().as_ref()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_organizer_require_network_mount_blocks_local_destination() {
+        use tempfile::tempdir;
+        let data_dir = tempdir().unwrap();
+        let nas_dir = tempdir().unwrap();
+        let incoming_dir = tempdir().unwrap();
+
+        let cfg = crate::config::DaemonConfig::new(data_dir.path().to_path_buf(), "tok");
+        let dl_svc =
+            crate::services::downloads::DownloadService::in_memory(data_dir.path().join("temp"))
+                .unwrap();
+        let state = AppState::new(cfg, dl_svc);
+
+        crate::rpc::handlers::settings::handle_settings_set(
+            &state,
+            Some(json!({
+                "nasRootDir": nas_dir.path().to_string_lossy(),
+                "nasRequireNfs": true,
+            })),
+        )
+        .await
+        .unwrap();
+
+        let item = MediaItem {
+            id: "movie-guard-1".to_string(),
+            tmdb_id: Some(603),
+            imdb_id: None,
+            tvdb_id: None,
+            media_type: "movie".to_string(),
+            title: "The Matrix".to_string(),
+            original_title: None,
+            year: Some(1999),
+            overview: None,
+            poster_path: None,
+            backdrop_path: None,
+            status: "downloading".to_string(),
+            monitored: true,
+            quality_profile: "1080p-es".to_string(),
+            root_folder: nas_dir.path().join("Movies").to_string_lossy().to_string(),
+            file_path: None,
+            download_id: Some("dl-guard-1".to_string()),
+            created_at: 1,
+            updated_at: 1,
+        };
+        {
+            let dl_guard = state.downloads.lock().await;
+            dl_guard.db().insert_media_item(&item).unwrap();
+        }
+
+        let src_file = incoming_dir.path().join("The.Matrix.1999.1080p.mkv");
+        std::fs::write(&src_file, b"video payload").unwrap();
+
+        let res = MediaOrganizer::organize_download(&state, "dl-guard-1", &src_file).await;
+        assert!(res.is_err(), "Debe bloquear la transferencia a disco local cuando nasRequireNfs está activo");
+        assert!(src_file.exists(), "El archivo fuente en incoming debe conservarse intacto");
+        assert!(!nas_dir.path().join("Movies").exists(), "No debe crear subcarpetas en destino bloqueado");
     }
 }

@@ -19,6 +19,7 @@ pub mod media_automation;
 pub mod media_metadata;
 pub mod media_probe;
 pub mod nas_transfer;
+pub mod nfs_mount;
 pub mod obfuscation_stream;
 pub mod organizer;
 pub mod peer_session;

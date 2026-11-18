@@ -53,6 +53,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "viewSharedFiles",
     "maxActiveDownloads",
     "nasRootDir",
+    "nasRequireNfs",
     "moviesDir",
     "seriesDir",
     "sonarrUrl",
@@ -93,39 +94,48 @@ fn query_disk_space(path: &std::path::Path) -> (Option<u64>, Option<u64>) {
     (free, total)
 }
 
-type NasDiskCacheEntry = (std::time::Instant, Option<u64>, Option<u64>);
+type NasDiskCacheEntry = (std::time::Instant, std::path::PathBuf, Option<u64>, Option<u64>);
 
 static NAS_DISK_CACHE: std::sync::RwLock<Option<NasDiskCacheEntry>> =
     std::sync::RwLock::new(None);
 
 pub fn get_cached_nas_disk_space(nas_path: std::path::PathBuf) -> (Option<u64>, Option<u64>) {
     if let Ok(guard) = NAS_DISK_CACHE.read() {
-        if let Some((ts, free, total)) = *guard {
-            if ts.elapsed() < std::time::Duration::from_secs(60) {
+        if let Some((ts, ref cached_path, free, total)) = *guard {
+            if cached_path == &nas_path && ts.elapsed() < std::time::Duration::from_secs(60) {
                 return (free, total);
             }
         }
     }
 
+    let nas_for_task = nas_path.clone();
     tokio::task::spawn(async move {
         let res = tokio::task::spawn_blocking(move || {
-            if nas_path.exists() {
-                query_disk_space(&nas_path)
+            let ready = crate::services::nfs_mount::verify_destination_mount_ready(
+                &nas_for_task,
+                false,
+            )
+            .is_ok();
+            if ready && nas_for_task.exists() {
+                (nas_for_task.clone(), query_disk_space(&nas_for_task))
             } else {
-                (None, None)
+                (nas_for_task, (None, None))
             }
         })
-        .await
-        .unwrap_or((None, None));
+        .await;
 
-        if let Ok(mut guard) = NAS_DISK_CACHE.write() {
-            *guard = Some((std::time::Instant::now(), res.0, res.1));
+        if let Ok((checked_path, (free, total))) = res {
+            if let Ok(mut guard) = NAS_DISK_CACHE.write() {
+                *guard = Some((std::time::Instant::now(), checked_path, free, total));
+            }
         }
     });
 
     if let Ok(guard) = NAS_DISK_CACHE.read() {
-        if let Some((_, free, total)) = *guard {
-            return (free, total);
+        if let Some((_, ref cached_path, free, total)) = *guard {
+            if cached_path == &nas_path {
+                return (free, total);
+            }
         }
     }
 
@@ -136,26 +146,16 @@ pub async fn handle_status(state: &AppState) -> Result<Value, JsonRpcError> {
     let dl_count = state.downloads.lock().await.list_downloads().len();
     let capabilities = crate::rpc::capabilities::daemon_capabilities();
 
-    let (default_dl_dir, nas_root_dir) = {
-        let dl = state.downloads.lock().await;
-        let dl_dir = dl
-            .get_setting("default_download_directory")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| {
-                state
-                    .config
-                    .default_download_dir
-                    .to_string_lossy()
-                    .to_string()
-            });
-        let nas_dir = dl
-            .get_setting("nas_root_dir")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| state.config.nas_root_dir.to_string_lossy().to_string());
-        (dl_dir, nas_dir)
-    };
+    let default_dl_dir = state
+        .effective_download_dir()
+        .await
+        .to_string_lossy()
+        .to_string();
+    let nas_root_dir = state
+        .effective_nas_root_dir()
+        .await
+        .to_string_lossy()
+        .to_string();
 
     let (dl_free, dl_total) = query_disk_space(std::path::Path::new(&default_dl_dir));
     let (data_free, data_total) = query_disk_space(&state.config.data_dir);
@@ -279,26 +279,23 @@ fn get_host_metrics() -> Value {
 }
 
 pub async fn handle_disk_space(state: &AppState) -> Result<Value, JsonRpcError> {
-    let (default_dl_dir, nas_root_dir) = {
-        let dl = state.downloads.lock().await;
-        let dl_dir = dl
-            .get_setting("default_download_directory")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| {
-                state
-                    .config
-                    .default_download_dir
-                    .to_string_lossy()
-                    .to_string()
-            });
-        let nas_dir = dl
-            .get_setting("nas_root_dir")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| state.config.nas_root_dir.to_string_lossy().to_string());
-        (dl_dir, nas_dir)
-    };
+    let default_dl_dir = state
+        .effective_download_dir()
+        .await
+        .to_string_lossy()
+        .to_string();
+    let nas_root_dir = state
+        .effective_nas_root_dir()
+        .await
+        .to_string_lossy()
+        .to_string();
+
+    let nas_for_inspect = std::path::PathBuf::from(&nas_root_dir);
+    let nfs_status = tokio::task::spawn_blocking(move || {
+        crate::services::nfs_mount::inspect_directory_status(&nas_for_inspect, false)
+    })
+    .await
+    .ok();
 
     let (dl_free, dl_total) = query_disk_space(std::path::Path::new(&default_dl_dir));
     let (data_free, data_total) = query_disk_space(&state.config.data_dir);
@@ -320,6 +317,7 @@ pub async fn handle_disk_space(state: &AppState) -> Result<Value, JsonRpcError> 
             "path": nas_root_dir,
             "freeBytes": nas_free,
             "totalBytes": nas_total,
+            "nfs": nfs_status,
         },
         "host": get_host_metrics(),
     }))
@@ -463,11 +461,26 @@ fn parse_nas_telemetry(raw: &str) -> Value {
 }
 
 pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
+    let effective_nas_root = state.effective_nas_root_dir().await;
+    let nas_for_inspect = effective_nas_root.clone();
+    let nfs_status = tokio::task::spawn_blocking(move || {
+        crate::services::nfs_mount::inspect_directory_status(&nas_for_inspect, false)
+    })
+    .await
+    .ok();
+
+    let attach_nfs = |mut v: Value| -> Value {
+        if let (Some(obj), Some(ref status)) = (v.as_object_mut(), &nfs_status) {
+            obj.insert("nfs".to_string(), json!(status));
+        }
+        v
+    };
+
     // 1. Comprobar la caché (TTL de 60s para evitar reactivaciones de CPU en Raspberry Pi)
     if let Ok(cache) = NAS_TELEMETRY_CACHE.read() {
         if let Some((ts, ref val)) = *cache {
             if ts.elapsed() < std::time::Duration::from_secs(60) {
-                return Ok(val.clone());
+                return Ok(attach_nfs(val.clone()));
             }
         }
     }
@@ -507,7 +520,7 @@ pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
                 if let Ok(mut cache) = NAS_TELEMETRY_CACHE.write() {
                     *cache = Some((std::time::Instant::now(), val.clone()));
                 }
-                return Ok(val);
+                return Ok(attach_nfs(val));
             }
         }
     }
@@ -519,21 +532,21 @@ pub async fn handle_nas_info(state: &AppState) -> Result<Value, JsonRpcError> {
             if let Some(obj) = stale_val.as_object_mut() {
                 obj.insert("stale".to_string(), json!(true));
             }
-            return Ok(stale_val);
+            return Ok(attach_nfs(stale_val));
         }
     }
 
     // Respaldo 2: espacio en disco del montaje NFS (en caché y sin bloqueo)
-    let (free_b, total_b) = get_cached_nas_disk_space(state.config.nas_root_dir.clone());
-    Ok(json!({
+    let (free_b, total_b) = get_cached_nas_disk_space(effective_nas_root.clone());
+    Ok(attach_nfs(json!({
         "reachable": false,
         "model": "NAS",
         "volume": {
-            "path": state.config.nas_root_dir.to_string_lossy(),
+            "path": effective_nas_root.to_string_lossy(),
             "freeBytes": free_b,
             "totalBytes": total_b,
         }
-    }))
+    })))
 }
 
 pub async fn handle_stop(state: &AppState) -> Result<Value, JsonRpcError> {
@@ -662,6 +675,11 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                 .unwrap_or(0),
         )
     };
+    let current_dir = custom_dir
+        .as_ref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| state.config.default_download_dir.clone());
+
     let bools = {
         let dls = state.downloads.lock().await;
         let read = |key: &str, default: bool| {
@@ -683,6 +701,52 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             .and_then(|s| s.parse::<u64>().ok())
             // eMule 0.72a `MinUpload` default = 1 Ko/s (clamped >= 1).
             .unwrap_or(1);
+
+        let default_local_media = state.config.default_download_dir.join("media");
+        let nas_root_persisted = dls
+            .get_setting("nas_root_dir")
+            .ok()
+            .flatten()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let env_nas = (state.config.nas_root_dir != default_local_media
+            && !state.config.nas_root_dir.as_os_str().is_empty())
+        .then(|| state.config.nas_root_dir.to_string_lossy().to_string());
+        let nas_root_dir_out = if !nas_root_persisted.is_empty() {
+            nas_root_persisted
+        } else {
+            env_nas.unwrap_or_default()
+        };
+        let nas_root_active = !nas_root_dir_out.is_empty();
+
+        let custom_media_dir = |key: &str, subdir: &str, cfg_dir: &std::path::Path| -> String {
+            let persisted = dls
+                .get_setting(key)
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+            if !persisted.is_empty() {
+                if nas_root_active
+                    && state.is_default_local_media_subdir(
+                        std::path::Path::new(&persisted),
+                        &current_dir,
+                        subdir,
+                    )
+                {
+                    return String::new();
+                }
+                return persisted;
+            }
+            if !nas_root_active
+                && !cfg_dir.as_os_str().is_empty()
+                && !state.is_default_local_media_subdir(cfg_dir, &current_dir, subdir)
+            {
+                return cfg_dir.to_string_lossy().to_string();
+            }
+            String::new()
+        };
+
         json!({
             "minUploadKbs": min_up,
             "ichEnabled": read("ich_enabled", true),
@@ -712,21 +776,10 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                 .ok()
                 .flatten()
                 .unwrap_or_default(),
-            "moviesDir": dls
-                .get_setting("movies_dir")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| state.config.movies_dir.to_string_lossy().to_string()),
-            "seriesDir": dls
-                .get_setting("series_dir")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| state.config.series_dir.to_string_lossy().to_string()),
-            "nasRootDir": dls
-                .get_setting("nas_root_dir")
-                .ok()
-                .flatten()
-                .unwrap_or_default(),
+            "moviesDir": custom_media_dir("movies_dir", "Movies", &state.config.movies_dir),
+            "seriesDir": custom_media_dir("series_dir", "Series", &state.config.series_dir),
+            "nasRootDir": nas_root_dir_out,
+            "nasRequireNfs": read("nas_require_nfs", false),
             "autoGrabberEnabled": read("auto_grabber_enabled", true),
             "scorerAntiFake": read("scorer_anti_fake", true),
             "subtitlesAutoDownload": read("subtitles_auto_download", true),
@@ -754,10 +807,23 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         })
     };
 
-    let current_dir = custom_dir
-        .as_ref()
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| state.config.default_download_dir.clone());
+    let effective_movies_dir = state.effective_movies_dir().await;
+    let effective_series_dir = state.effective_series_dir().await;
+    let effective_nas_root = state.effective_nas_root_dir().await;
+    let fallback_nas_root = effective_nas_root.clone();
+    let (nfs_status, discovered_mounts) = tokio::task::spawn_blocking(move || {
+        let status =
+            crate::services::nfs_mount::inspect_directory_status(&effective_nas_root, true);
+        let mounts = crate::services::nfs_mount::discover_system_network_mounts();
+        (status, mounts)
+    })
+    .await
+    .unwrap_or_else(|_| {
+        (
+            crate::services::nfs_mount::inspect_directory_status(&fallback_nas_root, false),
+            Vec::new(),
+        )
+    });
 
     let portable_default =
         crate::workdir::WorkDirectoryResolver::resolve(None, None).default_download_dir;
@@ -765,6 +831,10 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         "defaultDownloadDir": current_dir.to_string_lossy(),
         "portableDownloadDir": portable_default.to_string_lossy(),
         "isCustom": custom_dir.is_some(),
+        "effectiveMoviesDir": effective_movies_dir.to_string_lossy(),
+        "effectiveSeriesDir": effective_series_dir.to_string_lossy(),
+        "nfsStatus": nfs_status,
+        "discoveredMounts": discovered_mounts,
         "authToken": state.config.auth_token.clone(),
         "webuiPasswordEnabled": state.has_webui_password(),
         "historyRetentionDays": retention_days,
@@ -1272,47 +1342,165 @@ pub async fn handle_settings_set(
         state.inbound_listener.set_paranoid_mode(v);
         keys.push("paranoidMode");
     }
-    if let Some(val) = params.get("moviesDir") {
-        let dir_str = val
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'moviesDir'"))?
-            .trim();
-        if !dir_str.is_empty() {
-            let _ = std::fs::create_dir_all(std::path::Path::new(dir_str));
-        }
+    if let Some(val) = params.get("nasRequireNfs") {
+        let v = val
+            .as_bool()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'nasRequireNfs'"))?;
         state
             .downloads
             .lock()
             .await
-            .set_setting("movies_dir", dir_str)?;
-        keys.push("moviesDir");
+            .set_setting("nas_require_nfs", if v { "1" } else { "0" })?;
+        keys.push("nasRequireNfs");
     }
-    if let Some(val) = params.get("seriesDir") {
-        let dir_str = val
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'seriesDir'"))?
-            .trim();
-        if !dir_str.is_empty() {
-            let _ = std::fs::create_dir_all(std::path::Path::new(dir_str));
-        }
-        state
-            .downloads
-            .lock()
-            .await
-            .set_setting("series_dir", dir_str)?;
-        keys.push("seriesDir");
-    }
+
+    let require_net = state.nas_require_network_mount().await;
+    let effective_dl_dir = state.effective_download_dir().await;
+    let old_effective_movies = state.effective_movies_dir().await;
+    let old_effective_series = state.effective_series_dir().await;
+    let mut media_roots_changed = false;
+
     if let Some(val) = params.get("nasRootDir") {
         let dir_str = val
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'nasRootDir'"))?
             .trim();
-        state
-            .downloads
-            .lock()
+        if !dir_str.is_empty() {
+            let nas_path = std::path::PathBuf::from(dir_str);
+            let check_path = nas_path.clone();
+            let check_res = tokio::task::spawn_blocking(move || {
+                crate::services::nfs_mount::verify_destination_mount_ready(&check_path, require_net)
+            })
             .await
-            .set_setting("nas_root_dir", dir_str)?;
+            .map_err(|e| JsonRpcError::internal(format!("Mount check failed: {e}")))?;
+            if let Err(e) = check_res {
+                tracing::warn!(
+                    "[SETTINGS] Ruta NAS '{}' no verificada como lista ({e}); se guarda la ruta pero no se crean subcarpetas en disco local",
+                    dir_str
+                );
+            }
+        }
+        {
+            let mut dls = state.downloads.lock().await;
+            dls.set_setting("nas_root_dir", dir_str)?;
+            if !dir_str.is_empty() {
+                for (key, subdir) in [("movies_dir", "Movies"), ("series_dir", "Series")] {
+                    if let Ok(Some(cur)) = dls.get_setting(key) {
+                        if state.is_default_local_media_subdir(
+                            std::path::Path::new(cur.trim()),
+                            &effective_dl_dir,
+                            subdir,
+                        ) {
+                            let _ = dls.set_setting(key, "");
+                        }
+                    }
+                }
+            }
+        }
+        if let Ok(mut cache) = NAS_DISK_CACHE.write() {
+            *cache = None;
+        }
         keys.push("nasRootDir");
+        media_roots_changed = true;
+    }
+
+    let nas_root_active = {
+        let dls = state.downloads.lock().await;
+        let db_nas = dls
+            .get_setting("nas_root_dir")
+            .ok()
+            .flatten()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let default_local_media = state.config.default_download_dir.join("media");
+        db_nas
+            || (state.config.nas_root_dir != default_local_media
+                && !state.config.nas_root_dir.as_os_str().is_empty())
+    };
+
+    for (camel, snake, subdir) in [
+        ("moviesDir", "movies_dir", "Movies"),
+        ("seriesDir", "series_dir", "Series"),
+    ] {
+        if let Some(val) = params.get(camel) {
+            let mut dir_str = val
+                .as_str()
+                .ok_or_else(|| JsonRpcError::invalid_params(&format!("Invalid '{camel}'")))?
+                .trim()
+                .to_string();
+            if nas_root_active
+                && !dir_str.is_empty()
+                && state.is_default_local_media_subdir(
+                    std::path::Path::new(&dir_str),
+                    &effective_dl_dir,
+                    subdir,
+                )
+            {
+                dir_str.clear();
+            }
+            if !dir_str.is_empty() {
+                let target_path = std::path::PathBuf::from(&dir_str);
+                let res = tokio::task::spawn_blocking(move || {
+                    crate::services::nfs_mount::verify_destination_mount_ready(
+                        &target_path,
+                        require_net,
+                    )?;
+                    std::fs::create_dir_all(&target_path)
+                })
+                .await;
+                if let Ok(Err(e)) = res {
+                    tracing::warn!(
+                        "[SETTINGS] Omitiendo create_dir_all en '{}' por protección NFS/red: {}",
+                        dir_str,
+                        e
+                    );
+                }
+            }
+            state
+                .downloads
+                .lock()
+                .await
+                .set_setting(snake, &dir_str)?;
+            keys.push(camel);
+            media_roots_changed = true;
+        }
+    }
+
+    if media_roots_changed {
+        let new_movies_str = state
+            .effective_movies_dir()
+            .await
+            .to_string_lossy()
+            .into_owned();
+        let new_series_str = state
+            .effective_series_dir()
+            .await
+            .to_string_lossy()
+            .into_owned();
+        let now_ts = crate::services::downloads::now_ms();
+
+        let dls = state.downloads.lock().await;
+        if let Ok(items) = dls.db().list_media_items(None, None) {
+            for mut item in items {
+                let (target_root, old_eff, subdir) = if item.media_type == "tv" {
+                    (&new_series_str, &old_effective_series, "Series")
+                } else {
+                    (&new_movies_str, &old_effective_movies, "Movies")
+                };
+                let stored_path = std::path::Path::new(item.root_folder.trim());
+                let is_incomplete = item.file_path.as_deref().unwrap_or("").trim().is_empty();
+                let is_default_root = item.root_folder.trim().is_empty()
+                    || state.is_default_local_media_subdir(stored_path, &effective_dl_dir, subdir)
+                    || stored_path.starts_with(effective_dl_dir.join("media"))
+                    || stored_path.starts_with(state.config.default_download_dir.join("media"))
+                    || stored_path == old_eff.as_path();
+                if (is_incomplete || is_default_root) && item.root_folder != *target_root {
+                    item.root_folder = target_root.clone();
+                    item.updated_at = now_ts;
+                    let _ = dls.db().insert_media_item(&item);
+                }
+            }
+        }
     }
     for (camel, snake) in [
         ("autoGrabberEnabled", "auto_grabber_enabled"),

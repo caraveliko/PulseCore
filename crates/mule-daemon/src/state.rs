@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use mule_network_policy::{NetworkPolicyManager, ResourceBudgets};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::DaemonConfig;
 use crate::services::downloads::types::DownloadSnapshot;
@@ -747,50 +747,147 @@ impl AppState {
         dl.get_setting("default_download_directory")
             .ok()
             .flatten()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.config.default_download_dir.clone())
     }
 
-    /// Directorio efectivo de películas (ajuste persistido `movies_dir` o valor derivado/inicial).
-    pub async fn effective_movies_dir(&self) -> PathBuf {
-        let dl = self.downloads.lock().await;
-        if let Some(dir) = dl.get_setting("movies_dir").ok().flatten() {
-            if !dir.trim().is_empty() {
-                return PathBuf::from(dir.trim());
-            }
-        }
-        if let Some(nas_dir) = dl.get_setting("nas_root_dir").ok().flatten() {
-            if !nas_dir.trim().is_empty() {
-                return PathBuf::from(nas_dir.trim()).join("Movies");
-            }
-        }
-        if let Some(dl_dir) = dl.get_setting("default_download_directory").ok().flatten() {
-            if !dl_dir.trim().is_empty() {
-                return PathBuf::from(dl_dir.trim()).join("media").join("Movies");
-            }
-        }
-        self.config.movies_dir.clone()
+    /// Devuelve `true` si la ruta coincide con un directorio local predeterminado (`.../media/<subdir>`).
+    pub fn is_default_local_media_subdir(&self, candidate: &Path, default_dl_dir: &Path, default_subdir: &str) -> bool {
+        let local_1 = default_dl_dir.join("media").join(default_subdir);
+        let local_2 = self
+            .config
+            .default_download_dir
+            .join("media")
+            .join(default_subdir);
+        let legacy = PathBuf::from("nas").join(default_subdir);
+        candidate == local_1 || candidate == local_2 || candidate == legacy
     }
 
-    /// Directorio efectivo de series (ajuste persistido `series_dir` o valor derivado/inicial).
+    /// Devuelve la raíz efectiva del NAS/almacenamiento multimedia (`nas_root_dir` persistido,
+    /// variable de entorno `EMULERUST_NAS_PATH` o subcarpeta local `downloads/media`).
+    pub async fn effective_nas_root_dir(&self) -> PathBuf {
+        let (nas_setting, dl_dir) = {
+            let dl = self.downloads.lock().await;
+            let nas = dl
+                .get_setting("nas_root_dir")
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            let dldir = dl
+                .get_setting("default_download_directory")
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from);
+            (nas, dldir)
+        };
+        if let Some(nas) = nas_setting {
+            return PathBuf::from(nas);
+        }
+        let default_local_media = self.config.default_download_dir.join("media");
+        if self.config.nas_root_dir != default_local_media
+            && !self.config.nas_root_dir.as_os_str().is_empty()
+        {
+            return self.config.nas_root_dir.clone();
+        }
+        dl_dir
+            .unwrap_or_else(|| self.config.default_download_dir.clone())
+            .join("media")
+    }
+
+    /// Indica si está activada la protección estricta de montaje NFS/red (`nas_require_nfs`).
+    pub async fn nas_require_network_mount(&self) -> bool {
+        self.setting_bool("nas_require_nfs", false).await
+    }
+
+    async fn resolve_effective_media_dir(
+        &self,
+        setting_key: &str,
+        default_subdir: &str,
+        config_dir: &Path,
+        is_movies: bool,
+    ) -> PathBuf {
+        let (explicit_dir, explicit_nas, dl_dir) = {
+            let dl = self.downloads.lock().await;
+            let dir = dl
+                .get_setting(setting_key)
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from);
+            let nas = dl
+                .get_setting("nas_root_dir")
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from);
+            let dldir = dl
+                .get_setting("default_download_directory")
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| self.config.default_download_dir.clone());
+            (dir, nas, dldir)
+        };
+
+        let default_local_media = self.config.default_download_dir.join("media");
+        let nas_root = explicit_nas.or_else(|| {
+            (self.config.nas_root_dir != default_local_media
+                && !self.config.nas_root_dir.as_os_str().is_empty())
+            .then(|| self.config.nas_root_dir.clone())
+        });
+
+        if let Some(dir) = explicit_dir {
+            let shadowed_by_nas =
+                nas_root.is_some() && self.is_default_local_media_subdir(&dir, &dl_dir, default_subdir);
+            if !shadowed_by_nas {
+                return dir;
+            }
+        }
+
+        if let Some(nas) = nas_root {
+            let nas_clone = nas.clone();
+            let resolved = tokio::task::spawn_blocking(move || {
+                let status = crate::services::nfs_mount::inspect_directory_status(&nas_clone, true);
+                if is_movies {
+                    status.resolved_movies_dir
+                } else {
+                    status.resolved_series_dir
+                }
+            })
+            .await
+            .ok()
+            .map(PathBuf::from);
+            return resolved.unwrap_or_else(|| nas.join(default_subdir));
+        }
+
+        if !config_dir.as_os_str().is_empty()
+            && !self.is_default_local_media_subdir(config_dir, &dl_dir, default_subdir)
+        {
+            return config_dir.to_path_buf();
+        }
+
+        dl_dir.join("media").join(default_subdir)
+    }
+
+    /// Directorio efectivo de películas (ajuste persistido `movies_dir`, autodetección bajo `nas_root_dir` o valor inicial).
+    pub async fn effective_movies_dir(&self) -> PathBuf {
+        self.resolve_effective_media_dir("movies_dir", "Movies", &self.config.movies_dir, true)
+            .await
+    }
+
+    /// Directorio efectivo de series (ajuste persistido `series_dir`, autodetección bajo `nas_root_dir` o valor inicial).
     pub async fn effective_series_dir(&self) -> PathBuf {
-        let dl = self.downloads.lock().await;
-        if let Some(dir) = dl.get_setting("series_dir").ok().flatten() {
-            if !dir.trim().is_empty() {
-                return PathBuf::from(dir.trim());
-            }
-        }
-        if let Some(nas_dir) = dl.get_setting("nas_root_dir").ok().flatten() {
-            if !nas_dir.trim().is_empty() {
-                return PathBuf::from(nas_dir.trim()).join("Series");
-            }
-        }
-        if let Some(dl_dir) = dl.get_setting("default_download_directory").ok().flatten() {
-            if !dl_dir.trim().is_empty() {
-                return PathBuf::from(dl_dir.trim()).join("media").join("Series");
-            }
-        }
-        self.config.series_dir.clone()
+        self.resolve_effective_media_dir("series_dir", "Series", &self.config.series_dir, false)
+            .await
     }
 
     /// Puerto UDP efectivo de Kad (`kad_port` persistido o configuración de inicio).

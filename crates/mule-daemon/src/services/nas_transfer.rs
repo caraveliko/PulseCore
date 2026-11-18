@@ -45,52 +45,10 @@ impl FilesystemKind {
 }
 
 /// Detecta el tipo de sistema de archivos de la ruta objetivo.
-/// En Linux, resuelve el punto de montaje más específico en `/proc/mounts`.
+/// En Linux, resuelve el punto de montaje más específico en `/proc/mounts` a través de `nfs_mount`.
 #[cfg(target_os = "linux")]
 pub fn detect_filesystem_kind(path: &Path) -> FilesystemKind {
-    let mut current = path.to_path_buf();
-    while !current.exists() {
-        if let Some(parent) = current.parent() {
-            current = parent.to_path_buf();
-        } else {
-            break;
-        }
-    }
-    let target_canonical = current.canonicalize().unwrap_or(current);
-    let target_str = target_canonical.to_string_lossy();
-
-    if let Ok(mounts) = std::fs::read_to_string("/proc/mounts") {
-        let mut best_match: Option<(usize, &str)> = None; // (prefix_len, fstype)
-        for line in mounts.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                let mnt_pt = parts[1];
-                let fstype = parts[2];
-                if target_str.starts_with(mnt_pt) {
-                    let len = mnt_pt.len();
-                    if let Some((best_len, _)) = best_match {
-                        if len > best_len {
-                            best_match = Some((len, fstype));
-                        }
-                    } else {
-                        best_match = Some((len, fstype));
-                    }
-                }
-            }
-        }
-
-        if let Some((_, fstype)) = best_match {
-            if fstype == "nfs" || fstype == "nfs4" {
-                return FilesystemKind::Nfs;
-            } else if fstype == "cifs" || fstype == "smbfs" {
-                return FilesystemKind::Smb;
-            } else if matches!(fstype, "sshfs" | "fuse.sshfs" | "glusterfs" | "ceph") {
-                return FilesystemKind::Remote;
-            }
-        }
-    }
-
-    FilesystemKind::Local
+    crate::services::nfs_mount::detect_filesystem_kind_linux(path)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -139,6 +97,7 @@ pub fn transfer_to_destination<F>(
 where
     F: FnMut(&NasTransferProgress),
 {
+    crate::services::nfs_mount::verify_destination_mount_ready(tgt, false)?;
     let fs_kind = detect_filesystem_kind(tgt);
     let total_bytes = std::fs::metadata(src)?.len();
 

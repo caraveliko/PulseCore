@@ -3347,31 +3347,39 @@
           <!-- Rutas Multimedia y NAS -->
           <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
             <h4 style="margin-top: 0; margin-bottom: 14px; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
-              <span>🗄️</span> <span>Bibliotecas Multimedia & NAS</span>
+              <span>🗄️</span> <span>Bibliotecas Multimedia &amp; NAS (NFS)</span>
             </h4>
             <div class="form-group">
-              <label>Biblioteca de Películas (Movies)</label>
+              <label>Ruta Raíz del NAS / Punto de Montaje NFS</label>
               <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="form-control" id="pref-movies-dir" placeholder="/home/caraveliko/amule/incoming/Movies" style="flex: 1;">
+                <input type="text" class="form-control" id="pref-nas-root-dir" placeholder="/mnt/nas" style="flex: 1;">
+                <button type="button" class="btn btn-sm" onclick="openFolderBrowser('pref-nas-root-dir', 'Ruta Raíz del NAS / Punto de Montaje NFS')" title="Abrir explorador de carpetas" aria-label="Examinar carpeta NAS" style="padding: 8px 12px; flex-shrink: 0; font-size: 1rem;">📂</button>
+              </div>
+              <span class="help-text">Carpeta principal del NAS o montaje NFS/SMB. Autodetecta subcarpetas existentes (<code>Movies</code>/<code>Películas</code> y <code>Series</code>/<code>TV Shows</code>).</span>
+            </div>
+            <div id="nfs-mount-status-box" style="margin-top: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); background: rgba(15, 23, 42, 0.55); font-size: 0.8rem; display: none;"></div>
+            <div class="form-group" style="margin-top: 12px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="pref-nas-require-nfs" style="width: 16px; height: 16px;">
+                <span>Proteger disco local: exigir montaje NFS/red activo antes de transferir al NAS</span>
+              </label>
+              <span class="help-text">Si el montaje de red se cae o está desmontado, pausa la organización en lugar de copiar archivos al disco local / tarjeta SD.</span>
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+              <label>Biblioteca de Películas (Movies) — Opcional</label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" class="form-control" id="pref-movies-dir" placeholder="Autodetectada dentro de la raíz del NAS" style="flex: 1;">
                 <button type="button" class="btn btn-sm" onclick="openFolderBrowser('pref-movies-dir', 'Biblioteca de Películas (Movies)')" title="Abrir explorador de carpetas" aria-label="Examinar carpeta Películas" style="padding: 8px 12px; flex-shrink: 0; font-size: 1rem;">📂</button>
               </div>
-              <span class="help-text">Destino estructurado Plex/Jellyfin: <code>Movies/Título (Año)/Título (Año) [Calidad].ext</code></span>
+              <span class="help-text">Déjalo vacío para autodetectar <code>Movies</code> o <code>Películas</code> dentro del NAS. Destino Plex/Jellyfin: <code>Título (Año)/Título (Año) [Calidad].ext</code></span>
             </div>
             <div class="form-group" style="margin-top: 12px;">
-              <label>Biblioteca de Series de TV (TV Shows)</label>
+              <label>Biblioteca de Series de TV (TV Shows) — Opcional</label>
               <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="form-control" id="pref-series-dir" placeholder="/home/caraveliko/amule/incoming/TV Shows" style="flex: 1;">
+                <input type="text" class="form-control" id="pref-series-dir" placeholder="Autodetectada dentro de la raíz del NAS" style="flex: 1;">
                 <button type="button" class="btn btn-sm" onclick="openFolderBrowser('pref-series-dir', 'Biblioteca de Series de TV (TV Shows)')" title="Abrir explorador de carpetas" aria-label="Examinar carpeta Series" style="padding: 8px 12px; flex-shrink: 0; font-size: 1rem;">📂</button>
               </div>
-              <span class="help-text">Destino estructurado: <code>TV Shows/Serie/Season SS/Serie - S01E01.ext</code></span>
-            </div>
-            <div class="form-group" style="margin-top: 12px;">
-              <label>Ruta Biblioteca Multimedia / NAS (Opcional)</label>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="form-control" id="pref-nas-root-dir" placeholder="C:\Media\Video" style="flex: 1;">
-                <button type="button" class="btn btn-sm" onclick="openFolderBrowser('pref-nas-root-dir', 'Ruta Biblioteca Multimedia / NAS')" title="Abrir explorador de carpetas" aria-label="Examinar carpeta NAS" style="padding: 8px 12px; flex-shrink: 0; font-size: 1rem;">📂</button>
-              </div>
-              <span class="help-text">Ruta opcional de red o volumen secundario. Los hardlinks atómicos operan sin duplicar espacio en disco.</span>
+              <span class="help-text">Déjalo vacío para autodetectar <code>Series</code> o <code>TV Shows</code> dentro del NAS. Destino: <code>Serie/Season SS/Serie - S01E01.ext</code></span>
             </div>
           </div>
         </div>
@@ -8971,6 +8979,77 @@
       }
     }
 
+    function renderNfsMountStatus(nfsStatus, discoveredMounts) {
+      const box = document.getElementById('nfs-mount-status-box');
+      if (!box) return;
+
+      let statusHtml = '';
+      if (nfsStatus) {
+        let icon = '🟡';
+        let color = '#fbbf24';
+        let title = `Almacenamiento local (${escapeHtml(nfsStatus.targetPath || '')})`;
+        if (nfsStatus.unmountedFstabTrap) {
+          icon = '🔴';
+          color = '#f87171';
+          const exp = nfsStatus.remoteExport ? ` (${escapeHtml(nfsStatus.remoteExport)})` : '';
+          title = `Montaje NFS/red en /etc/fstab desmontado${exp} — escritura bloqueada para proteger el disco local`;
+        } else if (nfsStatus.nfsPortReachable === false) {
+          icon = '🔴';
+          color = '#f87171';
+          const host = nfsStatus.serverHost ? `${escapeHtml(nfsStatus.serverHost)}:2049` : 'puerto 2049';
+          title = `Servidor NFS no responde en TCP ${host} — transferencias al NAS pausadas`;
+        } else if (nfsStatus.isNetworkMount) {
+          icon = '🟢';
+          color = '#4ade80';
+          const kind = escapeHtml((nfsStatus.fsKind || 'nfs').toUpperCase());
+          const exp = escapeHtml(nfsStatus.remoteExport || nfsStatus.mountPoint || '');
+          const portTag = nfsStatus.nfsPortReachable === true ? ' · TCP 2049 OK' : '';
+          title = `Montaje ${kind} activo: ${exp}${portTag}`;
+        }
+        const subdirs = `<div style="color: #94a3b8; font-size: 0.74rem; margin-top: 4px; word-break: break-all;">🎬 Películas: <code>${escapeHtml(nfsStatus.resolvedMoviesDir || '')}</code> · 📺 Series: <code>${escapeHtml(nfsStatus.resolvedSeriesDir || '')}</code></div>`;
+        statusHtml += `<div style="color: ${color}; font-weight: 600;">${icon} ${title}</div>${subdirs}`;
+      }
+
+      if (Array.isArray(discoveredMounts) && discoveredMounts.length > 0) {
+        statusHtml += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(148,163,184,0.18);">
+          <div style="color: #cbd5e1; font-size: 0.74rem; margin-bottom: 6px;">Montajes de red detectados en el sistema (clic para usar):</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+        discoveredMounts.forEach((m, idx) => {
+          const stateBadge = m.mounted ? '🟢' : '⚠️ Desmontado';
+          statusHtml += `<button type="button" class="btn btn-sm btn-select-nfs-mount" data-mount-idx="${idx}" style="font-size: 0.74rem; padding: 4px 8px;">${stateBadge} Usar ${escapeHtml(m.mountPoint)} (${escapeHtml(m.remoteExport)} [${escapeHtml(m.fsType)}])</button>`;
+        });
+        statusHtml += `</div></div>`;
+      }
+
+      if (!statusHtml) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+      box.style.display = 'block';
+      box.innerHTML = statusHtml;
+
+      box.querySelectorAll('.btn-select-nfs-mount').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-mount-idx'), 10);
+          const mount = discoveredMounts[idx];
+          if (!mount) return;
+          const nasInput = document.getElementById('pref-nas-root-dir');
+          const movInput = document.getElementById('pref-movies-dir');
+          const serInput = document.getElementById('pref-series-dir');
+          if (nasInput) nasInput.value = mount.mountPoint;
+          if (movInput) {
+            movInput.value = '';
+            movInput.placeholder = `${mount.mountPoint.replace(/\/+$/, '')}/Movies (se autodetectará al guardar)`;
+          }
+          if (serInput) {
+            serInput.value = '';
+            serInput.placeholder = `${mount.mountPoint.replace(/\/+$/, '')}/Series (se autodetectará al guardar)`;
+          }
+        });
+      });
+    }
+
     async function loadPreferences() {
       try {
         const s = await client.call('settings.get');
@@ -8980,12 +9059,19 @@
         const setChk = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.checked = !!val; };
 
         // Directorios
+        window.__lastDefaultDownloadDir = s.defaultDownloadDir || '';
         setVal('pref-download-dir', s.defaultDownloadDir || '');
         setVal('pref-temp-dir', s.tempDir || '');
         setChk('pref-share-download-dir', s.shareDownloadDir !== false);
+        setVal('pref-nas-root-dir', s.nasRootDir || '');
+        setChk('pref-nas-require-nfs', !!s.nasRequireNfs);
         setVal('pref-movies-dir', s.moviesDir || '');
         setVal('pref-series-dir', s.seriesDir || '');
-        setVal('pref-nas-root-dir', s.nasRootDir || '');
+        const movEl = document.getElementById('pref-movies-dir');
+        if (movEl) movEl.placeholder = s.effectiveMoviesDir || 'Autodetectada dentro de la raíz del NAS';
+        const serEl = document.getElementById('pref-series-dir');
+        if (serEl) serEl.placeholder = s.effectiveSeriesDir || 'Autodetectada dentro de la raíz del NAS';
+        renderNfsMountStatus(s.nfsStatus, s.discoveredMounts);
 
         // Conexión & Caudal
         setVal('pref-cap-down', s.capacityDownloadKbs || '');
@@ -9086,12 +9172,19 @@
         if (tempDir !== null) payload.tempDir = tempDir;
         const shareDl = getBool('pref-share-download-dir');
         if (shareDl !== null) payload.shareDownloadDir = shareDl;
-        const movDir = getStr('pref-movies-dir');
-        if (movDir !== null) payload.moviesDir = movDir;
-        const serDir = getStr('pref-series-dir');
-        if (serDir !== null) payload.seriesDir = serDir;
         const nasDir = getStr('pref-nas-root-dir');
         if (nasDir !== null) payload.nasRootDir = nasDir;
+        const nasReqNfs = getBool('pref-nas-require-nfs');
+        if (nasReqNfs !== null) payload.nasRequireNfs = nasReqNfs;
+        let movDir = getStr('pref-movies-dir');
+        let serDir = getStr('pref-series-dir');
+        if (nasDir) {
+          const baseLocal = (window.__lastDefaultDownloadDir || dlDir || '').replace(/\/+$/, '');
+          if (movDir && baseLocal && movDir === `${baseLocal}/media/Movies`) movDir = '';
+          if (serDir && baseLocal && serDir === `${baseLocal}/media/Series`) serDir = '';
+        }
+        if (movDir !== null) payload.moviesDir = movDir;
+        if (serDir !== null) payload.seriesDir = serDir;
 
         // Conexión
         const capDown = getInt('pref-cap-down');
@@ -9193,8 +9286,9 @@
         if (payload.webuiPassword) {
           const webuiPassInput = document.getElementById('pref-webui-password');
           if (webuiPassInput) webuiPassInput.value = '';
-          await loadPreferences();
         }
+        await loadPreferences();
+        refreshStorage();
         if (badge) {
           badge.style.display = 'inline-block';
           setTimeout(() => { badge.style.display = 'none'; }, 3500);
