@@ -1,64 +1,47 @@
-# Bienvenido a la Wiki de Pulse Core
+# 📚 Wiki Oficial de Pulse Core — Manual de Usuario y Referencia Técnica
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/caraveliko/PulseCore/master/Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="220"/>
   <br/>
-  <strong>Documentación técnica oficial de Pulse Core — Motor P2P asíncrono en Rust</strong>
+  <strong>Manual Integral de Usuario, Administración de Servidores y Referencia Protocolaria</strong>
 </div>
 
 ---
 
-> [![Aviso Importante](https://img.shields.io/badge/AVISO-DOCUMENTACI%C3%93N%20OFICIAL-8a2be2.svg)](Home)
+> [![Aviso Importante](https://img.shields.io/badge/WIKI-MANUAL%20OFICIAL-8a2be2.svg)](Home)
 >
-> Toda la documentación técnica de **Pulse Core** se redacta y mantiene exclusivamente en **español de España**. Esta Wiki proporciona una referencia exhaustiva sobre arquitectura, configuración avanzada, especificaciones de cable e integración de automatizaciones para administradores de sistemas y desarrolladores.
+> Bienvenido a la **Wiki Oficial de Pulse Core**. Esta base de conocimiento contiene la documentación exhaustiva para aprender a utilizar el programa, interpretar sus pantallas, desplegarlo en servidores domésticos (*headless* / NAS) y exprimir al máximo sus capacidades de descarga híbrida (**eD2K**, **Kad DHT** y **Torrent**) y catalogación multimedia.
+>
+> Toda la documentación está redactada en **español de España**.
 
 ---
 
-## 🗺️ Mapa de Navegación de la Wiki
+## 🧭 Índice General de Manuales y Guías
 
-Explora las guías oficiales organizadas por ámbito técnico:
+Explora los contenidos organizados según tu necesidad:
 
-### 🚀 1. [Guía de Inicio y Despliegue en Servidores](01-Guia-de-Inicio-y-Servidor)
-- Requisitos e instalación de la cadena de herramientas Rust.
-- Compilación nativa universal con Cargo (`mule-daemon` y `mule-cli`).
-- Despliegue *headless* en servidores Linux, microservidores y Raspberry Pi (`aarch64`).
-- Configuración de servicios en segundo plano con `systemd` y persistencia con `loginctl enable-linger`.
-- Integración en Windows 11 con bandeja del sistema nativa.
+### 🔰 Primeros Pasos
+- **[01. Instalación y Primeros Pasos](01-Instalacion-y-Primeros-Pasos)**: Requisitos, compilación nativa rápida, primer arranque y acceso al panel web en `http://127.0.0.1:4660`.
 
-### ⚙️ 2. [Configuración y Ajustes del Sistema](02-Configuracion-y-Ajustes)
-- Persistencia en base de datos SQLite y modificación en caliente vía JSON-RPC.
-- Rutas del sistema: carpetas de descargas entrantes (`Incoming`), archivos temporales (`.part`) e importaciones.
-- Presupuestos de red, límites de velocidad globales y por par, y gestión de cuotas.
-- Tabla completa de parámetros de configuración y equivalencias con eMule clásico.
+### 🖥️ Manual de Usuario de la Interfaz Web (WebUI)
+- **[02. Manual Completo de la Interfaz Web](02-Manual-de-la-Interfaz-Web)**: Guía detallada pantalla a pantalla: pestaña de Descargas, Búsqueda global, Servidores, Red Kad, Compartidos, Biblioteca Cine & Series, Registro en vivo y Preferencias.
+- **[03. Gestión de Descargas, Fuentes y Enjambres](03-Gestion-de-Descargas-y-Fuentes)**: Interpretación de la barra de progreso (franjas de colores), estados de archivo, sistema de créditos y colas remotas, algoritmo *Rarest First* y recuperación de partes dañadas (ICH / AICH).
 
-### 🌐 3. [Protocolos P2P: eD2K, Kad DHT y Torrent](03-Protocolos-P2P)
-- Arquitectura del bucle de eventos unificado sin bloqueo.
-- Especificación en cable eD2K: entramado acotado, compresión zlib (`OP_COMPRESSEDPART`) e intercambio de fuentes (SX1/SX2).
-- Red Kademlia DHT de 128 bits: enrutamiento XOR, contactos, árbol de búsqueda y bootstrap descentralizado.
-- Motor Torrent integrado: negociación de enjambres, árboles AICH y hashing de dos niveles.
+### 🎬 Automatización Multimedia y Centros de Medios
+- **[04. Biblioteca Multimedia, Enlaces Duros y Subtítulos](04-Biblioteca-Multimedia-y-Subtitulos)**: Organización desatendida para **Plex** y **Jellyfin** mediante enlaces duros (*Zero-Copy Hardlinks*) sin duplicar espacio en disco, actualización automática de calidades (*Quality Upgrades*) y sincronización de subtítulos exactos con OpenSubtitles mediante hash de 64 bits.
 
-### 🎬 4. [Organización y Catalogación Multimedia](04-Organizacion-Multimedia)
-- Organización automática para centros multimedia (Plex y Jellyfin) mediante enlaces duros (`hard_link`) sin consumo de disco adicional (*Zero-Copy*).
-- Detección y actualización progresiva de calidades (*Quality Upgrades*) de forma desatendida.
-- Sincronización de subtítulos con OpenSubtitles mediante cálculo de hash de 64 bits (`first 64KB + last 64KB + size`).
-- Filtrado inteligente de nombres de archivo y algoritmos de puntuación de lanzamientos.
+### 🌐 Redes P2P y Conectividad
+- **[05. Red eD2K: Servidores, Conexión y Solución de ID Baja](05-Red-eD2K-Servidores-e-ID-Alta)**: Cómo funciona la red eDonkey/eMule, qué significa matemáticamente tener **ID Alta (*HighID*)** frente a **ID Baja (*LowID*)**, listas seguras `server.met` y apertura de puertos en el router.
+- **[06. Red Kad DHT: Búsqueda y Transferencia sin Servidores](06-Red-Kad-DHT-sin-Servidores)**: Funcionamiento del árbol Kademlia de 128 bits, cómo inicializar la red (*Bootstrap*), resolución del estado tras cortafuegos (*Firewalled*) y sistema de clientes compañeros (*Buddy*).
+- **[07. Motor Torrent y Enjambres Híbridos](07-Motor-Torrent-y-Enjambres)**: Gestión de enlaces `magnet:?`, metadatos `.torrent`, orquestación de ancho de banda y ensamblado de piezas multiprotocolo.
 
-### 🤖 5. [API RPC y Servidor MCP para Inteligencia Artificial](05-API-RPC-y-Servidor-MCP)
-- Especificación del protocolo JSON-RPC 2.0 sobre WebSockets (`ws://127.0.0.1:4660/rpc`).
-- Catálogo de métodos RPC: descargas, compartidos, servidores, búsqueda e historial.
-- Servidor MCP (*Model Context Protocol*) con más de 85 herramientas expuestas para asistentes de IA y agentes autónomos.
-- Ejemplos prácticos de automatización en Python y llamadas CLI.
+### 💾 Migración y Servidores
+- **[08. Migración desde el eMule Clásico](08-Migracion-desde-eMule-Clasico)**: Guía paso a paso para importar tus descargas a medias (`.part` y `.part.met`) desde eMule 0.50a / 0.72a a Pulse Core sin perder datos.
+- **[09. Despliegue en NAS y Servidores Domésticos (*Headless*)](09-Despliegue-en-NAS-y-Servidores)**: Ejecución 24/7 sin monitor con `systemd`, persistencia de usuario con `loginctl enable-linger`, guía para Raspberry Pi, TrueNAS y Unraid.
 
-### 🛡️ 6. [Seguridad de Red y Mitigación de Abusos](06-Seguridad-y-Red)
-- Canalización de validación estricta y aislamiento anti-SSRF.
-- Filtrado dinámico de IPs maliciosas mediante listas de bloqueo (`ipfilter.dat`).
-- Interruptor de corte atómico (*kill switch*) para desconexión instantánea ante anomalías.
-- Aislamiento estricto de bucle local (*loopback isolation*).
+### 🤖 Herramientas Avanzadas e Inteligencia Artificial
+- **[10. Manual de la CLI (`mule-cli`)](10-Manual-de-la-CLI)**: Comandos de terminal para inspeccionar enlaces eD2K, hashes criptográficos y archivos `.part.met` en local.
+- **[11. Automatización con IA y Servidor MCP](11-Automatizacion-con-IA-y-MCP)**: Control del daemon en lenguaje natural conectando asistentes (Antigravity, Claude, Gemini) a través del protocolo Model Context Protocol (~87 herramientas).
 
----
-
-## 📌 Enlaces Rápidos y Recursos
-
-- **Repositorio oficial**: [https://github.com/caraveliko/PulseCore](https://github.com/caraveliko/PulseCore)
-- **Panel Web del Daemon**: `http://127.0.0.1:4660` (cuando el servicio está en ejecución)
-- **Licencia**: [GPL-2.0-or-later](../LICENSE)
+### ❓ Soporte y Diagnóstico
+- **[12. Preguntas Frecuentes y Solución de Problemas](12-Preguntas-Frecuentes-y-Problemas)**: Respuestas a dudas habituales («¿Por qué no descarga?», «¿Cómo configuro el cortafuegos?», «¿Cómo recupero espacio en disco?»).

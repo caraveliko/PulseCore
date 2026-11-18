@@ -1,48 +1,41 @@
-### 🧭 Navegación
+### 🧭 Navegación General
 
-* **[🏠 Portada Principal](Home)**
-
----
-
-### 📚 Guías de la Wiki
-
-* **[🚀 1. Inicio y Servidor](01-Guia-de-Inicio-y-Servidor)**
-  * Requisitos previos
-  * Compilación con Cargo
-  * Servicio `systemd` headless
-  * Despliegue en Raspberry Pi
-  * Bandeja de Windows 11
-
-* **[⚙️ 2. Configuración](02-Configuracion-y-Ajustes)**
-  * Base de datos SQLite
-  * Directorios y rutas
-  * Puertos y cortafuegos
-  * Tabla de ajustes en caliente
-
-* **[🌐 3. Protocolos P2P](03-Protocolos-P2P)**
-  * Motor asíncrono Tokio
-  * Red eD2K y eMule 0.72a
-  * Kademlia DHT de 128 bits
-  * Enjambres Torrent
-
-* **[🎬 4. Multimedia](04-Organizacion-Multimedia)**
-  * Enlaces duros Zero-Copy
-  * Mejora de calidades
-  * Subtítulos OpenSubtitles
-  * Integración Plex / Jellyfin
-
-* **[🤖 5. API RPC y MCP](05-API-RPC-y-Servidor-MCP)**
-  * JSON-RPC 2.0 WebSockets
-  * Servidor MCP (~87 tools)
-  * Automatización con IA
-
-* **[🛡️ 6. Seguridad y Red](06-Seguridad-y-Red)**
-  * Protección anti-SSRF
-  * Filtro IP (`ipfilter.dat`)
-  * Kill Switch atómico
+* **[🏠 Portada de la Wiki](Home)**
 
 ---
 
-### 🔗 Enlaces Externos
-* [GitHub Repository](https://github.com/caraveliko/PulseCore)
+### 📖 Manuales de Usuario
+
+* **[🔰 01. Primeros Pasos](01-Instalacion-y-Primeros-Pasos)**
+* **[🖥️ 02. Manual Interfaz Web](02-Manual-de-la-Interfaz-Web)**
+* **[📥 03. Gestión de Descargas](03-Gestion-de-Descargas-y-Fuentes)**
+* **[🎬 04. Biblioteca y Subtítulos](04-Biblioteca-Multimedia-y-Subtitulos)**
+
+---
+
+### 🌐 Conectividad y Redes
+
+* **[⚡ 05. Red eD2K y HighID](05-Red-eD2K-Servidores-e-ID-Alta)**
+* **[🕸️ 06. Red Kad DHT](06-Red-Kad-DHT-sin-Servidores)**
+* **[🧲 07. Motor Torrent](07-Motor-Torrent-y-Enjambres)**
+
+---
+
+### 🛠️ Servidores y Migración
+
+* **[📦 08. Migración desde eMule](08-Migracion-desde-eMule-Clasico)**
+* **[🖥️ 09. Despliegue en NAS/Server](09-Despliegue-en-NAS-y-Servidores)**
+* **[💻 10. Manual de la CLI](10-Manual-de-la-CLI)**
+
+---
+
+### 🤖 Avanzado y Soporte
+
+* **[🤖 11. Control IA con MCP](11-Automatizacion-con-IA-y-MCP)**
+* **[❓ 12. FAQ y Problemas](12-Preguntas-Frecuentes-y-Problemas)**
+
+---
+
+### 🔗 Enlaces Rápidos
+* [Repositorio GitHub](https://github.com/caraveliko/PulseCore)
 * [WebUI Local (4660)](http://127.0.0.1:4660)

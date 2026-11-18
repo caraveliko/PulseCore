@@ -1,68 +1,80 @@
-# 🎬 Organización y Catalogación Multimedia
+# 🎬 04. Biblioteca Multimedia, Enlaces Duros y Subtítulos
 
-Pulse Core incorpora de forma nativa su propio motor de gestión de medios (`mule-daemon::services::media` y `organizer`), diseñado para transformar las descargas completadas en una biblioteca ordenada y lista para reproducir en **Plex**, **Jellyfin** o **Kodi**, sin requerir herramientas externas ni servicios pesados.
+Uno de los aspectos más potentes y diferenciadores de **Pulse Core** es su motor de gestión y organización multimedia propio (`organizer` y `media_library`). Esta funcionalidad convierte el daemon en el compañero perfecto para servidores de medios como **Plex**, **Jellyfin** o **Kodi**.
 
 ---
 
-## 1. Enlaces Duros sin Duplicar Espacio (*Zero-Copy Hardlinks*)
+## 1. El Problema del Espacio y los Enlaces Duros (*Zero-Copy*)
 
-Uno de los mayores problemas al utilizar clientes P2P tradicionales junto con gestores de medios es la duplicación de espacio: o bien se mueve el archivo (rompiendo la compartición y el ratio de subida en la red), o bien se duplica (gastando el doble de almacenamiento).
+Cuando descargas una película en un cliente tradicional, te encuentras ante un dilema:
+- Si **mueves** el archivo a tu carpeta de películas para que lo lea Plex, rompes la compartición en la red P2P (dejas de sembrar y pierdes ratio).
+- Si **copias** el archivo, gastas el doble de disco (una película de 15 GB pasa a ocupar 30 GB).
 
-Pulse Core resuelve esto mediante **enlaces duros del sistema de archivos (`std::fs::hard_link`)**:
+Pulse Core soluciona esto de raíz utilizando **enlaces duros del sistema de archivos (`hard_link`)**:
 
+### ¿Qué es un enlace duro?
+A nivel de sistema de archivos (NTFS en Windows, ext4/btrfs/ZFS en Linux):
+- Un archivo físico es un bloque de datos en disco identificado por un número de inodo.
+- Un enlace duro es simplemente una **segunda entrada en el directorio que apunta al mismo bloque físico**.
+- Puedes tener el archivo en dos rutas a la vez:
+  ```text
+  /media/datos/Descargas/Incoming/Gladiator.2000.1080p.mkv     (Ruta de compartición P2P)
+  /media/datos/Peliculas/Gladiator (2000)/Gladiator (2000).mkv  (Ruta de Plex / Jellyfin)
+  ```
+- **Espacio ocupado**: exactamente 15 GB, ¡cero bytes adicionales duplicados!
+- Si borras una de las dos rutas, la otra sigue existiendo intacta. El espacio solo se libera cuando se eliminan ambas.
+
+> [!IMPORTANT]
+> **Requisito para Enlaces Duros**: La carpeta de descargas entrantes (`Incoming`) y la carpeta de biblioteca multimedia deben residir en la misma partición o disco físico. Si están en discos distintos, Pulse Core detectará la frontera de sistema de archivos (`EXDEV`) y realizará una copia ordinaria.
+
+---
+
+## 2. Estructura de Carpetas Estandarizada
+
+Cuando una descarga multimedia finaliza, Pulse Core analiza sus metadatos (título, año, temporada, episodio) y crea la jerarquía recomendada por Plex y Jellyfin:
+
+### Estructura para Películas
 ```text
-Disco Duro / Almacenamiento (Inodo #48291)
-  ├── Entrada 1: ~/Descargas/PulseCore/Incoming/Pelicula.2024.1080p.mkv   <-- Compartiendo en eD2K/Torrent
-  └── Entrada 2: /media/Peliculas/Pelicula (2024)/Pelicula (2024).mkv    <-- Leído por Plex / Jellyfin
+Películas/
+└── Nombre de la Película (Año)/
+    ├── Nombre de la Película (Año).mkv
+    └── Nombre de la Película (Año).es.srt
 ```
 
-### Ventajas de este enfoque
-- **Consumo de disco adicional = 0 bytes**: Ambas rutas apuntan al mismo bloque físico de almacenamiento.
-- **Siembra continua ininterrumpida**: El archivo puede seguir compartiéndose en la red eD2K y en el enjambre Torrent indefinidamente.
-- **Estructura estricta para servidores multimedia**: Las películas y series se renombran y organizan automáticamente según las convenciones estándar:
-  - Películas: `Películas/Título (Año)/Título (Año).ext`
-  - Series de TV: `Series/Nombre de la Serie/Temporada 01/Nombre S01E01.ext`
-
-*(Nota técnica: Si la carpeta de destino reside en un sistema de archivos o disco físico distinto, el motor detecta el error de sistema `EXDEV` y realiza una copia segura con verificación de integridad).*
-
----
-
-## 2. Actualización Progresiva de Calidades (*Quality Upgrades*)
-
-El motor de catalogación evalúa continuamente las calidades disponibles en la red para los elementos supervisados en tu biblioteca:
-
-1. **Puntuación de Lanzamientos**: Cada versión descubierta en la red se califica numéricamente considerando:
-   - **Resolución**: 720p < 1080p < 2160p (4K UHD).
-   - **Códec de Vídeo**: MPEG-4 < H.264/AVC < H.265/HEVC < AV1.
-   - **Pista de Audio y Rango Dinámico**: Detección de HDR10, Dolby Vision y pistas multicanal (5.1, Atmos).
-2. **Reemplazo Transparente y Atómico**:
-   - Si se detecta un lanzamiento con mayor puntuación que la versión actualmente almacenada, Pulse Core programa su descarga en segundo plano.
-   - Una vez finalizada y verificada la nueva versión, el enlace duro en la biblioteca multimedia se actualiza de forma atómica. Tu servidor de medios (Plex o Jellyfin) detecta inmediatamente la versión mejorada sin que el usuario tenga que borrar archivos ni renombrar carpetas a mano.
+### Estructura para Series de Televisión
+```text
+Series/
+└── Nombre de la Serie (Año)/
+    └── Temporada 01/
+        ├── Nombre S01E01.mkv
+        ├── Nombre S01E01.es.srt
+        └── Nombre S01E02.mkv
+```
 
 ---
 
-## 3. Descarga Automática de Subtítulos (OpenSubtitles / VLSub)
+## 3. Actualización Progresiva de Calidades (*Quality Upgrades*)
 
-Para garantizar que los subtítulos estén perfectamente sincronizados con la pista de audio y la velocidad de fotogramas (*framerate*) del archivo descargado, Pulse Core implementa el cliente REST de OpenSubtitles con **algoritmo de suma de verificación de 64 bits**:
+Pulse Core no solo descarga un archivo y se olvida: **supervisa activamente la calidad de tu biblioteca**.
 
-### Cálculo del Hash de Vídeo
-En lugar de basarse en el nombre del archivo (que puede ser engañoso), el motor calcula una suma de verificación directa sobre el flujo binario:
-$$\text{Hash}_{64} = \text{Tamaño en bytes} + \sum \text{primeros 64 KB} + \sum \text{últimos 64 KB}$$
-
-### Flujo de trabajo automatizado
-1. Al completarse la descarga del vídeo, el servicio de subtítulos calcula el hash de 64 bits y realiza una consulta a la API de OpenSubtitles.
-2. Si existe un subtítulo exacto en el idioma preferido (por defecto español de España, `.es.srt`), se descarga el paquete comprimido `.gz`.
-3. El motor descomprime el flujo en memoria, normaliza la codificación a **UTF-8 estricto** y lo deposita junto al archivo de vídeo con el mismo nombre base:
-   - `Película (2024).mkv`
-   - `Película (2024).es.srt`
+### ¿Cómo funciona la mejora automática?
+1. Supongamos que agregas una película clásica a tu catálogo de la que actualmente solo existe una versión `720p HDTV`. Pulse Core la descarga y la enlaza a tu biblioteca.
+2. La película queda registrada en estado *Monitoreada*.
+3. Días o semanas después, un usuario de la red comparte una versión remasterizada en `1080p BluRay` o `2160p 4K HDR`.
+4. El algoritmo de puntuación de Pulse Core detecta la nueva versión, verifica que supera la puntuación de calidad de la copia actual y programa automáticamente su descarga en segundo plano.
+5. Al completarse, **sustituye atómicamente el enlace duro** en tu carpeta de Plex. Tu servidor multimedia detecta la nueva resolución de inmediato sin que hayas tenido que hacer nada manualmente.
 
 ---
 
-## 4. Filtrado Inteligente de Falsos Positivos
+## 4. Subtítulos Sincronizados al Milisegundo con OpenSubtitles
 
-Las redes P2P abiertas pueden contener archivos con títulos engañosos, grabaciones de cine de baja calidad (*CAM/TS*) o archivos corruptos.
+Nada arruina más una película que un subtítulo desfasado por dos segundos debido a una diferencia de fotogramas por segundo (*23.976 fps* frente a *25.000 fps*).
 
-Pulse Core incluye algoritmos heurísticos de filtrado que analizan los metadatos antes de autorizar la captura:
-- **Tolerancia de año estricta**: Rechaza coincidencias con desviaciones de año superiores a $\pm 1$ para evitar descargar adaptaciones clásicas o secuelas homónimas.
-- **Descarte de etiquetas de baja fidelidad**: Reglas de exclusión para términos como `CAM`, `TELESYNC`, `HDCAM`, `SAMPLE` o resoluciones anómalas.
-- **Validación de tamaño mínimo**: Comprobación de que el tamaño del archivo se corresponda con la duración esperada según el códec reportado en los metadatos.
+Para evitar esto, Pulse Core integra el cliente REST de **OpenSubtitles (VLSub)** con cálculo de hash de vídeo de 64 bits:
+
+### El algoritmo de suma de verificación binaria
+En lugar de buscar el subtítulo por el nombre del archivo (que suele ser genérico), el daemon lee los primeros 64 KB y los últimos 64 KB del archivo de vídeo y suma su longitud en bytes. Esta combinación genera una **huella digital única**:
+
+- Solo los subtítulos creados y sincronizados específicamente para ese mismo ripeo de vídeo compartirán dicho hash.
+- Pulse Core descarga el archivo `.gz`, lo descomprime en memoria y valida que su codificación sea **UTF-8 universal** (evitando caracteres corruptos o problemas con tildes y eñes).
+- Guarda el subtítulo junto al vídeo con la extensión `.es.srt` (español de España) para que Plex y Jellyfin lo activen automáticamente.
