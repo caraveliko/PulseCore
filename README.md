@@ -11,6 +11,10 @@
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](Cargo.toml)
 [![Idioma](https://img.shields.io/badge/Idioma-Espa%C3%B1ol%20(ES--ES)-red)](README.md)
 
+<br/>
+
+[Características](#-qué-hace-diferente-a-pulse-core) • [Interfaz Web](#-interfaz-web-integrada) • [Puertos y Red](#-configuración-de-red-y-puertos) • [Arquitectura](#-arquitectura-del-workspace) • [Inicio Rápido](#-inicio-rápido) • [Reportar un error](#-antes-de-reportar-un-error)
+
 </div>
 
 ---
@@ -41,6 +45,17 @@ Consume una fracción de los recursos habituales y funciona de forma idéntica e
 
 ---
 
+## 🖥️ Interfaz Web integrada
+
+El servicio incorpora un panel de control web reactivo y moderno servido directamente en el puerto `4660`, sin dependencias externas:
+
+<div align="center">
+  <img src="docs/screenshots/downloads.jpg" alt="Panel de control Web de Pulse Core" width="85%" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"/>
+  <p><em>Panel de control reactivo en tiempo real servido nativamente por <code>mule-daemon</code> (Axum + WebSockets).</em></p>
+</div>
+
+---
+
 ## ⚡ Qué hace diferente a Pulse Core
 
 ### 1. Dos redes en un solo motor asíncrono
@@ -59,6 +74,39 @@ Incorpora un servidor **MCP** (*Model Context Protocol*) con más de 85 herramie
 - **Aislamiento Loopback y Anti-SSRF**: Ningún paquete malicioso puede forzar al daemon a escanear tu red local o comunicarse con servicios internos protegidos.
 - **Filtrado dinámico de IPs (`ipfilter.dat`)**: Descarte inmediato a nivel de socket de rangos de direcciones sospechosas o maliciosas.
 - **Interruptor de corte atómico (*kill switch*)**: Cierre y desconexión fulminante de todo el tráfico de red ante cualquier anomalía de seguridad.
+
+---
+
+## 🌐 Configuración de red y puertos
+
+Para despliegues domésticos, servidores dedicados o contenedores NAS, estos son los puertos estándar utilizados por el motor:
+
+| Puerto por defecto | Protocolo | Servicio | Función |
+| :---: | :---: | :--- | :--- |
+| **`4660`** | TCP | WebUI & JSON-RPC | Panel de control web en navegador y APIs de control local. |
+| **`39735`** | TCP | Transferencias eD2K | Conexión con clientes eDonkey/eMule para descarga y subida. |
+| **`39737`** | UDP | Kademlia (Kad DHT) | Búsqueda descentralizada de fuentes y enrutamiento global. |
+| **`6881`** | TCP / UDP | BitTorrent | Tráfico del enjambre Torrent y negociación de piezas. |
+
+*(Todos los puertos son totalmente configurables en caliente o mediante variables de entorno).*
+
+---
+
+## 🏗️ Arquitectura del Workspace
+
+El proyecto está organizado en un workspace de Cargo modular, donde cada componente tiene una única responsabilidad bien definida:
+
+| Crate | Rol principal |
+| :--- | :--- |
+| **`crates/mule-daemon`** | Servidor principal Tokio/Axum, WebUI embebida, APIs RPC/WebSocket y bandeja de Windows (`src/tray.rs`). |
+| **`crates/mule-protocol`** | Códecs de cable acotados eD2K/Kad con vectores de prueba estrictos basados en eMule 0.72a. |
+| **`crates/mule-core`** | Dominio de negocio, gestor de descargas y motor de almacenamiento disperso. |
+| **`crates/mule-torrent`** | Motor BitTorrent integrado y asignador de enjambre híbrido. |
+| **`crates/mule-crypto`** | Primitivas criptográficas: MD4, árboles de hashing AICH e identificadores P2P. |
+| **`crates/mule-mcp`** | Servidor MCP con más de 85 herramientas para interacción con asistentes y agentes de IA. |
+| **`crates/mule-network-policy`** | Canalización de seguridad anti-SSRF, mitigación de ataques y aislamiento en bucle local. |
+| **`crates/mule-filter`** | Filtrado de rangos IP maliciosos (`ipfilter.dat`) de alta velocidad. |
+| **`crates/mule-format`** | Decodificación y serialización de formatos de archivo clásicos (`.met`, `.dat`). |
 
 ---
 
@@ -96,7 +144,7 @@ Para resolver cualquier problema con la mayor rapidez posible, comprueba lo sigu
    ```bash
    RUST_LOG=mule_daemon=debug,mule_protocol=debug,mule_core=debug ./target/release/mule-daemon
    ```
-3. **Detalles del entorno**: Especifica tu sistema operativo (p. ej. *Windows 11 23H2* o *Ubuntu 24.04*), arquitectura de procesador (`x86_64` o `aarch64`), y el subsistema afectado (eD2K, Kad, BitTorrent, WebUI o Automatización multimedia).
+3. **Detalles del entorno**: Especifica tu sistema operativo (p. ej. *Windows 11 23H2* o *Ubuntu 24.04*), arquitectura de procesador (`x86_64` o `aarch64`), y el subsistema afectado (eD2K, Kad, BitTorrent, WebUI o Catalogación multimedia).
 4. **Pruebas en bucle cerrado**: Si sospechas de un fallo en los códecs de cable, comprueba si pasa las pruebas locales:
    ```bash
    cargo test -p mule-protocol --all-features
