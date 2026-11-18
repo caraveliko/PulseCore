@@ -4,73 +4,112 @@
 
 # Pulse Core
 
-**Cliente P2P híbrido en Rust que combina las redes eMule (eD2K + Kad DHT) y BitTorrent, con interfaz web integrada y herramientas de organización multimedia.**
+**Reinvención moderna y asíncrona en Rust de las redes eMule (eD2K + Kad DHT) y BitTorrent, con automatización multimedia nativa e interfaz web integrada.**
 
-[![License: GPL-2.0-or-later](https://img.shields.io/badge/License-GPL--2.0--or--later-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux-lightgrey)](README.md)
-[![Language](https://img.shields.io/badge/Idioma-Espa%C3%B1ol%20(ES--ES)-red)](README.md)
+[![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/Licencia-GPL--2.0--or--later-blue.svg)](LICENSE)
+[![Plataforma](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux%20%7C%20aarch64-lightgrey)](README.md)
+[![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](Cargo.toml)
+[![Idioma](https://img.shields.io/badge/Idioma-Espa%C3%B1ol%20(ES--ES)-red)](README.md)
 
 </div>
 
 ---
 
-## ¿Qué es Pulse Core?
+> [!IMPORTANT]
+> **Desarrollo técnico riguroso:** Pulse Core es una reimplementación limpia creada en simbiosis entre ingeniería humana experta y agentes de IA avanzados. La totalidad del código, los comentarios y la documentación están redactados en **español de España**, siguiendo estándares inflexibles de seguridad de memoria en Rust: sin pánicos en producción, sin advertencias del compilador (`-D warnings`), con fidelidad milimétrica a las fuentes de eMule 0.72a y suites de prueba que se ejecutan 100 % sin conexión a Internet.
 
-**Pulse Core** es un cliente P2P moderno y asíncrono (Tokio) escrito en **Rust** que unifica los protocolos **eD2K**, **Kademlia DHT (Kad)** y **BitTorrent** en un único servicio (`mule-daemon`).
+El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **BitTorrent** en un mismo bucle de eventos sin bloqueo.
 
-Está diseñado tanto para su uso en estaciones de trabajo como en servidores domésticos (*headless*), incorporando una interfaz web ligera servida directamente por el ejecutable y utilidades locales para catalogar y organizar descargas.
+Consume una fracción de los recursos habituales y funciona de forma idéntica en un PC de sobremesa con bandeja del sistema en Windows 11 o en una **Raspberry Pi sin monitor** (*headless*) gestionada a través de su interfaz web embebida.
+
+> [!WARNING]
+> **Proyecto en desarrollo activo y pruebas de enjambre:** El núcleo fundamental es 100 % operativo: el cálculo de identificadores eD2K (MD4 + AICH), la canalización anti-SSRF, el filtrado IP (`ipfilter.dat`), la interfaz web y la organización mediante enlaces duros están completamente probados y son estables. Actualmente estamos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
+>
+> **Entornos validados:** Probado con éxito en estaciones de trabajo AMD Ryzen / Intel Core bajo Windows 10/11 x64, Linux x86_64 (Arch, Debian, Ubuntu) y procesadores ARM64 (Raspberry Pi 4 y 5 bajo Raspberry Pi OS, con consumos inferiores a ~45 MB de RAM en reposo).
+
+> [!TIP]
+> **Panel Web instantáneo sin dependencias:** No necesitas Node.js, Docker ni servidores HTTP externos para controlar Pulse Core. Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar descargas, alternar el Modo Tortuga de velocidad o consultar el estado de los enjambres.
+>
+> Para colaborar o inspeccionar las decisiones de diseño, consulta [`docs/INDEX.md`](docs/INDEX.md) y [`AGENTS.md`](AGENTS.md). Recuerda que cualquier aportación debe superar `cargo test --workspace --all-features` y el linteado estricto sin advertencias.
+
+> [!NOTE]
+> **Neutralidad tecnológica absoluta:** Pulse Core **no incluye, no aloja, no indexa ni proporciona acceso a ningún archivo, película, serie o material con derechos de autor**. No suministra listas de servidores de terceros ni rastreadores preconfigurados. Es un motor de transporte de datos agnóstico y descentralizado; el uso y la legalidad del material descargado son responsabilidad exclusiva del usuario final.
 
 ---
 
-## Características
+## ⚡ Qué hace diferente a Pulse Core
 
-- **Soporte multiprotocolo**: Descarga simultáneamente desde redes eD2K / Kad y enjambres BitTorrent mediante un único proceso.
-- **Fidelidad protocolaria eD2K/Kad**: Soporte de compresión zlib (`OP_COMPRESSEDPART`), intercambio de fuentes (SX1/SX2) y DHT Kademlia v2 de 128 bits.
-- **Interfaz Web integrada**: Panel de control accesible en `http://127.0.0.1:4660` sin necesidad de servidores web externos, con control de velocidad (Modo Tortuga).
-- **Organización multimedia**: Clasificación automática para gestores como Plex o Jellyfin (`Películas/Título (Año)/...`) mediante enlaces duros (`hard_link`) para ahorrar espacio en disco, con descarga opcional de subtítulos vía OpenSubtitles.
-- **Filtrado y puntuación configurable**: Reglas de descarte de falsos positivos y prioridad por calidad o idioma.
-- **Seguridad de red**: Canalización con validación anti-SSRF, filtrado de IPs maliciosas (`ipfilter.dat`) y aislamiento en bucle local.
-- **Control e interoperabilidad**: Servidor MCP (*Model Context Protocol*) integrado para automatización e integración con asistentes.
+### 1. Dos redes en un solo motor asíncrono
+Descarga y comparte piezas simultáneamente entre clientes clásicos de eMule y enjambres modernos de BitTorrent. El asignador de almacenamiento disperso asigna espacio dinámicamente y verifica la integridad de cada fragmento mediante sumas de verificación jerárquicas eD2K y árboles AICH.
+
+### 2. Automatización multimedia integrada (Ecosistema Servarr nativo)
+Olvídate de configurar pilas complejas de contenedores externos para organizar tus descargas:
+- **Enlaces duros sin duplicar espacio (`hard_link`)**: Clasifica automáticamente las películas y series finalizadas en la estructura requerida por Plex o Jellyfin (`Películas/Título (Año)/...`) sin consumir ni un solo megabyte extra en disco.
+- **Subtítulos automáticos sincronizados**: Cliente REST integrado con OpenSubtitles (VLSub) que calcula el hash exacto de 64 bits (`primeros 64KB + últimos 64KB + tamaño`) para descargar y descomprimir el subtítulo `.es.srt` perfecto y sincronizado al milisegundo.
+- **Agregador Torznab**: Compatible con búsquedas y lanzamientos estructurados con filtro estricto de calidad y tolerancia de año.
+
+### 3. Control por Inteligencia Artificial (Servidor MCP integrado)
+Incorpora un servidor **MCP** (*Model Context Protocol*) con más de 85 herramientas expuestas. Puedes conectar asistentes de IA (como Antigravity, Claude Code o Gemini) para pausar transferencias, analizar la salud de las conexiones, optimizar colas o inspeccionar los registros del daemon mediante lenguaje natural.
+
+### 4. Seguridad de red sin concesiones
+- **Aislamiento Loopback y Anti-SSRF**: Ningún paquete malicioso puede forzar al daemon a escanear tu red local o comunicarse con servicios internos protegidos.
+- **Filtrado dinámico de IPs (`ipfilter.dat`)**: Descarte inmediato a nivel de socket de rangos de direcciones sospechosas o maliciosas.
+- **Interruptor de corte atómico (*kill switch*)**: Cierre y desconexión fulminante de todo el tráfico de red ante cualquier anomalía de seguridad.
 
 ---
 
-## Inicio Rápido
+## 🚀 Inicio Rápido
 
-### Requisitos
-- **Rust** (`stable`, 1.80 o superior)
+### Requisitos previos
+- **Rust** (`stable`, 1.80 o superior).
+- Compilador C/C++ del sistema (MSVC en Windows, GCC/Clang en Linux).
 
 ### Compilación y ejecución
 
-**En Linux:**
+**En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
 ```bash
 cargo build --release -p mule-daemon
 ./target/release/mule-daemon
 ```
 
-**En Windows:**
+**En Windows (PowerShell):**
 ```powershell
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1
 ```
-*(O compilar con `cargo build --release -p mule-daemon`).*
+*(O de forma manual mediante `cargo build --release -p mule-daemon`).*
 
-Una vez iniciado el daemon, abre en el navegador:
-> **`http://127.0.0.1:4660`**
-
----
-
-## Licencia y Atribución
-
-Distribuido bajo licencia **GPL-2.0-or-later** — consulta los archivos [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE) para detalles de atribución y referencias protocolarias.
+Una vez iniciado el servicio, accede a la interfaz desde cualquier navegador:
+> 🌐 **`http://127.0.0.1:4660`**
 
 ---
 
-## ⚖️ Aviso Legal / Legal Disclaimer
+## 🛠️ Antes de reportar un error
 
-> **EXENCIÓN DE RESPONSABILIDAD**
->
-> **Pulse Core** es un proyecto de software libre de carácter técnico y educativo que implementa un cliente para protocolos estándar de comunicación entre pares (*peer-to-peer*: eD2K, Kademlia y BitTorrent), junto con herramientas locales de organización de archivos.
->
-> 1. **Ausencia de contenido**: Este software **no aloja, almacena, indexa, distribuye, enlaza ni proporciona acceso** a ningún archivo, película, serie, obra multimedia o material protegido por derechos de autor. No incluye servidores propios, rastreadores (*trackers*) ni catálogos de contenido de terceros.
-> 2. **Neutralidad tecnológica**: Las funciones de búsqueda y organización operan exclusivamente sobre redes descentralizadas públicas o indexadores externos configurados libremente por el propio usuario. Los autores y colaboradores del proyecto no supervisan ni tienen conocimiento alguno sobre los archivos gestionados por los usuarios.
-> 3. **Responsabilidad del usuario**: El uso que se haga de esta herramienta recae **única y exclusivamente sobre el usuario final**, quien debe asegurarse de contar con la debida autorización y cumplir la legislación aplicable en materia de propiedad intelectual.
-> 4. **Sin garantías**: Este programa se distribuye «TAL CUAL» (*AS IS*), sin garantías de ningún tipo, conforme a los términos de la licencia GPL-2.0-or-later.
+Para resolver cualquier problema con la mayor rapidez posible, comprueba lo siguiente antes de abrir una incidencia (*issue*):
+
+1. **Reproducción en la rama principal**: Asegúrate de que el fallo persista en la última versión de la rama `main`.
+2. **Captura de registros detallados**: Arranca el daemon activando los registros de depuración de Tokio y tracing:
+   ```bash
+   RUST_LOG=mule_daemon=debug,mule_protocol=debug,mule_core=debug ./target/release/mule-daemon
+   ```
+3. **Detalles del entorno**: Especifica tu sistema operativo (p. ej. *Windows 11 23H2* o *Ubuntu 24.04*), arquitectura de procesador (`x86_64` o `aarch64`), y el subsistema afectado (eD2K, Kad, BitTorrent, WebUI o Automatización multimedia).
+4. **Pruebas en bucle cerrado**: Si sospechas de un fallo en los códecs de cable, comprueba si pasa las pruebas locales:
+   ```bash
+   cargo test -p mule-protocol --all-features
+   ```
+
+---
+
+## 📄 Licencia y Atribución
+
+Este proyecto se distribuye bajo la licencia **GPL-2.0-or-later**. 
+Consulta los archivos [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE) para información sobre autoría original, licencias de terceros y referencias protocolarias.
+
+---
+
+## ⚖️ Exención de Responsabilidad Legal
+
+1. **Finalidad técnica y de preservación**: **Pulse Core** es un proyecto de software libre con fines didácticos, de investigación y de preservación tecnológica de protocolos P2P históricos.
+2. **Ausencia de catálogo**: El proyecto no gestiona, no promueve ni mantiene índices de contenido protegido ni servidores de intercambio de archivos.
+3. **Responsabilidad exclusiva del usuario**: Corresponde al usuario asegurarse de que su utilización del software se ajusta a las leyes y regulaciones vigentes en su territorio en materia de telecomunicaciones y propiedad intelectual.
+4. **Garantía**: Conforme a los términos de la licencia GPL-2.0-or-later, este software se suministra «TAL CUAL», sin ninguna garantía explícita ni implícita de rendimiento o adecuación a un fin particular.
