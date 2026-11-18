@@ -114,25 +114,45 @@ El proyecto está organizado en un workspace de Cargo modular, donde cada compon
 ## 🚀 Inicio Rápido
 
 ### Requisitos previos
-- **Rust** (`stable`, 1.80 o superior).
-- Compilador C/C++ del sistema (MSVC en Windows, GCC/Clang en Linux).
+- **Rust** (`stable`, 1.80 o superior con `cargo`).
+- Compilador C/C++ del sistema (MSVC en Windows, GCC o Clang en Linux).
 
-### Compilación y ejecución
+---
 
-**En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
+### Compilación nativa con Cargo (Universal)
+
+Puedes compilar el servicio en cualquier sistema operativo directamente con el gestor de paquetes y compilador de Rust:
+
 ```bash
+# Compilar el daemon principal en modo Release
 cargo build --release -p mule-daemon
-./target/release/mule-daemon
+
+# (Opcional) Compilar tanto el daemon como la CLI de control:
+cargo build --release --bin mule-daemon --bin mule-cli
 ```
 
-**En Windows (PowerShell):**
-```powershell
-powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1
-```
-*(O de forma manual mediante `cargo build --release -p mule-daemon`).*
+Una vez finalizada la compilación, ejecuta el binario generado:
+
+- **En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
+  ```bash
+  ./target/release/mule-daemon
+  ```
+- **En Windows (CMD o PowerShell):**
+  ```powershell
+  .\target\release\mule-daemon.exe
+  ```
 
 Una vez iniciado el servicio, accede a la interfaz desde cualquier navegador:
 > 🌐 **`http://127.0.0.1:4660`**
+
+---
+
+### Empaquetado para distribución en Windows (Opcional)
+
+Si deseas empaquetar una versión completa comprimida en `.zip` con scripts `.bat` de arranque automático y manifiestos SBOM:
+```powershell
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_server.ps1
+```
 
 ---
 
