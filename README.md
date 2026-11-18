@@ -124,7 +124,11 @@ El proyecto está organizado en un workspace de Cargo modular, donde cada compon
 Puedes compilar el servicio en cualquier sistema operativo directamente con el gestor de paquetes y compilador de Rust:
 
 ```bash
-# Compilar el daemon principal en modo Release
+# 1. Clonar el repositorio
+git clone https://github.com/caraveliko/PulseCore.git
+cd PulseCore
+
+# 2. Compilar el daemon principal en modo Release
 cargo build --release -p mule-daemon
 
 # (Opcional) Compilar tanto el daemon como la CLI de control:
