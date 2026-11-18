@@ -42,11 +42,11 @@ Consume una fracción de los recursos habituales y funciona de forma idéntica e
 ### 1. Dos redes en un solo motor asíncrono
 Descarga y comparte piezas simultáneamente entre clientes clásicos de eMule y enjambres modernos de BitTorrent. El asignador de almacenamiento disperso asigna espacio dinámicamente y verifica la integridad de cada fragmento mediante sumas de verificación jerárquicas eD2K y árboles AICH.
 
-### 2. Automatización multimedia integrada (Ecosistema Servarr nativo)
-Olvídate de configurar pilas complejas de contenedores externos para organizar tus descargas:
-- **Enlaces duros sin duplicar espacio (`hard_link`)**: Clasifica automáticamente las películas y series finalizadas en la estructura requerida por Plex o Jellyfin (`Películas/Título (Año)/...`) sin consumir ni un solo megabyte extra en disco.
-- **Subtítulos automáticos sincronizados**: Cliente REST integrado con OpenSubtitles (VLSub) que calcula el hash exacto de 64 bits (`primeros 64KB + últimos 64KB + tamaño`) para descargar y descomprimir el subtítulo `.es.srt` perfecto y sincronizado al milisegundo.
-- **Agregador Torznab**: Compatible con búsquedas y lanzamientos estructurados con filtro estricto de calidad y tolerancia de año.
+### 2. Organización y catalogación multimedia propia
+Pulse Core incorpora su propio motor de gestión de medios sin depender de programas de terceros ni servicios externos:
+- **Enlaces duros sin duplicar espacio (`hard_link`)**: Organiza y clasifica automáticamente las descargas finalizadas en la estructura requerida por gestores como Plex o Jellyfin (`Películas/Título (Año)/...`) sin consumir ni un solo megabyte extra en disco.
+- **Sincronización de subtítulos**: Cliente REST integrado con OpenSubtitles (VLSub) que calcula el hash exacto de 64 bits (`primeros 64KB + últimos 64KB + tamaño`) para descargar y descomprimir el subtítulo `.es.srt` exacto y sincronizado al milisegundo.
+- **Filtrado y puntuación inteligente**: Algoritmos propios de descarte de falsos positivos y asignación de prioridad por calidad e idioma.
 
 ### 3. Control por Inteligencia Artificial (Servidor MCP integrado)
 Incorpora un servidor **MCP** (*Model Context Protocol*) con más de 85 herramientas expuestas. Puedes conectar asistentes de IA (como Antigravity, Claude Code o Gemini) para pausar transferencias, analizar la salud de las conexiones, optimizar colas o inspeccionar los registros del daemon mediante lenguaje natural.
