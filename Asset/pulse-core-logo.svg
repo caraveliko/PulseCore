@@ -1,0 +1,209 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5d4" />
+      <stop offset="50%" stop-color="#00bbf9" />
+      <stop offset="100%" stop-color="#7209b7" />
+    </linearGradient>
+    <linearGradient id="lineGradCyanBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#00bbf9" stop-opacity="0.3" />
+    </linearGradient>
+    <linearGradient id="lineGradBluePurple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00bbf9" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#7209b7" stop-opacity="0.2" />
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.9" />
+      <stop offset="40%" stop-color="#00bbf9" stop-opacity="0.6" />
+      <stop offset="80%" stop-color="#7209b7" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="nodeGlowCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="45%" stop-color="#00f5d4" />
+      <stop offset="100%" stop-color="#00bbf9" />
+    </radialGradient>
+    <radialGradient id="nodeGlowBlue" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#00bbf9" />
+      <stop offset="100%" stop-color="#4361ee" />
+    </radialGradient>
+    <radialGradient id="nodeGlowPurple" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#7209b7" />
+      <stop offset="100%" stop-color="#f72585" />
+    </radialGradient>
+    <filter id="glowFilter" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="coreGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <g class="pulse-rings" opacity="0.25">
+    <circle cx="250" cy="250" r="72" fill="none" stroke="#00f5d4" stroke-width="1.2" stroke-dasharray="4 8" />
+    <circle cx="250" cy="250" r="140" fill="none" stroke="#00bbf9" stroke-width="1.0" stroke-dasharray="6 12" />
+    <circle cx="250" cy="250" r="212" fill="none" stroke="#7209b7" stroke-width="0.8" stroke-dasharray="3 15" />
+    <circle cx="250" cy="250" r="240" fill="none" stroke="#00f5d4" stroke-width="0.5" stroke-opacity="0.4" />
+  </g>
+  <circle cx="250" cy="250" r="55" fill="url(#coreGlow)" />
+  <g class="swarm-edges">
+    <line x1="250" y1="250" x2="312.35" y2="214.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="250" y1="250" x2="312.35" y2="286.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="250" y1="250" x2="250.0" y2="322.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="250" y1="250" x2="187.65" y2="286.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="250" y1="250" x2="187.65" y2="214.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="250" y1="250" x2="250.0" y2="178.0" stroke="url(#lineGradCyanBlue)" stroke-width="2.4" stroke-opacity="0.85" />
+    <line x1="312.35" y1="214.0" x2="312.35" y2="286.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="214.0" x2="250.0" y2="178.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="214.0" x2="325.61" y2="149.21" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="214.0" x2="365.19" y2="163.59" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="286.0" x2="250.0" y2="322.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="286.0" x2="402.89" y2="268.44" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="286.0" x2="382.43" y2="306.55" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="312.35" y1="286.0" x2="299.48" y2="365.88" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="322.0" x2="187.65" y2="286.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="322.0" x2="299.48" y2="365.88" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="322.0" x2="268.44" y2="402.89" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="322.0" x2="174.39" y2="350.79" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="286.0" x2="187.65" y2="214.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="286.0" x2="174.39" y2="350.79" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="286.0" x2="134.81" y2="336.41" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="214.0" x2="250.0" y2="178.0" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="214.0" x2="97.11" y2="231.56" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="214.0" x2="117.57" y2="193.45" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="187.65" y1="214.0" x2="200.52" y2="134.12" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="178.0" x2="200.52" y2="134.12" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="178.0" x2="231.56" y2="97.11" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="250.0" y1="178.0" x2="325.61" y2="149.21" stroke="url(#lineGradCyanBlue)" stroke-width="1.6" stroke-opacity="0.6" />
+    <line x1="402.89" y1="268.44" x2="382.43" y2="306.55" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="402.89" y1="268.44" x2="477.27" y2="268.22" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="402.89" y1="268.44" x2="459.06" y2="304.31" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="382.43" y1="306.55" x2="477.27" y2="268.22" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="382.43" y1="306.55" x2="459.06" y2="304.31" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="382.43" y1="306.55" x2="414.04" y2="390.52" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="382.43" y1="306.55" x2="371.97" y2="398.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="299.48" y1="365.88" x2="268.44" y2="402.89" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="299.48" y1="365.88" x2="371.97" y2="398.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="268.44" y1="402.89" x2="371.97" y2="398.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="268.44" y1="402.89" x2="302.9" y2="471.78" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="268.44" y1="402.89" x2="262.95" y2="465.61" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="268.44" y1="402.89" x2="176.27" y2="427.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="174.39" y1="350.79" x2="134.81" y2="336.41" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="174.39" y1="350.79" x2="176.27" y2="427.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="174.39" y1="350.79" x2="133.75" y2="432.05" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="134.81" y1="336.41" x2="176.27" y2="427.28" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="134.81" y1="336.41" x2="133.75" y2="432.05" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="134.81" y1="336.41" x2="55.42" y2="368.85" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="134.81" y1="336.41" x2="71.28" y2="320.17" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="97.11" y1="231.56" x2="117.57" y2="193.45" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="97.11" y1="231.56" x2="71.28" y2="320.17" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="97.11" y1="231.56" x2="34.69" y2="232.74" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="97.11" y1="231.56" x2="40.94" y2="195.69" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="117.57" y1="193.45" x2="34.69" y2="232.74" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="117.57" y1="193.45" x2="40.94" y2="195.69" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="117.57" y1="193.45" x2="76.84" y2="101.67" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="200.52" y1="134.12" x2="231.56" y2="97.11" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="200.52" y1="134.12" x2="112.79" y2="83.18" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="200.52" y1="134.12" x2="199.88" y2="39.89" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="200.52" y1="134.12" x2="238.49" y2="58.35" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="231.56" y1="97.11" x2="199.88" y2="39.89" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="231.56" y1="97.11" x2="238.49" y2="58.35" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="325.61" y1="149.21" x2="365.19" y2="163.59" stroke="url(#lineGradBluePurple)" stroke-width="1.3" stroke-opacity="0.45" />
+    <line x1="325.61" y1="149.21" x2="366.25" y2="67.95" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="325.61" y1="149.21" x2="413.85" y2="149.92" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="365.19" y1="163.59" x2="366.25" y2="67.95" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="365.19" y1="163.59" x2="413.85" y2="149.92" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="365.19" y1="163.59" x2="451.06" y2="171.05" stroke="url(#lineGradBluePurple)" stroke-width="1.0" stroke-opacity="0.35" />
+    <line x1="477.27" y1="268.22" x2="459.06" y2="304.31" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="414.04" y1="390.52" x2="371.97" y2="398.28" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="302.9" y1="471.78" x2="262.95" y2="465.61" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="176.27" y1="427.28" x2="133.75" y2="432.05" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="55.42" y1="368.85" x2="71.28" y2="320.17" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="34.69" y1="232.74" x2="40.94" y2="195.69" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="76.84" y1="101.67" x2="112.79" y2="83.18" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="199.88" y1="39.89" x2="238.49" y2="58.35" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="337.56" y1="39.48" x2="366.25" y2="67.95" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+    <line x1="413.85" y1="149.92" x2="451.06" y2="171.05" stroke="#7209b7" stroke-width="0.8" stroke-opacity="0.25" />
+  </g>
+  <g class="data-packets">
+    <circle cx="273.69" cy="236.32" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="250.0" cy="203.2" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="288.66" cy="299.68" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="282.16" cy="350.52" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="167.57" cy="305.16" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="217.84" cy="149.48" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="424.23" cy="282.07" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="279.3" cy="389.94" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="233.42" cy="412.16" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="134.12" cy="398.58" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="73.39" cy="232.01" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="220.7" cy="110.06" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="234.19" cy="82.38" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="396.82" cy="154.7" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="160.11" cy="429.09" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+    <circle cx="356.21" cy="57.99" r="1.8" fill="#ffffff" opacity="0.85" filter="url(#glowFilter)" />
+  </g>
+  <g class="swarm-nodes">
+    <circle cx="312.35" cy="214.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="312.35" cy="214.0" r="3.375" fill="#ffffff" />
+    <circle cx="312.35" cy="286.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="312.35" cy="286.0" r="3.375" fill="#ffffff" />
+    <circle cx="250.0" cy="322.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="250.0" cy="322.0" r="3.375" fill="#ffffff" />
+    <circle cx="187.65" cy="286.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="187.65" cy="286.0" r="3.375" fill="#ffffff" />
+    <circle cx="187.65" cy="214.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="187.65" cy="214.0" r="3.375" fill="#ffffff" />
+    <circle cx="250.0" cy="178.0" r="7.5" fill="url(#nodeGlowCyan)" filter="url(#glowFilter)" />
+    <circle cx="250.0" cy="178.0" r="3.375" fill="#ffffff" />
+    <circle cx="402.89" cy="268.44" r="5.5" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="382.43" cy="306.55" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="299.48" cy="365.88" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="268.44" cy="402.89" r="5.5" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="174.39" cy="350.79" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="134.81" cy="336.41" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="97.11" cy="231.56" r="5.5" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="117.57" cy="193.45" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="200.52" cy="134.12" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="231.56" cy="97.11" r="5.5" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="325.61" cy="149.21" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="365.19" cy="163.59" r="4.2" fill="url(#nodeGlowBlue)" filter="url(#glowFilter)" />
+    <circle cx="477.27" cy="268.22" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="459.06" cy="304.31" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="414.04" cy="390.52" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="371.97" cy="398.28" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="302.9" cy="471.78" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="262.95" cy="465.61" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="176.27" cy="427.28" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="133.75" cy="432.05" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="55.42" cy="368.85" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="71.28" cy="320.17" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="34.69" cy="232.74" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="40.94" cy="195.69" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="76.84" cy="101.67" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="112.79" cy="83.18" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="199.88" cy="39.89" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="238.49" cy="58.35" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="337.56" cy="39.48" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="366.25" cy="67.95" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="413.85" cy="149.92" r="4.2" fill="url(#nodeGlowPurple)" opacity="0.9" />
+    <circle cx="451.06" cy="171.05" r="3.0" fill="url(#nodeGlowPurple)" opacity="0.9" />
+  </g>
+  <!-- NÚCLEO CENTRAL PULSE CORE -->
+  <g id="pulse-core-center" filter="url(#coreGlowFilter)">
+    <circle cx="250" cy="250" r="32" fill="none" stroke="url(#pulseGrad)" stroke-width="2.5" stroke-dasharray="12 4 4 4" />
+    <circle cx="250" cy="250" r="24" fill="url(#pulseGrad)" />
+    <circle cx="250" cy="250" r="20" fill="#0a0f1d" />
+    <path d="M 233 250 L 241 250 L 245 240 L 249 261 L 253 243 L 256 253 L 259 250 L 267 250" fill="none" stroke="#00f5d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowFilter)" />
+  </g>
+</svg>
