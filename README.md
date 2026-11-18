@@ -35,7 +35,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 
 > [![Consejo](https://img.shields.io/badge/CONSEJO-ACCESO%20R%C3%81PIDO-brightgreen.svg)](README.md)
 >
-> **Panel Web instantáneo sin dependencias:** No necesitas Node.js, Docker ni servidores HTTP externos para controlar Pulse Core. Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar descargas, alternar el Modo Tortuga de velocidad o consultar el estado de los enjambres.
+> **Panel Web instantáneo sin dependencias:** No necesitas Node.js, Docker ni servidores HTTP externos para controlar Pulse Core. Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar transferencias en tiempo real mediante WebSockets, añadir enlaces `ed2k://` o magnet al vuelo y gestionar el catálogo multimedia sin latencia.
 >
 > Para colaborar o inspeccionar las decisiones de diseño, consulta [`docs/INDEX.md`](docs/INDEX.md) y [`AGENTS.md`](AGENTS.md). Recuerda que cualquier aportación debe superar `cargo test --workspace --all-features` y el linteado estricto sin advertencias.
 
