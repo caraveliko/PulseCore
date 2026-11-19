@@ -5,6 +5,15 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+- **Sistema híbrido de actualización Linux / `systemd`, rollback O(1), CLI y WebUI**:
+  - Endurecimiento de `UpdaterService` frente a la política de red (`NetworkPolicyManager`, interruptor de corte, aislamiento `LocalLab` y redirecciones 302 validadas contra SSRF), descarga oficial en *streaming* con progreso real, reporte de entorno (`platformTriple`, `managedBySystemd`, `canSelfUpdate`, `hasRollbackBackup`) y manejo claro de HTTP 404.
+  - Nuevo endpoint autenticado `POST /api/system/upload-update` (`Bearer <token>`, límite 64 MiB) para instalar binarios locales compilados con validación estricta de cabecera ELF64/PE y arquitectura (`x86_64` frente a `aarch64`).
+  - Respaldo O(1) mediante enlace duro `.old` en Unix y método JSON-RPC `system.rollbackUpdate` para revertir al binario anterior con validación previa de cabecera.
+  - Sincronización `systemd` (`ReadWritePaths=... %h/.local/bin`, `RestartSec=2`, liberación explícita de `DirectoryLock` y salida ordenada bajo `INVOCATION_ID`/`NOTIFY_SOCKET`).
+  - Nuevo subcomando `mule-cli update` (`status`, `check`, `upload`, `rollback`), script `scripts/update_linux.sh` (`--local`, `--rpi`, `--binary`, `--install-service`, `--ssh`, `--rollback`) e indicador inteligente en cabecera + modal Drag & Drop en `web/index.html`.
+- **Política estricta «Solo Vídeo» (ADR 0006)**:
+  - Fuente única de verdad en `mule_network_policy::content_policy` aplicada en admisión eD2K/Kad/Torznab, inspección de cabecera en vuelo (MD4 parte 0), importación `.part.met`, recuperación de huérfanos, compartidos y filtrado selectivo en torrents BitTorrent (admitiendo únicamente contenedores de vídeo válidos y subtítulos acompañantes dentro de torrents con vídeo).
+
 Campaña de validación previa a la publicación (puertas QA A–D):
 
 - **Cambio de marca completo a eMuleRust** (`e86cc01`): nombre mostrado, ejecutable, paquetes,

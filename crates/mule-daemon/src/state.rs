@@ -673,10 +673,14 @@ impl AppState {
             ed2k_port_eff,
             kad_port_eff,
         ));
-        let updater = Arc::new(crate::services::updater::UpdaterService::new(
-            config.update_manifest_url.clone(),
-            crate::rpc::methods::DAEMON_VERSION.to_string(),
-        ));
+        let updater = Arc::new(
+            crate::services::updater::UpdaterService::with_channel_config(
+                config.update_manifest_url.clone(),
+                crate::rpc::methods::DAEMON_VERSION.to_string(),
+                config.update_channel.clone(),
+                config.update_check_enabled,
+            ),
+        );
         Self {
             config,
             downloads: dl_arc,

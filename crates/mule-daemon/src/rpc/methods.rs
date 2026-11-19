@@ -40,6 +40,7 @@ pub async fn handle_request(
         "system.checkUpdate" => handle_check_update(state, req.params).await,
         "system.getUpdateStatus" => handle_get_update_status(state).await,
         "system.applyUpdate" => handle_apply_update(state, req.params).await,
+        "system.rollbackUpdate" => handle_rollback_update(state, req.params).await,
         "system.diskSpace" => handle_disk_space(state).await,
         "system.nasInfo" => handle_nas_info(state).await,
         "system.logs" => handle_logs(state, req.params).await,
@@ -249,5 +250,7 @@ fn handle_hello(
         "workdirMode": format!("{:?}", state.config.workdir_mode),
         "workdirPath": state.config.data_dir.to_string_lossy(),
         "defaultDownloadDir": state.config.default_download_dir.to_string_lossy(),
+        "platformTriple": crate::services::updater::UpdateManifest::current_platform_triple(),
+        "managedBySystemd": crate::services::updater::is_managed_by_systemd(),
     }))
 }

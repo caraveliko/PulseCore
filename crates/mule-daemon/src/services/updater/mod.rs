@@ -5,6 +5,7 @@
 
 pub mod constants;
 pub mod error;
+pub mod http_fetch;
 pub mod installer;
 pub mod manifest;
 pub mod service;
@@ -79,6 +80,14 @@ mod tests {
 
         // Misma versión numérica pero local es beta / prerelease y remota es estable
         assert!(make_manifest("0.3.0").is_newer_than("0.3.0-beta.2"));
+        assert!(make_manifest("0.4.0").is_newer_than("0.4.0-beta.2"));
+
+        // Progresión entre versiones de prelanzamiento SemVer
+        assert!(make_manifest("0.4.0-beta.2").is_newer_than("0.4.0-beta.1"));
+        assert!(make_manifest("0.4.0-beta.10").is_newer_than("0.4.0-beta.2"));
+        assert!(make_manifest("0.4.0-rc.1").is_newer_than("0.4.0-beta.9"));
+        assert!(!make_manifest("0.4.0-beta.1").is_newer_than("0.4.0-beta.2"));
+        assert!(!make_manifest("0.4.0-beta.2").is_newer_than("0.4.0-beta.2"));
 
         // Versión local igual o más reciente
         assert!(!make_manifest("0.3.0").is_newer_than("0.3.0"));
@@ -140,5 +149,176 @@ mod tests {
 
         // Limpieza de respaldo si existiese
         cleanup_old_backup_if_present(&fake_exe);
+    }
+
+    /// Construye una cabecera ELF de 64 bits little-endian sintética con la máquina indicada.
+    fn make_elf64_header(machine: u16) -> Vec<u8> {
+        let mut buf = vec![0u8; 64];
+        buf[0..4].copy_from_slice(&ELF_MAGIC);
+        buf[4] = ELF_CLASS_64;
+        buf[5] = ELF_DATA_LITTLE_ENDIAN;
+        buf[6] = 1;
+        buf[16..18].copy_from_slice(&3u16.to_le_bytes()); // ET_DYN (PIE)
+        buf[18..20].copy_from_slice(&machine.to_le_bytes());
+        buf
+    }
+
+    #[test]
+    fn test_validate_elf_architecture_matching_and_mismatch() {
+        let elf_x86 = make_elf64_header(ELF_MACHINE_X86_64);
+        let elf_arm = make_elf64_header(ELF_MACHINE_AARCH64);
+        let mut pe_win = vec![0u8; 64];
+        pe_win[0..2].copy_from_slice(&PE_MAGIC);
+
+        // Coincidencia válida en cada arquitectura Linux
+        assert!(validate_executable_for_triple(&elf_x86, "x86_64-unknown-linux-gnu").is_ok());
+        assert!(validate_executable_for_triple(&elf_arm, "aarch64-unknown-linux-gnu").is_ok());
+        assert!(validate_executable_for_triple(&pe_win, "x86_64-pc-windows-msvc").is_ok());
+
+        // Rechazo cruzado ARM64 <-> x86_64
+        let err_arm_on_x86 = validate_executable_for_triple(&elf_arm, "x86_64-unknown-linux-gnu")
+            .expect_err("Debe rechazar ELF aarch64 en host x86_64");
+        assert!(matches!(
+            err_arm_on_x86,
+            UpdaterError::ArchitectureMismatch { .. }
+        ));
+
+        let err_x86_on_arm = validate_executable_for_triple(&elf_x86, "aarch64-unknown-linux-gnu")
+            .expect_err("Debe rechazar ELF x86_64 en Raspberry Pi aarch64");
+        assert!(matches!(
+            err_x86_on_arm,
+            UpdaterError::ArchitectureMismatch { .. }
+        ));
+
+        // Rechazos de formato inválido y vacío
+        assert!(matches!(
+            validate_executable_for_triple(&[], "x86_64-unknown-linux-gnu"),
+            Err(UpdaterError::EmptyPayload)
+        ));
+        assert!(matches!(
+            validate_executable_for_triple(b"no-soy-un-ejecutable-valido-1234", "x86_64-unknown-linux-gnu"),
+            Err(UpdaterError::InvalidExecutableFormat(_))
+        ));
+        assert!(matches!(
+            validate_executable_for_triple(&pe_win, "x86_64-unknown-linux-gnu"),
+            Err(UpdaterError::InvalidExecutableFormat(_))
+        ));
+        assert!(matches!(
+            validate_executable_for_triple(&elf_x86, "x86_64-pc-windows-msvc"),
+            Err(UpdaterError::InvalidExecutableFormat(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_stage_and_apply_local_binary_to_target_replaces_atomically() {
+        let dir = tempdir().expect("Directorio temporal");
+        let target_exe = dir.path().join("mule-daemon");
+        std::fs::write(&target_exe, b"binario-anterior").expect("Escribir binario anterior");
+
+        let mut payload = match UpdateManifest::current_platform_triple() {
+            "aarch64-unknown-linux-gnu" => make_elf64_header(ELF_MACHINE_AARCH64),
+            "x86_64-pc-windows-msvc" => {
+                let mut pe = vec![0u8; 64];
+                pe[0..2].copy_from_slice(&PE_MAGIC);
+                pe
+            }
+            _ => make_elf64_header(ELF_MACHINE_X86_64),
+        };
+        payload.extend_from_slice(b"cuerpo-compilado-nuevo");
+        let good_sha = compute_sha256_hex(&payload);
+
+        let svc = UpdaterService::new("http://127.0.0.1/manifest.json".to_string(), "0.4.0".to_string());
+
+        // Suma SHA-256 incorrecta debe abortar sin tocar el binario previo
+        let bad_res = svc
+            .stage_and_apply_local_binary_to_target(
+                &payload,
+                Some("0000000000000000000000000000000000000000000000000000000000000000"),
+                Some("local-bad"),
+                &target_exe,
+                UpdateManifest::current_platform_triple(),
+            )
+            .await;
+        assert!(matches!(bad_res, Err(UpdaterError::ChecksumMismatch { .. })));
+        assert_eq!(std::fs::read(&target_exe).unwrap(), b"binario-anterior");
+
+        // Suma SHA-256 correcta sustituye atómicamente el ejecutable
+        let ok_res = svc
+            .stage_and_apply_local_binary_to_target(
+                &payload,
+                Some(&good_sha),
+                Some("compilacion-v0.4.1"),
+                &target_exe,
+                UpdateManifest::current_platform_triple(),
+            )
+            .await
+            .expect("Instalación local debe tener éxito");
+
+        assert_eq!(ok_res.sha256, good_sha);
+        assert_eq!(ok_res.label, "compilacion-v0.4.1");
+        assert_eq!(std::fs::read(&target_exe).unwrap(), payload);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&target_exe).unwrap().permissions().mode();
+            assert_eq!(mode & 0o111, 0o111, "El binario debe conservar permisos ejecutables");
+        }
+    }
+
+    #[test]
+    fn test_is_executable_dir_writable_tempdir() {
+        let dir = tempdir().expect("Directorio temporal");
+        let fake_exe = dir.path().join("mule-daemon");
+        assert!(is_executable_dir_writable(&fake_exe));
+        assert!(!is_executable_dir_writable(&std::path::PathBuf::from(
+            "/ruta/inexistente/pulse-core-no-existe/mule-daemon"
+        )));
+    }
+
+    #[tokio::test]
+    async fn test_linux_hardlink_backup_and_rollback_cycle() {
+        let dir = tempdir().expect("Directorio temporal");
+        let target_exe = dir.path().join("mule-daemon");
+
+        let mut old_bin = make_elf64_header(ELF_MACHINE_X86_64);
+        old_bin.extend_from_slice(b"v1-estable");
+        std::fs::write(&target_exe, &old_bin).expect("Escribir v1");
+
+        let mut new_bin = make_elf64_header(ELF_MACHINE_X86_64);
+        new_bin.extend_from_slice(b"v2-experimental");
+
+        let svc = UpdaterService::new("http://127.0.0.1/manifest.json".to_string(), "0.4.0".to_string());
+        svc.stage_and_apply_local_binary_to_target(
+            &new_bin,
+            None,
+            Some("v2"),
+            &target_exe,
+            "x86_64-unknown-linux-gnu",
+        )
+        .await
+        .expect("Instalación v2");
+
+        // Se ha creado el respaldo .old y coexiste tras limpiar posibles .update huérfanos
+        assert!(has_rollback_backup(&target_exe));
+        let orphan_staging = get_staging_executable_path(&target_exe);
+        std::fs::write(&orphan_staging, b"huerfano").expect("Crear staging huérfano");
+        cleanup_stale_staging_if_present(&target_exe);
+        assert!(!orphan_staging.exists());
+        assert!(has_rollback_backup(&target_exe));
+        assert_eq!(std::fs::read(&target_exe).unwrap(), new_bin);
+
+        // El rollback restaura exactamente v1 y consume .old
+        svc.rollback_update_to_target(&target_exe, "x86_64-unknown-linux-gnu")
+            .await
+            .expect("Rollback debe restaurar v1");
+        assert_eq!(std::fs::read(&target_exe).unwrap(), old_bin);
+        assert!(!has_rollback_backup(&target_exe));
+
+        // Un segundo rollback sin .old debe devolver NoRollbackAvailable
+        let second = svc
+            .rollback_update_to_target(&target_exe, "x86_64-unknown-linux-gnu")
+            .await;
+        assert!(matches!(second, Err(UpdaterError::NoRollbackAvailable)));
     }
 }

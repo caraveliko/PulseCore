@@ -14,6 +14,11 @@ clap.workspace = true
 hex.workspace = true
 data-encoding.workspace = true
 rusqlite.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+mule-test-support = { path = "../mule-test-support" }
+tokio.workspace = true

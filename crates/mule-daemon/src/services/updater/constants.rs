@@ -31,3 +31,45 @@ pub const UPDATE_STAGING_SUFFIX: &str = ".update";
 
 /// Sufijo de respaldo para el binario reemplazado en plataformas Windows (*move-aside*).
 pub const UPDATE_BACKUP_SUFFIX: &str = ".old";
+
+/// Sufijo temporal utilizado al comprobar permisos de escritura en el directorio del binario.
+pub const WRITE_PROBE_SUFFIX: &str = ".write-probe";
+
+/// Número máximo de redirecciones HTTP validadas al consultar o descargar una actualización.
+pub const MAX_UPDATE_REDIRECTS: usize = 5;
+
+/// Incremento mínimo de bytes descargados antes de refrescar la instantánea de progreso en memoria.
+pub const PROGRESS_UPDATE_MIN_BYTES: usize = 64 * 1024;
+
+/// Margen de espera (ms) antes de disparar el apagado para entregar la respuesta RPC/HTTP al cliente.
+pub const RESTART_RESPONSE_GRACE_MS: u64 = 250;
+
+/// Firma mágica de los ejecutables ELF en Linux.
+pub const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
+
+/// Clase ELF correspondiente a ejecutables de 64 bits (`ELFCLASS64`).
+pub const ELF_CLASS_64: u8 = 2;
+
+/// Codificación ELF en formato *little-endian* (`ELFDATA2LSB`).
+pub const ELF_DATA_LITTLE_ENDIAN: u8 = 1;
+
+/// Identificador de arquitectura ELF para Linux x86_64 (`EM_X86_64`).
+pub const ELF_MACHINE_X86_64: u16 = 0x003E;
+
+/// Identificador de arquitectura ELF para Linux ARM64 (`EM_AARCH64`).
+pub const ELF_MACHINE_AARCH64: u16 = 0x00B7;
+
+/// Firma mágica de los ejecutables PE en Windows (`MZ`).
+pub const PE_MAGIC: [u8; 2] = *b"MZ";
+
+/// Longitud mínima de cabecera exigida para validar formato y arquitectura del binario.
+pub const MIN_EXECUTABLE_HEADER_BYTES: usize = 20;
+
+/// Cabecera HTTP opcional con la suma SHA-256 esperada en la subida de un binario local.
+pub const HEADER_UPDATE_SHA256: &str = "x-update-sha256";
+
+/// Cabecera HTTP opcional con el nombre descriptivo del binario local subido.
+pub const HEADER_UPDATE_FILENAME: &str = "x-update-filename";
+
+/// Cabecera HTTP opcional que controla si el demonio debe reiniciarse tras aplicar la subida.
+pub const HEADER_UPDATE_AUTO_RESTART: &str = "x-auto-restart";

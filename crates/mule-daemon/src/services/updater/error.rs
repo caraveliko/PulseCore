@@ -58,4 +58,38 @@ pub enum UpdaterError {
     /// No hay ninguna actualización disponible o lista para instalar.
     #[error("No hay ninguna actualización preparada para su aplicación")]
     NoUpdateReady,
+
+    /// El paquete binario subido o recibido no contiene datos.
+    #[error("El archivo binario proporcionado está vacío")]
+    EmptyPayload,
+
+    /// El archivo no posee una cabecera ejecutable válida para la plataforma destino.
+    #[error("Formato de ejecutable no válido: {0}")]
+    InvalidExecutableFormat(String),
+
+    /// El binario corresponde a una arquitectura incompatible con el servidor.
+    #[error(
+        "Arquitectura del binario incompatible: este servidor requiere {expected}, pero el archivo corresponde a {actual}"
+    )]
+    ArchitectureMismatch { expected: String, actual: String },
+
+    /// El servidor remoto respondió con un código de estado HTTP distinto de éxito.
+    #[error("El servidor de versiones respondió con HTTP {status} al consultar {url}")]
+    HttpStatus { status: u16, url: String },
+
+    /// La política de red o el interruptor de corte impidió realizar la petición saliente.
+    #[error("Política de red bloqueó la solicitud de actualización: {0}")]
+    NetworkBlocked(String),
+
+    /// Ya existe una comprobación, descarga o aplicación de actualización en curso.
+    #[error("Ya hay una operación de actualización en curso")]
+    UpdateInProgress,
+
+    /// Se excedió el límite seguro de redirecciones HTTP en la descarga o consulta.
+    #[error("Se superó el límite de {max} redirecciones HTTP al descargar la actualización")]
+    TooManyRedirects { max: usize },
+
+    /// No existe ninguna copia de respaldo previa disponible para revertir la actualización.
+    #[error("No existe copia de respaldo (.old) disponible para revertir la actualización")]
+    NoRollbackAvailable,
 }

@@ -18,7 +18,7 @@ Type=simple
 WorkingDirectory=%h
 ExecStart=%h/.local/bin/mule-daemon --workdir %h/.mule --downloads-dir %h/Downloads --bind 0.0.0.0:4660 --ed2k-port 4662 --kad-port 4672
 Restart=always
-RestartSec=5
+RestartSec=2
 
 # === Límites de recursos (protección en Raspberry Pi y servidores) ===
 LimitNOFILE=65535
@@ -34,7 +34,7 @@ LockPersonality=yes
 RestrictSUIDSGID=yes
 UMask=0022
 InaccessiblePaths=-%h/.ssh -%h/.gnupg -%h/.bash_history
-ReadWritePaths=%h/.mule %h/Downloads
+ReadWritePaths=%h/.mule %h/Downloads %h/.local/bin
 
 [Install]
 WantedBy=default.target

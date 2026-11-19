@@ -2426,8 +2426,12 @@ dependencies = [
  "mule-core",
  "mule-daemon",
  "mule-format",
+ "mule-test-support",
+ "reqwest 0.12.28",
  "rusqlite",
+ "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

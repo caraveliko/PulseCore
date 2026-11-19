@@ -156,12 +156,12 @@ Se incorporan en `crates/mule-daemon/src/config.rs`:
 4. Si `autoRestart` está activo, se invoca el nuevo proceso desacoplado (`std::process::Command`) y el proceso anterior finaliza con código de salida `0`.
 5. Al siguiente arranque, `mule-daemon` detecta si existe un archivo `.old` y lo elimina silenciosamente.
 
-### Linux (x86_64 / aarch64)
-1. Se descomprime en `mule-daemon.update`.
-2. Se aplican permisos de ejecución `0o755`.
-3. Reemplazo atómico con `std::fs::rename("mule-daemon.update", "mule-daemon")` (en Linux, el inodo antiguo sigue activo para el proceso en memoria mientras el directorio apunta al nuevo).
-4. Si el proceso corre bajo `systemd` (detectado vía variable de entorno o `systemd_notify`), finaliza limpiamente para que `systemd` lo reinicie de inmediato (`Restart=always` / `Restart=on-success`).
-5. Si corre de forma independiente, ejecuta `execve` para sustituir el espacio de direcciones por el nuevo binario.
+### Linux (`x86_64` / `aarch64`)
+1. **Canal oficial o compilación local**: además de los lanzamientos oficiales firmados con Ed25519 en GitHub Releases (consultados en *streaming* a través de `http_fetch.rs` con validación anti-SSRF, bloqueo del interruptor de corte, aislamiento `LocalLab` y redirecciones 302 validadas), el demonio expone `POST /api/system/upload-update` autenticado mediante `Authorization: Bearer <token>` y protegido por `control_plane_security_guard` para instalar binarios compilados localmente o por compilación cruzada.
+2. **Validación ELF64/PE por arquitectura**: antes de tocar el disco, `verifier.rs` verifica el formato ELF de 64 bits *little-endian* y el identificador `e_machine` (`EM_X86_64` o `EM_AARCH64`, o `MZ` en Windows), rechazando cualquier binario incompatible o corrupto.
+3. **Respaldo O(1) `.old` y sustitución atómica**: antes de ejecutar `fs::rename("mule-daemon.update", "mule-daemon")` con permisos `0o755`, se crea un enlace duro `fs::hard_link("mule-daemon", "mule-daemon.old")` (con respaldo `fs::copy` ante `EXDEV`). Este archivo `.old` se conserva entre reinicios para permitir reversión inmediata mediante `system.rollbackUpdate`, `mule-cli update rollback` o `scripts/update_linux.sh --rollback`.
+4. **Supervisión con `systemd`**: si se detecta `INVOCATION_ID` o `NOTIFY_SOCKET`, el proceso libera `DirectoryLock` y finaliza de forma ordenada sin invocar `respawn_current_process()`, dejando que `systemd` (`Restart=always`, `RestartSec=2`, `ReadWritePaths=%h/.mule %h/Downloads %h/.local/bin`) relance el binario actualizado. Si corre de forma independiente sin `systemd`, relanza el nuevo proceso tras liberar el bloqueo.
+5. **Automatización CLI/Script**: `mule-cli update` (`status`, `check`, `upload`, `rollback`) y `scripts/update_linux.sh` (`--local`, `--rpi`, `--install-service`, `--ssh`, `--rollback`) automatizan el flujo completo desde consola.
 
 ---
 

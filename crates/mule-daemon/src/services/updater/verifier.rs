@@ -6,7 +6,12 @@
 use ring::signature::{UnparsedPublicKey, ED25519};
 use sha2::{Digest, Sha256};
 
+use super::constants::{
+    ELF_CLASS_64, ELF_DATA_LITTLE_ENDIAN, ELF_MACHINE_AARCH64, ELF_MACHINE_X86_64, ELF_MAGIC,
+    MIN_EXECUTABLE_HEADER_BYTES, PE_MAGIC,
+};
 use super::error::UpdaterError;
+use super::manifest::UpdateManifest;
 
 /// Longitud exacta en bytes de una clave pública Ed25519 estándar.
 pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
@@ -67,4 +72,109 @@ pub fn verify_payload(
         .map_err(|_| UpdaterError::CryptographicSignatureInvalid)?;
 
     Ok(())
+}
+
+/// Verifica el archivo binario y, si se facilita una suma SHA-256 esperada, exige coincidencia exacta.
+/// Devuelve la suma SHA-256 calculada en formato hexadecimal en minúsculas.
+pub fn verify_optional_sha256(
+    payload_bytes: &[u8],
+    expected_sha256: Option<&str>,
+) -> Result<String, UpdaterError> {
+    let calculated = compute_sha256_hex(payload_bytes);
+    if let Some(expected) = expected_sha256.map(str::trim).filter(|s| !s.is_empty()) {
+        if !calculated.eq_ignore_ascii_case(expected) {
+            return Err(UpdaterError::ChecksumMismatch {
+                calculated,
+                expected: expected.to_string(),
+            });
+        }
+    }
+    Ok(calculated)
+}
+
+/// Convierte el campo ELF `e_machine` en una etiqueta legible de arquitectura.
+fn elf_machine_label(machine: u16) -> String {
+    match machine {
+        ELF_MACHINE_X86_64 => "x86_64-unknown-linux-gnu".to_string(),
+        ELF_MACHINE_AARCH64 => "aarch64-unknown-linux-gnu".to_string(),
+        other => format!("ELF e_machine=0x{other:04x}"),
+    }
+}
+
+/// Valida que el binario recibido tenga cabecera ejecutable compatible con la plataforma objetivo.
+pub fn validate_executable_for_triple(
+    payload: &[u8],
+    expected_triple: &str,
+) -> Result<(), UpdaterError> {
+    if payload.is_empty() {
+        return Err(UpdaterError::EmptyPayload);
+    }
+    if payload.len() < MIN_EXECUTABLE_HEADER_BYTES {
+        return Err(UpdaterError::InvalidExecutableFormat(format!(
+            "archivo demasiado corto ({} bytes, mínimo {MIN_EXECUTABLE_HEADER_BYTES})",
+            payload.len()
+        )));
+    }
+
+    if expected_triple.contains("linux") {
+        if payload[..2] == PE_MAGIC {
+            return Err(UpdaterError::InvalidExecutableFormat(
+                "el archivo es un ejecutable PE de Windows (.exe) y este servidor ejecuta Linux"
+                    .to_string(),
+            ));
+        }
+        if payload[..4] != ELF_MAGIC {
+            return Err(UpdaterError::InvalidExecutableFormat(
+                "el archivo no comienza por la firma mágica ELF (0x7F 'ELF')".to_string(),
+            ));
+        }
+        if payload[4] != ELF_CLASS_64 {
+            return Err(UpdaterError::InvalidExecutableFormat(format!(
+                "solo se admiten binarios ELF de 64 bits (EI_CLASS={}, esperado {ELF_CLASS_64})",
+                payload[4]
+            )));
+        }
+        if payload[5] != ELF_DATA_LITTLE_ENDIAN {
+            return Err(UpdaterError::InvalidExecutableFormat(format!(
+                "codificación ELF no soportada (EI_DATA={}, esperado little-endian {ELF_DATA_LITTLE_ENDIAN})",
+                payload[5]
+            )));
+        }
+        let machine = u16::from_le_bytes([payload[18], payload[19]]);
+        let expected_machine = match expected_triple {
+            "x86_64-unknown-linux-gnu" => Some(ELF_MACHINE_X86_64),
+            "aarch64-unknown-linux-gnu" => Some(ELF_MACHINE_AARCH64),
+            _ => None,
+        };
+        if let Some(req_machine) = expected_machine {
+            if machine != req_machine {
+                return Err(UpdaterError::ArchitectureMismatch {
+                    expected: expected_triple.to_string(),
+                    actual: elf_machine_label(machine),
+                });
+            }
+        }
+        return Ok(());
+    }
+
+    if expected_triple.contains("windows") {
+        if payload[..4] == ELF_MAGIC {
+            return Err(UpdaterError::InvalidExecutableFormat(
+                "el archivo es un binario ELF de Linux y este servidor ejecuta Windows".to_string(),
+            ));
+        }
+        if payload[..2] != PE_MAGIC {
+            return Err(UpdaterError::InvalidExecutableFormat(
+                "el archivo no comienza por la firma mágica PE de Windows ('MZ')".to_string(),
+            ));
+        }
+        return Ok(());
+    }
+
+    Err(UpdaterError::UnsupportedPlatform(expected_triple.to_string()))
+}
+
+/// Valida que el binario recibido sea ejecutable en la arquitectura y SO actuales del daemon.
+pub fn validate_executable_for_current_platform(payload: &[u8]) -> Result<(), UpdaterError> {
+    validate_executable_for_triple(payload, UpdateManifest::current_platform_triple())
 }

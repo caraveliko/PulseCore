@@ -25,9 +25,9 @@ pub static malloc_conf: &[u8] = b"dirty_decay_ms:0,muzzy_decay_ms:0,background_t
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Limpieza silenciosa de posibles archivos de respaldo (.old) de actualizaciones previas
+    // Limpieza silenciosa de binarios temporales huérfanos (.update), conservando .old para rollback
     if let Ok(exe_path) = std::env::current_exe() {
-        mule_daemon::services::updater::cleanup_old_backup_if_present(&exe_path);
+        mule_daemon::services::updater::cleanup_stale_staging_if_present(&exe_path);
     }
 
     let args: Vec<String> = std::env::args().collect();
@@ -234,7 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 1. Adquirir bloqueo exclusivo del directorio
-    let _lock = DirectoryLock::acquire(&data_dir).map_err(|e| {
+    let dir_lock = DirectoryLock::acquire(&data_dir).map_err(|e| {
         tracing::error!("==> ERROR: {e}");
         e
     })?;
@@ -570,13 +570,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     DaemonSession::remove(&data_dir);
+    drop(dir_lock);
     tracing::info!("==> mule-daemon exited cleanly.");
 
-    // Si se aplicó una actualización con reinicio solicitado, relanza el nuevo binario
+    // Si se aplicó una actualización con reinicio solicitado, coordinar relanzamiento según entorno
     if updater_cleanup.is_restart_pending() {
-        tracing::info!("==> Relanzando proceso eMuleRust con la nueva versión actualizada...");
-        if let Err(e) = mule_daemon::services::updater::respawn_current_process() {
-            tracing::error!("Error al relanzar el proceso actualizado: {e}");
+        if mule_daemon::services::updater::is_managed_by_systemd() {
+            tracing::info!(
+                "==> Proceso gestionado por systemd: saliendo de forma ordenada para que systemd relance el binario actualizado..."
+            );
+        } else {
+            tracing::info!("==> Relanzando proceso eMuleRust con la nueva versión actualizada...");
+            if let Err(e) = mule_daemon::services::updater::respawn_current_process() {
+                tracing::error!("Error al relanzar el proceso actualizado: {e}");
+            }
         }
     }
 

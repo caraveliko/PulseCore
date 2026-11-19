@@ -27,7 +27,7 @@ pub struct EmbeddedWebAssets;
 
 /// Dirección IP del cliente propagada por el guardia de seguridad de plano de control.
 #[derive(Clone, Copy)]
-struct ClientIp(IpAddr);
+pub(crate) struct ClientIp(pub(crate) IpAddr);
 
 pub fn create_router(state: AppState) -> Router {
     let mut router = Router::new()
@@ -36,6 +36,14 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/rpc", post(handle_http_rpc))
         .route("/api", post(handle_http_rpc))
         .route("/api/auth/login", post(handle_webui_login))
+        .route(
+            "/api/system/upload-update",
+            post(crate::rpc::handlers::updater_upload::handle_upload_update).layer(
+                axum::extract::DefaultBodyLimit::max(
+                    crate::services::updater::constants::MAX_UPDATE_PAYLOAD_BYTES,
+                ),
+            ),
+        )
         .route("/session-config.js", get(session_config_js))
         .route(
             "/transmission/rpc",

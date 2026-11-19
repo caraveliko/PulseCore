@@ -3,11 +3,60 @@
 
 //! Mecanismo de sustitución atómica y gestión de archivos ejecutables en disco.
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
-use super::constants::{UPDATE_BACKUP_SUFFIX, UPDATE_STAGING_SUFFIX};
+use super::constants::{
+    MIN_EXECUTABLE_HEADER_BYTES, UPDATE_BACKUP_SUFFIX, UPDATE_STAGING_SUFFIX, WRITE_PROBE_SUFFIX,
+};
 use super::error::UpdaterError;
+use super::verifier::validate_executable_for_triple;
+
+/// Convierte un error de sistema de archivos en un error tipado más explicativo si falta permiso.
+fn map_fs_error(err: std::io::Error, path: &Path) -> UpdaterError {
+    match err.kind() {
+        ErrorKind::PermissionDenied | ErrorKind::ReadOnlyFilesystem => {
+            UpdaterError::PermissionDenied(format!(
+                "No se puede escribir en {} ({err}). En Linux/systemd comprueba que ReadWritePaths incluya el directorio del binario.",
+                path.display()
+            ))
+        }
+        _ => UpdaterError::Io(err),
+    }
+}
+
+/// Indica si el proceso actual se está ejecutando bajo supervisión de `systemd` en Linux.
+pub fn is_managed_by_systemd() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("INVOCATION_ID").is_some() || std::env::var_os("NOTIFY_SOCKET").is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+/// Comprueba mediante una sonda efímera si el directorio del ejecutable permite escritura.
+pub fn is_executable_dir_writable(target_exe: &Path) -> bool {
+    let Some(parent) = target_exe.parent() else {
+        return false;
+    };
+    if !parent.is_dir() {
+        return false;
+    }
+    let probe_name = format!(".mule-daemon-{}{}", std::process::id(), WRITE_PROBE_SUFFIX);
+    let probe_path = parent.join(probe_name);
+    match OpenOptions::new().write(true).create_new(true).open(&probe_path) {
+        Ok(file) => {
+            drop(file);
+            let _ = fs::remove_file(&probe_path);
+            true
+        }
+        Err(_) => false,
+    }
+}
 
 /// Obtiene la ruta canónica del ejecutable del demonio en ejecución.
 pub fn get_current_executable_path() -> Result<PathBuf, UpdaterError> {
@@ -36,14 +85,14 @@ pub fn get_backup_executable_path(current_exe: &Path) -> PathBuf {
 
 /// Escribe el contenido binario descargado en el archivo de preparación (*staging*).
 pub fn write_staging_binary(staging_path: &Path, data: &[u8]) -> Result<(), UpdaterError> {
-    fs::write(staging_path, data)?;
+    fs::write(staging_path, data).map_err(|e| map_fs_error(e, staging_path))?;
 
     // En plataformas Unix aseguramos permisos de ejecución (0o755)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(0o755);
-        let _ = fs::set_permissions(staging_path, perms);
+        fs::set_permissions(staging_path, perms).map_err(|e| map_fs_error(e, staging_path))?;
     }
 
     Ok(())
@@ -67,25 +116,58 @@ pub fn replace_current_executable(staging_path: &Path, target_exe: &Path) -> Res
         }
 
         // Renombrado del ejecutable en curso hacia .old (Windows lo permite en el mismo volumen)
-        fs::rename(target_exe, &backup_path)?;
+        fs::rename(target_exe, &backup_path).map_err(|e| map_fs_error(e, &backup_path))?;
 
         // Desplazamiento del nuevo binario hacia la ruta de destino original
         if let Err(e) = fs::rename(staging_path, target_exe) {
             // Intento de reversión en caso de error
             let _ = fs::rename(&backup_path, target_exe);
-            return Err(UpdaterError::Io(e));
+            return Err(map_fs_error(e, target_exe));
         }
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        if target_exe.exists() {
+            let backup_path = get_backup_executable_path(target_exe);
+            if backup_path.exists() {
+                let _ = fs::remove_file(&backup_path);
+            }
+            // Enlace duro O(1) para preservar el binario previo sin duplicar bloques en disco
+            if let Err(err) = fs::hard_link(target_exe, &backup_path) {
+                if matches!(
+                    err.kind(),
+                    ErrorKind::PermissionDenied | ErrorKind::ReadOnlyFilesystem
+                ) {
+                    return Err(map_fs_error(err, &backup_path));
+                }
+                fs::copy(target_exe, &backup_path).map_err(|e| map_fs_error(e, &backup_path))?;
+            }
+            let backup_perms = fs::Permissions::from_mode(0o755);
+            fs::set_permissions(&backup_path, backup_perms)
+                .map_err(|e| map_fs_error(e, &backup_path))?;
+        }
+
         let perms = fs::Permissions::from_mode(0o755);
-        let _ = fs::set_permissions(staging_path, perms);
-        fs::rename(staging_path, target_exe)?;
+        fs::set_permissions(staging_path, perms).map_err(|e| map_fs_error(e, staging_path))?;
+        fs::rename(staging_path, target_exe).map_err(|e| map_fs_error(e, target_exe))?;
     }
 
     Ok(())
+}
+
+/// Comprueba si existe una copia de respaldo `.old` lista para revertir el binario.
+pub fn has_rollback_backup(target_exe: &Path) -> bool {
+    get_backup_executable_path(target_exe).is_file()
+}
+
+/// Elimina binarios temporales huérfanos en fase `.update`, conservando `.old` para rollback.
+pub fn cleanup_stale_staging_if_present(target_exe: &Path) {
+    let staging_path = get_staging_executable_path(target_exe);
+    if staging_path.exists() {
+        let _ = fs::remove_file(&staging_path);
+    }
 }
 
 /// Elimina copias de seguridad residuales (`.old`) procedentes de actualizaciones anteriores.
@@ -94,6 +176,58 @@ pub fn cleanup_old_backup_if_present(target_exe: &Path) {
     if backup_path.exists() {
         let _ = fs::remove_file(&backup_path);
     }
+}
+
+/// Revierte el ejecutable actual restaurando de forma atómica la copia `.old` previa.
+pub fn rollback_to_backup(target_exe: &Path, expected_triple: &str) -> Result<PathBuf, UpdaterError> {
+    let backup_path = get_backup_executable_path(target_exe);
+    if !backup_path.is_file() {
+        return Err(UpdaterError::NoRollbackAvailable);
+    }
+
+    // Valida la cabecera binaria antes de restaurar para evitar revertir hacia un archivo corrupto
+    let mut file = fs::File::open(&backup_path).map_err(|e| map_fs_error(e, &backup_path))?;
+    let mut header_buf = [0u8; MIN_EXECUTABLE_HEADER_BYTES];
+    let mut filled = 0;
+    while filled < header_buf.len() {
+        let n = file
+            .read(&mut header_buf[filled..])
+            .map_err(|e| map_fs_error(e, &backup_path))?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    drop(file);
+    validate_executable_for_triple(&header_buf[..filled], expected_triple)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = fs::Permissions::from_mode(0o755);
+        fs::set_permissions(&backup_path, perms).map_err(|e| map_fs_error(e, &backup_path))?;
+        fs::rename(&backup_path, target_exe).map_err(|e| map_fs_error(e, target_exe))?;
+    }
+
+    #[cfg(windows)]
+    {
+        let staging_path = get_staging_executable_path(target_exe);
+        if staging_path.exists() {
+            let _ = fs::remove_file(&staging_path);
+        }
+        if target_exe.exists() {
+            fs::rename(target_exe, &staging_path).map_err(|e| map_fs_error(e, &staging_path))?;
+        }
+        if let Err(e) = fs::rename(&backup_path, target_exe) {
+            if staging_path.exists() {
+                let _ = fs::rename(&staging_path, target_exe);
+            }
+            return Err(map_fs_error(e, target_exe));
+        }
+        let _ = fs::remove_file(&staging_path);
+    }
+
+    Ok(target_exe.to_path_buf())
 }
 
 /// Relanza el binario actual como un nuevo proceso independiente desacoplado.

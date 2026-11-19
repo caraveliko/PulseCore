@@ -15,6 +15,7 @@ pub mod shares;
 pub mod sources;
 pub mod upnp;
 pub mod updater;
+pub mod updater_upload;
 
 /// Serializa la carga útil de un manejador en `serde_json::Value`.
 /// Las cargas útiles de RPC son `Serialize` por construcción; en caso de fallo

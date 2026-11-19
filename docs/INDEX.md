@@ -237,7 +237,9 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `src/commands/hash.rs` | Comando de cálculo de hash eD2K |
 | `src/commands/link.rs` | Comando de generación de enlaces eD2K |
 | `src/commands/part_met.rs` | Comando de inspección de archivos `.part.met` |
+| `src/commands/update.rs` | Subcomando `update` (`status`, `check`, `upload`, `rollback`) para gestionar actualizaciones vía HTTP/RPC |
 | `tests/make_link_tests.rs` | Pruebas del comando de creación de enlaces |
+| `tests/update_command_tests.rs` | Pruebas loopback del subcomando `mule-cli update` |
 
 ### `mule-core` — Modelo de dominio y persistencia
 
@@ -341,6 +343,8 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `src/rpc/handlers/shares.rs` | Manejador: archivos compartidos — `shares.list` (incl. parciales + estadísticas de subida `uploadRateBps`/`uploadedBytes` + `categoryId`/`upPriority`), `add`, `remove`, `rename`, `setEnabled`, `setUploadPriority` (mutaciones rechazadas en `is_partial`), `setCategory` (aceptada en parciales — categoría de la descarga subyacente), `rescan`; emite `shares.changed` en cada mutación |
 | `src/rpc/handlers/sources.rs` | Manejador: fuentes |
 | `src/rpc/handlers/upnp.rs` | Manejador: UPnP |
+| `src/rpc/handlers/updater.rs` | Manejador: actualizaciones oficiales y rollback (`system.checkUpdate`, `getUpdateStatus`, `applyUpdate`, `rollbackUpdate`) |
+| `src/rpc/handlers/updater_upload.rs` | Manejador HTTP autenticado `POST /api/system/upload-update` para binarios compilados locales |
 
 ### `mule-daemon` — Servicios
 
@@ -398,6 +402,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `src/services/upnp/discovery.rs` | Descubrimiento de la pasarela UPnP |
 | `src/services/upnp/mapping.rs` | Mapeo de puertos UPnP |
 | `src/services/upnp/types.rs` | Tipos UPnP |
+| `src/services/updater/` | Servicio híbrido de actualizaciones (`constants.rs`, `error.rs`, `http_fetch.rs`, `installer.rs`, `manifest.rs`, `service.rs`, `verifier.rs`) con validación ELF64/PE, respaldo `.old` O(1) y rollback |
 
 ### `mule-daemon` — Pruebas
 
@@ -434,6 +439,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `tests/servers_rpc_tests.rs` | Pruebas RPC servidores |
 | `tests/swarm_dual_peer_tests.rs` | Pruebas enjambre a dos pares |
 | `tests/upload_inbound_tests.rs` | Pruebas subida/conexiones entrantes |
+| `tests/updater_tests.rs` | Pruebas loopback del sistema híbrido de actualizaciones, subida autenticada y rollback |
 | `tests/upnp_and_wan_tests.rs` | Pruebas UPnP y WAN |
 | `tests/workdir_tests.rs` | Pruebas del directorio de trabajo |
 
@@ -747,6 +753,7 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `ed2k/decisions/0003-wire-lab-separation.md` | ADR: separación wire/lab |
 | `ed2k/decisions/0004-public-ed2k-kad-production.md` | ADR: conectividad pública eD2K/Kad en producción |
 | `ed2k/decisions/0005-negociacion-pares-2026.md` | ADR: negociación moderna de pares 2026 (capa compatible + extensión `PC26`) |
+| `ed2k/decisions/0006-politica-contenido-solo-video.md` | ADR: política de contenido estricta «Solo Vídeo» (Opción E1) en 4 puertas sin procesos externos |
 | `ed2k/negociacion_endurecimiento_2026.md` | Especificación de endurecimiento pre-handshake, SUI V2/caché, AICH, BDP, LEDBAT++ y peer scoring |
 | `ed2k/criptografia_moderna_pc26.md` | Especificación criptográfica `PC26`: X25519 + ML-KEM-768, ChaCha20-Poly1305, Ed25519 SUI v3, BLAKE3 Merkle y Zstd |
 
@@ -765,14 +772,16 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `docs/plans/kad/08_buddy_client.md` | Paso 8: rol cliente buddy LowID (`FINDBUDDY_REQ`, enlace TCP, publicación LowID) |
 | `docs/plans/kad/09_validation_interop.md` | Paso 9: golden packets eMule/aMule, proptest, laboratorio loopback (pérdida/duplicación/reordenación) |
 
-## scripts/ — Scripts PowerShell
+## scripts/ — Scripts PowerShell y Linux
 
 | Archivo | Función |
 |---|---|
 | `build_windows_release.ps1` | Compilación de release Windows (desktop + web empaquetada bajo `web/`, lanzador `Interface Web.bat`, `-SkipWeb`/`-WebBaseHref`) |
 | `generate_sbom.ps1` | Generación del SBOM (Bill of Materials) |
 | `generate_update_manifest.py` | Firma criptográfica Ed25519 y generación de `manifest.json` para actualizaciones |
+| `mule-daemon.service` | Unidad `systemd --user` para Linux / Raspberry Pi (`ReadWritePaths` incluye `%h/.local/bin`, `RestartSec=2`) |
 | `test_packaged_bundle.ps1` | Prueba del paquete empaquetado |
 | `test_qa_loopback_e2e.ps1` | Prueba E2E loopback QA |
 | `test_rc_matrix.ps1` | Matriz de pruebas release candidate |
+| `update_linux.sh` | Compilación local/cruzada (`aarch64`), subida HTTP autenticada, despliegue SSH, instalación de unidad `systemd` y rollback |
 | `verify_all.ps1` | Script de verificación global |

@@ -4,7 +4,7 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use mule_cli::commands::{hash, import_amule, known_met, link, part_met};
+use mule_cli::commands::{hash, import_amule, known_met, link, part_met, update};
 
 fn home_subdir(leaf: &str) -> PathBuf {
     std::env::var_os("HOME")
@@ -69,6 +69,20 @@ enum Commands {
         #[arg(long)]
         link_parts: bool,
     },
+    /// Consulta, comprueba, sube o revierte actualizaciones en un demonio Pulse Core
+    Update {
+        /// URL base HTTP del demonio en ejecución
+        #[arg(long, default_value = update::DEFAULT_DAEMON_URL)]
+        url: String,
+        /// Token Bearer de autenticación (si se omite, lee MULE_AUTH_TOKEN o auth.token)
+        #[arg(long)]
+        token: Option<String>,
+        /// Directorio de datos del demonio donde reside `auth.token`
+        #[arg(long, default_value_os_t = home_subdir(".mule"))]
+        data_dir: PathBuf,
+        #[command(subcommand)]
+        action: update::UpdateAction,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -97,6 +111,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             link_parts,
         } => {
             import_amule::run_import_amule(&amule_dir, &data_dir, dry_run, link_parts)?;
+        }
+        Commands::Update {
+            url,
+            token,
+            data_dir,
+            action,
+        } => {
+            update::run_update(&url, token.as_deref(), &data_dir, action)?;
         }
     }
 

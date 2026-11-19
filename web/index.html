@@ -739,6 +739,120 @@
       visibility: visible;
       transform: translateY(0);
     }
+
+    /* Indicador inteligente de actualizaciones y centro modal */
+    .update-pill {
+      position: relative;
+      height: 32px;
+      padding: 0 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 6px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .update-pill:hover {
+      color: #fff;
+      border-color: rgba(99, 102, 241, 0.55);
+      background: rgba(30, 41, 59, 0.95);
+    }
+    .update-pill.update-ok .update-dot {
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.55);
+    }
+    .update-pill.update-available {
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(245, 158, 11, 0.55);
+      color: #fbbf24;
+      font-weight: 600;
+      animation: updatePulse 2.2s infinite;
+    }
+    .update-pill.update-available .update-dot {
+      background: #f59e0b;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+    }
+    .update-pill.update-busy {
+      background: rgba(94, 106, 210, 0.2);
+      border-color: rgba(99, 102, 241, 0.65);
+      color: #c7d2fe;
+      font-weight: 600;
+    }
+    .update-pill.update-busy .update-dot {
+      background: #6366f1;
+    }
+    .update-pill.update-busy .update-icon-svg {
+      animation: updateSpin 1.15s linear infinite;
+    }
+    .update-pill.update-error {
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+    }
+    .update-pill.update-error .update-dot {
+      background: #ef4444;
+    }
+    .update-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #64748b;
+      flex-shrink: 0;
+    }
+    .update-pill-label {
+      font-size: 0.74rem;
+      white-space: nowrap;
+    }
+    .update-pill-label:empty {
+      display: none;
+    }
+    @keyframes updatePulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35); }
+      50% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0); }
+    }
+    @keyframes updateSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .update-hover-card {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 280px;
+      background: #0f1422;
+      border: 1px solid rgba(94, 106, 210, 0.4);
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+      z-index: 1000;
+    }
+    #update-header-container:hover .update-hover-card {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .update-dropzone {
+      border: 1.5px dashed rgba(148, 163, 184, 0.38);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.55);
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .update-dropzone:hover,
+    .update-dropzone.drag-over {
+      border-color: var(--primary-hover);
+      background: rgba(94, 106, 210, 0.14);
+    }
     .log-console {
       background: #090d13;
       border: 1px solid var(--border);
@@ -2654,8 +2768,48 @@
       </nav>
     </div>
 
-    <!-- Derecha: Acciones Rápidas (Tortuga + Spotlight) -->
+    <!-- Derecha: Acciones Rápidas (Actualizaciones + Tortuga + Spotlight) -->
     <div class="header-right-cluster" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+      <!-- Indicador Inteligente de Actualizaciones -->
+      <div style="position: relative; display: inline-flex;" id="update-header-container">
+        <button class="btn btn-sm update-pill update-idle" id="btn-header-update" onclick="openUpdateModal()" aria-label="Centro de actualizaciones">
+          <svg class="update-icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+            <path d="M12 8v5"></path>
+            <path d="M9.5 11.5 12 14l2.5-2.5"></path>
+          </svg>
+          <span class="update-dot" id="header-update-dot"></span>
+          <span class="update-pill-label" id="header-update-label"></span>
+        </button>
+        <div id="update-tooltip" class="update-hover-card">
+          <div style="font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; font-size: 0.82rem; margin-bottom: 4px;">
+            <span>🔄</span> <span>Actualizaciones</span>
+            <span id="header-update-tt-badge" class="badge" style="margin-left: auto; font-size: 0.65rem; background: rgba(255,255,255,0.08); color: var(--text-muted);">En espera</span>
+          </div>
+          <div id="header-update-tt-desc" style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.35;">
+            Gestiona versiones oficiales o sube un binario compilado en Linux.
+          </div>
+          <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.7rem; color: #94a3b8; display: flex; flex-direction: column; gap: 3px;">
+            <div style="display: flex; justify-content: space-between; gap: 8px;">
+              <span>Versión:</span>
+              <span id="header-update-tt-ver" style="color: #e2e8f0; font-family: var(--font-mono);">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; gap: 8px;">
+              <span>Plataforma:</span>
+              <span id="header-update-tt-arch" style="color: #a5b4fc; font-family: var(--font-mono);">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; gap: 8px;">
+              <span>Entorno:</span>
+              <span id="header-update-tt-mode" style="color: #cbd5e1;">—</span>
+            </div>
+          </div>
+          <div style="margin-top: 6px; font-size: 0.7rem; color: var(--primary-hover); text-align: right;">
+            Clic para gestionar o subir binario →
+          </div>
+        </div>
+      </div>
+
       <!-- Modo Tortuga -->
       <div style="position: relative; display: inline-flex;" id="turtle-container">
         <button class="btn btn-sm" id="btn-turtle-mode" aria-label="Modo Tortuga" title="Modo Tortuga: Limita temporalmente el ancho de banda a 500 kB/s bajada y 100 kB/s subida" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; transition: all 0.2s ease;">
@@ -3926,16 +4080,19 @@
             </div>
             <div>
               <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Actualizaciones de eMuleRust</h3>
-                <span id="update-status-pill" class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">● Sistema al día</span>
-                <span id="update-current-ver-badge" class="badge" style="background: rgba(255,255,255,0.06); color: #fff;">Versión instalada: v0.3.0-beta.2</span>
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Actualizaciones de Pulse Core</h3>
+                <span id="update-status-pill" class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">● En espera</span>
+                <span id="update-current-ver-badge" class="badge" style="background: rgba(255,255,255,0.06); color: #fff;">Versión instalada: detectando...</span>
               </div>
               <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.3;">
-                Actualizaciones atómicas sin interrupción con verificación criptográfica Ed25519 (Ring) y sustitución en caliente.
+                Actualizaciones atómicas sin interrupción con verificación criptográfica Ed25519 (Ring), validación ELF/PE o subida de binario local compilado.
               </div>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-sm" onclick="openUpdateModal()" style="padding: 7px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(99, 102, 241, 0.45); background: rgba(94, 106, 210, 0.16); color: #e0e7ff;">
+              <span>📦 Subir binario Linux…</span>
+            </button>
             <button class="btn btn-sm btn-primary" onclick="checkSystemUpdate()" id="btn-check-updates" style="padding: 7px 18px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
               <span>🔍 Comprobar Ahora</span>
             </button>
@@ -3947,7 +4104,7 @@
           <!-- Tarjeta 1: Información del Canal y Verificación -->
           <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
             <h4 style="margin-top: 0; margin-bottom: 14px; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
-              <span>🛡️</span> <span>Canal de Distribución y Seguridad</span>
+              <span>🛡️</span> <span>Canal de Distribución y Entorno del Servidor</span>
             </h4>
             <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem;">
               <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
@@ -3956,15 +4113,23 @@
               </div>
               <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
                 <span style="color: var(--text-muted);">Autenticidad criptográfica:</span>
-                <span style="color: #4ade80; font-weight: 600;">Ed25519 Ring Activo</span>
+                <span style="color: #4ade80; font-weight: 600;">Ed25519 Ring + Cabecera ELF/PE</span>
               </div>
               <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
-                <span style="color: var(--text-muted);">Arquitectura del sistema:</span>
-                <span style="font-family: var(--font-mono); color: #a5b4fc;" id="update-arch-val">Detectando plataforma...</span>
+                <span style="color: var(--text-muted);">Arquitectura del servidor:</span>
+                <span style="font-family: var(--font-mono); color: #a5b4fc;" id="update-arch-val">Detectando...</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+                <span style="color: var(--text-muted);">Modo de ejecución:</span>
+                <span style="font-weight: 600; color: #e2e8f0;" id="update-runtime-mode-val">Detectando...</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+                <span style="color: var(--text-muted);">Escritura en disco:</span>
+                <span style="font-weight: 600;" id="update-writable-val">Comprobando...</span>
               </div>
               <div style="display: flex; justify-content: space-between; padding-bottom: 4px;">
                 <span style="color: var(--text-muted);">Última comprobación:</span>
-                <span style="color: var(--text-muted);" id="update-last-check-val">Reciente</span>
+                <span style="color: var(--text-muted);" id="update-last-check-val">Sin comprobar</span>
               </div>
             </div>
           </div>
@@ -3976,7 +4141,7 @@
                 <span id="update-card-icon">✨</span> <span id="update-card-title">Comprobación de Versión</span>
               </h4>
               <div id="update-card-desc" style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 14px;">
-                El sistema se encuentra al día con la versión más reciente publicada. Pulsa «Comprobar Ahora» para verificar novedades.
+                Pulsa «Comprobar Ahora» para consultar nuevas versiones oficiales o abre el centro de actualizaciones para subir un binario compilado.
               </div>
               <div id="update-progress-container" style="display: none; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 4px;">
@@ -3989,8 +4154,8 @@
               </div>
             </div>
             <div>
-              <button class="btn btn-success" id="btn-apply-update" onclick="applySystemUpdate()" style="display: none; width: 100%; padding: 10px; font-weight: 700; font-size: 0.88rem; justify-content: center; align-items: center; gap: 8px;">
-                <span>🚀 Descargar y Actualizar Ahora</span>
+              <button class="btn btn-success" id="btn-apply-update" onclick="openUpdateModal()" style="display: none; width: 100%; padding: 10px; font-weight: 700; font-size: 0.88rem; justify-content: center; align-items: center; gap: 8px;">
+                <span>🚀 Revisar e Instalar Actualización</span>
               </button>
             </div>
           </div>
@@ -5045,6 +5210,167 @@
     </div>
   </div>
 
+  <!-- MODAL: CENTRO DE ACTUALIZACIONES DE PULSE CORE -->
+  <div class="modal-overlay" id="modal-system-update" onclick="if(event.target === this &amp;&amp; !window._updateModalLocked) closeModal('modal-system-update')">
+    <div class="modal" style="max-width: 660px; width: 94%; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(94, 106, 210, 0.18); border: 1px solid rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🔄</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 style="margin: 0; font-size: 1.05rem; color: #fff;">Centro de actualizaciones</h3>
+              <span id="modal-update-status-badge" class="badge" style="background: rgba(148, 163, 184, 0.16); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.3);">En espera</span>
+            </div>
+            <div style="font-size: 0.76rem; color: var(--text-muted);">Gestión de lanzamientos oficiales (Ed25519) o binario local compilado en Linux</div>
+          </div>
+        </div>
+        <button class="btn btn-sm" id="btn-modal-update-close-x" onclick="closeModal('modal-system-update')" style="padding: 2px 8px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 14px;">
+        <!-- Insignias reales del entorno del servidor -->
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.75rem;">
+          <span class="badge" style="background: rgba(255,255,255,0.06); color: #f8fafc; border-color: rgba(255,255,255,0.12);" id="modal-upd-env-ver">Versión: —</span>
+          <span class="badge" style="background: rgba(99, 102, 241, 0.14); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.35); font-family: var(--font-mono);" id="modal-upd-env-arch">Arquitectura: —</span>
+          <span class="badge" style="background: rgba(14, 165, 233, 0.14); color: #38bdf8; border-color: rgba(14, 165, 233, 0.35);" id="modal-upd-env-mode">Entorno: —</span>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(16, 185, 129, 0.35);" id="modal-upd-env-write">Escritura: —</span>
+        </div>
+
+        <!-- Aviso si el directorio del ejecutable no es escribible -->
+        <div id="modal-upd-readonly-warn" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.38); border-radius: 6px; padding: 10px 12px; font-size: 0.78rem; color: #fde68a; line-height: 1.4;">
+          <strong>Permisos de escritura limitados:</strong> el directorio del ejecutable no admite escritura directa (<code id="modal-upd-exe-path" style="color: #fff;">—</code>). En Linux con <code>systemd</code> añade esa ruta a <code>ReadWritePaths</code> o usa <code>scripts/update_linux.sh --ssh</code>.
+        </div>
+
+        <!-- Mensaje de estado integrado (errores/éxitos sin ventanas del navegador) -->
+        <div id="modal-upd-feedback" style="display: none; border-radius: 6px; padding: 10px 12px; font-size: 0.8rem; line-height: 1.4;"></div>
+
+        <!-- Panel de reconexión tras reinicio -->
+        <div id="modal-upd-restarting-panel" style="display: none; background: rgba(94, 106, 210, 0.14); border: 1px solid rgba(99, 102, 241, 0.45); border-radius: 8px; padding: 14px; text-align: center;">
+          <div style="font-weight: 700; color: #e0e7ff; margin-bottom: 4px;" id="modal-upd-restart-title">Reiniciando Pulse Core de forma ordenada…</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);" id="modal-upd-restart-sub">Esperando respuesta de salud en /health para recargar la interfaz automáticamente.</div>
+        </div>
+
+        <!-- Bloque 1: Lanzamiento Oficial -->
+        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.45);">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+            <div style="font-weight: 700; color: #fff; font-size: 0.9rem;">🌐 Versión oficial (GitHub Releases + Ed25519)</div>
+            <button class="btn btn-sm btn-primary" id="btn-modal-check-update" onclick="checkSystemUpdate(true, false)">🔍 Comprobar ahora</button>
+          </div>
+          <div id="modal-upd-official-title" style="font-size: 0.83rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px;">
+            En espera de comprobación
+          </div>
+          <div id="modal-upd-official-desc" style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">
+            Consulta el canal oficial configurado para descargar lanzamientos firmados criptográficamente.
+          </div>
+
+          <div id="modal-upd-official-progress" style="display: none; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span id="modal-upd-official-prog-label">Descargando paquete oficial…</span>
+              <span id="modal-upd-official-prog-pct">0%</span>
+            </div>
+            <div style="width: 100%; height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="modal-upd-official-prog-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), #10b981); transition: width 0.25s ease;"></div>
+            </div>
+          </div>
+
+          <div id="modal-upd-confirm-box" style="display: none; margin-top: 10px; padding: 10px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);">
+            <div style="font-size: 0.79rem; color: #fde68a; margin-bottom: 8px;">
+              Se descargará el binario verificado, se sustituirá en disco y Pulse Core se reiniciará automáticamente. ¿Continuar?
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button class="btn btn-sm" onclick="cancelOfficialUpdateConfirm()">Cancelar</button>
+              <button class="btn btn-sm btn-success" onclick="confirmAndApplyOfficialUpdate()">Confirmar e instalar</button>
+            </div>
+          </div>
+
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+            <button class="btn btn-sm btn-success" id="btn-modal-apply-official" onclick="requestOfficialUpdateConfirm()" style="display: none; font-weight: 700;">
+              🚀 Descargar e instalar
+            </button>
+          </div>
+        </div>
+
+        <!-- Bloque 2: Subida de binario local compilado en Linux -->
+        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.45);">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <div style="font-weight: 700; color: #fff; font-size: 0.9rem;">📦 Actualizar con binario compilado en Linux</div>
+            <span style="font-size: 0.71rem; color: var(--text-muted); font-family: var(--font-mono);">ELF64 / PE verificado</span>
+          </div>
+          <div style="font-size: 0.77rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+            Ideal tras compilar <code>cargo build --release -p mule-daemon</code> en local o para Raspberry Pi (<code>aarch64</code>). También puedes automatizarlo desde terminal con <code>scripts/update_linux.sh</code>.
+          </div>
+
+          <input type="file" id="input-local-update-file" hidden>
+          <div id="update-dropzone" class="update-dropzone" tabindex="0">
+            <div style="font-size: 1.35rem; margin-bottom: 4px;">⬆️</div>
+            <div style="font-size: 0.82rem; font-weight: 600; color: #e2e8f0;" id="update-dropzone-title">
+              Arrastra aquí tu binario <code>mule-daemon</code> o haz clic para seleccionarlo
+            </div>
+            <div style="font-size: 0.73rem; color: var(--text-muted); margin-top: 3px;" id="update-dropzone-sub">
+              El servidor rechazará automáticamente binarios de otra arquitectura antes de sustituir en disco.
+            </div>
+          </div>
+
+          <div id="local-file-selected-info" style="display: none; margin-top: 8px; padding: 8px 10px; background: rgba(94, 106, 210, 0.14); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 6px; font-size: 0.78rem; justify-content: space-between; align-items: center; gap: 8px;">
+            <div>
+              <strong id="local-file-name" style="color: #fff; font-family: var(--font-mono);">—</strong>
+              <span id="local-file-size" style="color: #a5b4fc; margin-left: 8px;">—</span>
+            </div>
+            <button class="btn btn-sm" onclick="clearSelectedLocalBinary()" style="padding: 2px 8px;">Quitar</button>
+          </div>
+
+          <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <input type="text" id="input-local-update-sha256" class="form-control" style="font-family: var(--font-mono); font-size: 0.76rem;" placeholder="Opcional: suma SHA-256 esperada (64 caracteres hexadecimales)">
+            <label style="display: inline-flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--text); cursor: pointer;">
+              <input type="checkbox" id="chk-local-auto-restart" checked> Reiniciar Pulse Core automáticamente tras sustituir el binario
+            </label>
+          </div>
+
+          <div id="modal-upd-upload-progress" style="display: none; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span id="modal-upd-upload-prog-label">Subiendo binario al servidor…</span>
+              <span id="modal-upd-upload-prog-pct">0%</span>
+            </div>
+            <div style="width: 100%; height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="modal-upd-upload-prog-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #10b981); transition: width 0.2s ease;"></div>
+            </div>
+          </div>
+
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+            <button class="btn btn-sm btn-primary" id="btn-modal-upload-local" onclick="uploadLocalUpdateBinary()" disabled style="font-weight: 700;">
+              ⬆️ Subir e instalar binario
+            </button>
+          </div>
+        </div>
+
+        <!-- Bloque 3 (condicional): Rollback rápido hacia .old -->
+        <div id="modal-upd-rollback-section" style="display: none; border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 12px 14px; background: rgba(245, 158, 11, 0.08);">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div>
+              <div style="font-weight: 700; color: #fde68a; font-size: 0.86rem;">↩️ Copia de respaldo anterior disponible (.old)</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                Si la versión actual presenta algún problema, puedes restaurar al instante el binario anterior conservado en disco.
+              </div>
+            </div>
+            <button class="btn btn-sm" id="btn-modal-rollback-trigger" onclick="requestRollbackConfirm()" style="border-color: rgba(245, 158, 11, 0.5); color: #fbbf24;">
+              ↩️ Revertir versión
+            </button>
+          </div>
+          <div id="modal-upd-rollback-confirm" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(245, 158, 11, 0.25); justify-content: flex-end; gap: 8px;">
+            <span style="font-size: 0.77rem; color: #fde68a; margin-right: auto; align-self: center;">¿Restaurar la copia <code>.old</code> y reiniciar Pulse Core?</span>
+            <button class="btn btn-sm" onclick="cancelRollbackConfirm()">Cancelar</button>
+            <button class="btn btn-sm" onclick="confirmAndRollbackUpdate()" style="background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.6); color: #fef3c7; font-weight: 700;">Confirmar rollback</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.73rem; color: var(--text-muted);">Autenticación protegida por token Bearer de sesión</span>
+        <button class="btn" id="btn-modal-update-close" onclick="closeModal('modal-system-update')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PANEL / DRAWER ASISTENTE COPILOTO IA -->
   <div id="assistant-drawer" class="assistant-drawer" style="display: none;">
     <div class="assistant-header">
@@ -5200,6 +5526,9 @@
                 document.getElementById('cfg-version').value = helloRes.daemonVersion;
                 const updateBadge = document.getElementById('update-current-ver-badge');
                 if (updateBadge) updateBadge.textContent = `Versión instalada: v${helloRes.daemonVersion}`;
+              }
+              if (typeof window._updateEnvFromHello === 'function') {
+                window._updateEnvFromHello(helloRes);
               }
             }
             this.trigger('connected');
@@ -9307,143 +9636,726 @@
       document.getElementById('btn-save-preferences').onclick = savePreferences;
     }
 
-    // === GESTIÓN DE ACTUALIZACIONES DEL SISTEMA ===
-    async function checkSystemUpdate(force = true) {
-      const btn = document.getElementById('btn-check-updates');
+    // === GESTIÓN DE ACTUALIZACIONES DEL SISTEMA (HÍBRIDA: OFICIAL + BINARIO LOCAL) ===
+    const updateUiState = {
+      snapshot: { status: 'idle' },
+      environment: null,
+      lastCheckAt: null,
+      selectedFile: null,
+      isUploading: false,
+      isRestarting: false,
+      officialPollTimer: null,
+      silentCheckScheduled: false,
+    };
+    window._updateModalLocked = false;
+
+    function formatUpdateMb(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '0.0 MB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    window._updateEnvFromHello = function(helloRes) {
+      if (!helloRes) return;
+      if (!updateUiState.environment) {
+        updateUiState.environment = {};
+      }
+      if (helloRes.daemonVersion) updateUiState.environment.currentVersion = helloRes.daemonVersion;
+      if (helloRes.platformTriple) updateUiState.environment.platformTriple = helloRes.platformTriple;
+      if (typeof helloRes.managedBySystemd === 'boolean') {
+        updateUiState.environment.managedBySystemd = helloRes.managedBySystemd;
+      }
+      renderUpdateEnvironment();
+    };
+
+    function showUpdateModalFeedback(kind, message) {
+      const box = document.getElementById('modal-upd-feedback');
+      if (!box) return;
+      if (!message) {
+        box.style.display = 'none';
+        box.textContent = '';
+        return;
+      }
+      const palette = {
+        error: { bg: 'rgba(239, 68, 68, 0.14)', border: 'rgba(239, 68, 68, 0.45)', color: '#fca5a5' },
+        success: { bg: 'rgba(34, 197, 94, 0.14)', border: 'rgba(34, 197, 94, 0.45)', color: '#86efac' },
+        info: { bg: 'rgba(56, 189, 248, 0.12)', border: 'rgba(56, 189, 248, 0.38)', color: '#bae6fd' },
+      }[kind || 'info'];
+      box.style.display = 'block';
+      box.style.background = palette.bg;
+      box.style.border = `1px solid ${palette.border}`;
+      box.style.color = palette.color;
+      box.textContent = message;
+    }
+
+    function setUpdateModalLocked(locked) {
+      window._updateModalLocked = !!locked;
+      const closeBtn = document.getElementById('btn-modal-update-close');
+      const closeX = document.getElementById('btn-modal-update-close-x');
+      if (closeBtn) closeBtn.disabled = !!locked;
+      if (closeX) closeX.disabled = !!locked;
+    }
+
+    function renderUpdateEnvironment() {
+      const env = updateUiState.environment;
+      if (!env) return;
+
+      const verLabel = env.currentVersion ? `v${env.currentVersion}` : '—';
+      const triple = env.platformTriple || 'desconocida';
+      const runtimeText = env.managedBySystemd ? 'systemd (reinicio automático)' : 'Proceso independiente';
+      const runtimeShort = env.managedBySystemd ? 'systemd' : 'Independiente';
+      const canWrite = typeof env.canSelfUpdate === 'boolean' ? env.canSelfUpdate : null;
+
+      const verBadge = document.getElementById('update-current-ver-badge');
+      if (verBadge && env.currentVersion) verBadge.textContent = `Versión instalada: ${verLabel}`;
+
+      const archEl = document.getElementById('update-arch-val');
+      if (archEl) archEl.textContent = triple;
+
+      const chanEl = document.getElementById('update-channel-val');
+      if (chanEl && env.channel) chanEl.textContent = env.channel;
+
+      const modeEl = document.getElementById('update-runtime-mode-val');
+      if (modeEl) modeEl.textContent = runtimeText;
+
+      const writeEl = document.getElementById('update-writable-val');
+      if (writeEl && canWrite !== null) {
+        writeEl.textContent = canWrite ? 'Correcto (escribible)' : 'Solo lectura';
+        writeEl.style.color = canWrite ? '#4ade80' : '#fbbf24';
+      }
+
+      const ttVer = document.getElementById('header-update-tt-ver');
+      const ttArch = document.getElementById('header-update-tt-arch');
+      const ttMode = document.getElementById('header-update-tt-mode');
+      if (ttVer) ttVer.textContent = verLabel;
+      if (ttArch) ttArch.textContent = triple;
+      if (ttMode) ttMode.textContent = runtimeShort;
+
+      const mVer = document.getElementById('modal-upd-env-ver');
+      const mArch = document.getElementById('modal-upd-env-arch');
+      const mMode = document.getElementById('modal-upd-env-mode');
+      const mWrite = document.getElementById('modal-upd-env-write');
+      const mWarn = document.getElementById('modal-upd-readonly-warn');
+      const mExe = document.getElementById('modal-upd-exe-path');
+
+      if (mVer) mVer.textContent = `Versión: ${verLabel}`;
+      if (mArch) mArch.textContent = `Plataforma: ${triple}`;
+      if (mMode) mMode.textContent = `Entorno: ${runtimeShort}`;
+      if (mWrite && canWrite !== null) {
+        mWrite.textContent = canWrite ? 'Escritura: OK' : 'Escritura: Solo lectura';
+        mWrite.style.background = canWrite ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.16)';
+        mWrite.style.color = canWrite ? '#34d399' : '#fbbf24';
+        mWrite.style.borderColor = canWrite ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.45)';
+      }
+      if (mWarn) {
+        mWarn.style.display = canWrite === false ? 'block' : 'none';
+      }
+      if (mExe && env.executablePath) {
+        mExe.textContent = env.executablePath;
+      }
+      const rbSection = document.getElementById('modal-upd-rollback-section');
+      if (rbSection) {
+        rbSection.style.display = env.hasRollbackBackup === true ? 'block' : 'none';
+      }
+    }
+
+    function requestRollbackConfirm() {
+      const box = document.getElementById('modal-upd-rollback-confirm');
+      if (box) box.style.display = 'flex';
+    }
+    window.requestRollbackConfirm = requestRollbackConfirm;
+
+    function cancelRollbackConfirm() {
+      const box = document.getElementById('modal-upd-rollback-confirm');
+      if (box) box.style.display = 'none';
+    }
+    window.cancelRollbackConfirm = cancelRollbackConfirm;
+
+    async function confirmAndRollbackUpdate() {
+      cancelRollbackConfirm();
+      showUpdateModalFeedback(null, '');
+      const rbBtn = document.getElementById('btn-modal-rollback-trigger');
+      if (rbBtn) rbBtn.disabled = true;
+      setUpdateModalLocked(true);
+
+      try {
+        addLog('warn', 'Solicitando reversión atómica hacia la copia .old...');
+        const res = await client.call('system.rollbackUpdate', { autoRestart: true });
+        showUpdateModalFeedback('success', (res && res.message) || 'Versión anterior restaurada.');
+        if (res && res.restarting) {
+          waitForDaemonRestartAndReload();
+        } else {
+          setUpdateModalLocked(false);
+          if (rbBtn) rbBtn.disabled = false;
+          refreshSystemUpdateStatus();
+        }
+      } catch (err) {
+        setUpdateModalLocked(false);
+        if (rbBtn) rbBtn.disabled = false;
+        showUpdateModalFeedback('error', 'No se pudo revertir la versión: ' + (err.message || err));
+      }
+    }
+    window.confirmAndRollbackUpdate = confirmAndRollbackUpdate;
+
+    function applyUpdateStateToUI(data) {
+      if (!data) return;
+      if (data.environment) {
+        updateUiState.environment = Object.assign({}, updateUiState.environment || {}, data.environment);
+      }
+      const snap = data.status ? data : updateUiState.snapshot;
+      updateUiState.snapshot = snap;
+      renderUpdateEnvironment();
+
+      const headerBtn = document.getElementById('btn-header-update');
+      const headerLabel = document.getElementById('header-update-label');
+      const ttBadge = document.getElementById('header-update-tt-badge');
+      const ttDesc = document.getElementById('header-update-tt-desc');
+
       const pill = document.getElementById('update-status-pill');
       const cardTitle = document.getElementById('update-card-title');
       const cardDesc = document.getElementById('update-card-desc');
       const applyBtn = document.getElementById('btn-apply-update');
       const lastCheckEl = document.getElementById('update-last-check-val');
-      const archEl = document.getElementById('update-arch-val');
+      const optProg = document.getElementById('update-progress-container');
+      const optProgBar = document.getElementById('update-progress-bar');
+      const optProgPct = document.getElementById('update-progress-pct');
+      const optProgLbl = document.getElementById('update-progress-label');
 
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳ Comprobando...</span>';
+      const mBadge = document.getElementById('modal-update-status-badge');
+      const mOffTitle = document.getElementById('modal-upd-official-title');
+      const mOffDesc = document.getElementById('modal-upd-official-desc');
+      const mOffBtn = document.getElementById('btn-modal-apply-official');
+      const mOffProg = document.getElementById('modal-upd-official-progress');
+      const mOffProgBar = document.getElementById('modal-upd-official-prog-bar');
+      const mOffProgPct = document.getElementById('modal-upd-official-prog-pct');
+      const mOffProgLbl = document.getElementById('modal-upd-official-prog-label');
+
+      if (updateUiState.lastCheckAt && lastCheckEl) {
+        lastCheckEl.textContent = updateUiState.lastCheckAt;
       }
 
-      if (pill) {
-        pill.textContent = '● Comprobando...';
-        pill.style.background = 'rgba(94, 106, 210, 0.2)';
-        pill.style.color = '#a5b4fc';
-        pill.style.borderColor = 'rgba(94, 106, 210, 0.4)';
+      if (headerBtn) {
+        headerBtn.classList.remove('update-idle', 'update-ok', 'update-available', 'update-busy', 'update-error');
+      }
+
+      const status = snap.status || 'idle';
+      if (status === 'update_available') {
+        const ver = snap.version || 'nueva';
+        const sizeMb = formatUpdateMb(snap.downloadSize || 0);
+        if (headerBtn) headerBtn.classList.add('update-available');
+        if (headerLabel) headerLabel.textContent = `v${ver}`;
+        if (ttBadge) {
+          ttBadge.textContent = `Nueva v${ver}`;
+          ttBadge.style.background = 'rgba(245, 158, 11, 0.22)';
+          ttBadge.style.color = '#fbbf24';
+        }
+        if (ttDesc) ttDesc.textContent = `Nueva versión oficial v${ver} (${sizeMb}) lista para descargar e instalar.`;
+
+        if (pill) {
+          pill.textContent = `★ Nueva versión v${ver}`;
+          pill.style.background = 'rgba(245, 158, 11, 0.2)';
+          pill.style.color = '#fbbf24';
+          pill.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        }
+        if (cardTitle) cardTitle.textContent = `Nueva versión disponible: v${ver}`;
+        if (cardDesc) {
+          cardDesc.innerHTML = `<strong>Novedades:</strong> ${escapeHtml(snap.summary || 'Mejoras de rendimiento y estabilidad.')}<br><span style="color: var(--text-muted); font-size: 0.74rem;">Tamaño: ~${sizeMb} | Firma Ed25519 verificada</span>`;
+        }
+        if (applyBtn) applyBtn.style.display = 'inline-flex';
+        if (optProg) optProg.style.display = 'none';
+
+        if (mBadge) {
+          mBadge.textContent = `Disponible v${ver}`;
+          mBadge.style.background = 'rgba(245, 158, 11, 0.2)';
+          mBadge.style.color = '#fbbf24';
+          mBadge.style.borderColor = 'rgba(245, 158, 11, 0.45)';
+        }
+        if (mOffTitle) mOffTitle.textContent = `Nueva versión oficial disponible: v${ver} (${sizeMb})`;
+        if (mOffDesc) {
+          mOffDesc.innerHTML = `${escapeHtml(snap.summary || 'Mejoras de rendimiento y estabilidad.')}`;
+        }
+        if (mOffBtn) {
+          mOffBtn.style.display = 'inline-flex';
+          mOffBtn.disabled = false;
+          mOffBtn.textContent = `🚀 Descargar e instalar v${ver}`;
+        }
+        if (mOffProg) mOffProg.style.display = 'none';
+      } else if (status === 'up_to_date') {
+        const cur = snap.currentVersion || (updateUiState.environment && updateUiState.environment.currentVersion) || 'actual';
+        if (headerBtn) headerBtn.classList.add('update-ok');
+        if (headerLabel) headerLabel.textContent = '';
+        if (ttBadge) {
+          ttBadge.textContent = 'Al día';
+          ttBadge.style.background = 'rgba(34, 197, 94, 0.2)';
+          ttBadge.style.color = '#4ade80';
+        }
+        if (ttDesc) ttDesc.textContent = `Tu instalación (v${cur}) coincide con la última publicación oficial.`;
+
+        if (pill) {
+          pill.textContent = '● Sistema al día';
+          pill.style.background = 'rgba(34, 197, 94, 0.2)';
+          pill.style.color = '#4ade80';
+          pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+        }
+        if (cardTitle) cardTitle.textContent = 'Tu Pulse Core está actualizado';
+        if (cardDesc) cardDesc.textContent = `Tienes instalada la versión más reciente (v${cur}). También puedes instalar un binario local compilado.`;
+        if (applyBtn) applyBtn.style.display = 'none';
+        if (optProg) optProg.style.display = 'none';
+
+        if (mBadge) {
+          mBadge.textContent = 'Al día';
+          mBadge.style.background = 'rgba(34, 197, 94, 0.18)';
+          mBadge.style.color = '#4ade80';
+          mBadge.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+        }
+        if (mOffTitle) mOffTitle.textContent = `Sistema al día (v${cur})`;
+        if (mOffDesc) mOffDesc.textContent = 'No hay versiones oficiales más recientes en el canal configurado.';
+        if (mOffBtn) mOffBtn.style.display = 'none';
+        if (mOffProg) mOffProg.style.display = 'none';
+      } else if (status === 'checking' || status === 'downloading') {
+        const isDl = status === 'downloading';
+        const dlBytes = snap.downloadedBytes || 0;
+        const totalBytes = snap.totalBytes || 0;
+        const pct = totalBytes > 0 ? Math.min(100, Math.round((dlBytes * 100) / totalBytes)) : 0;
+
+        if (headerBtn) headerBtn.classList.add('update-busy');
+        if (headerLabel) headerLabel.textContent = isDl ? `${pct}%` : '';
+        if (ttBadge) {
+          ttBadge.textContent = isDl ? `Descargando ${pct}%` : 'Consultando';
+          ttBadge.style.background = 'rgba(94, 106, 210, 0.25)';
+          ttBadge.style.color = '#c7d2fe';
+        }
+        if (ttDesc) ttDesc.textContent = isDl ? `Descargando actualización: ${formatUpdateMb(dlBytes)} de ${formatUpdateMb(totalBytes)}` : 'Consultando manifiesto oficial…';
+
+        if (pill) {
+          pill.textContent = isDl ? `⏳ Descargando ${pct}%` : '● Comprobando...';
+          pill.style.background = 'rgba(94, 106, 210, 0.2)';
+          pill.style.color = '#a5b4fc';
+          pill.style.borderColor = 'rgba(94, 106, 210, 0.4)';
+        }
+        if (isDl) {
+          if (optProg) optProg.style.display = 'block';
+          if (optProgBar) optProgBar.style.width = `${pct}%`;
+          if (optProgPct) optProgPct.textContent = `${pct}%`;
+          if (optProgLbl) optProgLbl.textContent = `Descargando (${formatUpdateMb(dlBytes)} / ${formatUpdateMb(totalBytes)})…`;
+
+          if (mOffProg) mOffProg.style.display = 'block';
+          if (mOffProgBar) mOffProgBar.style.width = `${pct}%`;
+          if (mOffProgPct) mOffProgPct.textContent = `${pct}%`;
+          if (mOffProgLbl) mOffProgLbl.textContent = `Descargando y verificando (${formatUpdateMb(dlBytes)} / ${formatUpdateMb(totalBytes)})…`;
+        }
+      } else if (status === 'ready_to_install') {
+        if (headerBtn) headerBtn.classList.add('update-ok');
+        if (headerLabel) headerLabel.textContent = '';
+        if (ttBadge) {
+          ttBadge.textContent = 'Listo';
+          ttBadge.style.background = 'rgba(16, 185, 129, 0.22)';
+          ttBadge.style.color = '#34d399';
+        }
+        if (mBadge) {
+          mBadge.textContent = 'Preparado';
+          mBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+          mBadge.style.color = '#34d399';
+        }
+      } else if (status === 'error') {
+        const msg = snap.message || 'No se pudo completar la consulta de actualizaciones.';
+        if (headerBtn) headerBtn.classList.add('update-error');
+        if (headerLabel) headerLabel.textContent = '';
+        if (ttBadge) {
+          ttBadge.textContent = 'Aviso';
+          ttBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+          ttBadge.style.color = '#fca5a5';
+        }
+        if (ttDesc) ttDesc.textContent = msg;
+
+        if (pill) {
+          pill.textContent = '⚠️ Error de consulta';
+          pill.style.background = 'rgba(239, 68, 68, 0.2)';
+          pill.style.color = '#f87171';
+          pill.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+        }
+        if (cardTitle) cardTitle.textContent = 'Sin manifiesto oficial o error de red';
+        if (cardDesc) cardDesc.textContent = msg;
+        if (applyBtn) applyBtn.style.display = 'none';
+        if (optProg) optProg.style.display = 'none';
+
+        if (mBadge) {
+          mBadge.textContent = 'Aviso';
+          mBadge.style.background = 'rgba(239, 68, 68, 0.18)';
+          mBadge.style.color = '#fca5a5';
+          mBadge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+        }
+        if (mOffTitle) mOffTitle.textContent = 'No se pudo obtener lanzamiento oficial';
+        if (mOffDesc) mOffDesc.textContent = msg;
+        if (mOffBtn) mOffBtn.style.display = 'none';
+        if (mOffProg) mOffProg.style.display = 'none';
+      } else {
+        if (headerBtn) headerBtn.classList.add('update-idle');
+        if (headerLabel) headerLabel.textContent = '';
+      }
+    }
+
+    async function refreshSystemUpdateStatus() {
+      try {
+        const res = await client.call('system.getUpdateStatus', {});
+        applyUpdateStateToUI(res);
+        return res;
+      } catch (e) {
+        console.debug('Error al consultar estado de actualizaciones:', e);
+        return null;
+      }
+    }
+
+    function openUpdateModal() {
+      showUpdateModalFeedback(null, '');
+      cancelOfficialUpdateConfirm();
+      const restartPanel = document.getElementById('modal-upd-restarting-panel');
+      if (restartPanel && !updateUiState.isRestarting) {
+        restartPanel.style.display = 'none';
+      }
+      openModal('modal-system-update');
+      refreshSystemUpdateStatus();
+    }
+    window.openUpdateModal = openUpdateModal;
+
+    function scheduleSilentUpdateCheckIfEnabled(statusRes) {
+      if (updateUiState.silentCheckScheduled) return;
+      const env = (statusRes && statusRes.environment) || updateUiState.environment;
+      const st = statusRes && statusRes.status;
+      if (!env || !env.autoCheckEnabled || (st && st !== 'idle')) return;
+      updateUiState.silentCheckScheduled = true;
+      setTimeout(() => {
+        if (document.hidden) return;
+        checkSystemUpdate(false, true).catch(() => {});
+      }, 3000);
+    }
+
+    async function checkSystemUpdate(force = true, silent = false) {
+      const btnSettings = document.getElementById('btn-check-updates');
+      const btnModal = document.getElementById('btn-modal-check-update');
+      if (!silent) {
+        showUpdateModalFeedback(null, '');
+      }
+      if (btnSettings) {
+        btnSettings.disabled = true;
+        btnSettings.innerHTML = '<span>⏳ Comprobando...</span>';
+      }
+      if (btnModal) {
+        btnModal.disabled = true;
+        btnModal.textContent = '⏳ Comprobando…';
       }
 
       try {
         const res = await client.call('system.checkUpdate', { force: !!force });
-        const nowStr = new Date().toLocaleTimeString();
-        if (lastCheckEl) lastCheckEl.textContent = nowStr;
-
-        if (archEl && navigator.userAgent) {
-          archEl.textContent = navigator.userAgent.includes('Windows') ? 'x86_64-pc-windows-msvc' : (navigator.userAgent.includes('aarch64') || navigator.userAgent.includes('arm') ? 'aarch64-unknown-linux-gnu' : 'x86_64-unknown-linux-gnu');
-        }
-
+        updateUiState.lastCheckAt = new Date().toLocaleTimeString();
+        applyUpdateStateToUI(res);
         if (res && res.status === 'update_available') {
-          if (pill) {
-            pill.textContent = `★ Nueva versión v${res.version}`;
-            pill.style.background = 'rgba(245, 158, 11, 0.2)';
-            pill.style.color = '#fbbf24';
-            pill.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-          }
-          if (cardTitle) cardTitle.textContent = `Nueva versión disponible: v${res.version}`;
-          if (cardDesc) {
-            const sizeMb = (res.downloadSize / (1024 * 1024)).toFixed(1);
-            cardDesc.innerHTML = `<strong>Novedades:</strong> ${res.summary || 'Mejoras de rendimiento y estabilidad.'}<br><span style="color: var(--text-muted); font-size: 0.74rem;">Tamaño: ~${sizeMb} MB | Firma Ed25519 verificada</span>`;
-          }
-          if (applyBtn) {
-            applyBtn.style.display = 'inline-flex';
-            applyBtn.innerHTML = `<span>🚀 Descargar y Actualizar a v${res.version}</span>`;
-            applyBtn.disabled = false;
-          }
-          addLog('info', `Actualización detectada: versión v${res.version} disponible.`);
-        } else if (res && res.status === 'up_to_date') {
-          if (pill) {
-            pill.textContent = '● Sistema al día';
-            pill.style.background = 'rgba(34, 197, 94, 0.2)';
-            pill.style.color = '#4ade80';
-            pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-          }
-          if (cardTitle) cardTitle.textContent = 'Tu eMuleRust está actualizado';
-          if (cardDesc) cardDesc.textContent = `Tienes instalada la versión más reciente (${res.currentVersion || 'actual'}). No se requieren acciones.`;
-          if (applyBtn) applyBtn.style.display = 'none';
-        } else if (res && res.status === 'error') {
-          if (pill) {
-            pill.textContent = '⚠️ Error de consulta';
-            pill.style.background = 'rgba(239, 68, 68, 0.2)';
-            pill.style.color = '#f87171';
-            pill.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-          }
-          if (cardDesc) cardDesc.textContent = res.message || 'No se pudo conectar con el servidor de versiones.';
-          if (applyBtn) applyBtn.style.display = 'none';
+          addLog('info', `Actualización oficial detectada: versión v${res.version} disponible.`);
         }
       } catch (err) {
         console.error('Error al comprobar actualización:', err);
-        if (pill) {
-          pill.textContent = '⚠️ Fallo de conexión';
-          pill.style.background = 'rgba(239, 68, 68, 0.2)';
-          pill.style.color = '#f87171';
+        if (!silent) {
+          showUpdateModalFeedback('error', 'Error al comprobar actualizaciones: ' + (err.message || err));
         }
-        if (cardDesc) cardDesc.textContent = 'Fallo al consultar el servicio de actualizaciones: ' + (err.message || err);
       } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '<span>🔍 Comprobar Ahora</span>';
+        if (btnSettings) {
+          btnSettings.disabled = false;
+          btnSettings.innerHTML = '<span>🔍 Comprobar Ahora</span>';
+        }
+        if (btnModal) {
+          btnModal.disabled = false;
+          btnModal.textContent = '🔍 Comprobar ahora';
         }
       }
     }
+    window.checkSystemUpdate = checkSystemUpdate;
 
-    async function applySystemUpdate() {
-      const applyBtn = document.getElementById('btn-apply-update');
-      const progressContainer = document.getElementById('update-progress-container');
-      const progressBar = document.getElementById('update-progress-bar');
-      const progressLabel = document.getElementById('update-progress-label');
-      const progressPct = document.getElementById('update-progress-pct');
+    function requestOfficialUpdateConfirm() {
+      const box = document.getElementById('modal-upd-confirm-box');
+      if (box) box.style.display = 'block';
+    }
+    window.requestOfficialUpdateConfirm = requestOfficialUpdateConfirm;
 
-      if (!confirm('¿Deseas descargar la actualización y reiniciar eMuleRust de forma ordenada ahora?')) {
+    function cancelOfficialUpdateConfirm() {
+      const box = document.getElementById('modal-upd-confirm-box');
+      if (box) box.style.display = 'none';
+    }
+    window.cancelOfficialUpdateConfirm = cancelOfficialUpdateConfirm;
+
+    function stopOfficialDownloadPolling() {
+      if (updateUiState.officialPollTimer) {
+        clearInterval(updateUiState.officialPollTimer);
+        updateUiState.officialPollTimer = null;
+      }
+    }
+
+    function startOfficialDownloadPolling() {
+      stopOfficialDownloadPolling();
+      updateUiState.officialPollTimer = setInterval(() => {
+        refreshSystemUpdateStatus().catch(() => {});
+      }, 350);
+    }
+
+    async function confirmAndApplyOfficialUpdate() {
+      cancelOfficialUpdateConfirm();
+      showUpdateModalFeedback(null, '');
+      const applyModalBtn = document.getElementById('btn-modal-apply-official');
+      const mOffProg = document.getElementById('modal-upd-official-progress');
+      const mOffProgLbl = document.getElementById('modal-upd-official-prog-label');
+
+      if (applyModalBtn) applyModalBtn.disabled = true;
+      if (mOffProg) mOffProg.style.display = 'block';
+      if (mOffProgLbl) mOffProgLbl.textContent = 'Iniciando descarga verificada…';
+      setUpdateModalLocked(true);
+      startOfficialDownloadPolling();
+
+      try {
+        addLog('info', 'Iniciando descarga en streaming y reemplazo atómico de actualización...');
+        const res = await client.call('system.applyUpdate', { autoRestart: true });
+        stopOfficialDownloadPolling();
+        await refreshSystemUpdateStatus();
+
+        if (res && res.stage === 'restarting') {
+          showUpdateModalFeedback('success', res.message || 'Actualización aplicada. Reiniciando Pulse Core…');
+          addLog('success', 'Actualización aplicada con éxito. Esperando reinicio ordenado...');
+          waitForDaemonRestartAndReload();
+        } else {
+          setUpdateModalLocked(false);
+          showUpdateModalFeedback('success', (res && res.message) || 'Actualización preparada.');
+        }
+      } catch (err) {
+        stopOfficialDownloadPolling();
+        setUpdateModalLocked(false);
+        console.error('Error aplicando actualización oficial:', err);
+        showUpdateModalFeedback('error', 'No se pudo completar la actualización: ' + (err.message || err));
+        if (applyModalBtn) applyModalBtn.disabled = false;
+      }
+    }
+    window.confirmAndApplyOfficialUpdate = confirmAndApplyOfficialUpdate;
+
+    function setSelectedLocalBinary(file) {
+      if (!file) return;
+      updateUiState.selectedFile = file;
+      const infoBox = document.getElementById('local-file-selected-info');
+      const nameEl = document.getElementById('local-file-name');
+      const sizeEl = document.getElementById('local-file-size');
+      const uploadBtn = document.getElementById('btn-modal-upload-local');
+
+      if (nameEl) nameEl.textContent = file.name;
+      if (sizeEl) sizeEl.textContent = `(${formatUpdateMb(file.size)})`;
+      if (infoBox) infoBox.style.display = 'flex';
+      if (uploadBtn) uploadBtn.disabled = false;
+      showUpdateModalFeedback(null, '');
+    }
+
+    function clearSelectedLocalBinary() {
+      updateUiState.selectedFile = null;
+      const inputEl = document.getElementById('input-local-update-file');
+      const infoBox = document.getElementById('local-file-selected-info');
+      const uploadBtn = document.getElementById('btn-modal-upload-local');
+      if (inputEl) inputEl.value = '';
+      if (infoBox) infoBox.style.display = 'none';
+      if (uploadBtn) uploadBtn.disabled = true;
+    }
+    window.clearSelectedLocalBinary = clearSelectedLocalBinary;
+
+    function setupLocalUpdateDropzone() {
+      const dz = document.getElementById('update-dropzone');
+      const inputEl = document.getElementById('input-local-update-file');
+      if (!dz || !inputEl || dz.dataset.bound === '1') return;
+      dz.dataset.bound = '1';
+
+      dz.addEventListener('click', () => inputEl.click());
+      dz.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          inputEl.click();
+        }
+      });
+      inputEl.addEventListener('change', () => {
+        if (inputEl.files && inputEl.files.length > 0) {
+          setSelectedLocalBinary(inputEl.files[0]);
+        }
+      });
+      ['dragenter', 'dragover'].forEach((evt) => {
+        dz.addEventListener(evt, (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          dz.classList.add('drag-over');
+        });
+      });
+      ['dragleave', 'drop'].forEach((evt) => {
+        dz.addEventListener(evt, (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          dz.classList.remove('drag-over');
+        });
+      });
+      dz.addEventListener('drop', (ev) => {
+        const files = ev.dataTransfer && ev.dataTransfer.files;
+        if (files && files.length > 0) {
+          setSelectedLocalBinary(files[0]);
+        }
+      });
+    }
+
+    function uploadLocalUpdateBinary() {
+      const file = updateUiState.selectedFile;
+      if (!file || updateUiState.isUploading) return;
+
+      const shaInput = document.getElementById('input-local-update-sha256');
+      const expectedSha = shaInput ? shaInput.value.trim() : '';
+      if (expectedSha && !/^[0-9a-fA-F]{64}$/.test(expectedSha)) {
+        showUpdateModalFeedback('error', 'La suma SHA-256 opcional debe tener exactamente 64 caracteres hexadecimales.');
         return;
       }
 
-      if (applyBtn) {
-        applyBtn.disabled = true;
-        applyBtn.innerHTML = '<span>⏳ Preparando descarga y reemplazo...</span>';
+      const maxBytes = (updateUiState.environment && updateUiState.environment.maxUploadBytes) || (64 * 1024 * 1024);
+      if (file.size === 0) {
+        showUpdateModalFeedback('error', 'El archivo seleccionado está vacío.');
+        return;
+      }
+      if (file.size > maxBytes) {
+        showUpdateModalFeedback('error', `El archivo supera el límite permitido de ${formatUpdateMb(maxBytes)}.`);
+        return;
       }
 
-      if (progressContainer) progressContainer.style.display = 'block';
-      if (progressBar) progressBar.style.width = '30%';
-      if (progressPct) progressPct.textContent = '30%';
-      if (progressLabel) progressLabel.textContent = 'Descargando paquete binario por HTTPS...';
+      const autoRestartChk = document.getElementById('chk-local-auto-restart');
+      const autoRestart = autoRestartChk ? !!autoRestartChk.checked : true;
+      const uploadBtn = document.getElementById('btn-modal-upload-local');
+      const progBox = document.getElementById('modal-upd-upload-progress');
+      const progBar = document.getElementById('modal-upd-upload-prog-bar');
+      const progPct = document.getElementById('modal-upd-upload-prog-pct');
+      const progLbl = document.getElementById('modal-upd-upload-prog-label');
 
-      try {
-        addLog('info', 'Iniciando descarga y reemplazo atómico de actualización...');
-        setTimeout(() => {
-          if (progressBar) progressBar.style.width = '75%';
-          if (progressPct) progressPct.textContent = '75%';
-          if (progressLabel) progressLabel.textContent = 'Verificando firma criptográfica Ed25519 (Ring)...';
-        }, 1200);
+      updateUiState.isUploading = true;
+      setUpdateModalLocked(true);
+      showUpdateModalFeedback(null, '');
+      if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '⏳ Subiendo e instalando…';
+      }
+      if (progBox) progBox.style.display = 'block';
+      if (progBar) progBar.style.width = '0%';
+      if (progPct) progPct.textContent = '0%';
+      if (progLbl) progLbl.textContent = `Enviando ${file.name} (${formatUpdateMb(file.size)})…`;
 
-        const res = await client.call('system.applyUpdate', { autoRestart: true });
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/system/upload-update', true);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      if (client.token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${client.token}`);
+      }
+      const asciiName = file.name.replace(/[^\x20-\x7E]/g, '_');
+      if (asciiName) {
+        xhr.setRequestHeader('X-Update-Filename', asciiName);
+      }
+      if (expectedSha) {
+        xhr.setRequestHeader('X-Update-Sha256', expectedSha);
+      }
+      xhr.setRequestHeader('X-Auto-Restart', autoRestart ? 'true' : 'false');
 
-        if (progressBar) progressBar.style.width = '100%';
-        if (progressPct) progressPct.textContent = '100%';
-        if (progressLabel) progressLabel.textContent = '¡Completado! Reiniciando demonio eMuleRust...';
-
-        addLog('success', 'Actualización aplicada con éxito. El demonio se está reiniciando de forma ordenada.');
-        alert('Actualización aplicada correctamente. La aplicación se está reiniciando con la nueva versión.');
-
-        // Intentar reconectar en 3.5 segundos
-        setTimeout(() => {
-          window.location.reload();
-        }, 3500);
-      } catch (err) {
-        console.error('Error aplicando actualización:', err);
-        alert('Error al aplicar la actualización: ' + (err.message || JSON.stringify(err)));
-        if (progressContainer) progressContainer.style.display = 'none';
-        if (applyBtn) {
-          applyBtn.disabled = false;
-          applyBtn.innerHTML = '<span>🚀 Reintentar Actualización</span>';
+      xhr.upload.onprogress = (ev) => {
+        if (!ev.lengthComputable || ev.total <= 0) return;
+        const pct = Math.min(100, Math.round((ev.loaded * 100) / ev.total));
+        if (progBar) progBar.style.width = `${pct}%`;
+        if (progPct) progPct.textContent = `${pct}%`;
+        if (progLbl) {
+          progLbl.textContent = pct >= 100
+            ? 'Validando formato ELF/PE y sustituyendo binario en servidor…'
+            : `Subiendo binario (${formatUpdateMb(ev.loaded)} / ${formatUpdateMb(ev.total)})…`;
         }
-      }
+      };
+
+      xhr.onload = () => {
+        updateUiState.isUploading = false;
+        let parsed = null;
+        try {
+          parsed = JSON.parse(xhr.responseText || '{}');
+        } catch (_) {}
+
+        if (xhr.status >= 200 && xhr.status < 300 && parsed && parsed.ok) {
+          if (progBar) progBar.style.width = '100%';
+          if (progPct) progPct.textContent = '100%';
+          if (progLbl) progLbl.textContent = 'Binario verificado y aplicado en disco.';
+          addLog('success', `Binario local instalado (${parsed.label}, SHA-256 ${String(parsed.sha256 || '').slice(0, 12)}…).`);
+
+          if (parsed.restarting) {
+            showUpdateModalFeedback('success', parsed.message || 'Binario instalado. Reiniciando Pulse Core…');
+            waitForDaemonRestartAndReload();
+          } else {
+            setUpdateModalLocked(false);
+            if (uploadBtn) {
+              uploadBtn.disabled = false;
+              uploadBtn.textContent = '⬆️ Subir e instalar binario';
+            }
+            showUpdateModalFeedback('success', parsed.message || 'Binario instalado correctamente. Se aplicará al próximo reinicio.');
+            refreshSystemUpdateStatus();
+          }
+        } else {
+          setUpdateModalLocked(false);
+          if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '⬆️ Subir e instalar binario';
+          }
+          const errMsg = (parsed && parsed.error) || `El servidor devolvió HTTP ${xhr.status}`;
+          showUpdateModalFeedback('error', errMsg);
+          addLog('error', `Error subiendo binario local: ${errMsg}`);
+        }
+      };
+
+      xhr.onerror = () => {
+        updateUiState.isUploading = false;
+        setUpdateModalLocked(false);
+        if (uploadBtn) {
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = '⬆️ Subir e instalar binario';
+        }
+        showUpdateModalFeedback('error', 'Error de conexión al subir el binario local al servidor.');
+      };
+
+      xhr.send(file);
     }
+    window.uploadLocalUpdateBinary = uploadLocalUpdateBinary;
+
+    async function waitForDaemonRestartAndReload() {
+      updateUiState.isRestarting = true;
+      setUpdateModalLocked(true);
+      const panel = document.getElementById('modal-upd-restarting-panel');
+      const titleEl = document.getElementById('modal-upd-restart-title');
+      const subEl = document.getElementById('modal-upd-restart-sub');
+      if (panel) panel.style.display = 'block';
+      if (titleEl) titleEl.textContent = 'Reiniciando Pulse Core de forma ordenada…';
+      if (subEl) subEl.textContent = 'Esperando a que el nuevo proceso vuelva a responder en /health…';
+
+      await new Promise((r) => setTimeout(r, 1200));
+
+      const maxAttempts = 45;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (subEl) {
+          subEl.textContent = `Comprobando disponibilidad de /health (${attempt}/${maxAttempts}s)…`;
+        }
+        try {
+          const resp = await fetch('/health', { cache: 'no-store' });
+          if (resp.ok) {
+            const health = await resp.json().catch(() => ({}));
+            const ver = health && health.daemonVersion ? ` v${health.daemonVersion}` : '';
+            if (titleEl) titleEl.textContent = `¡Pulse Core${ver} en línea de nuevo!`;
+            if (subEl) subEl.textContent = 'Recargando la interfaz web automáticamente…';
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+            return;
+          }
+        } catch (_) {}
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      updateUiState.isRestarting = false;
+      setUpdateModalLocked(false);
+      showUpdateModalFeedback('error', 'Pulse Core tardó más de 45s en responder tras reiniciar. Recarga la página manualmente cuando el servicio esté activo.');
+    }
+
+    setupLocalUpdateDropzone();
 
     client.on('connected', () => {
       const host = window.location.hostname || '192.168.1.166';
@@ -9452,8 +10364,9 @@
       }
 
       setupTableSorting();
+      setupLocalUpdateDropzone();
       updateTurtleModeUI();
-      addLog('success', 'Conectado al daemon eMule-Rust ARM64 vía WebSocket.');
+      addLog('success', 'Conectado al daemon Pulse Core vía WebSocket.');
 
       try { loadPreferences(); } catch (e) { console.error('Error loadPreferences:', e); }
       try { refreshKad(); } catch (e) { console.error('Error refreshKad:', e); }
@@ -9461,6 +10374,11 @@
       try { refreshDownloads(); } catch (e) { console.error('Error refreshDownloads:', e); }
       try { refreshStorage(); } catch (e) { console.error('Error refreshStorage:', e); }
       try { refreshBandwidthLimits(); } catch (e) { console.error('Error refreshBandwidthLimits:', e); }
+      try {
+        refreshSystemUpdateStatus().then(scheduleSilentUpdateCheckIfEnabled);
+      } catch (e) {
+        console.error('Error refreshSystemUpdateStatus:', e);
+      }
 
       // Comprobación de aviso legal y primer arranque
       setTimeout(async () => {

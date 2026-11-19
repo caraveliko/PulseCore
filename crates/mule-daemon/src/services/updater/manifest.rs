@@ -85,32 +85,57 @@ impl UpdateManifest {
 
     /// Compara si la versión del manifiesto es estrictamente más reciente que la versión actual.
     ///
-    /// Soporta esquemas semánticos numéricos básicos `mayor.menor.parche` con sufijos optativos.
+    /// Soporta esquemas SemVer `mayor.menor.parche` con identificadores de prelanzamiento
+    /// (por ejemplo `0.4.0-beta.2 > 0.4.0-beta.1` y `0.4.0 > 0.4.0-rc.1`).
     pub fn is_newer_than(&self, current_version: &str) -> bool {
-        let parse_version = |v: &str| -> (u64, u64, u64, bool) {
-            let base = v.split('-').next().unwrap_or(v);
+        let parse_version = |raw: &str| -> (u64, u64, u64, Option<String>) {
+            let trimmed = raw.trim().trim_start_matches('v');
+            let (base, pre) = match trimmed.split_once('-') {
+                Some((b, p)) if !p.is_empty() => (b, Some(p.to_string())),
+                _ => (trimmed, None),
+            };
             let mut parts = base.split('.').filter_map(|s| s.parse::<u64>().ok());
             let major = parts.next().unwrap_or(0);
             let minor = parts.next().unwrap_or(0);
             let patch = parts.next().unwrap_or(0);
-            let is_prerelease = v.contains('-');
-            (major, minor, patch, is_prerelease)
+            (major, minor, patch, pre)
         };
 
         let remote = parse_version(&self.version);
         let local = parse_version(current_version);
 
-        if remote.0 != local.0 {
-            return remote.0 > local.0;
-        }
-        if remote.1 != local.1 {
-            return remote.1 > local.1;
-        }
-        if remote.2 != local.2 {
-            return remote.2 > local.2;
+        match (remote.0, remote.1, remote.2).cmp(&(local.0, local.1, local.2)) {
+            std::cmp::Ordering::Greater => return true,
+            std::cmp::Ordering::Less => return false,
+            std::cmp::Ordering::Equal => {}
         }
 
-        // Si los tres números coinciden pero la versión local es prerrelease y la remota es final
-        !remote.3 && local.3
+        match (remote.3.as_deref(), local.3.as_deref()) {
+            (None, Some(_)) => true,
+            (None, None) | (Some(_), None) => false,
+            (Some(r_pre), Some(l_pre)) => {
+                compare_prerelease(r_pre, l_pre) == std::cmp::Ordering::Greater
+            }
+        }
     }
+}
+
+/// Compara dos sufijos de prelanzamiento SemVer separados por puntos (`beta.2` frente a `beta.10`).
+fn compare_prerelease(remote: &str, local: &str) -> std::cmp::Ordering {
+    let r_parts: Vec<&str> = remote.split('.').collect();
+    let l_parts: Vec<&str> = local.split('.').collect();
+
+    for (r_seg, l_seg) in r_parts.iter().zip(l_parts.iter()) {
+        let ord = match (r_seg.parse::<u64>(), l_seg.parse::<u64>()) {
+            (Ok(r_num), Ok(l_num)) => r_num.cmp(&l_num),
+            (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+            (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+            (Err(_), Err(_)) => r_seg.cmp(l_seg),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+
+    r_parts.len().cmp(&l_parts.len())
 }
