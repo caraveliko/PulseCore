@@ -135,25 +135,75 @@ resolver_token() {
   fi
 }
 
+# Parchea en sitio una unidad systemd existente sin perder Environment=/ExecStart= personalizados.
+parchear_unidad_systemd_en_equipo() {
+  cat <<'EOS_PATCH'
+set -euo pipefail
+SVC="$HOME/.config/systemd/user/mule-daemon.service"
+TMP="${SVC}.tmp"
+awk '
+  /^ReadWritePaths=/ {
+    if ($0 !~ /%h\/\.local\/bin/) {
+      $0 = $0 " %h/.local/bin"
+    }
+    seen_rw = 1
+  }
+  /^RestartSec=5$/ {
+    $0 = "RestartSec=2"
+  }
+  /^\[Install\]/ {
+    if (!seen_rw) {
+      print "ReadWritePaths=%h/.local/bin"
+      seen_rw = 1
+    }
+  }
+  { print }
+  END {
+    if (!seen_rw) {
+      print "ReadWritePaths=%h/.local/bin"
+    }
+  }
+' "$SVC" > "$TMP"
+if ! cmp -s "$SVC" "$TMP"; then
+  cp -f "$SVC" "${SVC}.bak"
+  mv -f "$TMP" "$SVC"
+  systemctl --user daemon-reload
+  echo "    Unidad systemd actualizada conservando configuración personalizada (respaldo en mule-daemon.service.bak)."
+else
+  rm -f "$TMP"
+  echo "    Unidad systemd ya contenía %h/.local/bin y RestartSec actualizado."
+fi
+loginctl enable-linger "$USER" 2>/dev/null || true
+EOS_PATCH
+}
+
 instalar_unidad_systemd() {
   if [[ ! -f "${SERVICE_TEMPLATE}" ]]; then
     echo "Error: no se encontró la plantilla ${SERVICE_TEMPLATE}" >&2
     exit 1
   fi
   if es_host_local && [[ "${USE_SSH}" == false ]]; then
-    echo "==> Instalando unidad systemd de usuario en ${HOME}/.config/systemd/user/mule-daemon.service..."
     mkdir -p "${HOME}/.local/bin" "${HOME}/.config/systemd/user" "${HOME}/.mule" "${HOME}/Downloads"
-    cp "${SERVICE_TEMPLATE}" "${HOME}/.config/systemd/user/mule-daemon.service"
-    systemctl --user daemon-reload
-    loginctl enable-linger "${USER}" 2>/dev/null || true
-    echo "==> Unidad systemd local sincronizada (daemon-reload completado)."
+    if [[ ! -f "${HOME}/.config/systemd/user/mule-daemon.service" ]]; then
+      echo "==> Instalando unidad systemd nueva en ${HOME}/.config/systemd/user/mule-daemon.service..."
+      cp "${SERVICE_TEMPLATE}" "${HOME}/.config/systemd/user/mule-daemon.service"
+      systemctl --user daemon-reload
+      loginctl enable-linger "${USER}" 2>/dev/null || true
+    else
+      echo "==> Actualizando unidad systemd local existente sin sobrescribir ajustes personalizados..."
+      bash -s < <(parchear_unidad_systemd_en_equipo)
+    fi
   else
     local destino="${SSH_USER}@${HOST}"
-    echo "==> Sincronizando unidad systemd de usuario en ${destino}..."
     ssh "${destino}" 'mkdir -p ~/.local/bin ~/.config/systemd/user ~/.mule ~/Downloads'
-    scp "${SERVICE_TEMPLATE}" "${destino}:~/.config/systemd/user/mule-daemon.service"
-    ssh "${destino}" 'systemctl --user daemon-reload && (loginctl enable-linger "$USER" 2>/dev/null || true)'
-    echo "==> Unidad systemd remota sincronizada en ${destino}."
+    if ssh "${destino}" '[[ ! -f ~/.config/systemd/user/mule-daemon.service ]]'; then
+      echo "==> Instalando unidad systemd nueva en ${destino}..."
+      scp "${SERVICE_TEMPLATE}" "${destino}:~/.config/systemd/user/mule-daemon.service"
+      ssh "${destino}" 'systemctl --user daemon-reload && (loginctl enable-linger "$USER" 2>/dev/null || true)'
+    else
+      echo "==> Actualizando unidad systemd existente en ${destino} sin sobrescribir ajustes..."
+      parchear_unidad_systemd_en_equipo | ssh "${destino}" 'bash -s'
+    fi
   fi
 }
 
@@ -259,11 +309,11 @@ echo "    SHA-256: ${SHA256}"
 desplegar_ssh() {
   local destino="${SSH_USER}@${HOST}"
   echo "==> Desplegando de forma atómica por SSH en ${destino}:~/.local/bin/mule-daemon..."
-  ssh "${destino}" 'mkdir -p ~/.local/bin ~/.config/systemd/user'
-  if ssh "${destino}" '[[ ! -f ~/.config/systemd/user/mule-daemon.service ]] || ! grep -q "%h/.local/bin" ~/.config/systemd/user/mule-daemon.service'; then
-    echo "==> Detectada unidad systemd ausente o sin ReadWritePaths=%h/.local/bin; sincronizando plantilla..."
-    scp "${SERVICE_TEMPLATE}" "${destino}:~/.config/systemd/user/mule-daemon.service"
-    ssh "${destino}" 'systemctl --user daemon-reload && (loginctl enable-linger "$USER" 2>/dev/null || true)'
+  if ssh "${destino}" '[[ ! -f ~/.config/systemd/user/mule-daemon.service ]] || ! grep -Eq "^ReadWritePaths=.*%h/\.local/bin" ~/.config/systemd/user/mule-daemon.service'; then
+    echo "==> Detectada unidad systemd ausente o sin ReadWritePaths=%h/.local/bin..."
+    instalar_unidad_systemd
+  else
+    ssh "${destino}" 'mkdir -p ~/.local/bin ~/.config/systemd/user'
   fi
   scp "${BINARY_PATH}" "${destino}:~/.local/bin/mule-daemon.update"
   ssh "${destino}" '
