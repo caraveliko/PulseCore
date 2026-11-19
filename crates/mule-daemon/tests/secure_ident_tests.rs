@@ -335,25 +335,40 @@ async fn test_inbound_secure_ident_verified_with_real_rsa() {
     out.extend_from_slice(&rp_pkt.payload);
     client.write_all(&out).await.unwrap();
 
-    let mut got_part = false;
-    while !got_part {
-        let n = client.read(&mut raw_buf).await.unwrap();
-        assert!(n > 0);
-        read_buf.extend_from_slice(&raw_buf[..n]);
-        while let Ok(Some(pkt)) = codec.decode(&mut read_buf) {
-            if pkt.protocol == PR_ED2K && pkt.opcode == OP_SENDINGPART {
-                got_part = true;
+    let mut received_part_bytes: usize = 0;
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while received_part_bytes < 184_320 {
+            let n = client.read(&mut raw_buf).await.unwrap();
+            assert!(n > 0);
+            read_buf.extend_from_slice(&raw_buf[..n]);
+            while let Ok(Some(pkt)) = codec.decode(&mut read_buf) {
+                if pkt.protocol == PR_ED2K && pkt.opcode == OP_SENDINGPART {
+                    received_part_bytes += pkt.payload.len().saturating_sub(24);
+                }
             }
         }
-    }
+    })
+    .await
+    .expect("Timed out waiting for complete 184320-byte OP_SENDINGPART block");
 
     let pk_hash = hex::encode(Md4::digest(&peer_pubkey_der));
-    let credit = state
-        .downloads
-        .lock()
-        .await
-        .get_peer_credit(&pk_hash)
-        .unwrap();
+    let mut credit = None;
+    for _ in 0..50 {
+        let fetched = state
+            .downloads
+            .lock()
+            .await
+            .get_peer_credit(&pk_hash)
+            .unwrap();
+        if fetched
+            .as_ref()
+            .is_some_and(|c| c.uploaded_bytes >= 184_320)
+        {
+            credit = fetched;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
     let credit = credit.expect("Verified peer must have a credit record pinned to its pubkey");
     assert_eq!(credit.uploaded_bytes, 184320);
 

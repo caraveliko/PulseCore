@@ -21,7 +21,16 @@ pub struct LabSourceService {
 }
 
 impl LabSourceService {
+    /// Inicia el servidor de laboratorio sin límite de bloques por conexión.
     pub async fn start(engine: LabSourceEngine) -> Result<Self, std::io::Error> {
+        Self::start_with_block_limit(engine, None).await
+    }
+
+    /// Inicia el servidor de laboratorio deteniendo la transferencia tras `max_blocks_per_conn` bloques.
+    pub async fn start_with_block_limit(
+        engine: LabSourceEngine,
+        max_blocks_per_conn: Option<usize>,
+    ) -> Result<Self, std::io::Error> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -34,7 +43,8 @@ impl LabSourceService {
                     Ok((socket, peer_addr)) => {
                         let engine = engine.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = handle_client(socket, engine).await {
+                            if let Err(e) = handle_client(socket, engine, max_blocks_per_conn).await
+                            {
                                 debug!(peer = %crate::services::peer_session::log_peer_addr(peer_addr), error = %e, "Lab source client session closed");
                             }
                         });
@@ -70,6 +80,7 @@ impl Drop for LabSourceService {
 async fn handle_client(
     mut socket: TcpStream,
     engine: LabSourceEngine,
+    max_blocks_per_conn: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let codec = PacketCodec::new();
     let mut read_buf = BytesMut::new();
@@ -94,6 +105,8 @@ async fn handle_client(
     }
 
     // 3. Serve block requests
+    let mut blocks_served = 0usize;
+    let mut goodbye_sent = false;
     loop {
         let msg = match read_msg(&mut socket, &codec, &mut read_buf).await {
             Ok(m) => m,
@@ -106,8 +119,38 @@ async fn handle_client(
                 start_offset,
                 length,
             } => {
+                if max_blocks_per_conn.is_some_and(|limit| blocks_served >= limit) {
+                    if !goodbye_sent {
+                        let _ = send_msg(
+                            &mut socket,
+                            &codec,
+                            &LabMessage::Goodbye {
+                                reason: "Block limit reached".into(),
+                            },
+                        )
+                        .await;
+                        goodbye_sent = true;
+                    }
+                    // Seguir drenando los RequestBlock ya canalizados para no cerrar con TCP RST
+                    // y permitir que el cliente lea todos los BlockData + Goodbye antes del EOF.
+                    continue;
+                }
                 let resp = engine.serve_block(&file_hash, start_offset, length);
                 send_msg(&mut socket, &codec, &resp).await?;
+                blocks_served += 1;
+                if max_blocks_per_conn.is_some_and(|limit| blocks_served >= limit)
+                    && !goodbye_sent
+                {
+                    let _ = send_msg(
+                        &mut socket,
+                        &codec,
+                        &LabMessage::Goodbye {
+                            reason: "Block limit reached".into(),
+                        },
+                    )
+                    .await;
+                    goodbye_sent = true;
+                }
             }
             LabMessage::Goodbye { .. } => {
                 let _ = sm.on_message(msg);

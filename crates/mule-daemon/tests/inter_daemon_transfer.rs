@@ -18,6 +18,9 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 const FIXTURE_FILE_SIZE: u64 = 9_728_000;
+/// Límite inicial de bloques (30 × 184 320 B = 5 529 600 B ≈ 56,8 %) para asegurar
+/// la interrupción antes de completar la descarga en loopback sin TCP RST ni carreras.
+const INITIAL_INTERRUPT_MAX_BLOCKS: usize = 30;
 const AUTH_TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 #[tokio::test]
@@ -35,11 +38,14 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     pattern_reader.read_to_end(&mut fixture_data).unwrap();
     let fixture_bytes = Bytes::from(fixture_data);
 
-    // 2. Iniciar daemon de origen (Daemon A)
+    // 2. Iniciar daemon de origen (Daemon A) con corte determinista antes del 50 %
     let _source_lock = DirectoryLock::acquire(dir_source.path()).unwrap();
     let mut engine = LabSourceEngine::new();
     engine.host_file(fixture_hash.0, "fixture_9728000.bin", fixture_bytes.clone());
-    let source_service = LabSourceService::start(engine).await.unwrap();
+    let source_service =
+        LabSourceService::start_with_block_limit(engine.clone(), Some(INITIAL_INTERRUPT_MAX_BLOCKS))
+            .await
+            .unwrap();
     let source_addr = source_service.local_addr();
 
     // 3. Iniciar daemon de cliente (Daemon B)
@@ -158,26 +164,30 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let mut saw_downloading = false;
     let mut received_at_interrupt = 0u64;
 
-    while let Some(Ok(msg)) = read.next().await {
-        let text = msg.to_text().unwrap();
-        if let Ok(evt) = serde_json::from_str::<Value>(text) {
-            if evt["method"] == "event.downloadUpdated" {
-                let dl = &evt["params"]["download"];
-                let status = dl["status"].as_str().unwrap_or("");
-                let received = dl["receivedBytes"].as_u64().unwrap_or(0);
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while let Some(Ok(msg)) = read.next().await {
+            let text = msg.to_text().unwrap();
+            if let Ok(evt) = serde_json::from_str::<Value>(text) {
+                if evt["method"] == "event.downloadUpdated" {
+                    let dl = &evt["params"]["download"];
+                    let status = dl["status"].as_str().unwrap_or("");
+                    let received = dl["receivedBytes"].as_u64().unwrap_or(0);
 
-                if status == "waiting_for_sources" {
-                    saw_waiting_for_sources = true;
-                } else if status == "downloading" {
-                    saw_downloading = true;
-                    if received >= 4_500_000 {
-                        received_at_interrupt = received;
-                        break;
+                    if status == "waiting_for_sources" {
+                        saw_waiting_for_sources = true;
+                    } else if status == "downloading" {
+                        saw_downloading = true;
+                        if received >= 4_500_000 {
+                            received_at_interrupt = received;
+                            break;
+                        }
                     }
                 }
             }
         }
-    }
+    })
+    .await
+    .expect("Timed out waiting for initial partial download progress before interrupt");
 
     assert!(
         saw_waiting_for_sources,
@@ -270,14 +280,17 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
         .unwrap();
     let _ = read_2.next().await.unwrap().unwrap();
 
-    // 8. Reanudar transferencia volviendo a asociar el origen
+    // 8. Reanudar transferencia levantando una fuente sin límite y reasociando el origen
+    source_service.stop();
+    let source_service_resume = LabSourceService::start(engine).await.unwrap();
+    let resume_source_addr = source_service_resume.local_addr();
     let req_resume = json!({
         "jsonrpc": "2.0",
         "id": 13,
         "method": "lab.addPeerSource",
         "params": {
             "downloadId": download_id,
-            "peerAddr": source_addr.to_string()
+            "peerAddr": resume_source_addr.to_string()
         }
     });
     write_2
@@ -299,29 +312,33 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let mut saw_verifying = false;
     let mut saw_completed = false;
 
-    while let Some(Ok(msg)) = read_2.next().await {
-        let text = msg.to_text().unwrap();
-        if let Ok(evt) = serde_json::from_str::<Value>(text) {
-            if evt["method"] == "event.downloadUpdated" {
-                let dl = &evt["params"]["download"];
-                let status = dl["status"].as_str().unwrap_or("");
-                let received = dl["receivedBytes"].as_u64().unwrap_or(0);
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while let Some(Ok(msg)) = read_2.next().await {
+            let text = msg.to_text().unwrap();
+            if let Ok(evt) = serde_json::from_str::<Value>(text) {
+                if evt["method"] == "event.downloadUpdated" {
+                    let dl = &evt["params"]["download"];
+                    let status = dl["status"].as_str().unwrap_or("");
+                    let received = dl["receivedBytes"].as_u64().unwrap_or(0);
 
-                if status == "verifying" {
-                    saw_verifying = true;
-                    assert_eq!(
-                        received, FIXTURE_FILE_SIZE,
-                        "All bytes must be received before verifying"
-                    );
-                } else if status == "completed" {
-                    saw_completed = true;
-                    assert_eq!(received, FIXTURE_FILE_SIZE);
-                    assert_eq!(dl["progress"], 1.0);
-                    break;
+                    if status == "verifying" {
+                        saw_verifying = true;
+                        assert_eq!(
+                            received, FIXTURE_FILE_SIZE,
+                            "All bytes must be received before verifying"
+                        );
+                    } else if status == "completed" {
+                        saw_completed = true;
+                        assert_eq!(received, FIXTURE_FILE_SIZE);
+                        assert_eq!(dl["progress"], 1.0);
+                        break;
+                    }
                 }
             }
         }
-    }
+    })
+    .await
+    .expect("Timed out waiting for resumed download completion events");
 
     assert!(saw_verifying, "Expected verifying state transition");
     assert!(saw_completed, "Expected completed state transition");
