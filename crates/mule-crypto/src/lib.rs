@@ -12,3 +12,6 @@
 
 pub mod cryptkey;
 pub mod legacy_sui;
+pub mod merkle_blake3;
+pub mod modern_identity;
+pub mod pc26_handshake;

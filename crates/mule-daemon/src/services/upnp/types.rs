@@ -36,6 +36,15 @@ pub struct UpnpStatusSnapshot {
     pub last_error: Option<String>,
     /// Marca temporal de la última actualización (milisegundos unix).
     pub updated_at_unix_ms: u64,
+    /// Protocolo activo usado para el mapeo de puertos (`"upnp-igd"`, `"pcp"`, `"nat-pmp"`).
+    #[serde(default)]
+    pub mapping_protocol: Option<String>,
+    /// Indica si se ha abierto un *pinhole* IPv6 en el cortafuegos IGDv2.
+    #[serde(default)]
+    pub ipv6_pinhole_mapped: bool,
+    /// Identificador único de concesión *pinhole* IPv6 devuelto por el router.
+    #[serde(default)]
+    pub ipv6_pinhole_id: Option<String>,
 }
 
 /// Devuelve los milisegundos unix actuales.

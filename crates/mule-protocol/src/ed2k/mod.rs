@@ -20,6 +20,7 @@ pub mod obfuscation;
 pub mod opcodes;
 pub mod packed;
 pub mod packet;
+pub mod pc26;
 pub mod peer_info;
 pub mod profile;
 pub mod protocol;
@@ -32,6 +33,7 @@ pub mod source_exchange;
 #[cfg(feature = "ed2k-loopback")]
 pub mod storage;
 pub mod tags;
+pub mod zstd_codec;
 
 #[cfg(feature = "ed2k-loopback")]
 pub mod loopback;
@@ -80,6 +82,11 @@ pub use packet::{
     Ed2kRequestPartsI64, Ed2kSecIdentState, Ed2kSendingPart, Ed2kSendingPartI64, Ed2kSignature,
     PartAvailabilityMask,
 };
+pub use pc26::{
+    build_pc26_hello_tags, parse_pc26_tags, Pc26PeerCaps, PC26_CAP_BLAKE3_MERKLE,
+    PC26_CAP_ED25519_SUI_V3, PC26_CAP_HYBRID_MLKEM768, PC26_CAP_IPV6, PC26_CAP_QUIC,
+    PC26_CAP_UDP_HOLE_PUNCH, PC26_CAP_X25519_CHACHA, PC26_CAP_ZSTD,
+};
 pub use peer_info::Ed2kPeerInfo;
 pub use profile::Ed2kCompatibilityProfile;
 pub use protocol::{is_valid_ed2k_protocol, PR_ED2K, PR_EMULE, PR_EMULE_COMPRESSED};
@@ -111,6 +118,10 @@ pub use tags::{
     TAG_SPECIAL_EMULE_VERSION, TAG_SPECIAL_FILESIZE, TAG_SPECIAL_FILETYPE,
     TAG_SPECIAL_MISCOPTIONS1, TAG_SPECIAL_MISCOPTIONS2, TAG_SPECIAL_NAME, TAG_SPECIAL_UDPOPTIONS,
     TAG_SPECIAL_VERSION,
+};
+pub use zstd_codec::{
+    compress_zstd_bounded, decompress_zstd_bounded, ZstdCodecError, DEFAULT_ZSTD_LEVEL,
+    ZSTD_MAX_DECOMPRESSED_DEFAULT,
 };
 
 #[cfg(feature = "ed2k-loopback")]

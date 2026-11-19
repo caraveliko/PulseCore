@@ -255,3 +255,41 @@ pub fn update_peer_source_details(
     )?;
     Ok(rows > 0)
 }
+
+/// Persiste el punto de enlace IPv6 (`[ip]:puerto`) y el puerto UDP QUIC anunciados por `PC26`.
+pub fn update_peer_source_modern_endpoints(
+    conn: &mut Connection,
+    file_hash: &str,
+    address: &str,
+    ipv6_endpoint: Option<&str>,
+    quic_port: u16,
+) -> Result<bool, CoreError> {
+    let quic_arg = (quic_port > 0).then_some(i64::from(quic_port));
+    let rows = conn.execute(
+        "UPDATE peer_sources SET
+            ipv6_endpoint = COALESCE(?1, ipv6_endpoint),
+            quic_port = COALESCE(?2, quic_port)
+         WHERE file_hash = ?3 AND address = ?4",
+        params![ipv6_endpoint, quic_arg, file_hash, address],
+    )?;
+    Ok(rows > 0)
+}
+
+/// Recupera el punto de enlace IPv6 y el puerto QUIC almacenados para una fuente de par.
+pub fn get_peer_source_modern_endpoints(
+    conn: &Connection,
+    file_hash: &str,
+    address: &str,
+) -> Result<Option<(Option<String>, u16)>, CoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT ipv6_endpoint, quic_port FROM peer_sources WHERE file_hash = ?1 AND address = ?2",
+    )?;
+    let mut rows = stmt.query(params![file_hash, address])?;
+    if let Some(row) = rows.next()? {
+        let ipv6: Option<String> = row.get(0)?;
+        let quic: i64 = row.get::<_, Option<i64>>(1)?.unwrap_or(0);
+        Ok(Some((ipv6, quic.clamp(0, i64::from(u16::MAX)) as u16)))
+    } else {
+        Ok(None)
+    }
+}

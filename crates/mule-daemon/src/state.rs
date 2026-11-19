@@ -179,6 +179,9 @@ pub struct AppState {
     pub webui_password_hash: Arc<std::sync::RwLock<Option<String>>>,
     /// Servicio de comprobación, descarga y aplicación de actualizaciones en caliente.
     pub updater: Arc<crate::services::updater::UpdaterService>,
+    /// Transporte QUIC P2P autenticado por Ed25519 (gestionado con el ciclo de vida UDP).
+    pub quic_transport:
+        Arc<tokio::sync::RwLock<Option<Arc<crate::services::quic_transport::QuicPeerTransport>>>>,
 }
 
 impl AppState {
@@ -482,6 +485,7 @@ impl AppState {
         uss.set_server_session(server_session.clone());
         uss.set_upload_manager(inbound_listener.upload_manager().clone());
         uss.set_downloads(Arc::clone(&dl_arc));
+        peer_session.set_uss(uss.clone());
         inbound_listener
             .upload_manager()
             .set_uss_gate(uss.accept_flag());
@@ -710,7 +714,65 @@ impl AppState {
             media_metadata: Arc::new(crate::services::MediaMetadataService::new()),
             webui_password_hash: Arc::new(std::sync::RwLock::new(initial_webui_pass_hash)),
             updater,
+            quic_transport: Arc::new(tokio::sync::RwLock::new(None)),
         }
+    }
+
+    /// Enlaza e inicia el transporte QUIC P2P autenticado por Ed25519 sobre UDP si la
+    /// política de red y `udp_enabled` lo permiten.
+    pub async fn start_quic_transport(&self) -> Option<SocketAddr> {
+        if let Some(existing) = self.quic_transport.read().await.as_ref() {
+            return Some(existing.local_addr());
+        }
+        if !self.udp_enabled()
+            || self.network_policy.state() == mule_network_policy::NetworkState::Disabled
+        {
+            return None;
+        }
+        let modern_key = self.identity.lock().await.modern_key().cloned()?;
+        let policy_arc = Arc::new(self.network_policy.clone());
+        let candidates: &[SocketAddr] = if self.network_policy.profile().is_loopback_only() {
+            &[SocketAddr::from(([127, 0, 0, 1], 0))]
+        } else {
+            &[
+                SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, 0)),
+                SocketAddr::from(([0, 0, 0, 0], 0)),
+            ]
+        };
+        for &bind_addr in candidates {
+            match crate::services::quic_transport::QuicPeerTransport::bind(
+                bind_addr,
+                &modern_key,
+                Arc::clone(&policy_arc),
+            ) {
+                Ok(qt) => {
+                    let mut slot = self.quic_transport.write().await;
+                    if let Some(existing) = slot.as_ref() {
+                        qt.close();
+                        return Some(existing.local_addr());
+                    }
+                    let addr = qt.local_addr();
+                    self.inbound_listener.set_quic_port(addr.port());
+                    *slot = Some(Arc::new(qt));
+                    tracing::info!("[QUIC] Transporte P2P Ed25519 enlazado en {addr}");
+                    return Some(addr);
+                }
+                Err(e) => {
+                    tracing::debug!("[QUIC] No se pudo enlazar QUIC en {bind_addr}: {e}");
+                }
+            }
+        }
+        tracing::warn!("[QUIC] No se pudo enlazar el transporte QUIC P2P en ningún candidato");
+        None
+    }
+
+    /// Detiene el transporte QUIC P2P y libera su permiso de escucha y el puerto anunciado.
+    pub async fn stop_quic_transport(&self) {
+        let prev = self.quic_transport.write().await.take();
+        if let Some(qt) = prev {
+            qt.close();
+        }
+        self.inbound_listener.set_quic_port(0);
     }
 
     /// Identificador de la descarga que ostenta activamente la ranura de copia al NAS.
@@ -897,19 +959,26 @@ impl AppState {
 
     /// Devuelve el motor BitTorrent inicializado de forma diferida (lazy).
     pub async fn torrent_engine(&self) -> Result<Arc<mule_torrent::TorrentEngine>, String> {
-        if self.network_policy.state() == mule_network_policy::NetworkState::Disabled {
+        let state = self.network_policy.state();
+        if matches!(
+            state,
+            mule_network_policy::NetworkState::Disabled
+                | mule_network_policy::NetworkState::ShuttingDown
+        ) {
             return Err("BitTorrent engine disabled by network policy kill switch".to_string());
         }
-        let default_dir = self.config.default_download_dir.clone();
-        let loopback_only = self.network_policy.profile().is_loopback_only();
+        let default_dir = self.effective_download_dir().await;
+        let data_dir = self.config.data_dir.clone();
+        let enable_upnp = self.upnp.snapshot().await.enabled;
+        let policy = Arc::new(self.network_policy.clone());
         self.torrent
             .get_or_try_init(|| async move {
-                let res = if loopback_only {
-                    mule_torrent::TorrentEngine::new_offline(default_dir).await
-                } else {
-                    mule_torrent::TorrentEngine::new(default_dir).await
-                };
-                res.map(Arc::new).map_err(|e| e.to_string())
+                let mut cfg = mule_torrent::TorrentPolicyConfig::new(default_dir, data_dir);
+                cfg.enable_upnp = enable_upnp;
+                mule_torrent::TorrentEngine::new_with_policy(policy, cfg)
+                    .await
+                    .map(Arc::new)
+                    .map_err(|e| e.to_string())
             })
             .await
             .cloned()

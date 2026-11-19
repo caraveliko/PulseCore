@@ -3,11 +3,13 @@
 
 pub mod auto_grabber;
 pub mod cleaner;
+pub mod compression_policy;
 pub mod client_udp;
 pub mod disk_scanner;
 pub mod downloads;
 pub mod events;
 pub(crate) mod hello_caps;
+pub mod hole_punch;
 pub mod identity;
 pub mod inbound_listener;
 pub mod incoming_share;
@@ -22,7 +24,9 @@ pub mod nas_transfer;
 pub mod nfs_mount;
 pub mod obfuscation_stream;
 pub mod organizer;
+pub mod pc26_stream;
 pub mod peer_session;
+pub mod quic_transport;
 pub mod scorer;
 pub mod server_session;
 pub mod server_udp;
@@ -33,6 +37,7 @@ pub mod upnp;
 pub mod updater;
 pub mod uss;
 mod uss_icmp;
+pub mod uss_ledbat;
 
 pub use client_udp::{ClientUdpService, UdpReaskResult, UdpReaskTarget};
 pub use events::DaemonEvent;

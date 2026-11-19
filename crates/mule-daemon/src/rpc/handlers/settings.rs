@@ -1876,9 +1876,11 @@ pub(crate) async fn apply_udp_state(state: &AppState, enabled: bool) {
         if let Ok(ip_addr) = ip.parse() {
             let _ = state.server_udp.start(ip_addr).await;
         }
+        let _ = state.start_quic_transport().await;
     } else {
         let _ = state.kad.udp().stop().await;
         state.server_udp.stop().await;
+        state.stop_quic_transport().await;
     }
 }
 

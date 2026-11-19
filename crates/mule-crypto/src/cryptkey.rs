@@ -106,7 +106,7 @@ pub fn load_cryptkey(data_dir: &Path) -> LegacyKeyLoad {
         Ok(raw) => raw,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return LegacyKeyLoad::Missing,
         Err(e) => {
-            let quarantine_path = quarantine_path_for(&path);
+            let quarantine_path = quarantine_path_with_prefix(&path, CRYPTKEY_FILENAME);
             let _ = std::fs::rename(&path, &quarantine_path);
             return LegacyKeyLoad::Invalid {
                 quarantine_path,
@@ -117,7 +117,7 @@ pub fn load_cryptkey(data_dir: &Path) -> LegacyKeyLoad {
     match parse_cryptkey_bytes(&raw) {
         Ok(key) => LegacyKeyLoad::Loaded(Box::new(key)),
         Err(reason) => {
-            let quarantine_path = quarantine_path_for(&path);
+            let quarantine_path = quarantine_path_with_prefix(&path, CRYPTKEY_FILENAME);
             let _ = std::fs::rename(&path, &quarantine_path);
             if is_legacy_blob(&raw) {
                 return LegacyKeyLoad::LegacyBlob { quarantine_path };
@@ -163,12 +163,12 @@ pub fn generate_cryptkey(data_dir: &Path) -> Result<RsaPrivateKey, CryptkeyError
     Ok(key)
 }
 
-fn quarantine_path_for(path: &Path) -> PathBuf {
+pub(crate) fn quarantine_path_with_prefix(path: &Path, filename: &str) -> PathBuf {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    path.with_file_name(format!("cryptkey.dat.corrupt-{ts}"))
+    path.with_file_name(format!("{filename}.corrupt-{ts}"))
 }
 
 #[cfg(test)]

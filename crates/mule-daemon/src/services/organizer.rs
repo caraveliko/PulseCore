@@ -6,15 +6,9 @@ use serde_json::{json, Value};
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use crate::services::downloads::types::now_ms;
 use crate::state::AppState;
 use mule_core::model::{EpisodeItem, MediaItem};
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
-}
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mkv", "mp4", "avi", "m4v", "mov", "wmv", "flv", "ts",

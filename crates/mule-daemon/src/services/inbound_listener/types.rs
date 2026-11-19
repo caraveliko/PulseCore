@@ -104,4 +104,8 @@ pub struct InboundListenerService {
     pub(crate) sx_env: std::sync::Arc<
         std::sync::RwLock<Option<crate::services::peer_session::source_exchange::SxEnv>>,
     >,
+    /// Controlador de cuotas máximas por subred (`/24` y `/48`) para defensa pre-handshake.
+    pub(crate) subnet_guard: super::subnet_guard::SubnetQuotaGuard,
+    /// Puerto UDP QUIC local anunciado en etiquetas `pc26_quic` (0 si está inactivo).
+    pub(crate) quic_port: std::sync::Arc<std::sync::atomic::AtomicU16>,
 }

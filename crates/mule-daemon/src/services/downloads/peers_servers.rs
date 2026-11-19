@@ -203,3 +203,72 @@ pub fn list_peer_credits(db: &Database, limit: usize) -> Result<Vec<PeerCredit>,
     db.list_peer_credits(limit)
         .map_err(db_err("listing peer credits"))
 }
+
+/// Inserta o actualiza la clave pública SUI verificada de un par en caché SQLite.
+pub fn upsert_verified_peer_pubkey(
+    db: &mut Database,
+    user_hash: &str,
+    pubkey_der: &[u8],
+    pubkey_hash: &str,
+    verified_at_unix_ms: i64,
+    last_ip: Option<&str>,
+) -> Result<(), DaemonError> {
+    db.upsert_verified_peer_pubkey(user_hash, pubkey_der, pubkey_hash, verified_at_unix_ms, last_ip)
+        .map_err(db_err("upserting cached SUI pubkey"))
+}
+
+/// Recupera la clave pública SUI cacheada para un `user_hash`.
+pub fn get_verified_peer_pubkey(
+    db: &Database,
+    user_hash: &str,
+) -> Result<Option<Vec<u8>>, DaemonError> {
+    db.get_verified_peer_pubkey(user_hash)
+        .map_err(db_err("reading cached SUI pubkey"))
+}
+
+/// Purga entradas obsoletas de la caché SUI anteriores a `cutoff_unix_ms`.
+pub fn prune_stale_pubkeys(db: &mut Database, cutoff_unix_ms: i64) -> Result<usize, DaemonError> {
+    db.prune_stale_pubkeys(cutoff_unix_ms)
+        .map_err(db_err("pruning stale SUI pubkeys"))
+}
+
+/// Almacena los hashes de partes AICH para un hash de archivo.
+pub fn store_aich_part_hashes(
+    db: &mut Database,
+    file_hash: &str,
+    part_hashes: &[[u8; 20]],
+) -> Result<(), DaemonError> {
+    db.store_aich_part_hashes(file_hash, part_hashes)
+        .map_err(db_err("storing AICH part hashes"))
+}
+
+/// Carga los hashes de partes AICH persistidos para un hash de archivo.
+pub fn load_aich_part_hashes(
+    db: &Database,
+    file_hash: &str,
+) -> Result<Vec<[u8; 20]>, DaemonError> {
+    db.load_aich_part_hashes(file_hash)
+        .map_err(db_err("loading AICH part hashes"))
+}
+
+/// Actualiza el punto de enlace IPv6 y puerto QUIC de una fuente de par.
+pub fn update_peer_source_modern_endpoints(
+    db: &mut Database,
+    file_hash: &str,
+    address: &str,
+    ipv6_endpoint: Option<&str>,
+    quic_port: u16,
+) -> Result<bool, DaemonError> {
+    db.update_peer_source_modern_endpoints(file_hash, address, ipv6_endpoint, quic_port)
+        .map_err(db_err("updating modern peer endpoints"))
+}
+
+/// Recupera el punto de enlace IPv6 y puerto QUIC almacenados para una fuente de par.
+pub fn get_peer_source_modern_endpoints(
+    db: &Database,
+    file_hash: &str,
+    address: &str,
+) -> Result<Option<(Option<String>, u16)>, DaemonError> {
+    db.get_peer_source_modern_endpoints(file_hash, address)
+        .map_err(db_err("reading modern peer endpoints"))
+}

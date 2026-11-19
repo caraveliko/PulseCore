@@ -60,6 +60,7 @@ pub async fn handle_network_disconnect_all(state: &AppState) -> Result<Value, Js
     // de red (kill switch).
     let _ = state.kad.udp().stop().await;
     state.server_udp.stop().await;
+    state.stop_quic_transport().await;
     // Los supervisores (observador de reconexión, coordinador de enjambre, rotador
     // de identidad, cuota de subida) permanecen vivos: se auto-inhiben
     // mientras el estado sea `Disabled` y se reanudan en `network.enable`.

@@ -26,12 +26,16 @@ use mule_protocol::ed2k::{
     OP_SECIDENTSTATE, OP_SIGNATURE, PR_EMULE,
 };
 
+use crate::services::downloads::DownloadService;
 use crate::services::obfuscation_stream::ObfuscatedStream;
 use crate::services::IdentityService;
+use md4::Digest;
+use mule_crypto::modern_identity::{verify_channel_binding, ChannelBindingRole};
 
 pub(crate) struct OutboundSui {
     identity: Option<Arc<Mutex<IdentityService>>>,
-    /// DER de la clave pública del desafiador (par remoto), aprendida de su OP_PUBLICKEY.
+    /// DER de la clave pública del desafiador (par remoto), aprendida de su OP_PUBLICKEY
+    /// o precargada desde caché SQLite.
     peer_pubkey_der: Option<Vec<u8>>,
     /// Solo una firma por conexión (semántica anti-inundación de eMule).
     answered: bool,
@@ -49,6 +53,10 @@ pub(crate) struct OutboundSui {
     /// Firma del par verificada — su identidad de clave pública puede acumular
     /// créditos de descarga (eMule solo acredita a clientes criptográficamente verificados).
     peer_verified: bool,
+    /// Servicio de descargas para leer/persistir claves SUI cacheadas por `user_hash`.
+    downloads: Option<Arc<Mutex<DownloadService>>>,
+    /// User hash del par remoto en hexadecimal (cuando se conoce).
+    peer_user_hash_hex: Option<String>,
 }
 
 impl OutboundSui {
@@ -63,12 +71,36 @@ impl OutboundSui {
             pending_challenge: None,
             sui_stats: None,
             peer_verified: false,
+            downloads: None,
+            peer_user_hash_hex: None,
         }
     }
 
     pub fn with_stats(mut self, stats: Arc<crate::services::identity::SuiStats>) -> Self {
         self.sui_stats = Some(stats);
         self
+    }
+
+    /// Conecta caché SQLite de claves públicas verificadas por `user_hash`.
+    pub fn with_cache(
+        mut self,
+        downloads: Arc<Mutex<DownloadService>>,
+        peer_user_hash: Option<[u8; 16]>,
+    ) -> Self {
+        self.downloads = Some(downloads);
+        self.peer_user_hash_hex = peer_user_hash.map(hex::encode);
+        self
+    }
+
+    /// Verifica una firma Ed25519 de vinculación de canal SUI v3 sobre `transcript_hash`.
+    #[allow(dead_code)]
+    pub(crate) fn verify_modern_channel_binding(
+        transcript_hash: &[u8; 32],
+        peer_ed25519: &[u8; 32],
+        sig: &[u8; 64],
+        role: ChannelBindingRole,
+    ) -> bool {
+        verify_channel_binding(peer_ed25519, transcript_hash, role, sig).is_ok()
     }
 
     fn bump(
@@ -84,10 +116,9 @@ impl OutboundSui {
         self.peer_sec_ident = cap;
     }
 
-    /// `SendSecIdentStatePacket` / `InfoPacketsReceived` de eMule: una vez intercambiados ambos
-    /// paquetes de información, si el par anunció soporte de Identificación Segura lo
-    /// desafiamos — `state=2` (IS_KEYANDSIGNEEDED) ya que nunca mantenemos una
-    /// clave de par almacenada entre conexiones.
+    /// `SendSecIdentStatePacket` / `InfoPacketsReceived` de eMule: si la clave pública
+    /// del par ya está cacheada en SQLite solicita únicamente firma (`state=1`),
+    /// o clave + firma (`state=2`) en caso contrario.
     pub async fn initiate(
         &mut self,
         target_addr: SocketAddr,
@@ -104,11 +135,18 @@ impl OutboundSui {
         if !has_key {
             return;
         }
+        if self.peer_pubkey_der.is_none() {
+            if let (Some(dl), Some(uh)) = (&self.downloads, &self.peer_user_hash_hex) {
+                if let Some(cached) = dl.lock().await.get_verified_peer_pubkey(uh) {
+                    if parse_peer_public_key(&cached).is_ok() {
+                        self.peer_pubkey_der = Some(cached);
+                    }
+                }
+            }
+        }
+        let state = if self.peer_pubkey_der.is_some() { 1 } else { 2 };
         let challenge: u32 = rand::random::<u32>().wrapping_add(1);
-        match encoder.encode_secident_state(&Ed2kSecIdentState {
-            state: 2,
-            challenge,
-        }) {
+        match encoder.encode_secident_state(&Ed2kSecIdentState { state, challenge }) {
             Ok(pkt) => {
                 let mut out = Vec::with_capacity(6 + pkt.payload.len());
                 out.push(pkt.protocol);
@@ -121,7 +159,7 @@ impl OutboundSui {
                         self.challenge_issued = Some(challenge);
                         self.bump(|s| &s.challenges_issued_out);
                         tracing::debug!(
-                            "[SUI] Sent OP_SECIDENTSTATE challenge to {peer} (state=2)",
+                            "[SUI] Sent OP_SECIDENTSTATE challenge to {peer} (state={state})",
                             peer = log_peer_addr(target_addr)
                         );
                     }
@@ -139,7 +177,7 @@ impl OutboundSui {
 
     /// Responde a un desafío del par (rol de firmante en `OP_SECIDENTSTATE`): envía nuestra
     /// `OP_PUBLICKEY` cuando el par la solicitó (state=2), y luego `OP_SIGNATURE`
-    /// sobre `peer_pubkey || challenge` (V1). Requiere `peer_pubkey_der`.
+    /// en formato V1 o V2 según `peer_sec_ident`. Requiere `peer_pubkey_der`.
     async fn answer_challenge(
         &mut self,
         state: u8,
@@ -178,13 +216,36 @@ impl OutboundSui {
             }
         }
 
-        let payload = match build_sui_signing_payload(
-            SecureIdentVersion::V1,
-            peer_pub,
-            challenge,
-            None,
-            None,
-        ) {
+        let use_v2 = (self.peer_sec_ident & 0x01) == 0 && (self.peer_sec_ident & 0x02) != 0;
+        let (v2_kind, payload_res) = if use_v2 {
+            let (ip_u32, kind_byte) = match target_addr.ip() {
+                std::net::IpAddr::V4(v4) => (u32::from_be_bytes(v4.octets()), 10u8),
+                std::net::IpAddr::V6(_) => (0u32, 30u8),
+            };
+            (
+                Some(kind_byte),
+                build_sui_signing_payload(
+                    SecureIdentVersion::V2,
+                    peer_pub,
+                    challenge,
+                    Some(ip_u32),
+                    Some(kind_byte),
+                ),
+            )
+        } else {
+            (
+                None,
+                build_sui_signing_payload(
+                    SecureIdentVersion::V1,
+                    peer_pub,
+                    challenge,
+                    None,
+                    None,
+                ),
+            )
+        };
+
+        let payload = match payload_res {
             Ok(p) => p,
             Err(e) => {
                 tracing::warn!(
@@ -203,19 +264,25 @@ impl OutboundSui {
                 if let Ok(sig_pkt) = encoder.encode_signature(&Ed2kSignature {
                     signature_bytes: bytes::Bytes::from(sig_bytes),
                 }) {
-                    let mut out = Vec::new();
+                    let extra = usize::from(v2_kind.is_some());
+                    let mut out = Vec::with_capacity(6 + sig_pkt.payload.len() + extra);
                     out.push(sig_pkt.protocol);
-                    out.extend_from_slice(&(sig_pkt.frame_len() as u32).to_le_bytes());
+                    out.extend_from_slice(&((sig_pkt.frame_len() + extra) as u32).to_le_bytes());
                     out.push(sig_pkt.opcode);
                     out.extend_from_slice(&sig_pkt.payload);
+                    if let Some(kind) = v2_kind {
+                        out.push(kind);
+                    }
                     match stream.write_all(&out).await {
                         Ok(()) => {
                             self.answered = true;
                             self.bump(|s| &s.signatures_sent);
                             tracing::info!(
-                                "[SUI] Answered challenge from peer {peer} (state={}, V1 signature)",
-                                state
-                            , peer = log_peer_addr(target_addr));
+                                "[SUI] Answered challenge from peer {peer} (state={}, {} signature)",
+                                state,
+                                if v2_kind.is_some() { "V2" } else { "V1" },
+                                peer = log_peer_addr(target_addr)
+                            );
                         }
                         Err(e) => tracing::warn!(
                             "[SUI] Failed to send OP_SIGNATURE to {peer}: {e}",
@@ -398,6 +465,21 @@ impl OutboundSui {
                     Ok(()) => {
                         self.bump(|s| &s.signatures_verified);
                         self.peer_verified = true;
+                        if let (Some(dl), Some(uh)) = (&self.downloads, &self.peer_user_hash_hex) {
+                            let ph = hex::encode(md4::Md4::digest(&peer_der));
+                            let now_ms = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64;
+                            let ip_str = target_addr.ip().to_string();
+                            let _ = dl.lock().await.upsert_verified_peer_pubkey(
+                                uh,
+                                &peer_der,
+                                &ph,
+                                now_ms,
+                                Some(&ip_str),
+                            );
+                        }
                         tracing::info!(
                             "[SUI] Peer {peer} signature VERIFIED ({version:?})",
                             peer = log_peer_addr(target_addr)

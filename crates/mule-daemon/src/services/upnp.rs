@@ -8,7 +8,9 @@
 //! mapeo de puertos para eD2K TCP y Kad UDP.
 
 pub mod discovery;
+pub mod ipv6_pinhole;
 pub mod mapping;
+pub mod pcp_natpmp;
 pub mod types;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
@@ -204,6 +206,26 @@ impl UpnpService {
 
             match res {
                 Ok((gw, ext_ip, _local_ip, tcp_ok, udp_ok, cgnat)) => {
+                    let mut pinhole_id: Option<String> = None;
+                    if gw.control_schema.contains_key("AddPinhole") {
+                        if let Some(local_v6) = ipv6_pinhole::detect_local_global_ipv6() {
+                            let ctl_url = format!("http://{}{}", gw.addr, gw.control_url);
+                            if let Ok(id) = ipv6_pinhole::add_ipv6_pinhole(
+                                &ipv6_pinhole::Ipv6PinholeRequest {
+                                    gateway_control_url: ctl_url,
+                                    internal_client: local_v6,
+                                    internal_port: tcp_port,
+                                    protocol: 6,
+                                    lease_secs: ipv6_pinhole::DEFAULT_PINHOLE_LEASE_SECS,
+                                },
+                            )
+                            .await
+                            {
+                                pinhole_id = Some(id);
+                            }
+                        }
+                    }
+
                     let mut snap = self.snapshot.write().await;
                     snap.available = true;
                     snap.gateway_addr = Some(gw.addr.to_string());
@@ -211,6 +233,9 @@ impl UpnpService {
                     snap.tcp_mapped = tcp_ok;
                     snap.udp_mapped = udp_ok;
                     snap.cgnat_detected = cgnat;
+                    snap.mapping_protocol = Some("upnp-igd".to_string());
+                    snap.ipv6_pinhole_mapped = pinhole_id.is_some();
+                    snap.ipv6_pinhole_id = pinhole_id;
                     snap.last_error = if cgnat {
                         Some(
                             "CGNAT detectado: su operador utiliza un NAT compartido (100.64.x.x). Los puertos están mapeados localmente, pero la conectividad eD2K/Kad desde internet puede estar limitada."
@@ -241,11 +266,56 @@ impl UpnpService {
             }
         }
 
+        // Respaldo cascada PCP (RFC 6887) -> NAT-PMP (RFC 6886) si el router no ofrece UPnP IGD.
+        if let Some(gw_v4) = pcp_natpmp::detect_default_gateway_ipv4() {
+            let gw_sock = std::net::SocketAddr::V4(SocketAddrV4::new(
+                gw_v4,
+                pcp_natpmp::PCP_NATPMP_PORT,
+            ));
+            if is_valid_gateway_addr(gw_sock) {
+                if let Some(local_v4) = detect_local_ipv4_for_gateway(gw_sock) {
+                    if let Ok(cascade) = pcp_natpmp::map_ports_cascade_at(
+                        gw_sock,
+                        IpAddr::V4(local_v4),
+                        tcp_port,
+                        udp_port,
+                    )
+                    .await
+                    {
+                        let mut snap = self.snapshot.write().await;
+                        snap.available = true;
+                        snap.gateway_addr = Some(gw_sock.to_string());
+                        snap.external_ip = cascade.external_ip.map(|ip| ip.to_string());
+                        snap.tcp_mapped = cascade.tcp_mapped;
+                        snap.udp_mapped = cascade.udp_mapped;
+                        snap.cgnat_detected = cascade.external_ip.is_some_and(is_cgnat_ip);
+                        snap.mapping_protocol = Some(cascade.protocol.to_string());
+                        snap.ipv6_pinhole_mapped = false;
+                        snap.ipv6_pinhole_id = None;
+                        snap.last_error = if snap.cgnat_detected {
+                            Some("CGNAT detectado en puerta de enlace PCP/NAT-PMP".to_string())
+                        } else {
+                            None
+                        };
+                        snap.updated_at_unix_ms = current_unix_ms();
+                        info!(
+                            "Port mapping succeeded via {} fallback on {gw_sock} (TCP: {}, UDP: {})",
+                            cascade.protocol, cascade.tcp_mapped, cascade.udp_mapped
+                        );
+                        return Ok(snap.clone());
+                    }
+                }
+            }
+        }
+
         let mut snap = self.snapshot.write().await;
         snap.available = false;
         snap.cgnat_detected = false;
         snap.tcp_mapped = false;
         snap.udp_mapped = false;
+        snap.mapping_protocol = None;
+        snap.ipv6_pinhole_mapped = false;
+        snap.ipv6_pinhole_id = None;
         snap.last_error = Some(format!("{last_err} (tras {MAX_ATTEMPTS} intentos)"));
         snap.updated_at_unix_ms = current_unix_ms();
         warn!("UPnP setup failed after {MAX_ATTEMPTS} attempts: {last_err}");

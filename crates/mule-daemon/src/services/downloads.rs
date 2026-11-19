@@ -1273,6 +1273,79 @@ impl DownloadService {
         )
     }
 
+    /// Persiste los puntos de enlace modernos (`ipv6_endpoint` y `quic_port`) de una fuente de par.
+    pub fn update_peer_source_modern_endpoints(
+        &mut self,
+        file_hash: &str,
+        address: &str,
+        ipv6_endpoint: Option<&str>,
+        quic_port: u16,
+    ) -> Result<bool, DaemonError> {
+        peers_servers::update_peer_source_modern_endpoints(
+            &mut self.db,
+            file_hash,
+            address,
+            ipv6_endpoint,
+            quic_port,
+        )
+    }
+
+    /// Recupera el punto de enlace IPv6 y puerto QUIC de una fuente de par.
+    pub fn get_peer_source_modern_endpoints(
+        &self,
+        file_hash: &str,
+        address: &str,
+    ) -> Option<(Option<String>, u16)> {
+        peers_servers::get_peer_source_modern_endpoints(&self.db, file_hash, address)
+            .ok()
+            .flatten()
+    }
+
+    /// Guarda o refresca la clave pública SUI verificada de un `user_hash`.
+    pub fn upsert_verified_peer_pubkey(
+        &mut self,
+        user_hash: &str,
+        pubkey_der: &[u8],
+        pubkey_hash: &str,
+        verified_at_unix_ms: i64,
+        last_ip: Option<&str>,
+    ) -> Result<(), DaemonError> {
+        peers_servers::upsert_verified_peer_pubkey(
+            &mut self.db,
+            user_hash,
+            pubkey_der,
+            pubkey_hash,
+            verified_at_unix_ms,
+            last_ip,
+        )
+    }
+
+    /// Recupera la clave pública SUI cacheada para un `user_hash`.
+    pub fn get_verified_peer_pubkey(&self, user_hash: &str) -> Option<Vec<u8>> {
+        peers_servers::get_verified_peer_pubkey(&self.db, user_hash)
+            .ok()
+            .flatten()
+    }
+
+    /// Purga las claves públicas SUI verificadas anteriores a `cutoff_unix_ms`.
+    pub fn prune_stale_pubkeys(&mut self, cutoff_unix_ms: i64) -> Result<usize, DaemonError> {
+        peers_servers::prune_stale_pubkeys(&mut self.db, cutoff_unix_ms)
+    }
+
+    /// Persiste los hashes de partes AICH recibidos mediante `OP_HASHSETANSWER2`.
+    pub fn store_aich_part_hashes(
+        &mut self,
+        file_hash: &str,
+        part_hashes: &[[u8; 20]],
+    ) -> Result<(), DaemonError> {
+        peers_servers::store_aich_part_hashes(&mut self.db, file_hash, part_hashes)
+    }
+
+    /// Carga los hashes de partes AICH persistidos para un hash de archivo.
+    pub fn load_aich_part_hashes(&self, file_hash: &str) -> Vec<[u8; 20]> {
+        peers_servers::load_aich_part_hashes(&self.db, file_hash).unwrap_or_default()
+    }
+
     pub fn reset_peer_source_cooldown(
         &mut self,
         file_hash: &str,

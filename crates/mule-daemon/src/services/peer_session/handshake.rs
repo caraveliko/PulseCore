@@ -22,16 +22,10 @@ use super::types::{
     PeerConnectionStatus, PeerError, PeerTimeouts, SwarmInnerState, MAX_PEER_READ_BUFFER_SIZE,
 };
 use crate::services::downloads::DownloadService;
+use crate::services::hello_caps::{
+    build_hello_tags, local_pc26_caps, HelloBuildParams, EMULE_VERSION_SHORT,
+};
 use crate::services::obfuscation_stream::ObfuscatedStream;
-
-/// Versión de eMule anunciada codificada para `CT_EMULE_VERSION` —
-/// `(major<<17)|(minor<<10)|(update<<7)` = eMule 0.72.0
-/// (`BaseClient.cpp` `SendMuleInfoPacket`, `Version.h`: 0.72.0).
-pub(crate) const EMULE_VERSION_TAG: u32 = 72 << 10;
-
-/// `m_uCurVersionShort` = `MAKELONG(minor, major)` — el byte de versión de
-/// `OP_EMULEINFO`/`OP_EMULEINFOANSWER` (0.72a → 72).
-pub(crate) const EMULE_VERSION_SHORT: u8 = 72;
 
 pub struct HandshakeResult {
     pub stream: ObfuscatedStream<TcpStream>,
@@ -61,9 +55,14 @@ pub struct HandshakeResult {
     /// `OP_HASHSETREQUEST2` en lugar de `OP_HASHSETREQUEST`
     /// (`SendHashSetRequest`, `DownloadClient.cpp:2200`).
     pub peer_file_identifiers: bool,
+    /// Capacidades modernas `PC26` anunciadas por el par en `OP_HELLO_ANSWER`.
+    pub peer_pc26_caps: Option<mule_protocol::ed2k::pc26::Pc26PeerCaps>,
+    /// RTT inicial medido al conectar con el par (ms).
+    pub initial_rtt_ms: Option<u32>,
     pub connected_ms: i64,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn perform_peer_handshake(
     target_addr: SocketAddr,
     file_hash_str: &str,
@@ -88,38 +87,49 @@ pub(crate) async fn perform_peer_handshake(
     obfuscation_padding_max: u8,
     downloads: &Arc<Mutex<DownloadService>>,
     sec_ident_cap: u8,
+    identity: &Option<Arc<Mutex<crate::services::IdentityService>>>,
 ) -> Result<HandshakeResult, PeerError> {
-    // Comprobar antes de abrir el socket TCP si la política local exige ofuscación obligatoria sin hash
-    if obfuscation_required && target_user_hash.is_none() {
-        return Err(PeerError::new(
-            PeerFailureReason::MissingUserHashForObfuscation,
-            "Protocol obfuscation is required locally but peer user hash is unknown",
-        ));
-    }
-
-    // 1. Conexión TCP con tiempo de espera y cancel_token
-    let stream_res = tokio::select! {
-        _ = cancel_token.cancelled() => {
-            return Err(PeerError::new(PeerFailureReason::KillSwitchAborted, "Cancelled by network policy kill switch"));
+    let stored_modern = {
+        let dl_svc = downloads.lock().await;
+        dl_svc.get_peer_source_modern_endpoints(file_hash_str, address_str)
+    };
+    let mut candidate_addrs = vec![target_addr];
+    let mut peer_known_pc26 = false;
+    if let Some((ipv6_opt, quic_port)) = stored_modern {
+        if quic_port > 0 {
+            peer_known_pc26 = true;
         }
-        res = tokio::time::timeout(timeouts.connect_timeout, TcpStream::connect(target_addr)) => {
-            match res {
-                Ok(Ok(stream)) => stream,
-                Ok(Err(e)) => return Err(PeerError::new(PeerFailureReason::ConnectRefused, format!("TCP connect refused: {e}"))),
-                Err(_) => return Err(PeerError::new(PeerFailureReason::TimeoutConnect, "TCP connect timed out")),
+        if let Some(ipv6_str) = ipv6_opt {
+            if let Ok(v6_addr) = ipv6_str.parse::<SocketAddr>() {
+                if v6_addr != target_addr {
+                    candidate_addrs.push(v6_addr);
+                }
             }
         }
-    };
+    }
 
-    let tcp_stream = stream_res;
+    // 1. Conexión TCP Happy Eyeballs v2 con tiempo de espera y cancel_token
+    let tcp_connect_start = std::time::Instant::now();
+    let (tcp_stream, connected_addr) = super::happy_eyeballs::connect_happy_eyeballs(
+        &candidate_addrs,
+        timeouts.connect_timeout,
+        cancel_token,
+    )
+    .await?;
+    let initial_rtt_ms = Some(
+        tcp_connect_start
+            .elapsed()
+            .as_millis()
+            .clamp(1, u128::from(u32::MAX)) as u32,
+    );
     let _ = tcp_stream.set_nodelay(true);
     let connected_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64;
 
-    // Decisión de ofuscación: si nuestra política no exige cifrado y desconocemos el user_hash
-    // (p. ej. fuentes Kad o metadatos sin hash), intentar texto plano en lugar de abortar.
+    // Decisión de ofuscación: si nuestra política exige cifrado sin `user_hash` conocido o el
+    // par es `PC26` conocido, iniciamos transporte autenticado oportunista `PC26-AEAD`.
     let peer_requires_crypt = (peer_crypt_options & 0x04) != 0;
     let peer_supports_crypt = (peer_crypt_options & 0x01) != 0 || (peer_crypt_options & 0x02) != 0;
 
@@ -127,11 +137,71 @@ pub(crate) async fn perform_peer_handshake(
         obfuscation_required || peer_requires_crypt || (obfuscation_enabled && peer_supports_crypt)
     });
 
-    let mut stream = if let Some(th) = obfu_hash {
+    let pc26_attempt = (obfuscation_enabled && peer_known_pc26)
+        || (obfuscation_required && target_user_hash.is_none());
+
+    let mut stream = if pc26_attempt {
+        match ObfuscatedStream::connect_peer_pc26_outgoing(
+            tcp_stream,
+            mule_crypto::pc26_handshake::Pc26Suite::HybridMlKem768ChaCha20Poly1305,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) if obfuscation_required && target_user_hash.is_none() => {
+                return Err(PeerError::new(
+                    PeerFailureReason::ObfuscationNegotiationFailed,
+                    format!("PC26 obfuscation negotiation failed: {e}"),
+                ));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "PC26 handshake to peer {peer} failed ({e}), falling back to legacy mode",
+                    peer = log_peer_addr(connected_addr)
+                );
+                let (fallback_tcp, _) = super::happy_eyeballs::connect_happy_eyeballs(
+                    &candidate_addrs,
+                    timeouts.connect_timeout,
+                    cancel_token,
+                )
+                .await?;
+                let _ = fallback_tcp.set_nodelay(true);
+                if let Some(th) = obfu_hash {
+                    match ObfuscatedStream::connect_peer_outgoing(
+                        fallback_tcp,
+                        &th,
+                        obfuscation_padding_max,
+                    )
+                    .await
+                    {
+                        Ok(s) => s,
+                        Err(_) if !obfuscation_required => {
+                            let (plain_stream, _) = super::happy_eyeballs::connect_happy_eyeballs(
+                                &candidate_addrs,
+                                timeouts.connect_timeout,
+                                cancel_token,
+                            )
+                            .await?;
+                            let _ = plain_stream.set_nodelay(true);
+                            ObfuscatedStream::plaintext(plain_stream)
+                        }
+                        Err(rc4_err) => {
+                            return Err(PeerError::new(
+                                PeerFailureReason::ObfuscationNegotiationFailed,
+                                format!("Protocol obfuscation negotiation failed: {rc4_err}"),
+                            ));
+                        }
+                    }
+                } else {
+                    ObfuscatedStream::plaintext(fallback_tcp)
+                }
+            }
+        }
+    } else if let Some(th) = obfu_hash {
         tracing::info!(
             "Initiating obfuscated handshake to peer {peer} with target user hash {:02X?}",
             &th,
-            peer = log_peer_addr(target_addr)
+            peer = log_peer_addr(connected_addr)
         );
         match ObfuscatedStream::connect_peer_outgoing(tcp_stream, &th, obfuscation_padding_max)
             .await
@@ -141,10 +211,10 @@ pub(crate) async fn perform_peer_handshake(
                 if !obfuscation_required {
                     tracing::warn!(
                         "Obfuscated handshake to peer {peer} failed ({e}), falling back to plaintext connection"
-                    , peer = log_peer_addr(target_addr));
+                    , peer = log_peer_addr(connected_addr));
                     match tokio::time::timeout(
                         timeouts.connect_timeout,
-                        TcpStream::connect(target_addr),
+                        TcpStream::connect(connected_addr),
                     )
                     .await
                     {
@@ -180,7 +250,7 @@ pub(crate) async fn perform_peer_handshake(
                 } else {
                     tracing::warn!(
                         "Obfuscated handshake to peer {peer} failed: {e}",
-                        peer = log_peer_addr(target_addr)
+                        peer = log_peer_addr(connected_addr)
                     );
                     return Err(PeerError::new(
                         PeerFailureReason::ObfuscationNegotiationFailed,
@@ -193,7 +263,7 @@ pub(crate) async fn perform_peer_handshake(
         if peer_requires_crypt && target_user_hash.is_none() {
             tracing::debug!(
                 "Peer {peer} advertises required crypt without user_hash — attempting plaintext fallback",
-                peer = log_peer_addr(target_addr)
+                peer = log_peer_addr(connected_addr)
             );
         }
         ObfuscatedStream::plaintext(tcp_stream)
@@ -217,73 +287,6 @@ pub(crate) async fn perform_peer_handshake(
 
     // 2. Enviar OP_HELLO
     let encoder = Ed2kEncoder::default();
-    let mut tags = Vec::with_capacity(6);
-
-    // Apodo
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(mule_protocol::ed2k::tags::TAG_SPECIAL_NAME),
-        value: mule_protocol::ed2k::tags::TagValue::String(nickname.to_string()),
-    });
-
-    // Versión
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(
-            mule_protocol::ed2k::tags::TAG_SPECIAL_VERSION,
-        ),
-        value: mule_protocol::ed2k::tags::TagValue::UInt32(0x3C),
-    });
-
-    // UDPPorts
-    let udp_ports = ((kad_port as u32) << 16) | (client_port as u32);
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(
-            mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_UDPPORTS,
-        ),
-        value: mule_protocol::ed2k::tags::TagValue::UInt32(udp_ports),
-    });
-
-    // EmuleVersion — eMule 0.72a (`EMULE_VERSION_TAG`); el byte
-    // alto de la etiqueta permanece en 0 (ID de software compatible con SO_EMULE).
-    let emule_ver: u32 = EMULE_VERSION_TAG;
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(
-            mule_protocol::ed2k::tags::TAG_SPECIAL_CT_EMULE_VERSION,
-        ),
-        value: mule_protocol::ed2k::tags::TagValue::UInt32(emule_ver),
-    });
-
-    // MiscOptions1 — formato de eMule (BaseClient.cpp): AICH<<29 | Unicode<<28 |
-    // UDPVer<<24 | DataComp<<20 | SecIdent<<16 | SrcExch<<12 | ExtReq<<8 |
-    // Comments<<4 | NoView<<2 | MultiPkt<<1 | Preview<<0.
-    // SecIdent = 3 (v1+v2) cuando hay una clave RSA utilizable cargada, si no 0.
-    // MultiPacket = 1 (como en eMule — OP_MULTIPACKET* está decodificado);
-    // Preview = 0: OP_REQUESTPREVIEW/PREVIEWANSWER no implementados.
-    let misc1: u32 = (1 << 29)
-        | (1 << 28)
-        | (4 << 24)
-        | (1 << 20)
-        | ((sec_ident_cap as u32 & 0x0F) << 16)
-        | (4 << 12)
-        | (2 << 8)
-        | (1 << 4)
-        | (1 << 1);
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(
-            mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_MISCOPTIONS1,
-        ),
-        value: mule_protocol::ed2k::tags::TagValue::UInt32(misc1),
-    });
-
-    // MiscOptions2 — formato de eMule: FileIdent<<13 | DirectUDPCallback<<12 |
-    // Captcha<<11 | SrcExch2<<10 | CryptReq<<9 | CryptWants<<8 | CryptSup<<7 |
-    // ExtMultiPkt<<5 | LargeFiles<<4 | KadVersion<<0. KadVersion = 10
-    // (KADEMLIA_VERSION, eMule 0.72a): añade la característica de almacenamiento
-    // de palabras clave AICH de v9 (TAG_KADAICHHASHPUB / TAG_KADAICHHASHRESULT). El bit 11
-    // (Captcha) permanece en 0 — las respuestas de CAPTCHA no están implementadas.
-    // `BaseClient.cpp:1007` de eMule — bit 12 «DirectUDPCallback» anunciado
-    // cuando TCP es inalcanzable (sin HighID eD2K) pero el UDP de Kad está
-    // probado como abierto (NAT de cono completo): los pares pueden entonces enviarnos
-    // `OP_DIRECTCALLBACKREQ` para que conectemos hacia ellos.
     let udp_verified_open = match kad_service {
         Some(kad) => {
             let tracker = kad.udp().firewall_tracker();
@@ -292,19 +295,21 @@ pub(crate) async fn perform_peer_handshake(
         }
         None => false,
     };
-    // FileIdent<<13 = 1: los códecs FileIdentifier (OP_MULTIPACKET_EXT2,
-    // OP_HASHSET*2) están implementados — eMule 0.72a también lo anuncia.
-    let misc2: u32 = crate::services::hello_caps::misc_options2(
-        client_id < 0x0100_0000,
+    let ed25519_pubkey = match identity {
+        Some(id) => id.lock().await.ed25519_public_key(),
+        None => None,
+    };
+    let pc26 = local_pc26_caps(ed25519_pubkey, None, None, obfuscation_enabled);
+    let tags = build_hello_tags(&HelloBuildParams {
+        nickname,
+        tcp_port: client_port,
+        kad_port,
+        sec_ident_cap,
+        tcp_low_id: client_id < 0x0100_0000,
         udp_verified_open,
         obfuscation_enabled,
         obfuscation_required,
-    );
-    tags.push(mule_protocol::ed2k::tags::Ed2kTag {
-        name: mule_protocol::ed2k::tags::TagName::Id(
-            mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_MISCOPTIONS2,
-        ),
-        value: mule_protocol::ed2k::tags::TagValue::UInt32(misc2),
+        pc26_caps: Some(&pc26),
     });
 
     let hello = Ed2kHello {
@@ -388,6 +393,7 @@ pub(crate) async fn perform_peer_handshake(
     let mut peer_supports_compression = false;
     let mut peer_multipacket = super::source_exchange::MultiPacketLevel::None;
     let mut peer_file_identifiers = false;
+    let mut peer_pc26_caps: Option<mule_protocol::ed2k::pc26::Pc26PeerCaps> = None;
 
     let handshake_deadline = tokio::time::Instant::now() + timeouts.handshake_timeout;
     while !received_hello_answer {
@@ -540,6 +546,7 @@ pub(crate) async fn perform_peer_handshake(
                                         );
                                         peer_file_identifiers =
                                             peer_info.supports_file_identifiers();
+                                        peer_pc26_caps = peer_info.pc26_caps();
 
                                         let unknown_tag_ids: Vec<String> = peer_info
                                             .unknown_tags
@@ -618,7 +625,29 @@ pub(crate) async fn perform_peer_handshake(
                                             // requerido para OP_DIRECTCALLBACKREQ.
                                             udp_port: peer_udp_port.unwrap_or(0),
                                         };
-                                        let _ = downloads.lock().await.upsert_peer_sources(file_hash_str, &[updated_src]);
+                                        {
+                                            let mut dl_svc = downloads.lock().await;
+                                            let _ = dl_svc.upsert_peer_sources(file_hash_str, &[updated_src]);
+                                            if let Some(ref pc) = peer_pc26_caps {
+                                                if pc.ipv6_endpoint.is_some() || pc.quic_port.is_some() {
+                                                    let ipv6_str = pc.ipv6_endpoint.map(|(octets, port)| {
+                                                        std::net::SocketAddrV6::new(
+                                                            std::net::Ipv6Addr::from(octets),
+                                                            port,
+                                                            0,
+                                                            0,
+                                                        )
+                                                        .to_string()
+                                                    });
+                                                    let _ = dl_svc.update_peer_source_modern_endpoints(
+                                                        file_hash_str,
+                                                        address_str,
+                                                        ipv6_str.as_deref(),
+                                                        pc.quic_port.unwrap_or(0),
+                                                    );
+                                                }
+                                            }
+                                        }
 
                                         for tag in &ans.tags {
                                             if let mule_protocol::ed2k::tags::TagName::Id(mule_protocol::ed2k::tags::TAG_SPECIAL_EMULE_UDPPORTS) = tag.name {
@@ -670,6 +699,8 @@ pub(crate) async fn perform_peer_handshake(
         peer_kad_version,
         peer_multipacket,
         peer_file_identifiers,
+        peer_pc26_caps,
+        initial_rtt_ms,
         connected_ms,
     })
 }

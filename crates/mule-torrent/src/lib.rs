@@ -1,18 +1,37 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach" & Antigravity
 
-//! Motor BitTorrent integrado acotado y optimizado para bajo consumo de memoria.
+//! Motor BitTorrent integrado acotado, gobernado por política de red, `ipfilter`, uTP y Dual-Stack.
+
+pub mod blocklist;
+pub mod config;
 
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+
 use librqbit::api::TorrentIdOrHash;
-use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
+use librqbit::{
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ListenerMode, ListenerOptions, Session,
+    SessionOptions, SessionPersistenceConfig,
+};
+use mule_network_policy::validator::validate_connect_address;
+use mule_network_policy::{NetworkPolicyManager, NetworkState};
 use serde::{Deserialize, Serialize};
 
-/// Límite estricto de pares concurrentes por torrent para evitar sobrecarga de descriptores y memoria de búfer.
-pub const TORRENT_PEER_LIMIT: usize = 32;
+pub use config::{
+    TorrentCapabilitiesSnapshot, TorrentError, TorrentPolicyConfig, DEFAULT_TORRENT_CLIENT_NAME,
+    DEFAULT_TORRENT_PEER_LIMIT,
+};
 
+/// Alias compatible con versiones previas del límite por defecto de pares por torrent.
+pub const TORRENT_PEER_LIMIT: usize = DEFAULT_TORRENT_PEER_LIMIT;
+
+/// Carpeta de estado `fastresume` bajo `blocklist_dir`.
+const FASTRESUME_SUBDIR: &str = "bt_session";
+
+/// Instantánea pública de estado de una descarga torrent gestionada.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TorrentSnapshot {
     pub id: usize,
@@ -29,29 +48,50 @@ pub struct TorrentSnapshot {
     pub category: Option<String>,
 }
 
+/// Motor BitTorrent moderno integrado con aplicación de política de red y bloqueo IP.
 pub struct TorrentEngine {
     session: Arc<Session>,
     default_output_dir: PathBuf,
     categories: RwLock<HashMap<String, String>>,
+    policy: Option<Arc<NetworkPolicyManager>>,
+    peer_limit: usize,
+    capabilities: TorrentCapabilitiesSnapshot,
 }
 
 impl TorrentEngine {
-    pub async fn new(default_output_dir: PathBuf) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    /// Inicia el motor con configuración estándar predeterminada (sin políticas externas).
+    pub async fn new(
+        default_output_dir: PathBuf,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let opts = SessionOptions::default();
         let session = Session::new_with_opts(default_output_dir.clone(), opts).await?;
         Ok(Self {
             session,
             default_output_dir,
             categories: RwLock::new(HashMap::new()),
+            policy: None,
+            peer_limit: DEFAULT_TORRENT_PEER_LIMIT,
+            capabilities: TorrentCapabilitiesSnapshot {
+                utp_enabled: false,
+                ipv6_dual_stack: true,
+                fastresume_enabled: false,
+                ip_filter_entries: 0,
+                upnp_coordinated: false,
+                loopback_only: false,
+                mse_pe_supported: false,
+            },
         })
     }
 
+    /// Inicia un motor aislado completamente sin red saliente para pruebas en laboratorio.
     pub async fn new_offline(
         default_output_dir: PathBuf,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let opts = SessionOptions {
             dht: None,
             disable_trackers: true,
+            disable_local_service_discovery: true,
+            fastresume: false,
             persistence: None,
             listen: None,
             ..Default::default()
@@ -61,27 +101,295 @@ impl TorrentEngine {
             session,
             default_output_dir,
             categories: RwLock::new(HashMap::new()),
+            policy: None,
+            peer_limit: DEFAULT_TORRENT_PEER_LIMIT,
+            capabilities: TorrentCapabilitiesSnapshot {
+                utp_enabled: false,
+                ipv6_dual_stack: false,
+                fastresume_enabled: false,
+                ip_filter_entries: 0,
+                upnp_coordinated: false,
+                loopback_only: true,
+                mse_pe_supported: false,
+            },
         })
     }
 
+    /// Inicia el motor BitTorrent integrando `NetworkPolicyManager`, `IpFilter`, uTP,
+    /// Dual-Stack IPv6, `fastresume`, UPnP coordinado e interruptor de corte atómico.
+    pub async fn new_with_policy(
+        policy: Arc<NetworkPolicyManager>,
+        cfg: TorrentPolicyConfig,
+    ) -> Result<Self, TorrentError> {
+        let state = policy.state();
+        if matches!(state, NetworkState::Disabled | NetworkState::ShuttingDown) {
+            return Err(TorrentError::PolicyDenied(
+                "la red está deshabilitada por el interruptor de corte".to_string(),
+            ));
+        }
+
+        if cfg
+            .default_output_dir
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err(TorrentError::InvalidPath(
+                "no se permite '..' en la carpeta de descargas torrent".to_string(),
+            ));
+        }
+
+        let exported =
+            blocklist::export_ipfilter_to_librqbit_file(&policy.ip_filter(), &cfg.blocklist_dir)
+                .map_err(|e| {
+                    TorrentError::Session(format!("error exportando lista de bloqueo ipfilter: {e}"))
+                })?;
+        let (blocklist_url, ip_filter_entries) = match exported {
+            Some((path, count)) => {
+                let url = url::Url::from_file_path(&path).map_err(|_| {
+                    TorrentError::InvalidPath(format!(
+                        "no se pudo convertir ruta de blocklist a URI file://: {:?}",
+                        path
+                    ))
+                })?;
+                (Some(url.to_string()), count)
+            }
+            None => (None, 0),
+        };
+
+        let policy_cancel = policy.cancellation_token();
+        let rqbit_cancel = tokio_util::sync::CancellationToken::new();
+        let rqbit_cancel_bridge = rqbit_cancel.clone();
+        tokio::spawn(async move {
+            policy_cancel.cancelled().await;
+            rqbit_cancel_bridge.cancel();
+        });
+
+        let loopback_only = policy.profile().is_loopback_only();
+        let peer_limit = cfg.peer_limit.max(1);
+
+        let (session, effective_ipv6, effective_fastresume, effective_utp, effective_upnp) =
+            if loopback_only {
+                let opts = SessionOptions {
+                    dht: None,
+                    disable_trackers: true,
+                    disable_local_service_discovery: true,
+                    fastresume: false,
+                    persistence: None,
+                    listen: None,
+                    blocklist_url,
+                    peer_limit: Some(peer_limit),
+                    cancellation_token: Some(rqbit_cancel),
+                    client_name_and_version: cfg.client_name_and_version.clone(),
+                    ..Default::default()
+                };
+                let s = Session::new_with_opts(cfg.default_output_dir.clone(), opts)
+                    .await
+                    .map_err(|e| TorrentError::Session(e.to_string()))?;
+                (s, false, false, false, false)
+            } else {
+                let persistence_folder = if cfg.fastresume {
+                    let folder = cfg.blocklist_dir.join(FASTRESUME_SUBDIR);
+                    std::fs::create_dir_all(&folder).map_err(|e| {
+                        TorrentError::InvalidPath(format!(
+                            "no se pudo crear directorio fastresume {:?}: {e}",
+                            folder
+                        ))
+                    })?;
+                    Some(folder)
+                } else {
+                    None
+                };
+
+                let build_opts = |use_ipv6: bool,
+                                  bl_url: Option<String>,
+                                  pers_dir: Option<&std::path::Path>,
+                                  tok: tokio_util::sync::CancellationToken|
+                 -> SessionOptions {
+                    let listen_ip = if use_ipv6 {
+                        IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+                    } else {
+                        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+                    };
+                    let listen_addr = SocketAddr::new(listen_ip, cfg.listen_port.unwrap_or(0));
+                    let mode = if cfg.enable_utp {
+                        ListenerMode::TcpAndUtp
+                    } else {
+                        ListenerMode::TcpOnly
+                    };
+                    let persistence = pers_dir.map(|p| SessionPersistenceConfig::Json {
+                        folder: Some(p.to_path_buf()),
+                    });
+                    SessionOptions {
+                        fastresume: persistence.is_some(),
+                        persistence,
+                        listen: Some(ListenerOptions {
+                            mode,
+                            listen_addr,
+                            enable_upnp_port_forwarding: cfg.enable_upnp,
+                            ipv4_only: !use_ipv6,
+                            ..Default::default()
+                        }),
+                        ipv4_only: !use_ipv6,
+                        blocklist_url: bl_url,
+                        peer_limit: Some(peer_limit),
+                        cancellation_token: Some(tok),
+                        client_name_and_version: cfg.client_name_and_version.clone(),
+                        ..Default::default()
+                    }
+                };
+
+                let first_opts = build_opts(
+                    cfg.ipv6_dual_stack,
+                    blocklist_url.clone(),
+                    persistence_folder.as_deref(),
+                    rqbit_cancel.clone(),
+                );
+                match Session::new_with_opts(cfg.default_output_dir.clone(), first_opts).await {
+                    Ok(s) => (
+                        s,
+                        cfg.ipv6_dual_stack,
+                        cfg.fastresume,
+                        cfg.enable_utp,
+                        cfg.enable_upnp,
+                    ),
+                    Err(first_err) if cfg.ipv6_dual_stack => {
+                        tracing::warn!(
+                            "[BT] Error iniciando escucha dual-stack IPv6 ({first_err}); reintentando en IPv4"
+                        );
+                        let fallback_opts = build_opts(
+                            false,
+                            blocklist_url,
+                            persistence_folder.as_deref(),
+                            rqbit_cancel,
+                        );
+                        let s = Session::new_with_opts(cfg.default_output_dir.clone(), fallback_opts)
+                            .await
+                            .map_err(|e| TorrentError::Session(e.to_string()))?;
+                        (s, false, cfg.fastresume, cfg.enable_utp, cfg.enable_upnp)
+                    }
+                    Err(e) => return Err(TorrentError::Session(e.to_string())),
+                }
+            };
+
+        Ok(Self {
+            session,
+            default_output_dir: cfg.default_output_dir,
+            categories: RwLock::new(HashMap::new()),
+            policy: Some(policy),
+            peer_limit,
+            capabilities: TorrentCapabilitiesSnapshot {
+                utp_enabled: effective_utp,
+                ipv6_dual_stack: effective_ipv6,
+                fastresume_enabled: effective_fastresume,
+                ip_filter_entries,
+                upnp_coordinated: effective_upnp,
+                loopback_only,
+                mse_pe_supported: false,
+            },
+        })
+    }
+
+    /// Devuelve la instantánea verificable de capacidades reales del motor BitTorrent.
+    pub fn capabilities(&self) -> TorrentCapabilitiesSnapshot {
+        self.capabilities.clone()
+    }
+
+    fn ensure_policy_active(&self) -> Result<(), TorrentError> {
+        if let Some(policy) = &self.policy {
+            let st = policy.state();
+            if matches!(st, NetworkState::Disabled | NetworkState::ShuttingDown) {
+                return Err(TorrentError::PolicyDenied(
+                    "operación torrent denegada por interruptor de corte".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    async fn validate_torrent_url(&self, raw_url: &str) -> Result<(), TorrentError> {
+        self.ensure_policy_active()?;
+        let Some(policy) = &self.policy else {
+            return Ok(());
+        };
+        let parsed = url::Url::parse(raw_url)
+            .map_err(|e| TorrentError::SsrfRejected(format!("URI inválida '{raw_url}': {e}")))?;
+
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
+            return Ok(());
+        }
+        Self::validate_http_url_against_policy(&parsed, policy).await
+    }
+
+    async fn validate_http_url_against_policy(
+        parsed: &url::Url,
+        policy: &NetworkPolicyManager,
+    ) -> Result<(), TorrentError> {
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| TorrentError::SsrfRejected("la URL carece de host".to_string()))?;
+        let trimmed = host.trim_start_matches('[').trim_end_matches(']');
+        let port = parsed.port_or_known_default().unwrap_or(80);
+        let profile = policy.profile();
+
+        let addrs: Vec<SocketAddr> = if let Ok(ip) = trimmed.parse::<IpAddr>() {
+            vec![SocketAddr::new(ip, port)]
+        } else {
+            if profile.is_loopback_only() && !trimmed.eq_ignore_ascii_case("localhost") {
+                return Err(TorrentError::SsrfRejected(format!(
+                    "host remoto '{host}' prohibido en perfil aislado loopback"
+                )));
+            }
+            let resolved: Vec<SocketAddr> = tokio::net::lookup_host((trimmed, port))
+                .await
+                .map_err(|e| {
+                    TorrentError::SsrfRejected(format!("error resolviendo DNS para '{host}': {e}"))
+                })?
+                .collect();
+            if resolved.is_empty() {
+                return Err(TorrentError::SsrfRejected(format!(
+                    "resolución DNS vacía para '{host}'"
+                )));
+            }
+            resolved
+        };
+
+        for addr in addrs {
+            validate_connect_address(&addr, profile)
+                .map_err(|v| TorrentError::SsrfRejected(v.to_string()))?;
+            if let Some(rule) = policy.ip_filter().check_ip(addr.ip()) {
+                return Err(TorrentError::SsrfRejected(format!(
+                    "IP {addr} bloqueada por ipfilter ({})",
+                    rule.description
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Añade un torrent por URL (`magnet:`, `http://` o `https://`), validando antes la política anti-SSRF.
     pub async fn add_url(
         &self,
         url: &str,
         output_folder: Option<PathBuf>,
         category: Option<String>,
     ) -> Result<TorrentSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        self.validate_torrent_url(url).await?;
         let add_torrent = AddTorrent::from_url(url.to_string());
-        self.add_torrent_internal(add_torrent, output_folder, category).await
+        self.add_torrent_internal(add_torrent, output_folder, category)
+            .await
     }
 
+    /// Añade un torrent desde los bytes de un archivo `.torrent`.
     pub async fn add_bytes(
         &self,
         bytes: Vec<u8>,
         output_folder: Option<PathBuf>,
         category: Option<String>,
     ) -> Result<TorrentSnapshot, Box<dyn std::error::Error + Send + Sync>> {
+        self.ensure_policy_active()?;
         let add_torrent = AddTorrent::from_bytes(bytes);
-        self.add_torrent_internal(add_torrent, output_folder, category).await
+        self.add_torrent_internal(add_torrent, output_folder, category)
+            .await
     }
 
     async fn add_torrent_internal(
@@ -100,7 +408,7 @@ impl TorrentEngine {
         let opts = AddTorrentOptions {
             output_folder: Some(out_dir.to_string_lossy().to_string()),
             overwrite: true,
-            peer_limit: Some(TORRENT_PEER_LIMIT),
+            peer_limit: Some(self.peer_limit),
             ..Default::default()
         };
 
@@ -157,6 +465,7 @@ impl TorrentEngine {
         })
     }
 
+    /// Lista el estado instantáneo de todos los torrents gestionados.
     pub fn list(&self) -> Vec<TorrentSnapshot> {
         let cats = self.categories.read().ok();
         self.session.with_torrents(|torrents| {
@@ -165,9 +474,7 @@ impl TorrentEngine {
                     let hash_hex = handle.info_hash().as_string();
                     let name = handle.name().unwrap_or_else(|| "Torrent".to_string());
                     let stats = handle.stats();
-                    let category = cats
-                        .as_ref()
-                        .and_then(|c| c.get(&hash_hex).cloned());
+                    let category = cats.as_ref().and_then(|c| c.get(&hash_hex).cloned());
                     TorrentSnapshot {
                         id,
                         name,
@@ -207,6 +514,7 @@ impl TorrentEngine {
         })
     }
 
+    /// Pausa la transferencia del torrent identificado por `id`.
     pub async fn pause(&self, id: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(handle) = self.session.get(TorrentIdOrHash::Id(id)) {
             self.session.pause(&handle).await?;
@@ -214,15 +522,24 @@ impl TorrentEngine {
         Ok(())
     }
 
+    /// Reanuda un torrent previamente pausado.
     pub async fn resume(&self, id: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.ensure_policy_active()?;
         if let Some(handle) = self.session.get(TorrentIdOrHash::Id(id)) {
             self.session.unpause(&handle).await?;
         }
         Ok(())
     }
 
-    pub async fn delete(&self, id: usize, delete_files: bool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.session.delete(TorrentIdOrHash::Id(id), delete_files).await?;
+    /// Elimina un torrent de la sesión (opcionalmente borrando archivos del disco).
+    pub async fn delete(
+        &self,
+        id: usize,
+        delete_files: bool,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.session
+            .delete(TorrentIdOrHash::Id(id), delete_files)
+            .await?;
         Ok(())
     }
 }
@@ -230,10 +547,10 @@ impl TorrentEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mule_network_policy::{NetworkProfile, ResourceBudgets};
 
-    /// Build a minimal valid bencoded single-file `.torrent` buffer for offline testing.
+    /// Construye un archivo `.torrent` válido mínimo en memoria para pruebas sin conexión.
     fn sample_torrent_bytes() -> Vec<u8> {
-        // d8:announce25:http://127.0.0.1/announce4:infod6:lengthi1024e4:name8:test.bin12:piece lengthi16384e6:pieces20:AAAAAAAAAAAAAAAAAAAAee
         let mut buf = Vec::new();
         buf.extend_from_slice(
             b"d8:announce25:http://127.0.0.1/announce4:infod6:lengthi1024e4:name8:test.bin12:piece lengthi16384e6:pieces20:",
@@ -253,11 +570,7 @@ mod tests {
         assert!(engine.list().is_empty());
 
         let snap = engine
-            .add_bytes(
-                sample_torrent_bytes(),
-                None,
-                Some("movies".to_string()),
-            )
+            .add_bytes(sample_torrent_bytes(), None, Some("movies".to_string()))
             .await
             .expect("valid bencoded torrent should be added");
 
@@ -265,7 +578,6 @@ mod tests {
         assert_eq!(snap.total_bytes, 1024);
         assert_eq!(snap.category.as_deref(), Some("movies"));
 
-        // Pause immediately so no tracker activity continues
         engine.pause(snap.id).await.unwrap();
 
         let listed = engine.list();
@@ -285,5 +597,97 @@ mod tests {
             .unwrap();
         let err = engine.add_bytes(b"not-valid-bencode".to_vec(), None, None).await;
         assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_new_with_policy_loads_ipfilter_blocklist_and_respects_kill_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let dl_dir = dir.path().join("downloads");
+        let data_dir = dir.path().join("data");
+        std::fs::create_dir_all(&dl_dir).unwrap();
+
+        let policy = Arc::new(NetworkPolicyManager::new(
+            NetworkProfile::LocalLab,
+            ResourceBudgets::default(),
+        ));
+        policy
+            .ip_filter()
+            .load_from_str("203.0.113.10 - 203.0.113.20 , 0 , TestBlock\n")
+            .unwrap();
+
+        let cfg = TorrentPolicyConfig::new(dl_dir, data_dir.clone());
+        let engine = TorrentEngine::new_with_policy(Arc::clone(&policy), cfg)
+            .await
+            .expect("engine with ipfilter blocklist should start");
+
+        let caps = engine.capabilities();
+        assert_eq!(caps.ip_filter_entries, 1);
+        assert!(caps.loopback_only);
+        assert!(!caps.mse_pe_supported);
+        assert!(data_dir.join("librqbit_ipfilter.p2p").exists());
+
+        // Activar interruptor de corte bloquea nuevas operaciones.
+        policy.disconnect_all();
+        let err = engine.add_bytes(sample_torrent_bytes(), None, None).await;
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_add_url_enforces_ssrf_and_network_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let dl_dir = dir.path().join("dl");
+        let data_dir = dir.path().join("data");
+        std::fs::create_dir_all(&dl_dir).unwrap();
+
+        // Bajo perfil LocalLab se bloquean URLs HTTP no-loopback.
+        let lab_policy = Arc::new(NetworkPolicyManager::new(
+            NetworkProfile::LocalLab,
+            ResourceBudgets::default(),
+        ));
+        let engine = TorrentEngine::new_with_policy(
+            lab_policy,
+            TorrentPolicyConfig::new(dl_dir.clone(), data_dir.clone()),
+        )
+        .await
+        .unwrap();
+
+        for bad in [
+            "http://169.254.169.254/latest.torrent",
+            "http://192.168.1.1/file.torrent",
+            "http://example.com/linux.torrent",
+        ] {
+            let err = engine.add_url(bad, None, None).await;
+            assert!(err.is_err(), "debe rechazarse {bad} en LocalLab");
+        }
+
+        // Validación anti-SSRF bajo perfil público sin arrancar tráfico DHT saliente.
+        let pub_policy = NetworkPolicyManager::new(
+            NetworkProfile::PublicEd2kKadPreview,
+            ResourceBudgets::default(),
+        );
+        pub_policy
+            .ip_filter()
+            .load_from_str("8.8.4.4 - 8.8.4.4 , 0 , BlockedPublic\n")
+            .unwrap();
+        for bad_ssrf in [
+            "http://169.254.169.254/a.torrent",
+            "http://10.0.0.1/a.torrent",
+            "http://127.0.0.1/a.torrent",
+            "http://8.8.4.4/a.torrent",
+        ] {
+            let parsed = url::Url::parse(bad_ssrf).unwrap();
+            assert!(
+                TorrentEngine::validate_http_url_against_policy(&parsed, &pub_policy)
+                    .await
+                    .is_err(),
+                "SSRF o ipfilter en perfil público debía rechazar {bad_ssrf}"
+            );
+        }
+        let ok_public = url::Url::parse("https://8.8.8.8/ubuntu.torrent").unwrap();
+        assert!(
+            TorrentEngine::validate_http_url_against_policy(&ok_public, &pub_policy)
+                .await
+                .is_ok()
+        );
     }
 }

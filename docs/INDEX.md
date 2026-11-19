@@ -681,6 +681,8 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `docs/architecture/rpc_protocol.md` | Contrato JSON-RPC 2.0/WebSocket demonio↔clientes: transporte, auth, métodos, eventos, códigos de error, versionado |
 | `docs/architecture/plan_daemon_events.md` | Plan de eventos del demonio: subidas en tiempo real, `statsTick`, ciclo de vida de descargas, fin del polling (fases E1–E6) |
 | `docs/architecture/adr_auto_update.md` | ADR: Sistema de actualización automática integrado (In-App Staging + Atomic Self-Replace, Ed25519, graceful shutdown) |
+| `docs/architecture/conectividad_nat_quic_2026.md` | Especificación de conectividad 2026: cascada UPnP/PCP/NAT-PMP, IPv6 Pinhole, Happy Eyeballs v2, QUIC RFC 9000 y UDP Hole Punching |
+| `docs/architecture/bittorrent_negociacion_2026.md` | Especificación de seguridad, IP filter, uTP, Dual-Stack IPv6 y capacidades en `mule-torrent` |
 
 ### docs/walkthroughs/ — Guías de ejecución e interoperabilidad por fase
 | Archivo | Función |
@@ -742,6 +744,10 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `ed2k/decisions/0001-ed2k-read-only.md` | ADR: eD2K en solo lectura |
 | `ed2k/decisions/0002-no-public-network.md` | ADR: sin red pública |
 | `ed2k/decisions/0003-wire-lab-separation.md` | ADR: separación wire/lab |
+| `ed2k/decisions/0004-public-ed2k-kad-production.md` | ADR: conectividad pública eD2K/Kad en producción |
+| `ed2k/decisions/0005-negociacion-pares-2026.md` | ADR: negociación moderna de pares 2026 (capa compatible + extensión `PC26`) |
+| `ed2k/negociacion_endurecimiento_2026.md` | Especificación de endurecimiento pre-handshake, SUI V2/caché, AICH, BDP, LEDBAT++ y peer scoring |
+| `ed2k/criptografia_moderna_pc26.md` | Especificación criptográfica `PC26`: X25519 + ML-KEM-768, ChaCha20-Poly1305, Ed25519 SUI v3, BLAKE3 Merkle y Zstd |
 
 ### docs/plans/ — Planes de implementación
 

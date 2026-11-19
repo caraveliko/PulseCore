@@ -300,6 +300,43 @@ impl IpFilter {
         Some(ranges[idx].clone())
     }
 
+    /// Exporta los rangos IPv4 estáticos y los baneos dinámicos vigentes ordenados y
+    /// deduplicados, para sincronizar listas de bloqueo con motores externos (p. ej. `librqbit`).
+    pub fn export_ipv4_ranges(&self) -> Vec<(std::net::Ipv4Addr, std::net::Ipv4Addr)> {
+        if !self.is_enabled() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        if let Ok(guard) = self.ranges.read() {
+            out.reserve(guard.len());
+            for r in guard.iter() {
+                out.push((
+                    std::net::Ipv4Addr::from(r.start),
+                    std::net::Ipv4Addr::from(r.end),
+                ));
+            }
+        }
+        let now = Instant::now();
+        if let Ok(bans) = self.dynamic_bans.read() {
+            for (ip, st) in bans.iter() {
+                if let Some(until) = st.banned_until {
+                    if now < until {
+                        let v4_opt = match ip {
+                            IpAddr::V4(v4) => Some(*v4),
+                            IpAddr::V6(v6) => v6.to_ipv4_mapped(),
+                        };
+                        if let Some(v4) = v4_opt {
+                            out.push((v4, v4));
+                        }
+                    }
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
     pub fn stats(&self) -> FilterStats {
         FilterStats {
             enabled: self.is_enabled(),
@@ -339,5 +376,31 @@ mod tests {
             assert!(!filter.record_connection_attempt(lan_ip));
         }
         assert!(filter.check_ip(lan_ip).is_none());
+    }
+
+    #[test]
+    fn test_export_ipv4_ranges_includes_static_and_dynamic_and_respects_enabled() {
+        let filter = IpFilter::new();
+        filter
+            .load_from_str("203.0.113.10 - 203.0.113.20 , 000 , RangoPrueba\n")
+            .unwrap();
+        let flood_ip = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 99));
+        for _ in 0..=MAX_CONNS_PER_FLOOD_WINDOW {
+            let _ = filter.record_connection_attempt(flood_ip);
+        }
+
+        let exported = filter.export_ipv4_ranges();
+        assert_eq!(exported.len(), 2);
+        assert!(exported.contains(&(
+            Ipv4Addr::new(198, 51, 100, 99),
+            Ipv4Addr::new(198, 51, 100, 99),
+        )));
+        assert!(exported.contains(&(
+            Ipv4Addr::new(203, 0, 113, 10),
+            Ipv4Addr::new(203, 0, 113, 20),
+        )));
+
+        filter.set_enabled(false);
+        assert!(filter.export_ipv4_ranges().is_empty());
     }
 }

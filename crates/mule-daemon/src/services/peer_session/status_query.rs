@@ -65,11 +65,35 @@ pub(crate) async fn handle_hashset_answer(
                     return true;
                 }
                 if let Some(aich) = &ans2.aich_set {
-                    tracing::debug!(
-                        "Peer {peer} sent AICH part hashset ({} hashes) for {file_hash_str} — not persisted",
-                        aich.part_hashes.len(),
-                        peer = log_peer_addr(target_addr)
-                    );
+                    let mut dl_svc = downloads.lock().await;
+                    let expected_parts = dl_svc
+                        .find_by_ed2k_hash(file_hash_str)
+                        .map(|dl| {
+                            dl.total_bytes
+                                .div_ceil(mule_protocol::ed2k::ED2K_PART_SIZE as u64)
+                                as usize
+                        })
+                        .unwrap_or(aich.part_hashes.len());
+                    if expected_parts == 0 || aich.part_hashes.len() == expected_parts {
+                        if let Err(e) = dl_svc.store_aich_part_hashes(file_hash_str, &aich.part_hashes) {
+                            tracing::warn!(
+                                "Peer {peer}: failed persisting AICH part hashes for {file_hash_str}: {e}",
+                                peer = log_peer_addr(target_addr)
+                            );
+                        } else {
+                            tracing::debug!(
+                                "Peer {peer}: persisted {} AICH part hashes for {file_hash_str}",
+                                aich.part_hashes.len(),
+                                peer = log_peer_addr(target_addr)
+                            );
+                        }
+                    } else {
+                        tracing::warn!(
+                            "Peer {peer}: AICH part count mismatch for {file_hash_str} (got {}, expected {expected_parts})",
+                            aich.part_hashes.len(),
+                            peer = log_peer_addr(target_addr)
+                        );
+                    }
                 }
                 match ans2.md4_set {
                     Some(ans) => store_part_hashes(ans, dl_hash_bytes, file_hash_str, target_addr, downloads).await,

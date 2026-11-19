@@ -16,6 +16,7 @@ pub use super::transfer::{OP_COMPRESSEDPART_I64, OP_SENDINGPART_I64};
 use super::types::{PeerError, PeerTimeouts, SwarmInnerState};
 use crate::services::downloads::DownloadService;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_peer_connection(
     file_hash_str: String,
     dl_hash_bytes: [u8; 16],
@@ -44,6 +45,8 @@ pub(crate) async fn run_peer_connection(
     sui_stats: Arc<crate::services::identity::SuiStats>,
     rate_limiters: Option<Arc<mule_network_policy::PolicyRateLimiters>>,
     sx_env: SxEnv,
+    score_tracker: Arc<std::sync::Mutex<super::peer_scoring::PeerScoreTracker>>,
+    uss: Option<crate::services::UssService>,
 ) -> Result<u64, PeerError> {
     // eMule anuncia SecIdent=3 (v1|v2) en los bits 16-19 de MiscOptions1 cuando una
     // clave RSA utilizable está cargada, 0 en caso contrario.
@@ -51,6 +54,7 @@ pub(crate) async fn run_peer_connection(
         Some(id) if id.lock().await.has_key() => 3,
         _ => 0,
     };
+    let session_started = std::time::Instant::now();
     // 1-3. Realizar conexión TCP, negociación de ofuscación, OP_HELLO y esperar OP_HELLO_ANSWER
     let mut handshake_res = perform_peer_handshake(
         target_addr,
@@ -76,8 +80,21 @@ pub(crate) async fn run_peer_connection(
         obfuscation_padding_max,
         &downloads,
         sec_ident_cap,
+        &identity,
     )
     .await?;
+
+    if let (Some(rtt_ms), Some(u)) = (handshake_res.initial_rtt_ms, uss.as_ref()) {
+        u.record_passive_rtt_sample(rtt_ms);
+    }
+    if let Ok(mut guard) = score_tracker.lock() {
+        guard.record_handshake_profile(
+            &address_str,
+            handshake_res.stream.is_modern_aead() || handshake_res.peer_pc26_caps.is_some(),
+            false,
+            handshake_res.initial_rtt_ms,
+        );
+    }
 
     // 4-7. Consultar estado del archivo, solicitar nombre, iniciar petición de subida y esperar en cola.
     // El SUI saliente (desafíos OP_SECIDENTSTATE del extremo remoto) se gestiona
@@ -91,7 +108,9 @@ pub(crate) async fn run_peer_connection(
         );
     }
 
-    let mut sui = super::sui::OutboundSui::new(identity).with_stats(sui_stats);
+    let mut sui = super::sui::OutboundSui::new(identity)
+        .with_stats(sui_stats)
+        .with_cache(Arc::clone(&downloads), target_user_hash);
     sui.set_peer_sec_ident(handshake_res.peer_sec_ident);
     // InfoPacketsReceived de eMule: una vez intercambiados los paquetes de información, desafiar al
     // par si anunció compatibilidad con Secure Ident (rol de verificador).
@@ -135,7 +154,7 @@ pub(crate) async fn run_peer_connection(
     // 8-10. Planificador de bloques multifuente, solicitud de bloques y transferencias
     // continuas — con intercambio A4AF a nivel de socket en NNP/FNF
     // (`SwapToAnotherFile`: la conexión activa vuelve a pedir otro archivo).
-    run_status_transfer_with_a4af(
+    let res = run_status_transfer_with_a4af(
         &mut handshake_res.stream,
         target_addr,
         file_hash_str,
@@ -154,8 +173,25 @@ pub(crate) async fn run_peer_connection(
         &sx_local,
         &mut sui,
         rate_limiters.as_deref(),
+        uss.as_ref(),
     )
-    .await
+    .await;
+    if let Ok(bytes) = res {
+        let elapsed_ms = session_started.elapsed().as_millis().max(1) as u64;
+        let avg_bps = bytes.saturating_mul(1000) / elapsed_ms;
+        if let Ok(mut guard) = score_tracker.lock() {
+            guard.record_handshake_profile(
+                &address_str,
+                handshake_res.stream.is_modern_aead() || handshake_res.peer_pc26_caps.is_some(),
+                sui.verified_credit_identity().is_some(),
+                handshake_res.initial_rtt_ms,
+            );
+            if bytes > 0 {
+                guard.record_transfer_success(&address_str, avg_bps);
+            }
+        }
+    }
+    res
 }
 
 /// Ejecuta `query_file_status_and_enter_queue` + `run_transfer_loop` para el
@@ -184,6 +220,7 @@ pub(crate) async fn run_status_transfer_with_a4af(
     sx_local: &SxLocalIds,
     sui: &mut super::sui::OutboundSui,
     rate_limiters: Option<&mule_network_policy::PolicyRateLimiters>,
+    uss: Option<&crate::services::UssService>,
 ) -> Result<u64, PeerError> {
     let mut cur_hash_str = file_hash_str;
     let mut cur_hash = dl_hash_bytes;
@@ -253,6 +290,7 @@ pub(crate) async fn run_status_transfer_with_a4af(
             sx_local,
             sui,
             rate_limiters,
+            uss,
         )
         .await
         {
@@ -372,12 +410,18 @@ pub(crate) async fn run_callback_session(
     rate_limiters: Option<Arc<mule_network_policy::PolicyRateLimiters>>,
     sx_env: SxEnv,
     sx_local: SxLocalIds,
+    score_tracker: Arc<std::sync::Mutex<super::peer_scoring::PeerScoreTracker>>,
+    uss: Option<crate::services::UssService>,
 ) -> Result<u64, PeerError> {
-    let mut sui = super::sui::OutboundSui::new(identity).with_stats(sui_stats);
+    let session_started = std::time::Instant::now();
+    let modern = stream.is_modern_aead();
+    let mut sui = super::sui::OutboundSui::new(identity)
+        .with_stats(sui_stats)
+        .with_cache(Arc::clone(&downloads), None);
     sui.set_peer_sec_ident(peer_sec_ident);
     sui.initiate(target_addr, &Ed2kEncoder::default(), &mut stream)
         .await;
-    run_status_transfer_with_a4af(
+    let res = run_status_transfer_with_a4af(
         &mut stream,
         target_addr,
         file_hash_str,
@@ -396,6 +440,23 @@ pub(crate) async fn run_callback_session(
         &sx_local,
         &mut sui,
         rate_limiters.as_deref(),
+        uss.as_ref(),
     )
-    .await
+    .await;
+    if let Ok(bytes) = res {
+        let elapsed_ms = session_started.elapsed().as_millis().max(1) as u64;
+        let avg_bps = bytes.saturating_mul(1000) / elapsed_ms;
+        if let Ok(mut guard) = score_tracker.lock() {
+            guard.record_handshake_profile(
+                &address_str,
+                modern,
+                sui.verified_credit_identity().is_some(),
+                None,
+            );
+            if bytes > 0 {
+                guard.record_transfer_success(&address_str, avg_bps);
+            }
+        }
+    }
+    res
 }

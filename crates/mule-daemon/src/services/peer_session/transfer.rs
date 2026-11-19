@@ -84,7 +84,7 @@ struct PendingBlock {
 /// Los niveles de velocidad baja solo se aplican a clientes eMule (`IsEmuleClient()`) una vez
 /// medida la tasa de transferencia; antes de medir la tasa (`peer_bps == 0`),
 /// toma por defecto 3 bloques para preparar la tubería de ventana TCP de inmediato.
-fn emule_pending_block_count(peer_bps: u64, is_emule_client: bool) -> usize {
+pub(super) fn emule_pending_block_count(peer_bps: u64, is_emule_client: bool) -> usize {
     if peer_bps == 0 {
         // Estado inicial antes de medir la tasa de transferencia: comienza con 3 bloques
         // (1 paquete OP_REQUESTPARTS completo con 3 rangos) para encauzar de inmediato.
@@ -161,6 +161,19 @@ fn encode_block_request_packet(
 /// paquetes `OP_REQUESTPARTS` de hasta tres rangos cada uno. Devuelve `true` cuando
 /// al menos un rango nuevo se envió por el cable.
 #[allow(clippy::too_many_arguments)]
+/// Registra una muestra de RTT al recibir un bloque válido y alimenta el estimador pasivo de USS.
+fn record_chunk_rtt(
+    rtt_tracker: &mut super::bdp_pipeline::PeerRttTracker,
+    uss: Option<&crate::services::UssService>,
+) {
+    if let Some(rtt_ms) = rtt_tracker.on_chunk_received(std::time::Instant::now()) {
+        if let Some(u) = uss {
+            u.record_passive_rtt_sample(rtt_ms);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn fill_and_send_block_requests(
     stream: &mut ObfuscatedStream<TcpStream>,
     encoder: &Ed2kEncoder,
@@ -174,6 +187,7 @@ async fn fill_and_send_block_requests(
     block_count: usize,
     target_addr: SocketAddr,
     file_size: u64,
+    rtt_tracker: &mut super::bdp_pipeline::PeerRttTracker,
 ) -> Result<bool, PeerError> {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -268,6 +282,7 @@ async fn fill_and_send_block_requests(
                 format!("Failed to send OP_REQUESTPARTS: {e}"),
             ));
         }
+        rtt_tracker.on_request_sent(std::time::Instant::now());
         for r in chunk {
             if let Some(p) = pending
                 .iter_mut()
@@ -451,6 +466,7 @@ async fn requeue_and_resume_transfer(
     zstreams: &mut HashMap<u64, Decompress>,
     sequencer: &mut Ed2kDownloadSequencer,
     last_block_data: &mut tokio::time::Instant,
+    rtt_tracker: &mut super::bdp_pipeline::PeerRttTracker,
 ) -> Result<RequeueOutcome, PeerError> {
     // Descartar el estado pendiente local y liberar los rangos en vuelo para
     // que otros pares puedan asumirlos mientras esperamos.
@@ -534,9 +550,14 @@ async fn requeue_and_resume_transfer(
         ctx.peer_ext_req,
         &completed,
         pending,
-        emule_pending_block_count(peer_bps, ctx.is_emule_client),
+        super::bdp_pipeline::adaptive_pending_block_count(
+            peer_bps,
+            rtt_tracker.srtt_ms(),
+            ctx.is_emule_client,
+        ),
         ctx.target_addr,
         ctx.file_size,
+        rtt_tracker,
     )
     .await?;
 
@@ -567,6 +588,7 @@ async fn requeue_and_resume_transfer(
     Ok(RequeueOutcome::Resumed)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_transfer_loop(
     stream: &mut ObfuscatedStream<TcpStream>,
     target_addr: SocketAddr,
@@ -587,6 +609,7 @@ pub(crate) async fn run_transfer_loop(
     sx_local: &SxLocalIds,
     sui: &mut super::sui::OutboundSui,
     rate_limiters: Option<&mule_network_policy::PolicyRateLimiters>,
+    uss: Option<&crate::services::UssService>,
 ) -> Result<u64, PeerError> {
     let encoder = Ed2kEncoder::default();
     let decoder = Ed2kDecoder::default().with_extended_requests_version(peer_ext_req);
@@ -683,6 +706,7 @@ pub(crate) async fn run_transfer_loop(
         .get(address_str)
         .map(|s| s.snapshot.transfer_rate_bps)
         .unwrap_or(0);
+    let mut rtt_tracker = super::bdp_pipeline::PeerRttTracker::new();
     let mut pending: VecDeque<PendingBlock> = VecDeque::new();
     fill_and_send_block_requests(
         stream,
@@ -694,9 +718,14 @@ pub(crate) async fn run_transfer_loop(
         peer_ext_req,
         &completed_ranges,
         &mut pending,
-        emule_pending_block_count(peer_bps, is_emule_client),
+        super::bdp_pipeline::adaptive_pending_block_count(
+            peer_bps,
+            rtt_tracker.srtt_ms(),
+            is_emule_client,
+        ),
         target_addr,
         file_size,
+        &mut rtt_tracker,
     )
     .await?;
 
@@ -877,6 +906,7 @@ pub(crate) async fn run_transfer_loop(
                     &mut zstreams,
                     &mut sequencer,
                     &mut last_block_data,
+                    &mut rtt_tracker,
                 )
                 .await?
                 {
@@ -1071,6 +1101,7 @@ pub(crate) async fn run_transfer_loop(
                                         break 'transfer_loop;
                                     }
                                 }
+                                record_chunk_rtt(&mut rtt_tracker, uss);
                                 total_received += data_len;
                                 bytes_since_rate_check += data_len;
                                 credit_pending_bytes += data_len;
@@ -1256,6 +1287,7 @@ pub(crate) async fn run_transfer_loop(
                                     }
 
                                     if produced > 0 {
+                                        record_chunk_rtt(&mut rtt_tracker, uss);
                                         total_received += produced as u64;
                                         bytes_since_rate_check += produced as u64;
                                         credit_pending_bytes += produced as u64;
@@ -1446,6 +1478,7 @@ pub(crate) async fn run_transfer_loop(
                                         &mut zstreams,
                                         &mut sequencer,
                                         &mut last_block_data,
+                                        &mut rtt_tracker,
                                     )
                                     .await
                                     {
@@ -1559,9 +1592,14 @@ pub(crate) async fn run_transfer_loop(
                                     peer_ext_req,
                                     &completed,
                                     &mut pending,
-                                    emule_pending_block_count(peer_bps, is_emule_client),
+                                    super::bdp_pipeline::adaptive_pending_block_count(
+                                        peer_bps,
+                                        rtt_tracker.srtt_ms(),
+                                        is_emule_client,
+                                    ),
                                     target_addr,
                                     file_size,
+                                    &mut rtt_tracker,
                                 )
                                 .await?;
                                 // Un envío de petición cuenta como actividad de transferencia

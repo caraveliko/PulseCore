@@ -9,6 +9,11 @@ authors.workspace = true
 [dependencies]
 rsa = "0.9"
 sha1 = { workspace = true, features = ["oid"] }
+sha2.workspace = true
+ring.workspace = true
+ml-kem.workspace = true
+blake3.workspace = true
+rand.workspace = true
 thiserror.workspace = true
 data-encoding.workspace = true
 

@@ -23,11 +23,14 @@ use crate::error::DaemonError;
 use crate::services::downloads::DownloadService;
 
 pub mod a4af;
+pub mod bdp_pipeline;
 pub mod change_client_id;
 pub mod connection;
 pub mod events;
 pub mod file_request;
 pub mod handshake;
+pub mod happy_eyeballs;
+pub mod peer_scoring;
 pub mod source_exchange;
 pub mod status_query;
 pub mod sui;
@@ -35,6 +38,7 @@ pub mod transfer;
 pub mod types;
 
 pub use connection::{emit_download_update, emit_event, OP_COMPRESSEDPART_I64, OP_SENDINGPART_I64};
+pub use peer_scoring::{calculate_backoff_for_reason, PeerScoreTracker};
 pub use types::{
     calculate_backoff_cooldown_ms, PeerConnectionStatus, PeerSessionSnapshot, PeerTimeouts,
     SwarmStatusSnapshot, MAX_GLOBAL_PEERS, MAX_PEERS_PER_DOWNLOAD, MAX_PEER_READ_BUFFER_SIZE,
@@ -122,6 +126,10 @@ pub struct PeerSessionManager {
     /// Limitadores de tasa de ancho de banda globales compartidos con la política de red —
     /// el bucle de transferencia modula los datos recibidos mediante `download_bucket`.
     rate_limiters: Arc<std::sync::RwLock<Option<Arc<mule_network_policy::PolicyRateLimiters>>>>,
+    /// Seguidor de reputación, latencia y diversidad de subred para puntuación de candidatos.
+    score_tracker: Arc<std::sync::Mutex<peer_scoring::PeerScoreTracker>>,
+    /// Controlador USS para alimentar muestras pasivas de RTT (respaldo LEDBAT++).
+    uss: Arc<std::sync::RwLock<Option<crate::services::UssService>>>,
 }
 
 impl PeerSessionManager {
@@ -151,13 +159,31 @@ impl PeerSessionManager {
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             ),
             rate_limiters: Arc::new(std::sync::RwLock::new(None)),
+            score_tracker: Arc::new(std::sync::Mutex::new(peer_scoring::PeerScoreTracker::new())),
+            uss: Arc::new(std::sync::RwLock::new(None)),
         }
+    }
+
+    /// Inyecta el servicio USS para alimentar el estimador pasivo LEDBAT++.
+    pub fn set_uss(&self, uss: crate::services::UssService) {
+        if let Ok(mut g) = self.uss.write() {
+            *g = Some(uss);
+        }
+    }
+
+    fn uss(&self) -> Option<crate::services::UssService> {
+        self.uss.read().ok().and_then(|g| g.clone())
     }
 
     /// Inyecta los limitadores de tasa de política de red compartidos (planificador
     /// global de ancho de banda de descarga para bucles de transferencia de pares).
     pub fn set_rate_limiters(&self, limiters: Arc<mule_network_policy::PolicyRateLimiters>) {
         *self.rate_limiters.write().unwrap() = Some(limiters);
+    }
+
+    /// Devuelve el seguidor compartido de reputación y puntuación de pares.
+    pub fn score_tracker(&self) -> Arc<std::sync::Mutex<peer_scoring::PeerScoreTracker>> {
+        Arc::clone(&self.score_tracker)
     }
 
     fn rate_limiters(&self) -> Option<Arc<mule_network_policy::PolicyRateLimiters>> {
@@ -563,6 +589,8 @@ impl PeerSessionManager {
         let identity_opt = self.identity();
         let sui_stats = self.sui_stats.read().unwrap().clone();
         let rate_limiters_opt = self.rate_limiters();
+        let score_tracker_clone = self.score_tracker();
+        let uss_opt = self.uss();
 
         // Span de sesión: `peer` seudonimizado se adjunta a todos los
         // eventos de la tarea en el JSONL (correlación sin IP en bruto).
@@ -599,6 +627,8 @@ impl PeerSessionManager {
                     sui_stats,
                     rate_limiters_opt,
                     sx_env,
+                    Arc::clone(&score_tracker_clone),
+                    uss_opt,
                 )
                 .await;
 
@@ -700,6 +730,9 @@ impl PeerSessionManager {
                         .unwrap_or(1);
 
                     let (new_status, new_cooldown) = if let Some(reason) = failure_reason {
+                        if let Ok(mut guard) = score_tracker_clone.lock() {
+                            guard.record_failure(&address_str, reason);
+                        }
                         match reason {
                             PeerFailureReason::FileNotFound => (PeerSourceStatus::Rejected, None),
                             // "No Needed Parts" de eMule (DS_NONEEDEDPARTS): la
@@ -730,7 +763,11 @@ impl PeerSessionManager {
                                         Some(effective_deadline),
                                     )
                                 } else {
-                                    let cd = calculate_backoff_cooldown_ms(next_fail_count);
+                                    let cd = calculate_backoff_for_reason(
+                                        next_fail_count,
+                                        reason,
+                                        rand::random::<f64>(),
+                                    );
                                     (PeerSourceStatus::Failed, Some(now_ms + cd))
                                 }
                             }
@@ -836,6 +873,8 @@ impl PeerSessionManager {
         let identity_opt = self.identity();
         let sui_stats = self.sui_stats.read().unwrap().clone();
         let rate_limiters_opt = self.rate_limiters();
+        let score_tracker_clone = self.score_tracker();
+        let uss_opt = self.uss();
 
         let log_addr = log_peer_addr(peer_addr);
         let session_span = tracing::info_span!("peer_session", peer = %log_addr);
@@ -866,6 +905,8 @@ impl PeerSessionManager {
                 rate_limiters_opt,
                 sx_env,
                 sx_local,
+                Arc::clone(&score_tracker_clone),
+                uss_opt,
             )
             .await;
 
@@ -929,6 +970,9 @@ impl PeerSessionManager {
                     .unwrap_or(1);
 
                 let (new_status, new_cooldown) = if let Some(reason) = failure_reason {
+                    if let Ok(mut guard) = score_tracker_clone.lock() {
+                        guard.record_failure(&source_address, reason);
+                    }
                     match reason {
                         PeerFailureReason::FileNotFound => (PeerSourceStatus::Rejected, None),
                         // DS_NONEEDEDPARTS de eMule: fuente conservada, reconsulta
@@ -940,7 +984,11 @@ impl PeerSessionManager {
                             if err_msg.as_deref() == Some("Disconnected in queue") || err_msg.as_deref() == Some("Queue socket idle (eMule CONNECTION_TIMEOUT)") {
                                 (PeerSourceStatus::Allowed, Some(now_ms + 180_000))
                             } else {
-                                let cd = calculate_backoff_cooldown_ms(next_fail_count);
+                                let cd = calculate_backoff_for_reason(
+                                    next_fail_count,
+                                    reason,
+                                    rand::random::<f64>(),
+                                );
                                 (PeerSourceStatus::Failed, Some(now_ms + cd))
                             }
                         }

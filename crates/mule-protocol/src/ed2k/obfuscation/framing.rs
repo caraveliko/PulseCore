@@ -13,17 +13,28 @@ pub const MAGICVALUE_SYNC: u32 = 0x835E6FC4;
 /// Identificador del método de cifrado para la ofuscación de protocolo básica con RC4 (`0x00`).
 pub const ENM_OBFUSCATION: u8 = 0x00;
 
+/// Identificador del método moderno `PC26` con X25519 + ChaCha20-Poly1305 (`0x10`).
+pub const ENM_PC26_X25519_CHACHA: u8 = 0x10;
+
+/// Identificador del método moderno `PC26` híbrido post-cuántico X25519 + ML-KEM-768 + ChaCha20-Poly1305 (`0x11`).
+pub const ENM_PC26_HYBRID_MLKEM768_CHACHA: u8 = 0x11;
+
+/// Prefijo mágico de 4 bytes para el saludo oportunista `PC26` (`"PC26"`).
+/// Su primer byte (`0x50`) no colisiona con `0xE3`, `0xC5` ni `0xD4`.
+pub const PC26_OPPORTUNISTIC_MAGIC: [u8; 4] = *b"PC26";
+
 /// Devuelve `true` si `byte` es un marcador de protocolo eD2K estándar sin cifrar.
 #[inline]
 pub fn is_standard_protocol_marker(byte: u8) -> bool {
     byte == PR_ED2K || byte == PR_EMULE || byte == PR_EMULE_COMPRESSED
 }
 
-/// Genera un byte semialeatorio garantizando que NO colisione con los marcadores de protocolo estándar.
+/// Genera un byte semialeatorio garantizando que NO colisione con los marcadores
+/// de protocolo estándar ni con el primer byte del prefijo oportunista `PC26`.
 pub fn generate_semi_random_marker<R: RngCore>(rng: &mut R) -> u8 {
     loop {
         let b = (rng.next_u32() & 0xFF) as u8;
-        if !is_standard_protocol_marker(b) {
+        if !is_standard_protocol_marker(b) && b != PC26_OPPORTUNISTIC_MAGIC[0] {
             return b;
         }
     }

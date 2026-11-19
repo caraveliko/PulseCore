@@ -6,6 +6,7 @@
 pub mod connection;
 pub mod dispatcher;
 pub mod share_browser;
+pub mod subnet_guard;
 pub mod types;
 
 use std::collections::HashMap;
@@ -15,6 +16,38 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+
+/// Tamaño de cola *backlog* para el socket de escucha TCP dual-stack.
+const TCP_LISTEN_BACKLOG: i32 = 1024;
+
+/// Enlaza un `TcpListener` de Tokio con soporte dual-stack IPv6+IPv4 (`IPV6_V6ONLY = false`)
+/// cuando se escucha en `[::]`.
+async fn bind_dual_stack_tcp_listener(bind_addr: SocketAddr) -> Result<TcpListener, String> {
+    if bind_addr.is_ipv6() && bind_addr.ip().is_unspecified() {
+        let domain = socket2::Domain::IPV6;
+        let sock = socket2::Socket::new(
+            domain,
+            socket2::Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        )
+        .map_err(|e| format!("Failed to create dual-stack IPv6 socket for {bind_addr}: {e}"))?;
+        let _ = sock.set_only_v6(false);
+        let _ = sock.set_reuse_address(true);
+        sock.set_nonblocking(true)
+            .map_err(|e| format!("Failed to set nonblocking on {bind_addr}: {e}"))?;
+        sock.bind(&socket2::SockAddr::from(bind_addr))
+            .map_err(|e| format!("Failed to bind dual-stack listener to {bind_addr}: {e}"))?;
+        sock.listen(TCP_LISTEN_BACKLOG)
+            .map_err(|e| format!("Failed to listen on dual-stack socket {bind_addr}: {e}"))?;
+        let std_listener: std::net::TcpListener = sock.into();
+        TcpListener::from_std(std_listener)
+            .map_err(|e| format!("Failed to adopt dual-stack listener {bind_addr}: {e}"))
+    } else {
+        TcpListener::bind(bind_addr)
+            .await
+            .map_err(|e| format!("Failed to bind TCP listener to {bind_addr}: {e}"))
+    }
+}
 
 use mule_network_policy::{ConnectionPurpose, NetworkPolicyManager};
 
@@ -61,7 +94,14 @@ impl InboundListenerService {
             kad: Arc::new(std::sync::RwLock::new(None)),
             kad_udp_port: 0,
             sx_env: Arc::new(std::sync::RwLock::new(None)),
+            subnet_guard: subnet_guard::SubnetQuotaGuard::new(),
+            quic_port: Arc::new(std::sync::atomic::AtomicU16::new(0)),
         }
+    }
+
+    /// Actualiza el puerto QUIC UDP local anunciado en `OP_HELLO_ANSWER`.
+    pub fn set_quic_port(&self, port: u16) {
+        self.quic_port.store(port, Ordering::Relaxed);
     }
 
     /// Inyecta el entorno de intercambio de fuentes compartido (política de red +
@@ -227,11 +267,11 @@ impl InboundListenerService {
             }
         };
 
-        let tokio_listener = match TcpListener::bind(bind_addr).await {
+        let tokio_listener = match bind_dual_stack_tcp_listener(bind_addr).await {
             Ok(l) => l,
             Err(e) => {
                 self.is_running.store(false, Ordering::SeqCst);
-                return Err(format!("Failed to bind TCP listener to {bind_addr}: {e}"));
+                return Err(e);
             }
         };
 
@@ -271,6 +311,17 @@ impl InboundListenerService {
                                     drop(socket);
                                     continue;
                                 }
+                                let _subnet_permit = match service_self.subnet_guard.try_acquire(ip) {
+                                    Ok(p) => p,
+                                    Err(subnet_guard::SubnetQuotaExceeded) => {
+                                        warn!(
+                                            "Rejected inbound connection from {peer}: subnet quota reached",
+                                            peer = crate::services::peer_session::log_peer_addr(remote_addr)
+                                        );
+                                        drop(socket);
+                                        continue;
+                                    }
+                                };
                                 let mut conns = service_self.active_conns.lock().await;
                                 let total_conns: usize = conns.values().sum();
                                 // El límite entrante sigue el presupuesto de sockets
@@ -298,6 +349,7 @@ impl InboundListenerService {
                                 let service_clone = service_self.clone();
                                 let cancel_clone = cancel_token.clone();
                                 tokio::spawn(async move {
+                                    let _subnet_permit = _subnet_permit;
                                     service_clone.handle_inbound_connection(socket, remote_addr, actual_addr, cancel_clone).await;
                                     let mut conns = service_clone.active_conns.lock().await;
                                     if let std::collections::hash_map::Entry::Occupied(mut e) = conns.entry(ip) {
@@ -322,6 +374,7 @@ impl InboundListenerService {
             *service_self.listen_addr.lock().await = None;
             service_self.upload_manager.abort_all().await;
             service_self.active_conns.lock().await.clear();
+            service_self.subnet_guard.clear();
             info!("Inbound eD2K listener stopped");
         });
 
@@ -340,6 +393,7 @@ impl InboundListenerService {
         *self.listen_addr.lock().await = None;
         self.upload_manager.abort_all().await;
         self.active_conns.lock().await.clear();
+        self.subnet_guard.clear();
     }
 
     /// Devuelve una instantánea del estado del listener.

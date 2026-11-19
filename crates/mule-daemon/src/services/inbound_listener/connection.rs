@@ -19,11 +19,6 @@ use mule_protocol::framing::PacketCodec;
 
 use super::types::{InboundListenerService, MAX_READ_BUFFER_SIZE};
 
-/// Versión base del protocolo eD2K anunciada en `CT_VERSION` (0x3C, eMule estándar).
-const ED2K_CLIENT_VERSION: u32 = 0x3C;
-/// Versión de eMule anunciada en `CT_EMULE_VERSION` para saludos entrantes y callbacks.
-const INBOUND_EMULE_VERSION_TAG: u32 = 70 << 10;
-
 impl InboundListenerService {
     /// Construye las etiquetas completas de capacidad para `OP_HELLO` y `OP_HELLO_ANSWER`.
     async fn build_hello_tags(
@@ -31,13 +26,6 @@ impl InboundListenerService {
         tcp_port: u16,
         is_low_id: bool,
     ) -> (Vec<mule_protocol::ed2k::tags::Ed2kTag>, u8) {
-        use mule_protocol::ed2k::tags::{
-            Ed2kTag, TagName, TagValue, TAG_SPECIAL_CT_EMULE_VERSION,
-            TAG_SPECIAL_EMULE_MISCOPTIONS1, TAG_SPECIAL_EMULE_MISCOPTIONS2,
-            TAG_SPECIAL_EMULE_UDPPORTS, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
-        };
-
-        let mut tags = Vec::with_capacity(6);
         let nickname = self
             .downloads
             .lock()
@@ -47,23 +35,6 @@ impl InboundListenerService {
             .flatten()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "eMuleRust".to_string());
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_NAME),
-            value: TagValue::String(nickname),
-        });
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_VERSION),
-            value: TagValue::UInt32(ED2K_CLIENT_VERSION),
-        });
-        let udp_ports = ((self.kad_udp_port as u32) << 16) | (tcp_port as u32);
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_EMULE_UDPPORTS),
-            value: TagValue::UInt32(udp_ports),
-        });
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_CT_EMULE_VERSION),
-            value: TagValue::UInt32(INBOUND_EMULE_VERSION_TAG),
-        });
 
         let sec_ident: u8 = if self
             .sui_pubkey_der
@@ -76,20 +47,6 @@ impl InboundListenerService {
         } else {
             0
         };
-        // MultiPacket = 1 (como en eMule), ExtendedRequestsVer = 2, Preview = 0.
-        let misc1: u32 = (1 << 29)
-            | (1 << 28)
-            | (4 << 24)
-            | (1 << 20)
-            | ((sec_ident as u32 & 0x0F) << 16)
-            | (4 << 12)
-            | (2 << 8)
-            | (1 << 4)
-            | (1 << 1);
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS1),
-            value: TagValue::UInt32(misc1),
-        });
 
         let udp_verified_open = {
             let svc = self.kad_udp.read().ok().and_then(|g| g.clone());
@@ -102,19 +59,50 @@ impl InboundListenerService {
                 None => false,
             }
         };
-        let misc2: u32 = crate::services::hello_caps::misc_options2(
-            is_low_id,
-            udp_verified_open,
-            self.obfuscation_enabled
-                .load(std::sync::atomic::Ordering::Relaxed),
-            self.obfuscation_required
-                .load(std::sync::atomic::Ordering::Relaxed),
-        );
-        tags.push(Ed2kTag {
-            name: TagName::Id(TAG_SPECIAL_EMULE_MISCOPTIONS2),
-            value: TagValue::UInt32(misc2),
-        });
 
+        let obf_enabled = self
+            .obfuscation_enabled
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let obf_required = self
+            .obfuscation_required
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        let ed25519_pubkey = match &self.identity {
+            Some(id) => id.lock().await.ed25519_public_key(),
+            None => None,
+        };
+        let ipv6_endpoint = self
+            .listen_addr
+            .lock()
+            .await
+            .and_then(|addr| match addr {
+                SocketAddr::V6(v6) if !v6.ip().is_unspecified() && !v6.ip().is_loopback() => {
+                    Some((v6.ip().octets(), tcp_port))
+                }
+                _ => None,
+            });
+        let quic_port = Some(self.quic_port.load(std::sync::atomic::Ordering::Relaxed))
+            .filter(|&p| p > 0);
+        let pc26 = crate::services::hello_caps::local_pc26_caps(
+            ed25519_pubkey,
+            ipv6_endpoint,
+            quic_port,
+            obf_enabled,
+        );
+
+        let tags = crate::services::hello_caps::build_hello_tags(
+            &crate::services::hello_caps::HelloBuildParams {
+                nickname: &nickname,
+                tcp_port,
+                kad_port: self.kad_udp_port,
+                sec_ident_cap: sec_ident,
+                tcp_low_id: is_low_id,
+                udp_verified_open,
+                obfuscation_enabled: obf_enabled,
+                obfuscation_required: obf_required,
+                pc26_caps: Some(&pc26),
+            },
+        );
         (tags, sec_ident)
     }
 
@@ -156,15 +144,18 @@ impl InboundListenerService {
             return;
         }
 
-        // Detección de ofuscación de protocolo en el primer byte
+        // Detección de ofuscación de protocolo en el primer byte con tiempo de espera acotado.
         let mut first_byte = [0u8; 1];
         let read_res = tokio::select! {
             _ = cancel_token.cancelled() => return,
-            res = socket.read_exact(&mut first_byte) => res,
+            res = tokio::time::timeout(
+                super::subnet_guard::PRE_HANDSHAKE_FIRST_BYTE_TIMEOUT,
+                socket.read_exact(&mut first_byte),
+            ) => res,
         };
-        if read_res.is_err() {
+        let Ok(Ok(_)) = read_res else {
             return;
-        }
+        };
         let b = first_byte[0];
         let is_standard_proto = mule_protocol::ed2k::obfuscation::is_standard_protocol_marker(b);
 
@@ -195,21 +186,54 @@ impl InboundListenerService {
                 fallback_hashes.push(kad_id.to_hash_be());
                 fallback_hashes.push(kad_id.0);
             }
-            match crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_incoming_with_fallbacks(
-                socket,
-                b,
-                &local_user_hash,
-                &fallback_hashes,
-                self.obfuscation_padding_max,
-            )
-            .await
-            {
-                Ok(s) => s,
-                Err(e) => {
+            let magic = mule_protocol::ed2k::obfuscation::PC26_OPPORTUNISTIC_MAGIC;
+            let accept_res = tokio::time::timeout(super::subnet_guard::PRE_HANDSHAKE_OBFU_TIMEOUT, async {
+                if b == magic[0] {
+                    let mut rest = [0u8; 3];
+                    socket.read_exact(&mut rest).await?;
+                    if [b, rest[0], rest[1], rest[2]] == magic {
+                        return crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_pc26_after_magic(
+                            socket,
+                            true,
+                        )
+                        .await;
+                    }
+                    crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_incoming_with_prefetched_and_fallbacks(
+                        socket,
+                        b,
+                        Some(rest),
+                        &local_user_hash,
+                        &fallback_hashes,
+                        self.obfuscation_padding_max,
+                    )
+                    .await
+                } else {
+                    crate::services::obfuscation_stream::ObfuscatedStream::accept_peer_incoming_with_fallbacks(
+                        socket,
+                        b,
+                        &local_user_hash,
+                        &fallback_hashes,
+                        self.obfuscation_padding_max,
+                    )
+                    .await
+                }
+            })
+            .await;
+
+            match accept_res {
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => {
                     warn!(
                         "Inbound obfuscation handshake failed from {}: {}",
                         log_addr_str(&remote_str),
                         e
+                    );
+                    return;
+                }
+                Err(_) => {
+                    warn!(
+                        "Inbound obfuscation handshake timed out from {}",
+                        log_addr_str(&remote_str)
                     );
                     return;
                 }
@@ -586,6 +610,11 @@ impl InboundListenerService {
                 .as_ref()
                 .map(|p| p.supports_large_files())
                 .unwrap_or(false),
+            peer_info
+                .as_ref()
+                .map(|p| p.secure_ident_support())
+                .unwrap_or(0),
+            peer_info.as_ref().and_then(|p| p.pc26_caps()),
         )
         .await;
     }
@@ -750,6 +779,8 @@ impl InboundListenerService {
             answer.tcp_port,
             peer_info.emule_udp_port,
             peer_info.supports_large_files(),
+            peer_info.secure_ident_support(),
+            peer_info.pc26_caps(),
         )
         .await;
         Ok(())

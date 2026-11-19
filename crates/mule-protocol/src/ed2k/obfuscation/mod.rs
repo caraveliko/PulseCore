@@ -17,7 +17,8 @@ pub mod wire_cipher;
 pub use dh::{Dh768KeyPair, DH768_G, DH768_P};
 pub use framing::{
     generate_semi_random_marker, is_standard_protocol_marker, ClientInitiatorPacket,
-    ClientResponderPacket, ENM_OBFUSCATION, MAGICVALUE_SYNC,
+    ClientResponderPacket, ENM_OBFUSCATION, ENM_PC26_HYBRID_MLKEM768_CHACHA,
+    ENM_PC26_X25519_CHACHA, MAGICVALUE_SYNC, PC26_OPPORTUNISTIC_MAGIC,
 };
 pub use keys::{
     derive_initiator_peer_ciphers, derive_initiator_peer_raw_keys, derive_responder_peer_ciphers,

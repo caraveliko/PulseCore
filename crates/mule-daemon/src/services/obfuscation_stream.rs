@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
+use crate::services::pc26_stream::{
+    accept_pc26_after_magic, connect_pc26_stream_outgoing, Pc26AeadState,
+};
+use mule_crypto::pc26_handshake::{Pc26Suite, PC26_MAX_RECORD_PLAINTEXT};
 use mule_protocol::ed2k::obfuscation::{
     derive_initiator_peer_ciphers, derive_responder_peer_ciphers, derive_server_ciphers,
-    generate_semi_random_marker, Dh768KeyPair, WireObfuscationCipher, ENM_OBFUSCATION, MAGICVALUE_SYNC,
+    generate_semi_random_marker, Dh768KeyPair, WireObfuscationCipher, ENM_OBFUSCATION,
+    MAGICVALUE_SYNC,
 };
 use rand::Rng;
 use std::io;
@@ -11,12 +16,26 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
-/// Un envoltorio de flujo bidireccional que gestiona de forma transparente la ofuscación de protocolo de eMule
-/// mediante permutación de cable, o transmite datos sin modificar en modo texto sin formato.
+/// Tamaño máximo del búfer acumulador de bytes cifrados `PC26` pendientes de completar registro (256 KiB).
+const MAX_PC26_CIPHER_BUF_BYTES: usize = 256 * 1024;
+/// Límite de fragmento cifrado por escritura en modo RC4 clásico.
+const RC4_WRITE_CHUNK_BYTES: usize = 8192;
+
+enum CipherBackend {
+    Plaintext,
+    LegacyRc4 {
+        send: Box<WireObfuscationCipher>,
+        recv: Box<WireObfuscationCipher>,
+    },
+    Pc26Aead(Box<Pc26AeadState>),
+}
+
+/// Un envoltorio de flujo bidireccional que gestiona de forma transparente la ofuscación
+/// clásica RC4 de eMule, el transporte AEAD moderno `PC26` (X25519 / híbrido ML-KEM-768)
+/// o la transmisión en texto sin formato.
 pub struct ObfuscatedStream<S> {
     inner: S,
-    send_cipher: Option<WireObfuscationCipher>,
-    recv_cipher: Option<WireObfuscationCipher>,
+    backend: CipherBackend,
     read_prefix: Vec<u8>,
     read_prefix_offset: usize,
     write_buf: Vec<u8>,
@@ -28,8 +47,7 @@ impl<S> ObfuscatedStream<S> {
     pub fn plaintext(inner: S) -> Self {
         Self {
             inner,
-            send_cipher: None,
-            recv_cipher: None,
+            backend: CipherBackend::Plaintext,
             read_prefix: Vec::new(),
             read_prefix_offset: 0,
             write_buf: Vec::new(),
@@ -42,8 +60,7 @@ impl<S> ObfuscatedStream<S> {
     pub fn plaintext_with_prefix(inner: S, prefix: Vec<u8>) -> Self {
         Self {
             inner,
-            send_cipher: None,
-            recv_cipher: None,
+            backend: CipherBackend::Plaintext,
             read_prefix: prefix,
             read_prefix_offset: 0,
             write_buf: Vec::new(),
@@ -51,9 +68,30 @@ impl<S> ObfuscatedStream<S> {
         }
     }
 
-    /// Devuelve si este flujo está actualmente cifrado con ofuscación de protocolo RC4.
+    /// Devuelve si este flujo está actualmente cifrado (RC4 clásico o AEAD `PC26`).
     pub fn is_obfuscated(&self) -> bool {
-        self.send_cipher.is_some()
+        !matches!(self.backend, CipherBackend::Plaintext)
+    }
+
+    /// Devuelve `true` si la sesión utiliza transporte autenticado moderno `PC26-AEAD`.
+    pub fn is_modern_aead(&self) -> bool {
+        matches!(self.backend, CipherBackend::Pc26Aead(_))
+    }
+
+    /// Devuelve la suite criptográfica `PC26` negociada, si el flujo usa AEAD moderno.
+    pub fn pc26_suite(&self) -> Option<Pc26Suite> {
+        match &self.backend {
+            CipherBackend::Pc26Aead(st) => Some(st.suite),
+            _ => None,
+        }
+    }
+
+    /// Devuelve la huella SHA-256 de la transcripción del saludo `PC26` para vinculación de canal.
+    pub fn transcript_hash(&self) -> Option<[u8; 32]> {
+        match &self.backend {
+            CipherBackend::Pc26Aead(st) => Some(st.transcript_hash),
+            _ => None,
+        }
     }
 
     /// Devuelve una referencia al flujo de transporte subyacente.
@@ -179,8 +217,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
 
         Ok(Self {
             inner: stream,
-            send_cipher: Some(send_cipher),
-            recv_cipher: Some(recv_cipher),
+            backend: CipherBackend::LegacyRc4 {
+                send: Box::new(send_cipher),
+                recv: Box::new(recv_cipher),
+            },
             read_prefix: Vec::new(),
             read_prefix_offset: 0,
             write_buf: Vec::new(),
@@ -236,7 +276,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
         let mut resp_head = [0u8; 7];
         stream.read_exact(&mut resp_head).await?;
         recv_cipher.process(&mut resp_head);
-        let magic = u32::from_le_bytes(resp_head[..4].try_into().unwrap());
+        let magic = u32::from_le_bytes([resp_head[0], resp_head[1], resp_head[2], resp_head[3]]);
         if magic != MAGICVALUE_SYNC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -272,8 +312,42 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
 
         Ok(Self {
             inner: stream,
-            send_cipher: Some(send_cipher),
-            recv_cipher: Some(recv_cipher),
+            backend: CipherBackend::LegacyRc4 {
+                send: Box::new(send_cipher),
+                recv: Box::new(recv_cipher),
+            },
+            read_prefix: Vec::new(),
+            read_prefix_offset: 0,
+            write_buf: Vec::new(),
+            write_offset: 0,
+        })
+    }
+
+    /// Inicia un saludo cifrado moderno `PC26-AEAD` (oportunista sin requerir `user_hash`).
+    pub async fn connect_peer_pc26_outgoing(
+        stream: S,
+        suite: Pc26Suite,
+    ) -> Result<Self, io::Error> {
+        let (inner, state) = connect_pc26_stream_outgoing(stream, suite).await?;
+        Ok(Self {
+            inner,
+            backend: CipherBackend::Pc26Aead(Box::new(state)),
+            read_prefix: Vec::new(),
+            read_prefix_offset: 0,
+            write_buf: Vec::new(),
+            write_offset: 0,
+        })
+    }
+
+    /// Acepta una conexión entrante `PC26-AEAD` inmediatamente tras validar el prefijo `"PC26"`.
+    pub async fn accept_peer_pc26_after_magic(
+        stream: S,
+        allow_pq: bool,
+    ) -> Result<Self, io::Error> {
+        let (inner, state) = accept_pc26_after_magic(stream, allow_pq).await?;
+        Ok(Self {
+            inner,
+            backend: CipherBackend::Pc26Aead(Box::new(state)),
             read_prefix: Vec::new(),
             read_prefix_offset: 0,
             write_buf: Vec::new(),
@@ -283,13 +357,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
 
     /// Realiza un saludo de ofuscación entrante cliente a cliente eD2K cuando una conexión entrante
     /// comienza con un byte de protocolo no estándar.
-    ///
-    /// El llamador pasa `first_byte` (ya leído del socket).
-    /// El respondedor lee los 4 bytes restantes de `random_key_part` y deriva:
-    /// - RecvKey = MD5(LocalUserHash || 34 || RandomKeyPart)
-    /// - SendKey = MD5(LocalUserHash || 203 || RandomKeyPart)
-    ///
-    /// Luego recibe la sincronización + parámetros cifrados del iniciador, y responde con su propia sincronización + relleno cifrados.
     pub async fn accept_peer_incoming(
         stream: S,
         first_byte: u8,
@@ -307,18 +374,45 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
     }
 
     /// Variante de [`Self::accept_peer_incoming`] que intenta descifrar el marcador
-    /// `MAGICVALUE_SYNC` probando una lista ordenada de hashes candidatos tras
-    /// `local_user_hash` (p. ej. `KadId(user_hash).to_hash_be()`, ID Kad local).
+    /// `MAGICVALUE_SYNC` probando una lista ordenada de hashes candidatos tras `local_user_hash`.
     pub async fn accept_peer_incoming_with_fallbacks(
-        mut stream: S,
-        _first_byte: u8,
+        stream: S,
+        first_byte: u8,
         local_user_hash: &[u8; 16],
         fallback_hashes: &[[u8; 16]],
         max_padding: u8,
     ) -> Result<Self, io::Error> {
-        // 1. Leer los 4 bytes restantes de RandomKeyPart y los 4 bytes de sincronización.
+        Self::accept_peer_incoming_with_prefetched_and_fallbacks(
+            stream,
+            first_byte,
+            None,
+            local_user_hash,
+            fallback_hashes,
+            max_padding,
+        )
+        .await
+    }
+
+    /// Variante que admite 3 bytes ya leídos de `random_key_part` cuando el primer byte
+    /// coincidió fortuitamente con el byte inicial de `PC26_OPPORTUNISTIC_MAGIC`.
+    pub async fn accept_peer_incoming_with_prefetched_and_fallbacks(
+        mut stream: S,
+        _first_byte: u8,
+        prefetched_key_prefix: Option<[u8; 3]>,
+        local_user_hash: &[u8; 16],
+        fallback_hashes: &[[u8; 16]],
+        max_padding: u8,
+    ) -> Result<Self, io::Error> {
+        // 1. Leer los 4 bytes de RandomKeyPart y los 4 bytes de sincronización.
         let mut random_key_part_bytes = [0u8; 4];
-        stream.read_exact(&mut random_key_part_bytes).await?;
+        if let Some(prefix) = prefetched_key_prefix {
+            random_key_part_bytes[..3].copy_from_slice(&prefix);
+            let mut last = [0u8; 1];
+            stream.read_exact(&mut last).await?;
+            random_key_part_bytes[3] = last[0];
+        } else {
+            stream.read_exact(&mut random_key_part_bytes).await?;
+        }
         let random_key_part = u32::from_le_bytes(random_key_part_bytes);
 
         let mut magic_bytes = [0u8; 4];
@@ -388,8 +482,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> ObfuscatedStream<S> {
 
         Ok(Self {
             inner: stream,
-            send_cipher: Some(send_cipher),
-            recv_cipher: Some(recv_cipher),
+            backend: CipherBackend::LegacyRc4 {
+                send: Box::new(send_cipher),
+                recv: Box::new(recv_cipher),
+            },
             read_prefix: Vec::new(),
             read_prefix_offset: 0,
             write_buf: Vec::new(),
@@ -404,7 +500,11 @@ impl<S: AsyncRead + Unpin> AsyncRead for ObfuscatedStream<S> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        // 1. Drenar primero los bytes de prefijo leídos previamente
+        if buf.remaining() == 0 {
+            return Poll::Ready(Ok(()));
+        }
+
+        // 1. Drenar primero los bytes de prefijo leídos previamente (ya descifrados)
         if self.read_prefix_offset < self.read_prefix.len() {
             let available = self.read_prefix.len() - self.read_prefix_offset;
             let to_copy = available.min(buf.remaining());
@@ -415,21 +515,65 @@ impl<S: AsyncRead + Unpin> AsyncRead for ObfuscatedStream<S> {
             return Poll::Ready(Ok(()));
         }
 
-        // 2. Leer del flujo interno
-        let before_len = buf.filled().len();
-        match Pin::new(&mut self.inner).poll_read(cx, buf) {
-            Poll::Ready(Ok(())) => {
-                let after_len = buf.filled().len();
-                let newly_read = after_len - before_len;
-                if newly_read > 0 {
-                    if let Some(ref mut cipher) = self.recv_cipher {
-                        let filled = buf.filled_mut();
-                        cipher.process(&mut filled[before_len..after_len]);
+        // 2. Leer del flujo interno según el backend activo
+        let this = &mut *self;
+        match &mut this.backend {
+            CipherBackend::Plaintext => Pin::new(&mut this.inner).poll_read(cx, buf),
+            CipherBackend::LegacyRc4 { recv, .. } => {
+                let before_len = buf.filled().len();
+                match Pin::new(&mut this.inner).poll_read(cx, buf) {
+                    Poll::Ready(Ok(())) => {
+                        let after_len = buf.filled().len();
+                        if after_len > before_len {
+                            let filled = buf.filled_mut();
+                            recv.process(&mut filled[before_len..after_len]);
+                        }
+                        Poll::Ready(Ok(()))
                     }
+                    other => other,
                 }
-                Poll::Ready(Ok(()))
             }
-            other => other,
+            CipherBackend::Pc26Aead(state) => loop {
+                match state.try_open_next_record() {
+                    Ok(Some(plain)) => {
+                        let to_copy = plain.len().min(buf.remaining());
+                        buf.put_slice(&plain[..to_copy]);
+                        if to_copy < plain.len() {
+                            this.read_prefix = plain[to_copy..].to_vec();
+                            this.read_prefix_offset = 0;
+                        }
+                        return Poll::Ready(Ok(()));
+                    }
+                    Ok(None) => {}
+                    Err(e) => return Poll::Ready(Err(e)),
+                }
+
+                let mut tmp = [0u8; 4096];
+                let mut tmp_rb = ReadBuf::new(&mut tmp);
+                match Pin::new(&mut this.inner).poll_read(cx, &mut tmp_rb) {
+                    Poll::Ready(Ok(())) => {
+                        let newly_read = tmp_rb.filled().len();
+                        if newly_read == 0 {
+                            if state.recv_cipher_buf.is_empty() {
+                                return Poll::Ready(Ok(()));
+                            }
+                            return Poll::Ready(Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "registro AEAD PC26 truncado antes de EOF",
+                            )));
+                        }
+                        if state.recv_cipher_buf.len() + newly_read > MAX_PC26_CIPHER_BUF_BYTES {
+                            return Poll::Ready(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "búfer de entrada cifrado PC26 excede el límite",
+                            )));
+                        }
+                        state.recv_cipher_buf.extend_from_slice(tmp_rb.filled());
+                    }
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                }
+            },
         }
     }
 }
@@ -465,17 +609,25 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for ObfuscatedStream<S> {
             return Poll::Ready(Ok(0));
         }
 
-        // 2. Si es texto plano, reenviar directamente al flujo interno
-        if this.send_cipher.is_none() {
-            return Pin::new(&mut this.inner).poll_write(cx, buf);
-        }
-
-        // 3. Escritura cifrada: tomar hasta 8192 bytes, cifrar y enviar/almacenar en búfer
-        let chunk_size = buf.len().min(8192);
-        let mut chunk = buf[..chunk_size].to_vec();
-        if let Some(ref mut cipher) = this.send_cipher {
-            cipher.process(&mut chunk);
-        }
+        let (chunk_size, chunk) = match &mut this.backend {
+            CipherBackend::Plaintext => {
+                return Pin::new(&mut this.inner).poll_write(cx, buf);
+            }
+            CipherBackend::LegacyRc4 { send, .. } => {
+                let chunk_size = buf.len().min(RC4_WRITE_CHUNK_BYTES);
+                let mut chunk = buf[..chunk_size].to_vec();
+                send.process(&mut chunk);
+                (chunk_size, chunk)
+            }
+            CipherBackend::Pc26Aead(state) => {
+                let chunk_size = buf.len().min(PC26_MAX_RECORD_PLAINTEXT);
+                let sealed = state
+                    .send_cipher
+                    .seal_record(&buf[..chunk_size])
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("PC26: {e}")))?;
+                (chunk_size, sealed)
+            }
+        };
 
         match Pin::new(&mut this.inner).poll_write(cx, &chunk) {
             Poll::Ready(Ok(n)) => {
@@ -778,6 +930,163 @@ mod tests {
             .unwrap();
             stream.write_all(b"FASE1FASE2FASE3").await.unwrap();
             stream.flush().await.unwrap();
+        });
+
+        let (c_res, s_res) = tokio::join!(client_task, server_task);
+        c_res.unwrap();
+        s_res.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_pc26_aead_x25519_and_put_back_unread() {
+        let (client_io, server_io) = tokio::io::duplex(8192);
+
+        let client_task = tokio::spawn(async move {
+            let mut stream = ObfuscatedStream::connect_peer_pc26_outgoing(
+                client_io,
+                Pc26Suite::X25519ChaCha20Poly1305,
+            )
+            .await
+            .unwrap();
+            assert!(stream.is_obfuscated());
+            assert!(stream.is_modern_aead());
+            let th = stream.transcript_hash().unwrap();
+
+            stream.write_all(b"HOLA_PC26_X25519").await.unwrap();
+            stream.flush().await.unwrap();
+
+            let mut buf = [0u8; 32];
+            let n = stream.read(&mut buf).await.unwrap();
+            assert!(n >= 5);
+            assert_eq!(&buf[..5], b"PART1");
+            if n > 5 {
+                stream.put_back_unread(&buf[5..n]);
+            }
+            let mut rest = [0u8; 5];
+            stream.read_exact(&mut rest).await.unwrap();
+            assert_eq!(&rest, b"PART2");
+            th
+        });
+
+        let server_task = tokio::spawn(async move {
+            let mut server_io = server_io;
+            let mut magic = [0u8; 4];
+            server_io.read_exact(&mut magic).await.unwrap();
+            assert_eq!(magic, mule_protocol::ed2k::obfuscation::PC26_OPPORTUNISTIC_MAGIC);
+
+            let mut stream = ObfuscatedStream::accept_peer_pc26_after_magic(server_io, true)
+                .await
+                .unwrap();
+            assert!(stream.is_modern_aead());
+            let th = stream.transcript_hash().unwrap();
+
+            let mut msg = [0u8; 16];
+            stream.read_exact(&mut msg).await.unwrap();
+            assert_eq!(&msg, b"HOLA_PC26_X25519");
+
+            stream.write_all(b"PART1PART2").await.unwrap();
+            stream.flush().await.unwrap();
+            th
+        });
+
+        let (c_res, s_res) = tokio::join!(client_task, server_task);
+        assert_eq!(c_res.unwrap(), s_res.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_pc26_aead_hybrid_mlkem768_duplex() {
+        let (client_io, server_io) = tokio::io::duplex(16384);
+
+        let client_task = tokio::spawn(async move {
+            let mut stream = ObfuscatedStream::connect_peer_pc26_outgoing(
+                client_io,
+                Pc26Suite::HybridMlKem768ChaCha20Poly1305,
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                stream.pc26_suite(),
+                Some(Pc26Suite::HybridMlKem768ChaCha20Poly1305)
+            );
+            stream.write_all(b"PQ_SECURE_CHANNEL").await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
+        let server_task = tokio::spawn(async move {
+            let mut server_io = server_io;
+            let mut magic = [0u8; 4];
+            server_io.read_exact(&mut magic).await.unwrap();
+            assert_eq!(magic, mule_protocol::ed2k::obfuscation::PC26_OPPORTUNISTIC_MAGIC);
+
+            let mut stream = ObfuscatedStream::accept_peer_pc26_after_magic(server_io, true)
+                .await
+                .unwrap();
+            let mut msg = [0u8; 17];
+            stream.read_exact(&mut msg).await.unwrap();
+            assert_eq!(&msg, b"PQ_SECURE_CHANNEL");
+        });
+
+        let (c_res, s_res) = tokio::join!(client_task, server_task);
+        c_res.unwrap();
+        s_res.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_rc4_prefetched_prefix_when_first_byte_is_0x50() {
+        let (mut client_io, server_io) = tokio::io::duplex(4096);
+        let server_user_hash = [0x99u8; 16];
+
+        let client_task = tokio::spawn(async move {
+            let random_key_part: u32 = 0x1234_5678;
+            let (mut send_cipher, mut recv_cipher) =
+                derive_initiator_peer_ciphers(&server_user_hash, random_key_part);
+            // Simular un cliente heredado cuyo marcador aleatorio es 0x50 ('P')
+            // pero cuya continuación NO es "C26".
+            let mut hdr = [0u8; 5];
+            hdr[0] = b'P';
+            hdr[1..5].copy_from_slice(&random_key_part.to_le_bytes());
+
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&MAGICVALUE_SYNC.to_le_bytes());
+            payload.push(ENM_OBFUSCATION);
+            payload.push(ENM_OBFUSCATION);
+            payload.push(0);
+            send_cipher.process(&mut payload);
+
+            client_io.write_all(&hdr).await.unwrap();
+            client_io.write_all(&payload).await.unwrap();
+            client_io.flush().await.unwrap();
+
+            let mut resp = [0u8; 6];
+            client_io.read_exact(&mut resp).await.unwrap();
+            recv_cipher.process(&mut resp);
+            assert_eq!(
+                u32::from_le_bytes(resp[..4].try_into().unwrap()),
+                MAGICVALUE_SYNC
+            );
+        });
+
+        let server_task = tokio::spawn(async move {
+            let mut server_io = server_io;
+            let mut b0 = [0u8; 1];
+            server_io.read_exact(&mut b0).await.unwrap();
+            assert_eq!(b0[0], b'P');
+            let mut rest3 = [0u8; 3];
+            server_io.read_exact(&mut rest3).await.unwrap();
+            assert_ne!(&rest3, b"C26");
+
+            let stream = ObfuscatedStream::accept_peer_incoming_with_prefetched_and_fallbacks(
+                server_io,
+                b0[0],
+                Some(rest3),
+                &server_user_hash,
+                &[],
+                0,
+            )
+            .await
+            .unwrap();
+            assert!(stream.is_obfuscated());
+            assert!(!stream.is_modern_aead());
         });
 
         let (c_res, s_res) = tokio::join!(client_task, server_task);

@@ -155,6 +155,9 @@ pub struct UssSnapshot {
     pub ping_target: Option<String>,
 }
 
+/// Edad máxima aceptable para utilizar muestras pasivas LEDBAT++ como respaldo (ms).
+const LEDBAT_FRESH_WINDOW_MS: i64 = 30_000;
+
 struct UssInner {
     config: UssConfig,
     state: &'static str,
@@ -169,6 +172,8 @@ struct UssInner {
     /// descarga se vuelve a ajustar a `emule_ud_ratio(dl_cfg, upload)` en cada
     /// ajuste dinámico (`GetMaxDownloadInBytesPerSec` dinámico de eMule).
     download_limit_bps: u64,
+    /// Estimador pasivo LEDBAT++ para respaldo cuando ICMP/TCP no están disponibles.
+    ledbat: crate::services::uss_ledbat::LedbatEstimator,
 }
 
 /// Controlador USS. Controla `upload_bucket` cuando está habilitado.
@@ -201,6 +206,7 @@ impl UssService {
                 ping_target: None,
                 manual_limit_bps: 0,
                 download_limit_bps: 0,
+                ledbat: crate::services::uss_ledbat::LedbatEstimator::new(),
             })),
             accept_new_client: Arc::new(AtomicBool::new(true)),
             running: Arc::new(AtomicBool::new(false)),
@@ -223,6 +229,65 @@ impl UssService {
         *self.downloads.write().unwrap() = Some(dl);
         // La configuración persistida se carga de forma diferida en la primera
         // iteración del bucle de control (evita bloqueos en `AppState::new`).
+    }
+
+    /// Alimenta el estimador pasivo LEDBAT++ con una muestra reciente de RTT (ms)
+    /// observada en las sesiones de transferencia o saludo.
+    pub fn record_passive_rtt_sample(&self, rtt_ms: u32) {
+        if rtt_ms > 0 {
+            self.inner
+                .write()
+                .unwrap()
+                .ledbat
+                .record_rtt_sample(crate::services::downloads::types::now_ms(), rtt_ms);
+        }
+    }
+
+    fn apply_ledbat_step(
+        &self,
+        upload_bps: &mut u64,
+        cfg: &UssConfig,
+        limiters: &PolicyRateLimiters,
+        activate_state: bool,
+    ) -> bool {
+        let now_ms = crate::services::downloads::types::now_ms();
+        let (next_bps, cur_rtt, congested) = {
+            let inner = self.inner.read().unwrap();
+            if !inner.ledbat.has_fresh_samples(now_ms, LEDBAT_FRESH_WINDOW_MS) {
+                return false;
+            }
+            let min_bps = cfg.min_upload_bps.max(MIN_UPLOAD_BPS);
+            let seed_bps = (*upload_bps).max(min_bps);
+            let Some(next) = inner
+                .ledbat
+                .compute_rate_adjustment(seed_bps, min_bps, cfg.max_upload_bps)
+            else {
+                return false;
+            };
+            let rtt = inner.ledbat.current_delay_ms().unwrap_or(0);
+            let cong = inner
+                .ledbat
+                .queuing_delay_ms()
+                .is_some_and(|q| q > crate::services::uss_ledbat::TARGET_QUEUING_DELAY_MS);
+            (next, rtt, cong)
+        };
+        *upload_bps = next_bps;
+        self.accept_new_client.store(!congested, Ordering::Relaxed);
+        limiters
+            .upload_bucket
+            .set_rate(next_bps, next_bps.max(65536));
+        let eff_dl = mule_network_policy::emule_ud_ratio(
+            self.inner.read().unwrap().download_limit_bps,
+            next_bps,
+        );
+        limiters.download_bucket.set_rate(eff_dl, eff_dl.max(65536));
+        if activate_state {
+            self.set_state("active");
+        }
+        let mut inner = self.inner.write().unwrap();
+        inner.current_limit_bps = next_bps;
+        inner.latency_ms = cur_rtt;
+        true
     }
 
     /// Indicador compartido consultado por `UploadManager` antes de conceder ranuras
@@ -374,6 +439,13 @@ impl UssService {
                 cached_target = self.resolve_target(&cfg).await.map(|t| (t, Instant::now()));
             }
             let Some((target, _)) = cached_target.clone() else {
+                if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, true) {
+                    tokio::select! {
+                        _ = cancel.cancelled() => return,
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                    }
+                    continue;
+                }
                 self.set_state("waiting");
                 baseline_done = false;
                 tokio::select! {
@@ -408,6 +480,13 @@ impl UssService {
                     continue;
                 }
                 if successes == 0 {
+                    if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, true) {
+                        tokio::select! {
+                            _ = cancel.cancelled() => return,
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                        }
+                        continue;
+                    }
                     // Destino inalcanzable — esperar antes de reintentar.
                     self.set_state("waiting");
                     tokio::select! {
@@ -476,6 +555,10 @@ impl UssService {
                     ms as i64
                 }
                 None => {
+                    if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, false) {
+                        consecutive_failures = 0;
+                        continue;
+                    }
                     consecutive_failures += 1;
                     // eMule: un ping fallido cuenta como 3*(soll+initial) → fuerza
                     // una disminución.

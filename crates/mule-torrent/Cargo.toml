@@ -7,9 +7,15 @@ authors.workspace = true
 description = "Lightweight BitTorrent and magnet download engine for eMule-Rust"
 
 [dependencies]
+mule-filter = { path = "../mule-filter" }
+mule-network-policy = { path = "../mule-network-policy" }
 librqbit.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
 hex.workspace = true
 
 [dev-dependencies]

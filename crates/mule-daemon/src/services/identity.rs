@@ -8,6 +8,9 @@ use std::sync::atomic::AtomicU64;
 
 use mule_crypto::cryptkey::{self, LegacyKeyLoad};
 use mule_crypto::legacy_sui::EMULE_RSA_BITS;
+use mule_crypto::modern_identity::{
+    self, ChannelBindingRole, ModernIdentityKey, ModernIdentityLoad,
+};
 
 /// Contadores SUI compartidos para observabilidad de anomalías — una instancia por daemon,
 /// incrementados por el listener entrante y las sesiones de pares salientes, expuestos
@@ -66,6 +69,9 @@ pub struct IdentityStatus {
     pub key_bits: Option<u32>,
     /// Establecido cuando `cryptkey.dat` era ilegible o estaba corrupto y fue puesto en cuarentena.
     pub quarantined_key: Option<String>,
+    /// Clave pública moderna Ed25519 en hexadecimal (32 bytes = 64 caracteres).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ed25519_pubkey_hex: Option<String>,
 }
 
 /// `userhash.dat` — `m_abyUserHash` importado de eMule (16 bytes sin procesar), mantenido
@@ -105,6 +111,8 @@ pub struct IdentityService {
     /// Hash de usuario importado de eMule (`preferences.dat`); cuando está presente tiene
     /// prioridad sobre el hash derivado `MD4(pubkey)` — los créditos de eMule se indexan en él.
     userhash_override: Option<[u8; 16]>,
+    /// Identidad criptográfica moderna Ed25519 persistida en `pulse_identity.key`.
+    modern_key: Option<ModernIdentityKey>,
 }
 
 // Debug omite intencionadamente el material de la clave privada.
@@ -177,6 +185,33 @@ impl IdentityService {
         let public_key = legacy_key.as_ref().map(public_key_wire).unwrap_or_default();
         let pubkey_hash = hex::encode(Md4::digest(&public_key));
         let userhash_override = Self::load_userhash_override(data_dir);
+        let modern_key = match modern_identity::load_modern_identity(data_dir) {
+            ModernIdentityLoad::Loaded(k) => {
+                tracing::info!("[PC26] Identidad moderna Ed25519 cargada");
+                Some(*k)
+            }
+            ModernIdentityLoad::Missing => match modern_identity::generate_and_save_modern_identity(data_dir) {
+                Ok(k) => {
+                    tracing::info!("[PC26] Identidad moderna Ed25519 generada");
+                    Some(k)
+                }
+                Err(e) => {
+                    tracing::error!("[PC26] Fallo al generar pulse_identity.key: {}", e);
+                    None
+                }
+            },
+            ModernIdentityLoad::Invalid {
+                quarantine_path,
+                reason,
+            } => {
+                tracing::error!(
+                    "[PC26] pulse_identity.key inválido ({}), puesto en cuarentena en {:?}",
+                    reason,
+                    quarantine_path
+                );
+                None
+            }
+        };
 
         tracing::info!(
             "[SUI] Identity ready (sui={}, pubkey md4={}...)",
@@ -191,6 +226,7 @@ impl IdentityService {
             pubkey_hash,
             quarantined_key,
             userhash_override,
+            modern_key,
         }
     }
 
@@ -234,6 +270,7 @@ impl IdentityService {
             "[SUI] Identity rotated at {:?} (new pubkey md4={}...) — previous credits no longer claimable",
             key_path, &pubkey_hash[..16]
         );
+        let modern_key = modern_identity::generate_and_save_modern_identity(data_dir).ok();
         Ok(Self {
             key_path,
             legacy_key: Some(key),
@@ -241,6 +278,7 @@ impl IdentityService {
             pubkey_hash,
             quarantined_key: None,
             userhash_override: None,
+            modern_key,
         })
     }
 
@@ -356,6 +394,27 @@ impl IdentityService {
         out
     }
 
+    /// Devuelve la clave pública moderna Ed25519 de 32 bytes, si está disponible.
+    pub fn ed25519_public_key(&self) -> Option<[u8; 32]> {
+        self.modern_key.as_ref().map(|k| k.public_key())
+    }
+
+    /// Devuelve la clave moderna Ed25519 completa (para transporte QUIC P2P).
+    pub fn modern_key(&self) -> Option<&ModernIdentityKey> {
+        self.modern_key.as_ref()
+    }
+
+    /// Firma la vinculación de canal SUI v3 sobre `transcript_hash`.
+    pub fn sign_channel_binding(
+        &self,
+        transcript_hash: &[u8; 32],
+        role: ChannelBindingRole,
+    ) -> Option<[u8; 64]> {
+        self.modern_key
+            .as_ref()
+            .map(|k| k.sign_channel_binding(transcript_hash, role))
+    }
+
     /// Devuelve el objeto de estado público de identidad.
     pub fn status(&self) -> IdentityStatus {
         IdentityStatus {
@@ -364,6 +423,7 @@ impl IdentityService {
             pubkey_hash: Some(self.pubkey_hash.clone()),
             key_bits: self.legacy_key.as_ref().map(|_| EMULE_RSA_BITS as u32),
             quarantined_key: self.quarantined_key.clone(),
+            ed25519_pubkey_hex: self.ed25519_public_key().map(hex::encode),
         }
     }
 }

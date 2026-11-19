@@ -454,8 +454,45 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS sui_peer_pubkeys (
+            user_hash TEXT PRIMARY KEY,
+            pubkey_der BLOB NOT NULL,
+            pubkey_hash TEXT NOT NULL,
+            verified_at_unix_ms INTEGER NOT NULL,
+            last_ip TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS file_aich_part_hashes (
+            file_hash TEXT NOT NULL,
+            part_index INTEGER NOT NULL,
+            aich_hash BLOB NOT NULL,
+            PRIMARY KEY(file_hash, part_index)
+        );
         ",
     )?;
+
+    // Migración: puntos de enlace modernos (IPv6 y puerto QUIC) en `peer_sources`.
+    let mut stmt_peer_mod = conn.prepare("PRAGMA table_info(peer_sources)")?;
+    let mut rows_peer_mod = stmt_peer_mod.query([])?;
+    let (mut has_ipv6_endpoint, mut has_quic_port) = (false, false);
+    while let Some(row) = rows_peer_mod.next()? {
+        let col: String = row.get(1)?;
+        if col == "ipv6_endpoint" {
+            has_ipv6_endpoint = true;
+        }
+        if col == "quic_port" {
+            has_quic_port = true;
+        }
+    }
+    drop(rows_peer_mod);
+    drop(stmt_peer_mod);
+    if !has_ipv6_endpoint {
+        conn.execute_batch("ALTER TABLE peer_sources ADD COLUMN ipv6_endpoint TEXT;")?;
+    }
+    if !has_quic_port {
+        conn.execute_batch("ALTER TABLE peer_sources ADD COLUMN quic_port INTEGER DEFAULT 0;")?;
+    }
 
     // Migración: file_path en media_library
     let mut stmt_ml = conn.prepare("PRAGMA table_info(media_library)")?;

@@ -312,6 +312,11 @@ impl Ed2kPeerInfo {
     pub fn requires_crypt_layer(&self) -> bool {
         misc_bit(self.misc_options2, 9)
     }
+
+    /// Devuelve las capacidades modernas `PC26` anunciadas por el par, si existen.
+    pub fn pc26_caps(&self) -> Option<super::pc26::Pc26PeerCaps> {
+        super::pc26::parse_pc26_tags(&self.tags)
+    }
 }
 
 /// Extrae un campo de cuarteto (nibble) de 4 bits en `shift` de una palabra `misc_options*`

@@ -446,6 +446,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => tracing::warn!("Failed to auto-start server UDP: {e}"),
             }
         });
+
+        // Transporte QUIC P2P autenticado por Ed25519 sobre UDP.
+        let quic_state = state.clone();
+        tokio::spawn(async move {
+            let _ = quic_state.start_quic_transport().await;
+        });
     }
 
     // Auto-iniciar oyente TCP entrante en el puerto eD2K si se está en un perfil de vista previa o habilitado

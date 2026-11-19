@@ -17,6 +17,7 @@ use crate::persistence::traits::{
 };
 use crate::ranges::RangeSet;
 
+pub mod aich_hashes;
 pub mod cancelled;
 pub mod categories;
 pub mod credits;
@@ -29,6 +30,7 @@ pub mod schema;
 pub mod servers;
 pub mod shares;
 pub mod sources;
+pub mod sui_cache;
 
 /// Tiempo de espera de un bloqueo SQLite antes de `SQLITE_BUSY` — bajo
 /// contienda de disco (antivirus, puntos de control WAL), una escritura no debe
@@ -214,6 +216,28 @@ impl Database {
     /// Elimina el conjunto de hashes por parte almacenado para un archivo.
     pub fn delete_part_hashes(&mut self, file_hash: &str) -> Result<(), CoreError> {
         downloads::delete_part_hashes(&mut self.conn, file_hash)
+    }
+
+    /// Almacena el conjunto de hashes de partes AICH para un archivo.
+    pub fn store_aich_part_hashes(
+        &mut self,
+        file_hash: &str,
+        part_hashes: &[[u8; aich_hashes::AICH_PART_HASH_BYTES]],
+    ) -> Result<(), CoreError> {
+        aich_hashes::store_aich_part_hashes(&mut self.conn, file_hash, part_hashes)
+    }
+
+    /// Carga los hashes de partes AICH ordenados para un archivo.
+    pub fn load_aich_part_hashes(
+        &self,
+        file_hash: &str,
+    ) -> Result<Vec<[u8; aich_hashes::AICH_PART_HASH_BYTES]>, CoreError> {
+        aich_hashes::load_aich_part_hashes(&self.conn, file_hash)
+    }
+
+    /// Elimina los hashes de partes AICH persistidos para un archivo.
+    pub fn delete_aich_part_hashes(&mut self, file_hash: &str) -> Result<(), CoreError> {
+        aich_hashes::delete_aich_part_hashes(&mut self.conn, file_hash)
     }
 
     /// Actualiza el estado de una descarga.
@@ -466,6 +490,32 @@ impl Database {
         sources::clear_peer_sources(&mut self.conn, file_hash)
     }
 
+    /// Persiste el punto de enlace IPv6 y puerto QUIC de una fuente de par `PC26`.
+    pub fn update_peer_source_modern_endpoints(
+        &mut self,
+        file_hash: &str,
+        address: &str,
+        ipv6_endpoint: Option<&str>,
+        quic_port: u16,
+    ) -> Result<bool, CoreError> {
+        sources::update_peer_source_modern_endpoints(
+            &mut self.conn,
+            file_hash,
+            address,
+            ipv6_endpoint,
+            quic_port,
+        )
+    }
+
+    /// Recupera el punto de enlace IPv6 y puerto QUIC almacenados para una fuente de par.
+    pub fn get_peer_source_modern_endpoints(
+        &self,
+        file_hash: &str,
+        address: &str,
+    ) -> Result<Option<(Option<String>, u16)>, CoreError> {
+        sources::get_peer_source_modern_endpoints(&self.conn, file_hash, address)
+    }
+
     // ── Archivos compartidos ────────────────────────────────────────────────────────
 
     /// Inserta o actualiza un archivo compartido en SQLite.
@@ -580,6 +630,35 @@ impl Database {
     /// Lista los mejores créditos de pares.
     pub fn list_peer_credits(&self, limit: usize) -> Result<Vec<PeerCredit>, CoreError> {
         credits::list_peer_credits(&self.conn, limit)
+    }
+
+    /// Guarda o refresca la clave pública SUI verificada de un `user_hash`.
+    pub fn upsert_verified_peer_pubkey(
+        &mut self,
+        user_hash: &str,
+        pubkey_der: &[u8],
+        pubkey_hash: &str,
+        verified_at_unix_ms: i64,
+        last_ip: Option<&str>,
+    ) -> Result<(), CoreError> {
+        sui_cache::upsert_verified_peer_pubkey(
+            &mut self.conn,
+            user_hash,
+            pubkey_der,
+            pubkey_hash,
+            verified_at_unix_ms,
+            last_ip,
+        )
+    }
+
+    /// Recupera la clave pública SUI cacheada para un `user_hash`, si existe.
+    pub fn get_verified_peer_pubkey(&self, user_hash: &str) -> Result<Option<Vec<u8>>, CoreError> {
+        sui_cache::get_verified_peer_pubkey(&self.conn, user_hash)
+    }
+
+    /// Purga las claves públicas SUI verificadas cuya marca temporal sea anterior a `cutoff_unix_ms`.
+    pub fn prune_stale_pubkeys(&mut self, cutoff_unix_ms: i64) -> Result<usize, CoreError> {
+        sui_cache::prune_stale_pubkeys(&mut self.conn, cutoff_unix_ms)
     }
 
     // ── Amigos ─────────────────────────────────────────────────────────────

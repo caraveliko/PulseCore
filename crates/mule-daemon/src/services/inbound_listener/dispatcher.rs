@@ -75,6 +75,7 @@ fn emule_info_ext_req_version(info: &mule_protocol::ed2k::Ed2kEmuleInfo) -> Opti
 
 impl InboundListenerService {
     /// Dispatches post-handshake incoming peer requests.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn dispatch_requests(
         &self,
         mut stream: ObfuscatedStream<tokio::net::TcpStream>,
@@ -88,6 +89,8 @@ impl InboundListenerService {
         peer_tcp_port: u16,
         peer_udp_port: Option<u16>,
         peer_supports_large_files: bool,
+        peer_sec_ident: u8,
+        peer_pc26_caps: Option<mule_protocol::ed2k::pc26::Pc26PeerCaps>,
     ) {
         let mut read_buf = BytesMut::with_capacity(65536);
         let mut raw_buf = [0u8; 8192];
@@ -107,6 +110,52 @@ impl InboundListenerService {
         let mut pending_peer_challenge: Option<(u8, u32)> = None;
         let mut answered_peer_challenge = false;
         let peer_ip = remote_str.parse::<SocketAddr>().ok().map(|a| a.ip());
+        if let Some(ref caps) = peer_pc26_caps {
+            tracing::debug!(
+                "[PC26] Inbound peer {} capabilities: flags=0x{:08X} quic={:?} aead={}",
+                log_addr_str(&remote_str),
+                caps.flags,
+                caps.quic_port,
+                stream.is_modern_aead()
+            );
+        }
+        if let Some(uh) = peer_user_hash {
+            if (peer_sec_ident & 0x03) != 0 && self.sui_pubkey_der.read().unwrap().is_some() {
+                let uh_hex = hex::encode(uh);
+                let cached = {
+                    let dl_svc = self.downloads.lock().await;
+                    dl_svc.get_verified_peer_pubkey(&uh_hex)
+                };
+                if let Some(cached_der) = cached {
+                    if parse_peer_public_key(&cached_der).is_ok() {
+                        let hash_hex = hex::encode(Md4::digest(&cached_der));
+                        remote_pubkey_hash = Some(hash_hex);
+                        remote_pubkey_der = Some(cached_der);
+                        let challenge_val: u32 = rand::random();
+                        active_challenge = Some(challenge_val);
+                        let sec_state = Ed2kSecIdentState {
+                            state: 1,
+                            challenge: challenge_val,
+                        };
+                        if let Ok(st_pkt) = encoder.encode_secident_state(&sec_state) {
+                            let mut out = Vec::new();
+                            out.push(st_pkt.protocol);
+                            out.extend_from_slice(&(st_pkt.frame_len() as u32).to_le_bytes());
+                            out.push(st_pkt.opcode);
+                            out.extend_from_slice(&st_pkt.payload);
+                            let _ = stream.write_all(&out).await;
+                            self.sui_stats
+                                .challenges_issued_in
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            tracing::debug!(
+                                "[SUI] Cached pubkey found for {} — issued immediate challenge (state=1)",
+                                log_addr_str(&remote_str)
+                            );
+                        }
+                    }
+                }
+            }
+        }
         // Identidad en cola de subida: userhash cuando el par anunció uno en
         // OP_HELLO (eMule deduplica clientes en cola por identidad, no por IP —
         // un cliente reconectado conserva su posición, las IPs compartidas por NAT permanecen distintas),
@@ -256,6 +305,9 @@ impl InboundListenerService {
                                             );
                                             continue;
                                         }
+                                        let same_cached_key = remote_pubkey_der.as_deref()
+                                            == Some(pk.key_bytes.as_ref())
+                                            && active_challenge.is_some();
                                         let hash = Md4::digest(&pk.key_bytes);
                                         let hash_hex = hex::encode(hash);
                                         remote_pubkey_hash = Some(hash_hex.clone());
@@ -279,30 +331,32 @@ impl InboundListenerService {
                                             continue;
                                         };
                                         let _ = my_pub;
-                                        let challenge_val: u32 = rand::random();
-                                        active_challenge = Some(challenge_val);
-                                        let sec_state = Ed2kSecIdentState {
-                                            state: 1,
-                                            challenge: challenge_val,
-                                        };
-                                        if let Ok(st_pkt) = encoder.encode_secident_state(&sec_state) {
-                                            let mut out = Vec::new();
-                                            out.push(st_pkt.protocol);
-                                            out.extend_from_slice(&(st_pkt.frame_len() as u32).to_le_bytes());
-                                            out.push(st_pkt.opcode);
-                                            out.extend_from_slice(&st_pkt.payload);
-                                            let _ = stream.write_all(&out).await;
-                                            self.sui_stats.challenges_issued_in.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                            tracing::debug!(
-                                                "[SUI] Challenge issued to {} (state=1)",
-                                                log_addr_str(&remote_str)
-                                            );
+                                        if !same_cached_key {
+                                            let challenge_val: u32 = rand::random();
+                                            active_challenge = Some(challenge_val);
+                                            let sec_state = Ed2kSecIdentState {
+                                                state: 1,
+                                                challenge: challenge_val,
+                                            };
+                                            if let Ok(st_pkt) = encoder.encode_secident_state(&sec_state) {
+                                                let mut out = Vec::new();
+                                                out.push(st_pkt.protocol);
+                                                out.extend_from_slice(&(st_pkt.frame_len() as u32).to_le_bytes());
+                                                out.push(st_pkt.opcode);
+                                                out.extend_from_slice(&st_pkt.payload);
+                                                let _ = stream.write_all(&out).await;
+                                                self.sui_stats.challenges_issued_in.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                                tracing::debug!(
+                                                    "[SUI] Challenge issued to {} (state=1)",
+                                                    log_addr_str(&remote_str)
+                                                );
+                                            }
                                         }
                                         if let (Some((state, ch)), Some(pk)) =
                                             (pending_peer_challenge.take(), remote_pubkey_der.clone())
                                         {
                                             self.answer_peer_challenge(
-                                                state, ch, &pk, &remote_str, &encoder, &mut stream,
+                                                state, ch, &pk, peer_ip, peer_sec_ident, &remote_str, &encoder, &mut stream,
                                             ).await;
                                             answered_peer_challenge = true;
                                         }
@@ -312,13 +366,13 @@ impl InboundListenerService {
                                     // El par entrante nos desafía (rol de firmante):
                                     // responder con nuestra OP_PUBLICKEY cuando se
                                     // solicite (state=2) más OP_SIGNATURE sobre
-                                    // `peer_pubkey || challenge` (V1).
+                                    // `peer_pubkey || challenge` (V1 o V2).
                                     match decoder.decode_secident_state(pkt.protocol, pkt.opcode, &pkt.payload, 0) {
                                         Ok(st) if st.state != 0 && !answered_peer_challenge => {
                                             match remote_pubkey_der.clone() {
                                                 Some(pk) => {
                                                     self.answer_peer_challenge(
-                                                        st.state, st.challenge, &pk,
+                                                        st.state, st.challenge, &pk, peer_ip, peer_sec_ident,
                                                         &remote_str, &encoder, &mut stream,
                                                     ).await;
                                                     answered_peer_challenge = true;
@@ -451,6 +505,23 @@ impl InboundListenerService {
                                                 .as_ref()
                                                 .map(hex::encode)
                                                 .unwrap_or_default();
+                                            if let (Some(uh), Some(ref peer_der)) =
+                                                (peer_user_hash, &remote_pubkey_der)
+                                            {
+                                                let now_ms = std::time::SystemTime::now()
+                                                    .duration_since(std::time::UNIX_EPOCH)
+                                                    .unwrap_or_default()
+                                                    .as_millis() as i64;
+                                                let uh_hex = hex::encode(uh);
+                                                let ip_str = peer_ip.map(|ip| ip.to_string());
+                                                let _ = dl_svc.upsert_verified_peer_pubkey(
+                                                    &uh_hex,
+                                                    peer_der,
+                                                    ph,
+                                                    now_ms,
+                                                    ip_str.as_deref(),
+                                                );
+                                            }
                                             if let Ok(Some(credit)) = dl_svc.get_peer_credit(ph) {
                                                 credit_multiplier = credit.credit_multiplier();
                                             }
@@ -1747,16 +1818,10 @@ impl InboundListenerService {
                                                  // comprimidas se omiten
                                                  // (ShouldCompressBasedOnFilename) y eMule
                                                  // solo comprime bloques mayores de 31 bytes.
-                                                 let compressible_name = match shared_file
-                                                     .file_name
-                                                     .rsplit_once('.')
-                                                 {
-                                                     Some((_, ext)) => !matches!(
-                                                         ext.to_ascii_lowercase().as_str(),
-                                                         "zip" | "rar" | "7z" | "cbz" | "cbr" | "ogm" | "ace"
-                                                     ),
-                                                     None => true,
-                                                 };
+                                                 let compressible_name =
+                                                     crate::services::compression_policy::is_compressible_filename(
+                                                         &shared_file.file_name,
+                                                     );
                                                  let compressed = if peer_supports_compression
                                                      && compressible_name
                                                      && payload.len() > 31
@@ -2248,12 +2313,15 @@ impl InboundListenerService {
 
     /// Responde al desafío `OP_SECIDENTSTATE` de un par entrante (rol de firmante):
     /// envía nuestra `OP_PUBLICKEY` cuando se solicita (state=2), luego `OP_SIGNATURE`
-    /// sobre `peer_pubkey || challenge` (carga útil V1).
+    /// en formato V1 o V2 según `peer_sec_ident`.
+    #[allow(clippy::too_many_arguments)]
     async fn answer_peer_challenge(
         &self,
         state: u8,
         challenge: u32,
         peer_pubkey_der: &[u8],
+        peer_ip: Option<std::net::IpAddr>,
+        peer_sec_ident: u8,
         remote_str: &str,
         encoder: &Ed2kEncoder,
         stream: &mut ObfuscatedStream<tokio::net::TcpStream>,
@@ -2285,13 +2353,36 @@ impl InboundListenerService {
             }
         }
 
-        let payload = match build_sui_signing_payload(
-            SecureIdentVersion::V1,
-            peer_pubkey_der,
-            challenge,
-            None,
-            None,
-        ) {
+        let use_v2 = (peer_sec_ident & 0x01) == 0 && (peer_sec_ident & 0x02) != 0;
+        let (v2_kind, payload_res) = if use_v2 {
+            let (ip_u32, kind_byte) = match peer_ip {
+                Some(std::net::IpAddr::V4(v4)) => (u32::from_be_bytes(v4.octets()), 10u8),
+                _ => (0u32, 30u8),
+            };
+            (
+                Some(kind_byte),
+                build_sui_signing_payload(
+                    SecureIdentVersion::V2,
+                    peer_pubkey_der,
+                    challenge,
+                    Some(ip_u32),
+                    Some(kind_byte),
+                ),
+            )
+        } else {
+            (
+                None,
+                build_sui_signing_payload(
+                    SecureIdentVersion::V1,
+                    peer_pubkey_der,
+                    challenge,
+                    None,
+                    None,
+                ),
+            )
+        };
+
+        let payload = match payload_res {
             Ok(p) => p,
             Err(e) => {
                 warn!(
@@ -2311,19 +2402,25 @@ impl InboundListenerService {
                 if let Ok(sig_pkt) = encoder.encode_signature(&Ed2kSignature {
                     signature_bytes: Bytes::from(sig_bytes),
                 }) {
-                    let mut out = Vec::new();
+                    let extra = usize::from(v2_kind.is_some());
+                    let mut out = Vec::with_capacity(6 + sig_pkt.payload.len() + extra);
                     out.push(sig_pkt.protocol);
-                    out.extend_from_slice(&(sig_pkt.frame_len() as u32).to_le_bytes());
+                    out.extend_from_slice(&((sig_pkt.frame_len() + extra) as u32).to_le_bytes());
                     out.push(sig_pkt.opcode);
                     out.extend_from_slice(&sig_pkt.payload);
+                    if let Some(kind) = v2_kind {
+                        out.push(kind);
+                    }
                     match stream.write_all(&out).await {
                         Ok(()) => {
                             self.sui_stats
                                 .signatures_sent
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             tracing::info!(
-                                "[SUI] Answered challenge from inbound peer {} (state={}, V1 signature)",
-                                log_addr_str(remote_str), state
+                                "[SUI] Answered challenge from inbound peer {} (state={}, {} signature)",
+                                log_addr_str(remote_str),
+                                state,
+                                if v2_kind.is_some() { "V2" } else { "V1" }
                             );
                         }
                         Err(e) => {

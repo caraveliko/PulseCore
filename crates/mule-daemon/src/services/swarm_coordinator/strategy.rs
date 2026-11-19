@@ -882,11 +882,11 @@ impl SwarmCoordinator {
                 dl_guard.list_peer_sources(&hash_hex).unwrap_or_default()
             };
 
-            candidate_sources.sort_by(|a, b| {
-                a.fail_count
-                    .cmp(&b.fail_count)
-                    .then_with(|| b.last_seen_unix_ms.cmp(&a.last_seen_unix_ms))
-            });
+            {
+                let score_tracker = self.state.peer_session.score_tracker();
+                let tracker = score_tracker.lock().unwrap_or_else(|p| p.into_inner());
+                tracker.sort_candidates(&mut candidate_sources);
+            }
 
             // `CPartFile::Process` + `CDownloadQueue::Process` de eMule
             // (Opcodes.h): cada canal de descubrimiento tiene su propia cadencia
