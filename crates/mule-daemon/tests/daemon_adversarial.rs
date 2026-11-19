@@ -40,15 +40,18 @@ async fn test_corrupted_database_fails_explicitly_in_daemon() {
 #[tokio::test]
 async fn test_concurrent_downloads_no_crosstalk() {
     // 1. Generar dos archivos sintéticos con diferentes tamaños y datos
-    // Archivo 1: 2 bloques (368_640 bytes) rellenos con 0xAA
-    let data1 = vec![0xAAu8; 368_640];
+    // Archivo 1: 2 bloques (368_640 bytes) con cabecera Matroska válida
+    let mut data1 = vec![0xAAu8; 368_640];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    data1[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let hash1 = ed2k::hash_reader(&mut Cursor::new(&data1))
         .unwrap()
         .root_hash;
     let hash1_hex = hex::encode(hash1.0);
 
-    // Archivo 2: 3 bloques (552_960 bytes) rellenos con 0xBB
-    let data2 = vec![0xBBu8; 552_960];
+    // Archivo 2: 3 bloques (552_960 bytes) con cabecera Matroska válida
+    let mut data2 = vec![0xBBu8; 552_960];
+    data2[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let hash2 = ed2k::hash_reader(&mut Cursor::new(&data2))
         .unwrap()
         .root_hash;
@@ -56,8 +59,8 @@ async fn test_concurrent_downloads_no_crosstalk() {
 
     // 2. Configurar el daemon de origen A alojando ambos archivos
     let mut engine = LabSourceEngine::new();
-    engine.host_file(hash1.0, "concurrent_1.txt", Bytes::from(data1.clone()));
-    engine.host_file(hash2.0, "concurrent_2.txt", Bytes::from(data2.clone()));
+    engine.host_file(hash1.0, "concurrent_1.mkv", Bytes::from(data1.clone()));
+    engine.host_file(hash2.0, "concurrent_2.mkv", Bytes::from(data2.clone()));
 
     let source_service = LabSourceService::start(engine).await.unwrap();
     let source_addr = source_service.local_addr();
@@ -91,7 +94,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
     let _ = read_response(&mut read, 1).await;
 
     // Añadir archivo 1
-    let link1 = format!("ed2k://|file|concurrent_1.txt|368640|{}|/", hash1_hex);
+    let link1 = format!("ed2k://|file|concurrent_1.mkv|368640|{}|/", hash1_hex);
     let add1_req = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -112,7 +115,7 @@ async fn test_concurrent_downloads_no_crosstalk() {
         .to_string();
 
     // Añadir archivo 2
-    let link2 = format!("ed2k://|file|concurrent_2.txt|552960|{}|/", hash2_hex);
+    let link2 = format!("ed2k://|file|concurrent_2.mkv|552960|{}|/", hash2_hex);
     let add2_req = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -166,8 +169,8 @@ async fn test_concurrent_downloads_no_crosstalk() {
     // Monitorizar eventos hasta que AMBAS descargas alcancen "Completed"
     let mut id1_completed = false;
     let mut id2_completed = false;
-    let file1_final = client_target_dir.path().join("concurrent_1.txt");
-    let file2_final = client_target_dir.path().join("concurrent_2.txt");
+    let file1_final = client_target_dir.path().join("concurrent_1.mkv");
+    let file2_final = client_target_dir.path().join("concurrent_2.mkv");
 
     let timeout = Duration::from_secs(10);
     let start = std::time::Instant::now();
@@ -225,7 +228,9 @@ async fn test_concurrent_downloads_no_crosstalk() {
 
 #[tokio::test]
 async fn test_slow_source_delayed_delivery_recovers_cleanly() {
-    let data = vec![0x33u8; 10_000];
+    let mut data = vec![0x33u8; 10_000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let hash = ed2k::hash_reader(&mut Cursor::new(&data))
         .unwrap()
         .root_hash;
@@ -255,7 +260,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         let offer = mule_protocol::lab::LabMessage::FileOffer {
             file_hash: hash.0,
             file_size: 10_000,
-            name: "slow_file.txt".into(),
+            name: "slow_file.mkv".into(),
         };
         send_lab_msg(&mut stream, &codec, &offer).await.unwrap();
 
@@ -325,7 +330,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
     let _ = read_response(&mut read, 2).await;
 
     // Añadir descarga
-    let link = format!("ed2k://|file|slow_file.txt|10000|{hash_hex}|/");
+    let link = format!("ed2k://|file|slow_file.mkv|10000|{hash_hex}|/");
     let req_add = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -389,7 +394,7 @@ async fn test_slow_source_delayed_delivery_recovers_cleanly() {
         completed,
         "Slow download must successfully complete despite source delay"
     );
-    let final_file = client_target_dir.path().join("slow_file.txt");
+    let final_file = client_target_dir.path().join("slow_file.mkv");
     assert!(final_file.exists());
     assert_eq!(fs::read(&final_file).unwrap().len(), 10_000);
 

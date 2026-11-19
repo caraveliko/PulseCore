@@ -74,7 +74,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     assert_eq!(resp["result"]["protocolVersion"], 1);
 
     // 4. Agregar enlace eD2K
-    let valid_link = "ed2k://|file|test_archive.zip|10000|0123456789abcdef0123456789abcdef|/";
+    let valid_link = "ed2k://|file|test_archive.mkv|10000|0123456789abcdef0123456789abcdef|/";
     let req_add = json!({
         "jsonrpc": "2.0",
         "id": 4,
@@ -131,7 +131,7 @@ async fn test_full_rpc_contract_and_event_streaming() {
     let list = resp["result"]["downloads"].as_array().unwrap();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0]["id"], download_id);
-    assert_eq!(list[0]["fileName"], "test_archive.zip");
+    assert_eq!(list[0]["fileName"], "test_archive.mkv");
 
     #[cfg(any(feature = "debug-rpc", feature = "lab-tools"))]
     {
@@ -230,7 +230,7 @@ async fn test_downloads_remove_persistence_across_daemon_restart() {
     let temp_dir = data_dir.join("temp");
     let token = "test_token_persistence".to_string();
 
-    let link = "ed2k://|file|sample_file.iso|1048576|31d6cfe0d16ae931b73c59d7e0c089c0|/";
+    let link = "ed2k://|file|sample_file.mkv|1048576|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     let download_id: String;
 
     // 1. Primera ejecución: iniciar el daemon con SQLite en disco, agregar enlace y eliminar enlace

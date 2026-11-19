@@ -6,7 +6,7 @@ use mule_protocol::ed2k::{
     ServerIdChange, ServerLoginRequest, ServerResponse, ServerStatus, OP_FOUNDSOURCES,
     OP_FOUNDSOURCES_OBFU, OP_GETSOURCES, OP_GETSOURCES_OBFU, OP_IDCHANGE, OP_LOGINREQUEST,
     OP_SEARCHREQUEST, OP_SEARCH_RESULT, OP_SERVERMESSAGE, OP_SERVERSTATUS, TAG_SPECIAL_FILESIZE,
-    TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
+    TAG_SPECIAL_FILETYPE, TAG_SPECIAL_NAME, TAG_SPECIAL_VERSION,
 };
 use mule_protocol::PR_ED2K;
 
@@ -211,6 +211,21 @@ fn test_encode_search_query() {
     assert_eq!(packet.payload[0], 0x00); // BOOL
     assert_eq!(packet.payload[1], 0x00); // AND
     assert!(packet.payload.len() > 15);
+
+    // Búsqueda filtrada por tipo de archivo eD2K (FT_FILETYPE = "Video")
+    let mut video_query = SearchQuery::new("matrix");
+    video_query.file_type = Some("Video".to_string());
+    let video_pkt = video_query.encode(&limits).expect("codificar búsqueda Video");
+    assert_eq!(video_pkt.protocol, PR_ED2K);
+    assert_eq!(video_pkt.opcode, OP_SEARCHREQUEST);
+    assert_eq!(
+        video_pkt.payload.as_ref(),
+        &[
+            0x00, 0x00, // AND
+            0x01, 0x06, 0x00, b'm', b'a', b't', b'r', b'i', b'x', // término
+            0x02, 0x05, 0x00, b'V', b'i', b'd', b'e', b'o', 0x01, 0x00, TAG_SPECIAL_FILETYPE,
+        ]
+    );
 }
 
 #[test]

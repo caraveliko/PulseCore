@@ -36,6 +36,10 @@ pub fn add_ed2k_link(
     let link =
         Ed2kFileLink::parse(link_str).map_err(|e| DaemonError::InvalidParams(e.to_string()))?;
 
+    let clean_name = mule_format::fix_mojibake(&link.file_name);
+    mule_network_policy::content_policy::validate_video_filename(&clean_name)
+        .map_err(|e| DaemonError::Business(e.to_string()))?;
+
     let clean_hex = link.ed2k_hash.to_hex().to_lowercase();
     if let Some(existing) = active
         .values()
@@ -50,7 +54,6 @@ pub fn add_ed2k_link(
     let id = Uuid::new_v4();
     let temp_filename = format!("{id}.part");
     let temp_path = temp_dir.join(temp_filename);
-    let clean_name = mule_format::fix_mojibake(&link.file_name);
     let target_path = target_dir.join(&clean_name);
 
     let download = Download {
@@ -130,6 +133,7 @@ pub fn add_ed2k_link(
             persist_dirty: false,
             last_persist_flush: Instant::now(),
             staged_parts: HashMap::new(),
+            content_header_verified: false,
         },
     );
 
@@ -257,6 +261,9 @@ pub fn resume_download(
         let act = active
             .get_mut(id)
             .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
+
+        mule_network_policy::content_policy::validate_video_filename(&act.download.display_name)
+            .map_err(|e| DaemonError::Business(e.to_string()))?;
 
         let now = now_ms();
         if act.download.status == DownloadStatus::Failed
@@ -436,6 +443,74 @@ pub(crate) fn inject_range_brief(
     sender: Option<&str>,
 ) -> Result<DownloadSnapshot, DaemonError> {
     inject_range_impl(db, active, id, offset, data, sender, false)
+}
+
+/// Inspecciona la cabecera binaria de la parte 0 recién verificada por MD4,
+/// leyendo primero desde el búfer en RAM (`staged_parts`, cero syscalls) y
+/// recurriendo a `PartFile` solo si la parte no estaba preparada en memoria.
+fn inspect_verified_part0_header(
+    act: &mut ActiveDownload,
+    part_len: usize,
+) -> Result<bool, mule_network_policy::ContentPolicyError> {
+    let inspect_len = mule_network_policy::content_policy::HEADER_INSPECT_BYTES.min(part_len);
+    if let Some(staged) = act.staged_parts.get(&0) {
+        if let Some(slice) = staged.prefix_slice(inspect_len) {
+            mule_network_policy::content_policy::validate_video_header(
+                slice,
+                &act.download.display_name,
+            )?;
+            return Ok(true);
+        }
+    }
+    if let Some(pf) = act.part_file.as_mut() {
+        if let Ok(bytes) = pf.read_range(0, inspect_len) {
+            mule_network_policy::content_policy::validate_video_header(
+                &bytes,
+                &act.download.display_name,
+            )?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Aborta una descarga rechazada por la política de contenido: cierra y borra sus
+/// archivos temporales, registra el hash en `cancelled_files` y la marca como fallida.
+fn reject_download_by_content_policy(
+    db: &mut Database,
+    act: &mut ActiveDownload,
+    id: &Uuid,
+    reason: &str,
+) {
+    let _ = act.part_file.take();
+    if act.download.temp_path.exists() {
+        let _ = std::fs::remove_file(&act.download.temp_path);
+    }
+    super::part_met::delete_part_met(&act.download.temp_path);
+    let _ = cancelled_files::record_cancelled_file(db, &act.download.ed2k_hash.0);
+
+    let now = now_ms();
+    act.download.status = DownloadStatus::Failed;
+    act.download.updated_at = now;
+    act.last_status_change_unix_ms = now;
+    act.last_error = Some(reason.to_string());
+    act.ranges = RangeSet::new();
+    act.staged_parts.clear();
+    act.persist_dirty = false;
+    act.verification_in_progress = false;
+
+    let _ = db.update_status(id, DownloadStatus::Failed);
+    let _ = db.sync_received_ranges(id, &act.ranges);
+    record_history_event(
+        db,
+        &act.download,
+        0,
+        act.connection_attempts,
+        act.resume_count,
+        "failed",
+        "content_policy_rejected",
+        Some(reason.to_string()),
+    );
 }
 
 fn inject_range_impl(
@@ -623,6 +698,25 @@ fn inject_range_impl(
                         .unwrap_or(false),
                 };
                 if verified {
+                    if part_idx == 0 && !act.content_header_verified {
+                        match inspect_verified_part0_header(act, part_len) {
+                            Ok(true) => {
+                                act.content_header_verified = true;
+                            }
+                            Ok(false) => {}
+                            Err(policy_err) => {
+                                let reason = policy_err.to_string();
+                                tracing::warn!(
+                                    "[CONTENT_POLICY] Descarga eD2K '{}' ({}) rechazada en vuelo en parte 0: {}",
+                                    act.download.display_name,
+                                    hash_hex,
+                                    reason
+                                );
+                                reject_download_by_content_policy(db, act, id, &reason);
+                                return Ok(snap_of(act));
+                            }
+                        }
+                    }
                     let _ = db.mark_part_verified(id, part_idx as u32);
                     act.corruption_blackbox
                         .verified_data(part_idx as u32, part_start, part_end);
@@ -1245,16 +1339,45 @@ pub fn prepare_finalize(
     active: &mut HashMap<Uuid, ActiveDownload>,
     id: &Uuid,
 ) -> Result<(PathBuf, PathBuf, DownloadSnapshot), DaemonError> {
+    let (temp_path, display_name, already_verified) = {
+        let act = active
+            .get_mut(id)
+            .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
+        let _ = act.part_file.take();
+        (
+            act.download.temp_path.clone(),
+            act.download.display_name.clone(),
+            act.content_header_verified,
+        )
+    };
+
+    if !already_verified {
+        if let Err(policy_err) =
+            mule_network_policy::content_policy::validate_video_file(&temp_path, &display_name)
+        {
+            let reason = policy_err.to_string();
+            tracing::warn!(
+                "[CONTENT_POLICY] Descarga eD2K '{}' ({id}) rechazada antes de finalizar: {}",
+                display_name,
+                reason
+            );
+            let act = active
+                .get_mut(id)
+                .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
+            reject_download_by_content_policy(db, act, id, &reason);
+            return Err(DaemonError::Business(reason));
+        }
+    }
+
     let act = active
         .get_mut(id)
         .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
-    let _ = act.part_file.take();
+    act.content_header_verified = true;
     act.download.status = DownloadStatus::Completing;
     let now = now_ms();
     act.download.updated_at = now;
     act.last_status_change_unix_ms = now;
     let _ = db.update_status(id, DownloadStatus::Completing);
-    let temp_path = act.download.temp_path.clone();
     let target_path = act.download.target_path.clone();
     Ok((temp_path, target_path, act.snapshot()))
 }
@@ -1484,6 +1607,8 @@ pub fn rename_download(
     new_name: &str,
 ) -> Result<DownloadSnapshot, DaemonError> {
     let new_name = validate_new_file_name(new_name)?;
+    mule_network_policy::content_policy::validate_video_filename(new_name)
+        .map_err(|e| DaemonError::InvalidParams(e.to_string()))?;
 
     let (old_target, new_target, completed, hash_hex) = {
         let act = active
@@ -1551,6 +1676,8 @@ pub fn rename_shared_file(
     new_name: &str,
 ) -> Result<(), DaemonError> {
     let new_name = validate_new_file_name(new_name)?;
+    mule_network_policy::content_policy::validate_video_filename(new_name)
+        .map_err(|e| DaemonError::InvalidParams(e.to_string()))?;
 
     if let Some(dl_id) = active
         .values()

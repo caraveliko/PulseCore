@@ -290,5 +290,8 @@ fn is_shareable_file(path: &Path) -> bool {
         return false;
     }
     let lower = name.to_lowercase();
-    !SKIP_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+    if SKIP_EXTENSIONS.iter().any(|ext| lower.ends_with(ext)) {
+        return false;
+    }
+    mule_network_policy::content_policy::is_allowed_video_filename(name)
 }

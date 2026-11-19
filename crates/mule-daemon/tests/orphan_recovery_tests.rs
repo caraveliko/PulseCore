@@ -36,8 +36,10 @@ fn orphan_part_met_is_recovered_and_adopted_in_place() {
     std::fs::create_dir_all(&temp_dir).unwrap();
     let mut svc = DownloadService::in_memory(temp_dir.clone()).unwrap();
 
-    let content = vec![0xABu8; 500];
-    let file_hash = make_orphan(&temp_dir, "003", &content, "orphan.bin");
+    let mut content = vec![0xABu8; 500];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
+    let file_hash = make_orphan(&temp_dir, "003", &content, "orphan.mkv");
 
     let recovered = svc.recover_orphan_part_mets(tmp.path());
     assert_eq!(recovered, 1);
@@ -50,7 +52,7 @@ fn orphan_part_met_is_recovered_and_adopted_in_place() {
     assert_eq!(snaps.len(), 1);
     let snap = &snaps[0];
     assert_eq!(snap.status, "paused");
-    assert_eq!(snap.file_name, "orphan.bin");
+    assert_eq!(snap.file_name, "orphan.mkv");
     assert_eq!(snap.received_bytes, 500);
     assert_eq!(snap.ed2k_hash, hex::encode(file_hash));
     assert_eq!(snap.source_count, 0);
@@ -69,7 +71,7 @@ fn tracked_part_met_is_not_reimported() {
     let temp_dir = tmp.path().join("temp");
     let mut svc = DownloadService::in_memory(temp_dir.clone()).unwrap();
 
-    let link = format!("ed2k://|file|known.bin|500|{}|/", hex::encode([0x77u8; 16]));
+    let link = format!("ed2k://|file|known.mkv|500|{}|/", hex::encode([0x77u8; 16]));
     svc.add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
@@ -101,9 +103,11 @@ fn removed_download_with_kept_files_does_not_resurrect() {
     let temp_dir = tmp.path().join("temp");
     let mut svc = DownloadService::in_memory(temp_dir.clone()).unwrap();
 
-    let content = vec![0x55u8; 400];
+    let mut content = vec![0x55u8; 400];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let file_hash: [u8; 16] = Md4::digest(&content).into();
-    let link = format!("ed2k://|file|keep.bin|400|{}|/", hex::encode(file_hash));
+    let link = format!("ed2k://|file|keep.mkv|400|{}|/", hex::encode(file_hash));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -137,7 +141,7 @@ fn save_active_part_mets_flushes_all_in_progress() {
     let temp_dir = tmp.path().join("temp");
     let mut svc = DownloadService::in_memory(temp_dir).unwrap();
 
-    let link = format!("ed2k://|file|flush.bin|300|{}|/", hex::encode([0x11u8; 16]));
+    let link = format!("ed2k://|file|flush.mkv|300|{}|/", hex::encode([0x11u8; 16]));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();

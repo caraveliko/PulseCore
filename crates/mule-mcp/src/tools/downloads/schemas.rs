@@ -26,8 +26,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         },
         ToolDefinition {
             name: "emule_add_link".to_string(),
-            description: "Add an eD2K link (e.g. ed2k://|file|filename.iso|1234567|HASH|/) to the download queue.".to_string(),
-            input_schema: obj_schema(json!({"link": prop("string", "The full ed2k:// link to download"),
+            description: "Add a video-only eD2K link (movies/series, e.g. ed2k://|file|pelicula.mkv|1234567|HASH|/) to the download queue. Non-video files are rejected by content policy.".to_string(),
+            input_schema: obj_schema(json!({"link": prop("string", "The full ed2k:// video link to download"),
                     "category_id": prop("string", "Optional category ID to assign this download to"),
                     "destination_dir": prop("string", "Optional custom target directory for completed file")}), &["link"]),
         },

@@ -43,17 +43,10 @@ pub use mule_protocol::ed2k::{OP_COMPRESSEDPART_I64, OP_SENDINGPART_I64};
 /// Las peticiones I64 requieren `ExtendedRequestsVer >= 2` del par (`GetExtendedRequestsVersion`
 /// de eMule); devuelve `None` cuando el par no puede servir el rango solicitado.
 /// Extensiones de archivos previsualizables — eMule solo aplica la prioridad
-/// de primera/última parte (`PR_VERYHIGH`) a medios reproducibles durante
-/// la descarga.
+/// de primera/última parte (`PR_VERYHIGH`) a medios de vídeo admitidos por la
+/// política de contenido para validar y previsualizar durante la descarga.
 fn is_previewable_media(file_name: &str) -> bool {
-    const PREVIEW_EXTS: &[&str] = &[
-        "avi", "mpg", "mpeg", "mp4", "mkv", "wmv", "mov", "flv", "ts", "vob", "mp3", "flac", "ogg",
-        "wav", "m4a", "aac",
-    ];
-    std::path::Path::new(file_name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| PREVIEW_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+    mule_network_policy::content_policy::is_allowed_video_filename(file_name)
 }
 
 /// Estados para los cuales una sesión de par puede emitir nuevas peticiones
@@ -1123,20 +1116,22 @@ pub(crate) async fn run_transfer_loop(
                                         let Some(dl_id) = dl_svc.id_by_ed2k_hash(&file_hash) else {
                                             return (false, None);
                                         };
-                                        let done = match dl_svc.inject_range_brief(
-                                            &dl_id,
-                                            part_start,
-                                            &part_data,
-                                            Some(&sender),
-                                        ) {
-                                            Ok(snap) => {
-                                                let s = snap.status.to_lowercase();
-                                                s == "verifying"
-                                                    || s == "completed"
-                                                    || snap.progress >= 1.0
-                                            }
-                                            Err(_) => false,
-                                        };
+                                                let done = match dl_svc.inject_range_brief(
+                                                    &dl_id,
+                                                    part_start,
+                                                    &part_data,
+                                                    Some(&sender),
+                                                ) {
+                                                    Ok(snap) => {
+                                                        let s = snap.status.to_lowercase();
+                                                        s == "verifying"
+                                                            || s == "completed"
+                                                            || s == "failed"
+                                                            || s == "removed"
+                                                            || snap.progress >= 1.0
+                                                    }
+                                                    Err(_) => false,
+                                                };
                                         (done, Some(dl_id))
                                     })
                                     .await
@@ -1321,6 +1316,8 @@ pub(crate) async fn run_transfer_loop(
                                                         let s = snap.status.to_lowercase();
                                                         s == "verifying"
                                                             || s == "completed"
+                                                            || s == "failed"
+                                                            || s == "removed"
                                                             || snap.progress >= 1.0
                                                     }
                                                     Err(_) => false,

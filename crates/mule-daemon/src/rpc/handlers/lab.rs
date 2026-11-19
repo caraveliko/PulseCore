@@ -301,6 +301,7 @@ pub async fn handle_lab_create_fixture(
         .and_then(|p| p["fixtureType"].as_str())
         .unwrap_or("sample_1mb");
 
+    let mkv_header = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
     let (file_name, data): (String, Vec<u8>) = match fixture_type {
         "part_9728000" => {
             let size = 9_728_000usize;
@@ -308,7 +309,8 @@ pub async fn handle_lab_create_fixture(
             for i in 0..size {
                 v.push((i % 256) as u8);
             }
-            ("fixture_part_9728000.bin".to_string(), v)
+            v[..mkv_header.len()].copy_from_slice(mkv_header);
+            ("fixture_part_9728000.mkv".to_string(), v)
         }
         "pattern_9728001" | "part_9728001" => {
             let size = 9_728_001usize;
@@ -316,19 +318,22 @@ pub async fn handle_lab_create_fixture(
             for i in 0..size {
                 v.push((i % 256) as u8);
             }
-            ("fixture_part_9728001.bin".to_string(), v)
+            v[..mkv_header.len()].copy_from_slice(mkv_header);
+            ("fixture_part_9728001.mkv".to_string(), v)
         }
-        "text" => (
-            "hello-loopback.txt".to_string(),
-            b"eMuleRust local test\n".to_vec(),
-        ),
+        "text" => {
+            let mut v = mkv_header.to_vec();
+            v.extend_from_slice(b"eMuleRust local test\n");
+            ("hello-loopback.mkv".to_string(), v)
+        }
         _ => {
             let size = 1_048_576usize;
             let mut v = Vec::with_capacity(size);
             for i in 0..size {
                 v.push((i % 256) as u8);
             }
-            ("sample_1mb.bin".to_string(), v)
+            v[..mkv_header.len()].copy_from_slice(mkv_header);
+            ("sample_1mb.mkv".to_string(), v)
         }
     };
 

@@ -10,9 +10,6 @@ use crate::services::downloads::types::now_ms;
 use crate::state::AppState;
 use mule_core::model::{EpisodeItem, MediaItem};
 
-const VIDEO_EXTENSIONS: &[&str] = &[
-    "mkv", "mp4", "avi", "m4v", "mov", "wmv", "flv", "ts",
-];
 /// Tamaño mínimo de un archivo de vídeo independiente en una carpeta entrante adicional (50 MiB).
 const MIN_STANDALONE_VIDEO_BYTES: u64 = 50 * 1024 * 1024;
 /// Tamaño máximo considerado como extracto «sample / trailer» (85 MiB).
@@ -300,8 +297,10 @@ fn purge_superseded_episode_files(
             if !p.is_file() || p == dest_file {
                 continue;
             }
-            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if !VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+            let Some(fname) = p.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !mule_network_policy::content_policy::is_allowed_video_filename(fname) {
                 continue;
             }
             let fname = entry.file_name().to_string_lossy().to_string();
@@ -348,8 +347,10 @@ fn purge_superseded_movie_files(
             if !p.is_file() || p == dest_file {
                 continue;
             }
-            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if !VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+            let Some(fname) = p.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !mule_network_policy::content_policy::is_allowed_video_filename(fname) {
                 continue;
             }
             info!(
@@ -505,14 +506,14 @@ impl MediaOrganizer {
             return Ok(None);
         }
 
-        let ext = completed_file_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("mkv");
-
-        if !VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+        let Some(raw_file_name) = completed_file_path.file_name().and_then(|n| n.to_str()) else {
+            return Ok(None);
+        };
+        if !mule_network_policy::content_policy::is_allowed_video_filename(raw_file_name) {
             return Ok(None);
         }
+        let ext = mule_network_policy::content_policy::normalized_extension(raw_file_name)
+            .unwrap_or_else(|| "mkv".to_string());
 
         // Rechazar clips de muestra / tráiler para evitar organizarlos como episodios o películas completos
         if let Some(fname) = completed_file_path.file_name().and_then(|n| n.to_str()) {
@@ -1074,8 +1075,11 @@ impl MediaOrganizer {
                             for entry in entries.flatten() {
                                 let p = entry.path();
                                 if p.is_file() {
-                                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                                    if VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                                    let is_video = p
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename);
+                                    if is_video {
                                         if let Ok(Some(dest)) = Self::organize_download(state, &tor.info_hash, &p).await {
                                             torrent_organized_any = true;
                                             organized_files.push(json!({
@@ -1127,8 +1131,11 @@ impl MediaOrganizer {
                             if size < MIN_STANDALONE_VIDEO_BYTES {
                                 continue;
                             }
-                            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                            if VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                            let is_video = p
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename);
+                            if is_video {
                                 let pseudo_id = format!("manual-{}", p.file_name().unwrap_or_default().to_string_lossy());
                                 if let Ok(Some(dest)) = Self::organize_download(state, &pseudo_id, &p).await {
                                     organized_files.push(json!({

@@ -132,8 +132,14 @@ async fn test_sonarr_transmission_handshake_and_lifecycle() {
     assert_eq!(torrents[0]["name"], "Big_Buck_Bunny.1080p.mkv");
     assert_eq!(torrents[0]["labels"][0], "tv");
 
-    // 5b. Test `torrent-add` with BitTorrent magnet link (Dual-protocol check)
-    let magnet_link = "magnet:?xt=urn:btih:3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0&dn=Test_Torrent.iso";
+    // 5b. Test `torrent-add` con un torrent de vídeo mínimo offline codificado en base64 (`metainfo`)
+    let mut torrent_bytes = Vec::new();
+    torrent_bytes.extend_from_slice(
+        b"d8:announce25:http://127.0.0.1/announce4:infod6:lengthi1024e4:name16:sample_video.mkv12:piece lengthi16384e6:pieces20:",
+    );
+    torrent_bytes.extend_from_slice(&[0x41u8; 20]);
+    torrent_bytes.extend_from_slice(b"ee");
+    let metainfo_b64 = data_encoding::BASE64.encode(&torrent_bytes);
     let res = client
         .post(&rpc_url)
         .header("x-transmission-session-id", &session_header)
@@ -142,7 +148,7 @@ async fn test_sonarr_transmission_handshake_and_lifecycle() {
             json!({
                 "method": "torrent-add",
                 "arguments": {
-                    "filename": magnet_link,
+                    "metainfo": metainfo_b64,
                     "labels": ["movies"]
                 },
                 "tag": 1031
@@ -158,9 +164,13 @@ async fn test_sonarr_transmission_handshake_and_lifecycle() {
     let val: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(val["result"], "success");
     let added_torrent = &val["arguments"]["torrent-added"];
+    assert_eq!(added_torrent["name"], "sample_video.mkv");
     assert_eq!(
-        added_torrent["hashString"],
-        "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+        added_torrent["hashString"]
+            .as_str()
+            .expect("hashString")
+            .len(),
+        40
     );
     let bittorrent_id = added_torrent["id"].as_i64().unwrap();
 

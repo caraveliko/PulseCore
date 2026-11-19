@@ -52,14 +52,14 @@ async fn test_known_met_import_registers_share_without_rehash() {
 
     let incoming = tempdir().unwrap();
     let payload = vec![0x42u8; 5_000];
-    std::fs::write(incoming.path().join("movie.bin"), &payload).unwrap();
+    std::fs::write(incoming.path().join("movie.mkv"), &payload).unwrap();
     // Un archivo señuelo sin registro coincidente.
-    std::fs::write(incoming.path().join("other.bin"), vec![0x99u8; 100]).unwrap();
+    std::fs::write(incoming.path().join("other.mkv"), vec![0x99u8; 100]).unwrap();
 
     let aich = aich_root_for(&payload);
     let mut met_buf = vec![MET_HEADER_I64TAGS];
     let mut records = Vec::new();
-    records.extend_from_slice(&record_bytes(&payload, "movie.bin", &mut |t| {
+    records.extend_from_slice(&record_bytes(&payload, "movie.mkv", &mut |t| {
         push_string_tag(t, FT_AICH_HASH, &aich.to_base32());
         push_u32_tag(t, FT_ATTRANSFERRED, 777);
         push_u32_tag(t, FT_ULPRIORITY, 2); // PR_HIGH
@@ -86,7 +86,7 @@ async fn test_known_met_import_registers_share_without_rehash() {
         .get_shared_file(&hash_hex)
         .unwrap()
         .expect("share registered from known.met record");
-    assert_eq!(sf.file_name, "movie.bin");
+    assert_eq!(sf.file_name, "movie.mkv");
     assert_eq!(sf.file_size, 5_000);
     assert_eq!(sf.up_priority, "high");
     assert_eq!(sf.aich_root, Some(aich.0));
@@ -109,11 +109,11 @@ async fn test_known_met_import_verify_rejects_mismatch() {
     // El contenido del archivo difiere de lo que calculó el hash del registro — mismo nombre y tamaño.
     let real_payload = vec![0x11u8; 5_000];
     let stale_payload = vec![0x22u8; 5_000];
-    std::fs::write(incoming.path().join("changed.bin"), &real_payload).unwrap();
+    std::fs::write(incoming.path().join("changed.mkv"), &real_payload).unwrap();
 
     let mut met_buf = vec![MET_HEADER_I64TAGS];
     let mut records = Vec::new();
-    records.extend_from_slice(&record_bytes(&stale_payload, "changed.bin", &mut |_| {}));
+    records.extend_from_slice(&record_bytes(&stale_payload, "changed.mkv", &mut |_| {}));
     met_buf.extend_from_slice(&1u32.to_le_bytes());
     met_buf.extend_from_slice(&records);
     let met_path = tmp.path().join("known.met");
@@ -158,7 +158,7 @@ async fn test_known_met_import_enriches_existing_share() {
 
     let incoming = tempdir().unwrap();
     let payload = vec![0x33u8; 4_000];
-    std::fs::write(incoming.path().join("song.mp3"), &payload).unwrap();
+    std::fs::write(incoming.path().join("episode.mkv"), &payload).unwrap();
 
     // Pre-registrar el compartido con una prioridad definida por el usuario — la importación no debe
     // restablecerla (ruta exclusiva de enriquecimiento).
@@ -168,11 +168,11 @@ async fn test_known_met_import_enriches_existing_share() {
         let mut dl = svc.lock().await;
         let mut sf = mule_core::model::SharedFile::new(
             &hash_hex,
-            "song.mp3",
+            "episode.mkv",
             4_000,
             incoming
                 .path()
-                .join("song.mp3")
+                .join("episode.mkv")
                 .to_string_lossy()
                 .as_ref(),
         );
@@ -183,7 +183,7 @@ async fn test_known_met_import_enriches_existing_share() {
     let aich = aich_root_for(&payload);
     let mut met_buf = vec![MET_HEADER_I64TAGS];
     let mut records = Vec::new();
-    records.extend_from_slice(&record_bytes(&payload, "song.mp3", &mut |t| {
+    records.extend_from_slice(&record_bytes(&payload, "episode.mkv", &mut |t| {
         push_string_tag(t, FT_AICH_HASH, &aich.to_base32());
         push_u32_tag(t, FT_ATTRANSFERRED, 42);
         push_u32_tag(t, FT_ULPRIORITY, 3); // PR_VERYHIGH — must NOT override

@@ -82,7 +82,7 @@ async fn test_execute_tool_blocked_by_profile() {
         ToolProfile::Read,
         &client,
         "emule_add_link",
-        json!({ "link": "ed2k://|file|x.bin|1|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
+        json!({ "link": "ed2k://|file|x.mkv|1|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
     )
     .await;
     assert!(res.is_error);

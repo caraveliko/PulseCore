@@ -50,6 +50,7 @@ powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
 3. **Seguridad no negociable**: nunca debilitar la canalización anti-SSRF, el aislamiento loopback por defecto, el interruptor de corte atómico ni la seudonimización de pares (`mule-network-policy`). Nunca generar una versión pública con `-LabMode` / `--features lab-tools` — `test_packaged_bundle.ps1` verifica que el sabor `standard` no exponga ningún método `lab.*`.
 4. **Windows-first**: instrucciones y scripts en PowerShell, no en bash (salvo despliegues Linux/aarch64 específicos). Rutas con `\` o entrecomillado adecuado.
 5. **Dependencias**: revisar `deny.toml` antes de añadir una crate; preferir las dependencias del workspace (`[workspace.dependencies]`).
+6. **Política de contenido «Solo Vídeo» (invariante fijo)**: Pulse Core solo admite archivos de vídeo (y subtítulos complementarios dentro de torrents con vídeo) mediante la fuente única de verdad `mule_network_policy::content_policy` (ADR `docs/ed2k/decisions/0006-politica-contenido-solo-video.md`). Prohibido duplicar listas de extensiones o añadir opciones para desactivar esta política.
 
 ## Convenciones de código
 

@@ -26,7 +26,7 @@ fn aich_root_reaches_consensus_with_ten_unique_ips() {
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
     let link = format!(
-        "ed2k://|file|aich.bin|{}|{}|/",
+        "ed2k://|file|aich.mkv|{}|{}|/",
         500_000,
         hex::encode([0xAAu8; 16])
     );
@@ -57,7 +57,7 @@ fn aich_root_from_link_is_immediately_trusted() {
 
     let root = [0x77u8; 20];
     let link = format!(
-        "ed2k://|file|aich.bin|{}|{}|h={}|/",
+        "ed2k://|file|aich.mkv|{}|{}|h={}|/",
         500_000,
         hex::encode([0xAAu8; 16]),
         data_encoding::BASE32_NOPAD.encode(&root)
@@ -79,7 +79,7 @@ fn aich_recovery_evicts_only_corrupted_blocks() {
     let root = tree.root_hash().unwrap();
 
     let link = format!(
-        "ed2k://|file|aich.bin|{}|{}|h={}|/",
+        "ed2k://|file|aich.mkv|{}|{}|h={}|/",
         good.len(),
         hex::encode([0xAAu8; 16]),
         data_encoding::BASE32_NOPAD.encode(&root.0)
@@ -122,7 +122,7 @@ fn aich_recovery_marks_clean_part_verified() {
     let root = tree.root_hash().unwrap();
 
     let link = format!(
-        "ed2k://|file|aich.bin|{}|{}|h={}|/",
+        "ed2k://|file|aich.mkv|{}|{}|h={}|/",
         good.len(),
         hex::encode([0xAAu8; 16]),
         data_encoding::BASE32_NOPAD.encode(&root.0)
@@ -152,7 +152,7 @@ fn aich_recovery_rejects_untrusted_master_hash() {
     let root = tree.root_hash().unwrap();
 
     let link = format!(
-        "ed2k://|file|aich.bin|{}|{}|h={}|/",
+        "ed2k://|file|aich.mkv|{}|{}|h={}|/",
         good.len(),
         hex::encode([0xAAu8; 16]),
         data_encoding::BASE32_NOPAD.encode(&root.0)

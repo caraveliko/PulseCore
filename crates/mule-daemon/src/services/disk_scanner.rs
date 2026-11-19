@@ -11,15 +11,13 @@ use crate::services::organizer::{clean_movie_title, extract_year};
 use crate::state::AppState;
 use mule_core::model::{EpisodeItem, MediaItem};
 
-const VIDEO_EXTENSIONS: &[&str] = &[
-    ".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts",
-];
 /// Pausa entre dos peticiones de enriquecimiento externo (en ms) para respetar los límites de tasa.
 const METADATA_ENRICH_THROTTLE_MS: u64 = 80;
 
 fn is_video_file(path: &Path) -> bool {
-    let lower = path.to_string_lossy().to_lowercase();
-    VIDEO_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename)
 }
 
 /// Extrae tmdb_id del nombre de carpeta como "Abigail (2024) [tmdbid-1111873]"

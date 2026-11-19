@@ -16,6 +16,10 @@ use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ListenerMode, ListenerOptions, Session,
     SessionOptions, SessionPersistenceConfig,
 };
+use mule_network_policy::content_policy::{
+    HEADER_INSPECT_BYTES, HEADER_INSPECT_MIN_BYTES, select_torrent_video_files,
+    validate_video_header,
+};
 use mule_network_policy::validator::validate_connect_address;
 use mule_network_policy::{NetworkPolicyManager, NetworkState};
 use serde::{Deserialize, Serialize};
@@ -30,6 +34,163 @@ pub const TORRENT_PEER_LIMIT: usize = DEFAULT_TORRENT_PEER_LIMIT;
 
 /// Carpeta de estado `fastresume` bajo `blocklist_dir`.
 const FASTRESUME_SUBDIR: &str = "bt_session";
+
+/// Intervalo de muestreo del vigilante de cabeceras de vídeo para torrents activos.
+const VIDEO_HEADER_WATCHDOG_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Número máximo de ciclos de comprobación antes de detener el vigilante de un torrent inactivo.
+const VIDEO_HEADER_WATCHDOG_MAX_CHECKS: usize = 1800;
+
+/// Prefijo máximo comprobado para distinguir un archivo disperso preasignado (todo ceros) de datos reales.
+const SPARSE_ZERO_PREFIX_BYTES: usize = 64;
+
+/// Objetivo de vigilancia de cabecera para un archivo de vídeo dentro de un torrent.
+#[derive(Clone)]
+struct WatchVideoTarget {
+    idx: usize,
+    path: PathBuf,
+    display_name: String,
+    expected_len: u64,
+}
+
+/// Lee hasta `HEADER_INSPECT_BYTES` bytes del principio de un archivo de torrent sin bloquear el ejecutor.
+async fn read_torrent_header_prefix(
+    path: &std::path::Path,
+) -> std::io::Result<Option<(Vec<u8>, usize)>> {
+    use tokio::io::AsyncReadExt;
+
+    let mut file = match tokio::fs::File::open(path).await {
+        Ok(f) => f,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    let mut buf = vec![0u8; HEADER_INSPECT_BYTES];
+    let mut read_total = 0usize;
+    while read_total < buf.len() {
+        let n = file.read(&mut buf[read_total..]).await?;
+        if n == 0 {
+            break;
+        }
+        read_total += n;
+    }
+    Ok(Some((buf, read_total)))
+}
+
+/// Supervisa en segundo plano que las cabeceras binarias de los archivos de vídeo en curso sean legítimas.
+///
+/// Si un archivo declarado como vídeo contiene una cabecera no válida (por ejemplo, un ejecutable o
+/// archivo comprimido renombrado a `.mkv`), elimina de inmediato el torrent y sus archivos en disco.
+fn spawn_video_header_watchdog(
+    session: std::sync::Arc<Session>,
+    id: usize,
+    handle: std::sync::Arc<librqbit::ManagedTorrent>,
+    video_indices: Vec<usize>,
+) {
+    let cancel = session.cancellation_token().clone();
+    tokio::spawn(async move {
+        let out_dir = handle.output_folder().to_path_buf();
+        let mut pending: Vec<WatchVideoTarget> = match handle.with_metadata(|meta| {
+            video_indices
+                .iter()
+                .filter_map(|&idx| {
+                    meta.file_infos.get(idx).map(|fi| WatchVideoTarget {
+                        idx,
+                        path: out_dir.join(&fi.relative_filename),
+                        display_name: fi.relative_filename.to_string_lossy().into_owned(),
+                        expected_len: fi.len,
+                    })
+                })
+                .collect()
+        }) {
+            Ok(targets) => targets,
+            Err(_) => return,
+        };
+
+        for _ in 0..VIDEO_HEADER_WATCHDOG_MAX_CHECKS {
+            tokio::select! {
+                _ = cancel.cancelled() => return,
+                _ = tokio::time::sleep(VIDEO_HEADER_WATCHDOG_POLL_INTERVAL) => {}
+            }
+
+            if session.get(TorrentIdOrHash::Id(id)).is_none() || pending.is_empty() {
+                return;
+            }
+
+            let stats = handle.stats();
+            let mut next_pending = Vec::with_capacity(pending.len());
+
+            for target in pending {
+                let file_progress = stats.file_progress.get(target.idx).copied().unwrap_or(0);
+                let file_finished = stats.finished
+                    || (target.expected_len > 0 && file_progress >= target.expected_len);
+
+                let (buf, read_len) = match read_torrent_header_prefix(&target.path).await {
+                    Ok(Some(res)) => res,
+                    Ok(None) => {
+                        if file_finished {
+                            tracing::warn!(
+                                torrent_id = id,
+                                file = %target.display_name,
+                                "Archivo de vídeo ausente al finalizar el torrent; eliminando por política"
+                            );
+                            let _ = session.delete(TorrentIdOrHash::Id(id), true).await;
+                            return;
+                        }
+                        next_pending.push(target);
+                        continue;
+                    }
+                    Err(err) => {
+                        tracing::debug!(
+                            torrent_id = id,
+                            file = %target.display_name,
+                            error = %err,
+                            "Error transitorio leyendo cabecera de torrent; se reintentará"
+                        );
+                        next_pending.push(target);
+                        continue;
+                    }
+                };
+
+                if read_len == 0 && !file_finished {
+                    next_pending.push(target);
+                    continue;
+                }
+
+                let probe = &buf[..read_len];
+                if !file_finished && probe.len() < HEADER_INSPECT_MIN_BYTES {
+                    next_pending.push(target);
+                    continue;
+                }
+
+                let sparse_zeros_end = probe.len().min(SPARSE_ZERO_PREFIX_BYTES);
+                if !file_finished
+                    && sparse_zeros_end > 0
+                    && probe[..sparse_zeros_end].iter().all(|&b| b == 0)
+                {
+                    // Archivo disperso preasignado mientras la pieza 0 aún no ha llegado.
+                    next_pending.push(target);
+                    continue;
+                }
+
+                if let Err(err) = validate_video_header(probe, &target.display_name) {
+                    tracing::warn!(
+                        torrent_id = id,
+                        file = %target.display_name,
+                        error = %err,
+                        "Cabecera binaria no válida detectada en torrent activo; eliminando torrent y datos"
+                    );
+                    let _ = session.delete(TorrentIdOrHash::Id(id), true).await;
+                    return;
+                }
+            }
+
+            pending = next_pending;
+            if pending.is_empty() {
+                return;
+            }
+        }
+    });
+}
 
 /// Instantánea pública de estado de una descarga torrent gestionada.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,16 +566,61 @@ impl TorrentEngine {
         {
             return Err("Path traversal ('..') denied in torrent output folder".into());
         }
+
+        // Paso 1: resolver metadatos sin asignar archivos en disco (`list_only`) y filtrar por política «Solo Vídeo».
+        let list_opts = AddTorrentOptions {
+            list_only: true,
+            output_folder: Some(out_dir.to_string_lossy().to_string()),
+            peer_limit: Some(self.peer_limit),
+            ..Default::default()
+        };
+        let list_only = match self.session.add_torrent(add_torrent, Some(list_opts)).await? {
+            AddTorrentResponse::ListOnly(resp) => resp,
+            _ => {
+                return Err(Box::new(TorrentError::Session(
+                    "se esperaba respuesta ListOnly al inspeccionar el torrent".to_string(),
+                )));
+            }
+        };
+
+        let file_entries: Vec<(usize, String)> = list_only
+            .info
+            .iter_file_details()
+            .enumerate()
+            .map(|(idx, fd)| (idx, fd.filename.to_string()))
+            .collect();
+        let selection = select_torrent_video_files(
+            file_entries.iter().map(|(idx, path)| (*idx, path.as_str())),
+        )
+        .map_err(|err| Box::new(TorrentError::ContentRejected(err.to_string())))?;
+
+        let resolved_add = AddTorrent::from_bytes(list_only.torrent_bytes);
         let opts = AddTorrentOptions {
             output_folder: Some(out_dir.to_string_lossy().to_string()),
             overwrite: true,
+            only_files: Some(selection.selected_indices),
+            initial_peers: if list_only.seen_peers.is_empty() {
+                None
+            } else {
+                Some(list_only.seen_peers)
+            },
             peer_limit: Some(self.peer_limit),
             ..Default::default()
         };
 
-        let res = self.session.add_torrent(add_torrent, Some(opts)).await?;
+        let res = self.session.add_torrent(resolved_add, Some(opts)).await?;
         let (id, handle) = match res {
-            AddTorrentResponse::Added(id, handle) => (id, handle),
+            AddTorrentResponse::Added(id, handle) => {
+                if !selection.video_indices.is_empty() {
+                    spawn_video_header_watchdog(
+                        std::sync::Arc::clone(&self.session),
+                        id,
+                        handle.clone(),
+                        selection.video_indices,
+                    );
+                }
+                (id, handle)
+            }
             AddTorrentResponse::AlreadyManaged(id, handle) => (id, handle),
             AddTorrentResponse::ListOnly(_) => return Err("Torrent is list only".into()),
         };
@@ -549,15 +755,150 @@ mod tests {
     use super::*;
     use mule_network_policy::{NetworkProfile, ResourceBudgets};
 
-    /// Construye un archivo `.torrent` válido mínimo en memoria para pruebas sin conexión.
-    fn sample_torrent_bytes() -> Vec<u8> {
+    /// Construye un archivo `.torrent` válido mínimo de un único fichero en memoria para pruebas sin conexión.
+    fn single_file_torrent_bytes(file_name: &str, length: usize) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend_from_slice(
-            b"d8:announce25:http://127.0.0.1/announce4:infod6:lengthi1024e4:name8:test.bin12:piece lengthi16384e6:pieces20:",
+        let header = format!(
+            "d8:announce25:http://127.0.0.1/announce4:infod6:lengthi{length}e4:name{}:{file_name}12:piece lengthi16384e6:pieces20:",
+            file_name.len()
         );
+        buf.extend_from_slice(header.as_bytes());
         buf.extend_from_slice(&[0x41u8; 20]);
         buf.extend_from_slice(b"ee");
         buf
+    }
+
+    /// Construye un archivo `.torrent` multifichero válido en memoria para pruebas sin conexión.
+    fn multi_file_torrent_bytes(dir_name: &str, files: &[(&str, usize)]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"d8:announce25:http://127.0.0.1/announce4:infod5:filesl");
+        for (name, len) in files {
+            let entry = format!(
+                "d6:lengthi{len}e4:pathl{}:{name}ee",
+                name.len()
+            );
+            buf.extend_from_slice(entry.as_bytes());
+        }
+        let trailer = format!(
+            "e4:name{}:{dir_name}12:piece lengthi16384e6:pieces20:",
+            dir_name.len()
+        );
+        buf.extend_from_slice(trailer.as_bytes());
+        buf.extend_from_slice(&[0x41u8; 20]);
+        buf.extend_from_slice(b"ee");
+        buf
+    }
+
+    /// Construye el torrent de vídeo de ejemplo por defecto para pruebas sin conexión.
+    fn sample_torrent_bytes() -> Vec<u8> {
+        single_file_torrent_bytes("sample.mkv", 1024)
+    }
+
+    #[tokio::test]
+    async fn test_rejects_non_video_single_and_multifile_torrent() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_offline(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        let err = engine
+            .add_bytes(single_file_torrent_bytes("malware.exe", 2048), None, None)
+            .await
+            .expect_err("el torrent con único archivo .exe debe rechazarse");
+        assert!(
+            err.to_string().contains("vídeo"),
+            "error inesperado: {err}"
+        );
+
+        let err_multi = engine
+            .add_bytes(
+                multi_file_torrent_bytes(
+                    "ReleasePack",
+                    &[("readme.txt", 128), ("setup.msi", 4096)],
+                ),
+                None,
+                None,
+            )
+            .await
+            .expect_err("el torrent multifichero sin vídeo debe rechazarse");
+        assert!(
+            err_multi.to_string().contains("vídeo"),
+            "error inesperado: {err_multi}"
+        );
+        assert!(engine.list().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_selects_only_video_and_subtitles_in_multifile_torrent() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_offline(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        let torrent = multi_file_torrent_bytes(
+            "MoviePack",
+            &[
+                ("readme.nfo", 64),
+                ("movie.mkv", 2048),
+                ("subs.es.srt", 128),
+                ("keygen.exe", 512),
+            ],
+        );
+        let snap = engine
+            .add_bytes(torrent, None, Some("movies".to_string()))
+            .await
+            .expect("un torrent con vídeo y subtítulo debe admitirse");
+
+        let handle = engine
+            .session
+            .get(TorrentIdOrHash::Id(snap.id))
+            .expect("el torrent debe estar registrado");
+        assert_eq!(handle.only_files(), Some(vec![1, 2]));
+    }
+
+    #[tokio::test]
+    async fn test_watchdog_deletes_torrent_with_invalid_binary_header() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_offline(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        let snap = engine
+            .add_bytes(
+                single_file_torrent_bytes("spoofed_movie.mkv", 1024),
+                None,
+                None,
+            )
+            .await
+            .expect("la admisión nominal por .mkv debe permitirse inicialmente");
+
+        let handle = engine
+            .session
+            .get(TorrentIdOrHash::Id(snap.id))
+            .expect("handle activo");
+        let file_path = handle.output_folder().join("spoofed_movie.mkv");
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let mut fake_payload = vec![0x90u8; 1024];
+        fake_payload[..2].copy_from_slice(b"MZ");
+        std::fs::write(&file_path, &fake_payload).unwrap();
+
+        for _ in 0..60 {
+            if engine.list().is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        assert!(
+            engine.list().is_empty(),
+            "el vigilante debe eliminar el torrent cuya cabecera binaria sea PE/MZ"
+        );
+        assert!(
+            !file_path.exists(),
+            "los datos del torrent rechazado también deben borrarse del disco"
+        );
     }
 
     #[tokio::test]
@@ -574,7 +915,7 @@ mod tests {
             .await
             .expect("valid bencoded torrent should be added");
 
-        assert_eq!(snap.name, "test.bin");
+        assert_eq!(snap.name, "sample.mkv");
         assert_eq!(snap.total_bytes, 1024);
         assert_eq!(snap.category.as_deref(), Some("movies"));
 

@@ -33,17 +33,21 @@ pub fn emit_search_results(
     let files: Vec<serde_json::Value> = sr
         .files
         .iter()
-        .map(|f| {
+        .filter_map(|f| {
+            let file_name = f.name()?;
+            if !mule_network_policy::content_policy::is_allowed_video_filename(&file_name) {
+                return None;
+            }
             let hash = hex::encode(f.file_hash);
-            json!({
+            Some(json!({
                 "fileHash": hash,
-                "fileName": f.name().unwrap_or_else(|| "Unknown".to_string()),
+                "fileName": file_name,
                 "fileSize": f.size().unwrap_or(0),
                 "sourceCount": f.source_count().unwrap_or(1),
                 // eMule marca los archivos cancelados en los resultados de
                 // búsqueda (IsCancelledFileByID → m_MyListCtrlItem).
                 "cancelled": cancelled.contains(&hash),
-            })
+            }))
         })
         .collect();
 
@@ -162,7 +166,14 @@ fn emit_found_sources_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mule_protocol::ed2k::SearchResultFile;
+    use mule_protocol::ed2k::{Ed2kTag, SearchResultFile, TagName, TagValue, TAG_SPECIAL_NAME};
+
+    fn name_tag(name: &str) -> Vec<Ed2kTag> {
+        vec![Ed2kTag {
+            name: TagName::Id(TAG_SPECIAL_NAME),
+            value: TagValue::String(name.to_string()),
+        }]
+    }
 
     #[tokio::test]
     async fn search_result_marks_cancelled_hashes() {
@@ -174,13 +185,19 @@ mod tests {
                     file_hash: [0xAB; 16],
                     client_id: 0,
                     client_port: 0,
-                    tags: Vec::new(),
+                    tags: name_tag("Pelicula.A.mkv"),
                 },
                 SearchResultFile {
                     file_hash: [0xCD; 16],
                     client_id: 0,
                     client_port: 0,
-                    tags: Vec::new(),
+                    tags: name_tag("Serie.S01E01.mp4"),
+                },
+                SearchResultFile {
+                    file_hash: [0xEF; 16],
+                    client_id: 0,
+                    client_port: 0,
+                    tags: name_tag("troyano.exe"),
                 },
             ],
         };
@@ -191,6 +208,7 @@ mod tests {
         let msg = rx.recv().await.unwrap();
         let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
         assert_eq!(v["method"], "server.searchResult");
+        assert_eq!(v["params"]["files"].as_array().unwrap().len(), 2);
         assert_eq!(v["params"]["files"][0]["cancelled"], true);
         assert_eq!(v["params"]["files"][1]["cancelled"], false);
     }

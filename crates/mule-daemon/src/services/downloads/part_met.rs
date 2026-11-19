@@ -173,6 +173,8 @@ pub fn import_part_met(
     adopt_source: bool,
 ) -> Result<(ImportPartMetResult, ActiveDownload), DaemonError> {
     let inspection = inspect_part_met(met_path, part_path)?;
+    mule_network_policy::content_policy::validate_video_filename(&inspection.file_name)
+        .map_err(|e| DaemonError::Business(e.to_string()))?;
     if !inspection.part_file_exists {
         return Err(DaemonError::NotFound(format!(
             "Matching .part file not found for {}",
@@ -314,6 +316,32 @@ pub fn import_part_met(
         }
     }
 
+    let mut content_header_verified = false;
+    if verified_indices.contains(&0) {
+        let inspect_len =
+            mule_network_policy::content_policy::HEADER_INSPECT_BYTES.min(total_size as usize);
+        match part_file.read_range(0, inspect_len) {
+            Ok(bytes) => {
+                if let Err(policy_err) = mule_network_policy::content_policy::validate_video_header(
+                    &bytes,
+                    &inspection.file_name,
+                ) {
+                    drop(part_file);
+                    let _ = std::fs::remove_file(&internal_temp_path);
+                    return Err(DaemonError::Business(policy_err.to_string()));
+                }
+                content_header_verified = true;
+            }
+            Err(e) => {
+                drop(part_file);
+                let _ = std::fs::remove_file(&internal_temp_path);
+                return Err(DaemonError::Business(format!(
+                    "No se pudo inspeccionar la cabecera de la parte 0: {e}"
+                )));
+            }
+        }
+    }
+
     // Etiqueta de límite de fuentes por archivo de eMule (FT_MAXSOURCES / CPartFile::GetMaxSources).
     let max_sources = met
         .tags
@@ -396,6 +424,7 @@ pub fn import_part_met(
         persist_dirty: false,
         last_persist_flush: Instant::now(),
         staged_parts: std::collections::HashMap::new(),
+        content_header_verified,
     };
 
     let met_version_str = match met.version {

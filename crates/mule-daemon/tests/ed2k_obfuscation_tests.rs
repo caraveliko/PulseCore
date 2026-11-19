@@ -16,7 +16,7 @@ use mule_test_support::{download_state_with_obfuscation, make_req};
 
 #[tokio::test]
 async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
-    let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
+    let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
     // Par simulado estricto escuchando en 127.0.0.1
@@ -132,7 +132,7 @@ async fn test_outgoing_connection_to_strict_obfuscated_peer_succeeds() {
 
 #[tokio::test]
 async fn test_outgoing_connection_to_strict_peer_fails_when_user_hash_missing() {
-    let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
+    let (state, _dir, hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
     // Configuramos un par con crypt_options que exige cifrado (0x04), pero SIN user_hash
@@ -164,7 +164,7 @@ async fn test_outgoing_connection_to_strict_peer_fails_when_user_hash_missing() 
 #[tokio::test]
 async fn test_inbound_listener_strict_obfuscation_rejects_plaintext() {
     // Ofuscación requerida = true
-    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
+    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
     let mut authenticated = true;
 
     // Iniciar listener en puerto efímero
@@ -195,7 +195,7 @@ async fn test_inbound_listener_strict_obfuscation_rejects_plaintext() {
 #[tokio::test]
 async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() {
     // Ofuscación requerida = true
-    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
+    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, true).await;
     let mut authenticated = true;
 
     // Iniciar listener en puerto efímero
@@ -275,7 +275,7 @@ async fn test_inbound_listener_strict_obfuscation_accepts_encrypted_handshake() 
 #[tokio::test]
 async fn test_inbound_listener_opportunistic_accepts_both_plaintext_and_encrypted() {
     // Ofuscación habilitada = true, requerida = false (oportunista)
-    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
+    let (state, _dir, _hash) = download_state_with_obfuscation("test_token_obfu", "test_obfu_file.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0", true, false).await;
     let mut authenticated = true;
 
     let start_req = make_req(40, "listener.start", Some(json!({ "port": 0 })));

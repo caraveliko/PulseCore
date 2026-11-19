@@ -59,7 +59,7 @@ async fn test_daemon_ed2k_loopback_discovers_source_without_part_file_writes() {
     assert!(resp_val["result"]["daemonVersion"].is_string());
 
     // 4. Añadir enlace de descarga eD2K (5 partes = 48.640.000 bytes)
-    let ed2k_link = format!("ed2k://|file|test_discovery.bin|48640000|{file_hash_hex}|/");
+    let ed2k_link = format!("ed2k://|file|test_discovery.mkv|48640000|{file_hash_hex}|/");
     let req_add = json!({
         "jsonrpc": "2.0",
         "id": 2,

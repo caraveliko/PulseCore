@@ -14,9 +14,11 @@ fn part_met_is_written_on_add_and_updated_on_progress() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x55u8; 1000];
+    let mut content = vec![0x55u8; 1000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let file_hash: [u8; 16] = Md4::digest(&content).into();
-    let link = format!("ed2k://|file|sample.bin|1000|{}|/", hex::encode(file_hash));
+    let link = format!("ed2k://|file|sample.mkv|1000|{}|/", hex::encode(file_hash));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -30,7 +32,7 @@ fn part_met_is_written_on_add_and_updated_on_progress() {
 
     let met = mule_format::PartMetFile::open(&met_path).unwrap();
     assert_eq!(met.file_hash.0, file_hash);
-    assert_eq!(met.file_name.as_deref(), Some("sample.bin"));
+    assert_eq!(met.file_name.as_deref(), Some("sample.mkv"));
     assert_eq!(met.file_size, Some(1000));
     assert_eq!(met.gaps, vec![(0, 1000)]);
     assert_eq!(
@@ -54,7 +56,7 @@ fn part_met_is_deleted_on_remove_with_files() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let link = format!("ed2k://|file|gone.bin|500|{}|/", hex::encode([0x77u8; 16]));
+    let link = format!("ed2k://|file|gone.mkv|500|{}|/", hex::encode([0x77u8; 16]));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -80,18 +82,20 @@ fn completed_file_is_deleted_and_unshared_on_remove_with_files() {
 
     // El hash del enlace debe corresponder al contenido inyectado (archivo
     // de una sola parte: verificado al completarse).
-    let content = vec![0x42u8; 5000];
+    let mut content = vec![0x42u8; 5000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&content);
     let file_hash = hasher.finalize().unwrap().root_hash.to_hex();
-    let link = format!("ed2k://|file|done.bin|5000|{file_hash}|/");
+    let link = format!("ed2k://|file|done.mkv|5000|{file_hash}|/");
     let snap = svc
         .add_ed2k_link(&link, &target_dir, AllocationPolicy::None, None)
         .unwrap();
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     svc.finalize_download(&snap.id).unwrap();
 
-    let target_path = target_dir.join("done.bin");
+    let target_path = target_dir.join("done.mkv");
     assert!(target_path.exists(), "finalized file must exist");
     assert!(
         !svc.list_shared_files().unwrap().is_empty(),
@@ -115,18 +119,20 @@ fn completed_file_is_kept_on_remove_without_files() {
     let target_dir = tmp.path().join("incoming");
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x24u8; 5000];
+    let mut content = vec![0x24u8; 5000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&content);
     let file_hash = hasher.finalize().unwrap().root_hash.to_hex();
-    let link = format!("ed2k://|file|kept.bin|5000|{file_hash}|/");
+    let link = format!("ed2k://|file|kept.mkv|5000|{file_hash}|/");
     let snap = svc
         .add_ed2k_link(&link, &target_dir, AllocationPolicy::None, None)
         .unwrap();
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     svc.finalize_download(&snap.id).unwrap();
 
-    let target_path = target_dir.join("kept.bin");
+    let target_path = target_dir.join("kept.mkv");
     svc.remove_download(&snap.id, false).unwrap();
     assert!(
         target_path.exists(),
@@ -143,7 +149,7 @@ fn session_downloaded_bytes_counts_only_bytes_received_this_session() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let link = format!("ed2k://|file|sess.bin|1000|{}|/", hex::encode([0x11u8; 16]));
+    let link = format!("ed2k://|file|sess.mkv|1000|{}|/", hex::encode([0x11u8; 16]));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -163,12 +169,12 @@ fn shared_file_delete_removes_disk_file_and_entry() {
     // Archivo compartido «fuera de descargas» (nuevo escaneo de Incoming / shares.add).
     let dir = tmp.path().join("incoming");
     std::fs::create_dir_all(&dir).unwrap();
-    let file_path = dir.join("loose.bin");
+    let file_path = dir.join("loose.mkv");
     std::fs::write(&file_path, b"data").unwrap();
     let hash = "aabbccddeeff00112233445566778899";
     svc.add_shared_file(&mule_core::model::SharedFile::new(
         hash,
-        "loose.bin",
+        "loose.mkv",
         4,
         file_path.to_string_lossy().as_ref(),
     ))
@@ -186,12 +192,12 @@ fn shared_file_delete_keeps_disk_file_without_flag() {
 
     let dir = tmp.path().join("incoming");
     std::fs::create_dir_all(&dir).unwrap();
-    let file_path = dir.join("kept_share.bin");
+    let file_path = dir.join("kept_share.mkv");
     std::fs::write(&file_path, b"data").unwrap();
     let hash = "11223344556677889900aabbccddeeff";
     svc.add_shared_file(&mule_core::model::SharedFile::new(
         hash,
-        "kept_share.bin",
+        "kept_share.mkv",
         4,
         file_path.to_string_lossy().as_ref(),
     ))
@@ -208,7 +214,7 @@ fn shared_file_delete_rejects_partial_share() {
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
     let link = format!(
-        "ed2k://|file|partial.bin|500|{}|/",
+        "ed2k://|file|partial.mkv|500|{}|/",
         hex::encode([0x77u8; 16])
     );
     let snap = svc
@@ -232,18 +238,20 @@ fn shared_file_delete_completed_routes_through_remove_download() {
     let target_dir = tmp.path().join("incoming");
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x5Au8; 5000];
+    let mut content = vec![0x5Au8; 5000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&content);
     let file_hash = hasher.finalize().unwrap().root_hash.to_hex();
-    let link = format!("ed2k://|file|shared_done.bin|5000|{file_hash}|/");
+    let link = format!("ed2k://|file|shared_done.mkv|5000|{file_hash}|/");
     let snap = svc
         .add_ed2k_link(&link, &target_dir, AllocationPolicy::None, None)
         .unwrap();
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     svc.finalize_download(&snap.id).unwrap();
 
-    let target_path = target_dir.join("shared_done.bin");
+    let target_path = target_dir.join("shared_done.mkv");
     assert!(target_path.exists());
 
     // La eliminación a través del compartido retira también la entrada de descarga
@@ -262,7 +270,7 @@ fn rename_in_progress_updates_name_and_target_not_part_file() {
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
     let link = format!(
-        "ed2k://|file|old_name.bin|500|{}|/",
+        "ed2k://|file|old_name.mkv|500|{}|/",
         hex::encode([0x44u8; 16])
     );
     let snap = svc
@@ -271,17 +279,17 @@ fn rename_in_progress_updates_name_and_target_not_part_file() {
     let (temp_path, _, _, _) = svc.get_download_file_info(&snap.id).unwrap();
     let part_path = temp_path.clone();
 
-    let renamed = svc.rename_download(&snap.id, "new_name.bin").unwrap();
-    assert_eq!(renamed.file_name, "new_name.bin");
+    let renamed = svc.rename_download(&snap.id, "new_name.mkv").unwrap();
+    assert_eq!(renamed.file_name, "new_name.mkv");
     assert_eq!(
         svc.get_download_file_info(&snap.id).unwrap().1,
-        tmp.path().join("new_name.bin")
+        tmp.path().join("new_name.mkv")
     );
     // El .part por UUID no se mueve.
     assert!(part_path.exists());
     assert_eq!(
         svc.get_download(&snap.id).unwrap().file_name,
-        "new_name.bin"
+        "new_name.mkv"
     );
 }
 
@@ -293,26 +301,28 @@ fn rename_completed_renames_disk_file_and_share_entry() {
     let target_dir = tmp.path().join("incoming");
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x66u8; 500];
+    let mut content = vec![0x66u8; 500];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let file_hash: [u8; 16] = Md4::digest(&content).into();
     let hash_hex = hex::encode(file_hash);
-    let link = format!("ed2k://|file|before.iso|500|{hash_hex}|/");
+    let link = format!("ed2k://|file|before.mkv|500|{hash_hex}|/");
     let snap = svc
         .add_ed2k_link(&link, &target_dir, AllocationPolicy::None, None)
         .unwrap();
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     svc.finalize_download(&snap.id).unwrap();
 
-    let old_path = target_dir.join("before.iso");
-    let new_path = target_dir.join("after.iso");
+    let old_path = target_dir.join("before.mkv");
+    let new_path = target_dir.join("after.mkv");
     assert!(old_path.exists());
 
-    svc.rename_download(&snap.id, "after.iso").unwrap();
+    svc.rename_download(&snap.id, "after.mkv").unwrap();
     assert!(!old_path.exists());
     assert!(new_path.exists());
 
     let shared = svc.get_shared_file(&hash_hex).unwrap().unwrap();
-    assert_eq!(shared.file_name, "after.iso");
+    assert_eq!(shared.file_name, "after.mkv");
     assert_eq!(shared.file_path, new_path.to_string_lossy());
 }
 
@@ -324,25 +334,27 @@ fn rename_shared_file_by_hash_delegates_to_completed_download() {
     let target_dir = tmp.path().join("incoming");
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x77u8; 500];
+    let mut content = vec![0x77u8; 500];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let file_hash: [u8; 16] = Md4::digest(&content).into();
     let hash_hex = hex::encode(file_hash);
-    let link = format!("ed2k://|file|dl.bin|500|{hash_hex}|/");
+    let link = format!("ed2k://|file|dl.mkv|500|{hash_hex}|/");
     let snap = svc
         .add_ed2k_link(&link, &target_dir, AllocationPolicy::None, None)
         .unwrap();
     svc.inject_range(&snap.id, 0, &content, None).unwrap();
     svc.finalize_download(&snap.id).unwrap();
 
-    svc.rename_shared_file(&hash_hex, "dl_renamed.bin").unwrap();
-    assert!(target_dir.join("dl_renamed.bin").exists());
+    svc.rename_shared_file(&hash_hex, "dl_renamed.mkv").unwrap();
+    assert!(target_dir.join("dl_renamed.mkv").exists());
     assert_eq!(
         svc.get_download(&snap.id).unwrap().file_name,
-        "dl_renamed.bin"
+        "dl_renamed.mkv"
     );
     assert_eq!(
         svc.get_shared_file(&hash_hex).unwrap().unwrap().file_name,
-        "dl_renamed.bin"
+        "dl_renamed.mkv"
     );
 }
 
@@ -353,21 +365,21 @@ fn rename_rejects_invalid_file_names() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let link = format!("ed2k://|file|keep.bin|500|{}|/", hex::encode([0x55u8; 16]));
+    let link = format!("ed2k://|file|keep.mkv|500|{}|/", hex::encode([0x55u8; 16]));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
 
     for bad in [
-        "", "   ", "a/b.bin", "a\\b.bin", "x*.bin", "nul?.bin", "..", "name.",
+        "", "   ", "a/b.mkv", "a\\b.mkv", "x*.mkv", "nul?.mkv", "..", "name.",
     ] {
         assert!(
             svc.rename_download(&snap.id, bad).is_err(),
             "name {bad:?} must be rejected"
         );
     }
-    assert_eq!(svc.get_download(&snap.id).unwrap().file_name, "keep.bin");
-    assert!(svc.rename_shared_file("deadbeef", "a|b.bin").is_err());
+    assert_eq!(svc.get_download(&snap.id).unwrap().file_name, "keep.mkv");
+    assert!(svc.rename_shared_file("deadbeef", "a|b.mkv").is_err());
 }
 
 #[test]
@@ -376,7 +388,7 @@ fn part_met_persists_partial_gaps() {
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
     let link = format!(
-        "ed2k://|file|sparse.bin|300|{}|/",
+        "ed2k://|file|sparse.mkv|300|{}|/",
         hex::encode([0x33u8; 16])
     );
     let snap = svc
@@ -461,22 +473,22 @@ async fn shares_list_enriches_per_file_upload_stats() {
 
     // Los compartidos apuntan a archivos reales: `list_all_shared_files`
     // ahora filtra las entradas cuya carga útil haya desaparecido del disco.
-    let f_path = tmp.path().join("f.iso");
-    let g_path = tmp.path().join("g.iso");
+    let f_path = tmp.path().join("f.mkv");
+    let g_path = tmp.path().join("g.mkv");
     std::fs::write(&f_path, b"f").unwrap();
     std::fs::write(&g_path, b"g").unwrap();
     {
         let mut dl = state.downloads.lock().await;
         dl.add_shared_file(&mule_core::model::SharedFile::new(
             "haa",
-            "f.iso",
+            "f.mkv",
             100,
             f_path.to_string_lossy().as_ref(),
         ))
         .unwrap();
         dl.add_shared_file(&mule_core::model::SharedFile::new(
             "hbb",
-            "g.iso",
+            "g.mkv",
             100,
             g_path.to_string_lossy().as_ref(),
         ))
@@ -487,10 +499,10 @@ async fn shares_list_enriches_per_file_upload_stats() {
     assert_eq!(um.per_file_uploaded_bytes()["haa"], 7000);
 
     // Dos ranuras activas en el mismo archivo (distinto tamaño de mayúsculas/minúsculas en el hash).
-    um.request_upload_slot("c1", "c1", "HAA", "f.iso", 1.0, "normal", false, None)
+    um.request_upload_slot("c1", "c1", "HAA", "f.mkv", 1.0, "normal", false, None)
         .await
         .unwrap();
-    um.request_upload_slot("c2", "c2", "haa", "f.iso", 1.0, "normal", false, None)
+    um.request_upload_slot("c2", "c2", "haa", "f.mkv", 1.0, "normal", false, None)
         .await
         .unwrap();
     um.update_progress("c1", 3000).await;
@@ -527,7 +539,7 @@ fn missing_part_file_removes_download_at_startup() {
     let (temp_path, met_path) = {
         let mut svc = DownloadService::new(&db_path, temp_dir.clone()).unwrap();
         let link = format!(
-            "ed2k://|file|gone.bin|500|{}|/",
+            "ed2k://|file|gone.mkv|500|{}|/",
             hex::encode([0x66u8; 16])
         );
         let snap = svc
@@ -559,7 +571,7 @@ fn auto_down_priority_defaults_on_and_roundtrips_via_part_met() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let link = format!("ed2k://|file|prio.bin|1000|{}|/", hex::encode([0x44u8; 16]));
+    let link = format!("ed2k://|file|prio.mkv|1000|{}|/", hex::encode([0x44u8; 16]));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();

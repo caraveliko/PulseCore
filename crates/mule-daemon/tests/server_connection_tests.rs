@@ -385,7 +385,7 @@ async fn test_server_search_and_query_sources() {
         res_payload.extend_from_slice(&2u32.to_le_bytes()); // 2 tags
 
         // Tag 1: filename
-        let fname = "test_file.iso";
+        let fname = "test_file.mkv";
         res_payload.push(0x02); // TAGTYPE_STRING
         res_payload.extend_from_slice(&1u16.to_le_bytes());
         res_payload.push(mule_protocol::ed2k::TAG_SPECIAL_NAME);
@@ -513,7 +513,7 @@ async fn test_server_search_and_query_sources() {
                     received_search_result = true;
                     let files = val["params"]["files"].as_array().unwrap();
                     assert_eq!(files.len(), 1);
-                    assert_eq!(files[0]["fileName"], "test_file.iso");
+                    assert_eq!(files[0]["fileName"], "test_file.mkv");
                     assert_eq!(files[0]["fileSize"], 123456);
                 }
                 if val["method"] == "server.foundSources" {

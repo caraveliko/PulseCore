@@ -178,7 +178,7 @@ async fn test_confirmed_tool_executes() {
     let mut h = build_session(vec![
         tool_call_turn(
             "emule_add_link",
-            json!({ "link": "ed2k://|file|test.bin|1048576|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
+            json!({ "link": "ed2k://|file|test.mkv|1048576|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
         ),
         text_turn("lien ajouté"),
     ])
@@ -215,7 +215,7 @@ async fn test_denied_tool_not_executed() {
     let mut h = build_session(vec![
         tool_call_turn(
             "emule_add_link",
-            json!({ "link": "ed2k://|file|x.bin|1|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
+            json!({ "link": "ed2k://|file|x.mkv|1|31D6CFE0D16AE931B73C59D7E0C089C0|/" }),
         ),
         text_turn("compris, rien ajouté"),
     ])

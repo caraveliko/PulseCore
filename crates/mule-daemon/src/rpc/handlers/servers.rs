@@ -302,7 +302,16 @@ pub async fn handle_servers_search(
     let mut query = mule_protocol::ed2k::SearchQuery::new(term);
     query.min_size = params["minSize"].as_u64();
     query.max_size = params["maxSize"].as_u64();
-    query.extension = params["extension"].as_str().map(|s| s.to_string());
+    if let Some(ext) = params["extension"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+        if !mule_network_policy::content_policy::is_allowed_video_extension(ext) {
+            return Err(JsonRpcError::invalid_params(&format!(
+                "Extensión '.{}' no permitida en búsqueda: Pulse Core solo permite archivos de vídeo",
+                ext.trim_start_matches('.')
+            )));
+        }
+        query.extension = Some(ext.trim_start_matches('.').to_ascii_lowercase());
+    }
+    query.file_type = Some("Video".to_string());
 
     tracing::info!(
         "RPC servers.search received: term='{}', min_size={:?}, max_size={:?}, extension={:?}",

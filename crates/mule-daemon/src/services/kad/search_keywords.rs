@@ -171,6 +171,10 @@ pub async fn search_keywords_iterative(
                     addr
                 );
                 for w in wires {
+                    if !mule_network_policy::content_policy::is_allowed_video_filename(&w.file_name)
+                    {
+                        continue;
+                    }
                     let file_hash_hex = KadId(w.file_hash).to_hash_hex();
                     if let Some(min) = min_size {
                         if w.file_size < min {

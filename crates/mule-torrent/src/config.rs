@@ -28,6 +28,9 @@ pub enum TorrentError {
     /// Fallo interno de la sesión o de E/S en el motor `librqbit`.
     #[error("error de sesión BitTorrent: {0}")]
     Session(String),
+    /// Torrent rechazado por la política de contenido «Solo Vídeo».
+    #[error("contenido BitTorrent rechazado por política solo vídeo: {0}")]
+    ContentRejected(String),
 }
 
 /// Parámetros de arranque del motor BitTorrent gobernados por la política de red del daemon.

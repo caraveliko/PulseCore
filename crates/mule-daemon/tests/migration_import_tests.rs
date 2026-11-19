@@ -153,7 +153,7 @@ async fn test_remove_download_records_cancelled_hash() {
 
     let hash = [0xAAu8; 16];
     let link = format!(
-        "ed2k://|file|abort.bin|{}|{}|/",
+        "ed2k://|file|abort.mkv|{}|{}|/",
         500_000,
         hex::encode(hash)
     );

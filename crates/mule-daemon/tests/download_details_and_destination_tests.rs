@@ -37,7 +37,7 @@ async fn test_download_details_part_map_and_boundaries() {
     assert_eq!(resp["result"]["workdirMode"], "Portable");
 
     // 2. Añadir archivo de 9_728_001 bytes (1 parte completa de 9_728_000 + 1 parte residual de 1 byte)
-    let link_9728001 = "ed2k://|file|boundary_test.bin|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/";
+    let link_9728001 = "ed2k://|file|boundary_test.mkv|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     let req_add = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -70,14 +70,14 @@ async fn test_download_details_part_map_and_boundaries() {
     let detail = resp["result"].clone();
 
     // Verificar campos
-    assert_eq!(detail["fileName"], "boundary_test.bin");
+    assert_eq!(detail["fileName"], "boundary_test.mkv");
     assert_eq!(detail["totalBytes"], 9728001);
     assert_eq!(detail["remainingBytes"], 9728001);
     assert_eq!(detail["ed2kHash"], "31d6cfe0d16ae931b73c59d7e0c089c0");
     assert!(detail["ed2kLink"]
         .as_str()
         .unwrap()
-        .contains("ed2k://|file|boundary_test.bin|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/"));
+        .contains("ed2k://|file|boundary_test.mkv|9728001|31d6cfe0d16ae931b73c59d7e0c089c0|/"));
 
     // Verificar mapa de partes: exactamente 2 partes
     let parts = detail["parts"].as_array().expect("parts array");
@@ -124,7 +124,7 @@ async fn test_downloads_set_destination_and_retry_connection() {
     let _ = recv_response_by_id(&mut read, 1).await;
 
     // 2. Añadir descarga de muestra
-    let link = "ed2k://|file|test_dest.txt|100|0123456789abcdef0123456789abcdef|/";
+    let link = "ed2k://|file|test_dest.mkv|100|0123456789abcdef0123456789abcdef|/";
     let req_add = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -273,7 +273,9 @@ fn test_get_pending_verifications_does_not_trigger_on_sparse_file_length() {
     // incremental del hash de parte en inject_range usa el hash de archivo como hash de parte para archivos
     // menores que una parte eD2K, y descarta el rango en caso de discrepancia.
     let tail = vec![0xaa; 1000];
-    let head = vec![0xbb; 999_000];
+    let mut head = vec![0xbb; 999_000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    head[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut full = head.clone();
     full.extend_from_slice(&tail);
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
@@ -281,7 +283,7 @@ fn test_get_pending_verifications_does_not_trigger_on_sparse_file_length() {
     let file_hash = hasher.finalize().unwrap().root_hash.to_hex();
 
     let mut service = DownloadService::in_memory(temp_dir).unwrap();
-    let ed2k = format!("ed2k://|file|test.bin|1000000|{file_hash}|/");
+    let ed2k = format!("ed2k://|file|test.mkv|1000000|{file_hash}|/");
     let ed2k = ed2k.as_str();
     let snap = service
         .add_ed2k_link(
@@ -326,7 +328,7 @@ fn test_add_duplicate_ed2k_link_rejected() {
     std::fs::create_dir_all(&target_dir).unwrap();
 
     let mut service = DownloadService::in_memory(temp_dir).unwrap();
-    let ed2k = "ed2k://|file|sample.txt|1000|abcdefabcdefabcdefabcdefabcdefab|/";
+    let ed2k = "ed2k://|file|sample.mkv|1000|abcdefabcdefabcdefabcdefabcdefab|/";
     let res1 = service.add_ed2k_link(
         ed2k,
         &target_dir,
@@ -336,7 +338,7 @@ fn test_add_duplicate_ed2k_link_rejected() {
     assert!(res1.is_ok(), "First add must succeed");
 
     // Intentar añadir exactamente el mismo hash ed2k de nuevo debe fallar
-    let ed2k_duplicate = "ed2k://|file|sample_renamed.txt|1000|abcdefabcdefabcdefabcdefabcdefab|/";
+    let ed2k_duplicate = "ed2k://|file|sample_renamed.mkv|1000|abcdefabcdefabcdefabcdefabcdefab|/";
     let res2 = service.add_ed2k_link(
         ed2k_duplicate,
         &target_dir,
@@ -363,11 +365,13 @@ fn test_inject_range_after_completed_does_not_regress_status() {
 
     // El hash del archivo debe coincidir con los bytes inyectados (los archivos de parte única
     // verifican la parte contra el hash del archivo al completarse).
-    let data = vec![0x42; 50000];
+    let mut data = vec![0x42; 50000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::Ed2kHasher::new();
     hasher.update(&data);
     let file_hash = hasher.finalize().unwrap().root_hash.to_hex();
-    let ed2k = format!("ed2k://|file|packet_test.bin|50000|{file_hash}|/");
+    let ed2k = format!("ed2k://|file|packet_test.mkv|50000|{file_hash}|/");
     let ed2k = ed2k.as_str();
     let snap = service
         .add_ed2k_link(
@@ -412,7 +416,7 @@ fn test_startup_self_heal_completed() {
 
     let download_id = {
         let mut service = DownloadService::new(&db_path, temp_dir.clone()).unwrap();
-        let ed2k = "ed2k://|file|heal_test.bin|2048|fedcba9876543210fedcba9876543210|/";
+        let ed2k = "ed2k://|file|heal_test.mkv|2048|fedcba9876543210fedcba9876543210|/";
         let snap = service
             .add_ed2k_link(
                 ed2k,
@@ -422,8 +426,10 @@ fn test_startup_self_heal_completed() {
             )
             .unwrap();
 
-        // Inyectar datos completos
-        let data = vec![0x11; 2048];
+        // Inyectar datos completos con cabecera Matroska válida para superar la puerta prefinalización
+        let mut data = vec![0x11; 2048];
+        let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+        data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
         let _ = service.inject_range(&snap.id, 0, &data, None).unwrap();
         let _ = service.finalize_download(&snap.id).unwrap();
 

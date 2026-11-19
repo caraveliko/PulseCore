@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Laurent Geynet "Loulach"
 
 <#
@@ -361,13 +361,13 @@ try {
     # ===================================================================
     Write-Host "`n[B.4] Partages / uploads" -ForegroundColor Yellow
     # shares.add enregistre UN fichier (fileHash/fileName/fileSize/filePath)
-    Test-Rpc $ws "B.4" "shares.add" "shares.add" @{ fileHash = $fixHash; fileName = "sample_1mb.bin"; fileSize = 1048576; filePath = $fixPath } | Out-Null
+    Test-Rpc $ws "B.4" "shares.add" "shares.add" @{ fileHash = $fixHash; fileName = "sample_1mb.mkv"; fileSize = 1048576; filePath = $fixPath } | Out-Null
     Test-Rpc $ws "B.4" "shares.list" "shares.list" -Validate {
         param($r) if ($r.sharedFiles.Count -lt 1) { "share not listed" }
     } | Out-Null
     $shareKey = $fixHash
     if ($shareKey) {
-        Test-Rpc $ws "B.4" "shares.rename" "shares.rename" @{ fileHash = $shareKey; newName = "bench-share-renamed.txt" } -Expect "any" | Out-Null
+        Test-Rpc $ws "B.4" "shares.rename" "shares.rename" @{ fileHash = $shareKey; newName = "bench-share-renamed.mkv" } -Expect "any" | Out-Null
         Test-Rpc $ws "B.4" "shares.setEnabled(false)" "shares.setEnabled" @{ fileHash = $shareKey; enabled = $false } -Expect "any" | Out-Null
         Test-Rpc $ws "B.4" "shares.setUploadPriority" "shares.setUploadPriority" @{ fileHash = $shareKey; priority = "high" } -Expect "any" | Out-Null
         Test-Rpc $ws "B.4" "shares.setCategory" "shares.setCategory" @{ fileHash = $shareKey; categoryId = "" } -Expect "any" | Out-Null

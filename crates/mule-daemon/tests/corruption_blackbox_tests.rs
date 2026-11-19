@@ -25,7 +25,7 @@ fn inject_into_completed_part_is_ignored() {
 
     // Dos partes: la inyección de la parte 0 no completa el archivo.
     let link = format!(
-        "ed2k://|file|two.bin|{}|{}|/",
+        "ed2k://|file|two.mkv|{}|{}|/",
         9_728_000 + 10,
         hex::encode([0xAAu8; 16])
     );
@@ -62,7 +62,7 @@ fn corrupt_sender_is_banned_and_filtered() {
 
     let content = vec![0x42u8; 100];
     let file_hash = md4_of(&content);
-    let link = format!("ed2k://|file|small.bin|100|{}|/", hex::encode(file_hash));
+    let link = format!("ed2k://|file|small.mkv|100|{}|/", hex::encode(file_hash));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -104,6 +104,8 @@ fn verified_history_dilutes_corruption_blame() {
     // mismo emisor → ratio ~25 % < 32 % → sin expulsión.
     let part = 9_728_000usize;
     let mut whole = vec![0x42u8; part * 4];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    whole[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let p_hashes: Vec<[u8; 16]> = (0..4)
         .map(|i| md4_of(&whole[i * part..(i + 1) * part]))
         .collect();
@@ -111,7 +113,7 @@ fn verified_history_dilutes_corruption_blame() {
     whole[3 * part + 100] ^= 0xFF;
     let file_hash = [0xBBu8; 16];
     let link = format!(
-        "ed2k://|file|four.bin|{}|{}|/",
+        "ed2k://|file|four.mkv|{}|{}|/",
         part * 4,
         hex::encode(file_hash)
     );
@@ -150,7 +152,7 @@ fn ich_disabled_evicts_whole_part_without_aich() {
     // iría a la cola AICH; aquí debe descartarse directamente.
     let aich_root = [0x77u8; 20];
     let link = format!(
-        "ed2k://|file|aich.bin|100|{}|h={}|/",
+        "ed2k://|file|aich.mkv|100|{}|h={}|/",
         hex::encode([0xAAu8; 16]),
         data_encoding::BASE32_NOPAD.encode(&aich_root)
     );

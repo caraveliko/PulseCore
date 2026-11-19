@@ -4,6 +4,7 @@
 pub mod audit;
 pub mod budgets;
 pub mod cancellation;
+pub mod content_policy;
 pub mod fetch_guard;
 pub mod manager;
 pub mod permit;
@@ -16,6 +17,14 @@ pub use audit::{
 };
 pub use budgets::{ResourceBudgets, MAX_PEER_CONNECTIONS_CAP};
 pub use cancellation::CancellationToken;
+pub use content_policy::{
+    is_allowed_video_extension, is_allowed_video_filename, is_companion_subtitle_filename,
+    normalized_extension, select_torrent_video_files, validate_video_file, validate_video_header,
+    validate_video_filename, ContentPolicyError, TorrentFileSelection, VideoContainerKind,
+    ALLOWED_VIDEO_EXTENSIONS, COMPANION_SUBTITLE_EXTENSIONS, FILE_HEADER_INSPECT_BYTES,
+    FORBIDDEN_EMBEDDED_EXTENSIONS, HEADER_INSPECT_BYTES, HEADER_INSPECT_MIN_BYTES,
+    MINIMAL_VALID_MKV_HEADER,
+};
 pub use fetch_guard::{
     parse_fetch_url, pinned_ips, validate_fetch_ips, FetchPolicyError, FetchUrl,
     DEFAULT_HTTP_PORT, DEFAULT_HTTPS_PORT,

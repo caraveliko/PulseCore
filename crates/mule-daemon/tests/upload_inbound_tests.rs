@@ -23,7 +23,7 @@ fn shared_bytes() -> Vec<u8> {
 async fn test_inbound_listener_rejected_under_disabled_network() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -57,7 +57,7 @@ async fn test_inbound_listener_rejected_under_disabled_network() {
 async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
     let (state, _dir, hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -198,7 +198,7 @@ async fn test_inbound_handshake_and_request_shared_file_upload_streamed() {
 async fn test_inbound_request_unshared_file_does_not_upload() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -299,7 +299,7 @@ async fn test_inbound_request_unshared_file_does_not_upload() {
 async fn test_upload_queue_ranking_and_single_slot_concurrency() {
     let (state, _dir, hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -504,7 +504,7 @@ async fn test_upload_queue_ranking_and_single_slot_concurrency() {
 async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -592,7 +592,7 @@ async fn test_kill_switch_aborts_inbound_listener_and_active_uploads() {
 async fn test_inbound_handshake_returns_real_identity_and_listen_port() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -675,7 +675,7 @@ async fn test_inbound_handshake_returns_real_identity_and_listen_port() {
 async fn test_inbound_connection_per_ip_limit() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -753,7 +753,7 @@ async fn test_inbound_connection_per_ip_limit() {
 async fn test_inbound_secident_signature_without_challenge_rejected() {
     let (state, _dir, _hash) = share_state(
         "test_token_upload",
-        "test_shared_archive.iso",
+        "test_shared_archive.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -853,7 +853,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
     let dir = tempdir().unwrap();
     let download_dir = dir.path().join("downloads");
     std::fs::create_dir_all(&download_dir).unwrap();
-    std::fs::write(download_dir.join("rescan_target.bin"), b"rescan-me").unwrap();
+    std::fs::write(download_dir.join("rescan_target.mkv"), b"rescan-me").unwrap();
     // Se debe omitir un artefacto de descarga.
     std::fs::write(download_dir.join("pending.part"), b"partial").unwrap();
 
@@ -884,7 +884,7 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
         .as_array()
         .unwrap();
     assert_eq!(shares.len(), 1);
-    assert_eq!(shares[0]["fileName"], "rescan_target.bin");
+    assert_eq!(shares[0]["fileName"], "rescan_target.mkv");
     let hash = shares[0]["fileHash"].as_str().unwrap().to_string();
 
     let resp = handle_request(
@@ -937,14 +937,14 @@ async fn test_shares_rescan_discovers_new_files_and_preserves_settings() {
 async fn test_shares_rescan_is_recursive() {
     let dir = tempdir().unwrap();
     let download_dir = dir.path().join("downloads");
-    let nested = download_dir.join("Album").join("CD1");
+    let nested = download_dir.join("Season1").join("Disk1");
     std::fs::create_dir_all(&nested).unwrap();
-    std::fs::write(nested.join("track01.flac"), b"nested-audio").unwrap();
-    std::fs::write(download_dir.join("toplevel.bin"), b"top").unwrap();
+    std::fs::write(nested.join("episode01.mkv"), b"nested-video").unwrap();
+    std::fs::write(download_dir.join("toplevel.mkv"), b"top").unwrap();
     // Los directorios ocultos no deben compartirse.
     let hidden = download_dir.join(".hidden");
     std::fs::create_dir_all(&hidden).unwrap();
-    std::fs::write(hidden.join("secret.bin"), b"nope").unwrap();
+    std::fs::write(hidden.join("secret.mkv"), b"nope").unwrap();
 
     let token = "test_token_recursive".to_string();
     let config = DaemonConfig::new(dir.path().to_path_buf(), &token)
@@ -974,9 +974,9 @@ async fn test_shares_rescan_is_recursive() {
         .iter()
         .map(|s| s["fileName"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"track01.flac"));
-    assert!(names.contains(&"toplevel.bin"));
-    assert!(!names.contains(&"secret.bin"));
+    assert!(names.contains(&"episode01.mkv"));
+    assert!(names.contains(&"toplevel.mkv"));
+    assert!(!names.contains(&"secret.mkv"));
 }
 
 #[tokio::test]
@@ -984,8 +984,8 @@ async fn test_shares_rescan_prunes_files_deleted_from_disk() {
     let dir = tempdir().unwrap();
     let download_dir = dir.path().join("downloads");
     std::fs::create_dir_all(&download_dir).unwrap();
-    std::fs::write(download_dir.join("keep.bin"), b"keep").unwrap();
-    std::fs::write(download_dir.join("gone.bin"), b"gone").unwrap();
+    std::fs::write(download_dir.join("keep.mkv"), b"keep").unwrap();
+    std::fs::write(download_dir.join("gone.mkv"), b"gone").unwrap();
 
     let token = "test_token_prune".to_string();
     let config = DaemonConfig::new(dir.path().to_path_buf(), &token)
@@ -1006,7 +1006,7 @@ async fn test_shares_rescan_prunes_files_deleted_from_disk() {
     assert_eq!(resp.result.as_ref().unwrap()["added"], 2);
 
     // Eliminación física del archivo fuera del daemon.
-    std::fs::remove_file(download_dir.join("gone.bin")).unwrap();
+    std::fs::remove_file(download_dir.join("gone.mkv")).unwrap();
 
     // La lista ya no debe mostrar el archivo eliminado (filtro en la
     // lectura en `list_all_shared_files`), incluso antes de un nuevo escaneo.
@@ -1020,8 +1020,8 @@ async fn test_shares_rescan_prunes_files_deleted_from_disk() {
         .iter()
         .map(|s| s["fileName"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"keep.bin"));
-    assert!(!names.contains(&"gone.bin"));
+    assert!(names.contains(&"keep.mkv"));
+    assert!(!names.contains(&"gone.mkv"));
 
     // El reescaneo purga definitivamente la fila de `shared_files`.
     let resp = handle_request(
@@ -1041,7 +1041,7 @@ async fn test_shares_rescan_respects_share_download_dir_optout() {
     let dir = tempdir().unwrap();
     let download_dir = dir.path().join("downloads");
     std::fs::create_dir_all(&download_dir).unwrap();
-    std::fs::write(download_dir.join("should_not_share.bin"), b"x").unwrap();
+    std::fs::write(download_dir.join("should_not_share.mkv"), b"x").unwrap();
 
     let token = "test_token_rescan_off".to_string();
     let config = DaemonConfig::new(dir.path().to_path_buf(), &token)
@@ -1101,7 +1101,7 @@ async fn test_partial_download_is_shared_with_completed_parts_only() {
             1,
             "downloads.addEd2kLink",
             Some(json!({
-                "link": "ed2k://|file|partial.bin|19456000|0123456789ABCDEF0123456789ABCDEF|/"
+                "link": "ed2k://|file|partial.mkv|19456000|0123456789ABCDEF0123456789ABCDEF|/"
             })),
         ),
         &mut authenticated,
@@ -1280,7 +1280,7 @@ async fn test_completed_db_download_is_shared_after_restart() {
 
     // A finished file on disk + a Completed row in the DB, nothing in
     // `active` (simulating a fresh daemon boot).
-    let file_path = dir.path().join("downloads").join("finished.bin");
+    let file_path = dir.path().join("downloads").join("finished.mkv");
     std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
     std::fs::write(&file_path, b"done").unwrap();
     let hash = mule_format::Ed2kHash([0x42; 16]);
@@ -1289,7 +1289,7 @@ async fn test_completed_db_download_is_shared_after_restart() {
         dl.db_mut()
             .insert_download(&mule_core::model::Download {
                 id: uuid::Uuid::new_v4(),
-                display_name: "finished.bin".into(),
+                display_name: "finished.mkv".into(),
                 total_size: 4,
                 ed2k_hash: hash,
                 aich_root: None,
@@ -1312,7 +1312,7 @@ async fn test_completed_db_download_is_shared_after_restart() {
         .as_array()
         .unwrap();
     assert!(
-        shares.iter().any(|s| s["fileName"] == "finished.bin"),
+        shares.iter().any(|s| s["fileName"] == "finished.mkv"),
         "completed DB download must appear in shares.list: {shares:?}"
     );
     // Los pares deben poder resolverlo para subida.
@@ -1332,7 +1332,7 @@ async fn test_completed_db_download_is_shared_after_restart() {
 async fn test_inbound_shared_files_browse() {
     let (state, _dir, hash) = share_state(
         "test_token_browse",
-        "browse_shared.bin",
+        "browse_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -1513,7 +1513,7 @@ async fn test_inbound_shared_files_browse() {
 async fn test_inbound_kad_fw_tcpcheck_ack() {
     let (state, _dir, _hash) = share_state(
         "test_token_fwack",
-        "fwack_shared.bin",
+        "fwack_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -1618,7 +1618,7 @@ async fn test_inbound_kad_fw_tcpcheck_ack() {
 async fn test_inbound_publicip_req_echoes_requester_ip() {
     let (state, _dir, _hash) = share_state(
         "test_token_pubip",
-        "pubip_shared.bin",
+        "pubip_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -1717,7 +1717,7 @@ async fn test_inbound_publicip_req_echoes_requester_ip() {
 async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
     let (state, _dir, _hash) = share_state(
         "test_token_packed",
-        "packed_shared.bin",
+        "packed_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -1853,7 +1853,7 @@ async fn test_inbound_packed_packet_is_unpacked_and_dispatched() {
 async fn test_inbound_reaskcallbacktcp_from_buddy_relays_udp_reply() {
     let (state, _dir, _hash) = share_state(
         "test_token_reaskcb",
-        "reaskcb_shared.bin",
+        "reaskcb_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -1981,7 +1981,7 @@ async fn test_inbound_callback_registers_requester_as_source() {
     let hex_hash = hex::encode(file_hash);
     let (state, _dir, _hash) = share_state(
         "test_token_callback",
-        "callback_shared.bin",
+        "callback_shared.mkv",
         18874368,
         &shared_bytes(),
         &hex_hash,
@@ -2098,7 +2098,7 @@ async fn test_inbound_callback_registers_requester_as_source() {
 async fn test_inbound_hashsetrequest2_serves_md4_set() {
     let (state, _dir, hash) = share_state(
         "test_token_hs2",
-        "hs2_shared.bin",
+        "hs2_shared.mkv",
         18874368,
         &shared_bytes(),
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -2224,7 +2224,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     let file_data = vec![0xABu8; 184320];
     let (state, _dir, hash) = share_state(
         "test_comp_upload",
-        "test_document.txt",
+        "test_video.mpg",
         184320,
         &file_data,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
@@ -2311,7 +2311,7 @@ async fn test_inbound_upload_compressed_part_and_filename_answer_framing() {
     assert_eq!(&name_pkt.payload[..16], &hash_bytes);
     let name_len = u16::from_le_bytes([name_pkt.payload[16], name_pkt.payload[17]]) as usize;
     let decoded_name = std::str::from_utf8(&name_pkt.payload[18..18 + name_len]).unwrap();
-    assert_eq!(decoded_name, "test_document.txt");
+    assert_eq!(decoded_name, "test_video.mpg");
     assert_eq!(name_pkt.payload.len(), 18 + name_len);
     assert_eq!(read_buf.len(), 0, "No residual framing desync after filename answer");
 

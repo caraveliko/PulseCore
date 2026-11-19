@@ -74,7 +74,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
                 KadMessage::SearchKeywordReq(s) => {
                     let entries = vec![KadKeywordEntryWire {
                         file_hash: [0xAAu8; 16],
-                        file_name: "Ubuntu-22.04-live-server.iso".to_string(),
+                        file_name: "Ubuntu-22.04-live-server.mkv".to_string(),
                         file_size: 1_400_000_000,
                         source_count: 15,
                         tags: Vec::new(),
@@ -105,7 +105,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
         .kad
         .publish_keyword(
             &file_hash_hex,
-            "Ubuntu-22.04-live-server.iso",
+            "Ubuntu-22.04-live-server.mkv",
             1_400_000_000,
             None,
         )
@@ -122,7 +122,7 @@ async fn test_kad_keyword_publish_and_search_flow() {
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0]["fileHash"], file_hash_hex);
-    assert_eq!(results[0]["fileName"], "Ubuntu-22.04-live-server.iso");
+    assert_eq!(results[0]["fileName"], "Ubuntu-22.04-live-server.mkv");
     assert_eq!(results[0]["fileSize"], 1_400_000_000);
     assert_eq!(results[0]["sourceCount"], 15);
 
@@ -221,7 +221,7 @@ async fn test_kad_aich_pub_gated_on_target_version() {
 
         let _ = state
             .kad
-            .publish_keyword(&file_hash_hex, "aich-test-file.bin", 1234, Some(aich_root))
+            .publish_keyword(&file_hash_hex, "aich-test-file.mkv", 1234, Some(aich_root))
             .await
             .expect("publish keyword");
 

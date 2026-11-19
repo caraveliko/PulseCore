@@ -16,6 +16,7 @@ eMuleRust es un cliente P2P expuesto a la red. Los siguientes mecanismos defensi
 - Filtrado IP (`ipfilter.dat`, `mule-filter`)
 - Seudonimización con sal (*salted*) de los pares
 - Aislamiento de las funcionalidades de laboratorio tras la característica `lab-tools` — nunca presentes en las compilaciones públicas `standard`
+- Política de contenido estricta «Solo Vídeo» fija en tiempo de compilación (`mule_network_policy::content_policy`): lista blanca de extensiones de vídeo, bloqueo de dobles extensiones peligrosas, validación binaria en RAM de cabeceras reales de vídeo sin procesos externos y filtrado obligatorio en búsquedas, admisión, compartidos y BitTorrent (`docs/ed2k/decisions/0006-politica-contenido-solo-video.md`)
 
 ## Notificar una vulnerabilidad
 

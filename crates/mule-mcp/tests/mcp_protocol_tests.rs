@@ -76,7 +76,7 @@ async fn test_mcp_client_e2e_with_daemon() {
     assert!(!limits_res.is_error);
 
     // 6. Probar emule_add_link
-    let test_link = "ed2k://|file|test_file.bin|1048576|31D6CFE0D16AE931B73C59D7E0C089C0|/";
+    let test_link = "ed2k://|file|test_file.mkv|1048576|31D6CFE0D16AE931B73C59D7E0C089C0|/";
     let add_res = execute_tool(&client, "emule_add_link", json!({ "link": test_link })).await;
     assert!(!add_res.is_error, "Add link failed: {:?}", add_res);
     let add_json: serde_json::Value = serde_json::from_str(&add_res.content[0].text).unwrap();

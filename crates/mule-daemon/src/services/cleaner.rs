@@ -62,13 +62,12 @@ fn is_junk_image(path: &Path) -> bool {
     true
 }
 
-/// Extensiones de vídeo reconocidas por el reproductor multimedia.
-pub const VIDEO_EXTENSIONS: &[&str] = &[
-    "mkv", "mp4", "avi", "m4v", "mov", "wmv", "flv", "ts",
-];
+/// Extensiones de vídeo reconocidas por la política de contenido.
+pub const VIDEO_EXTENSIONS: &[&str] = mule_network_policy::content_policy::ALLOWED_VIDEO_EXTENSIONS;
 
-/// Extensiones de subtítulos complementarios.
-pub const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "sub", "vtt"];
+/// Extensiones de subtítulos complementarios reconocidas por la política de contenido.
+pub const SUBTITLE_EXTENSIONS: &[&str] =
+    mule_network_policy::content_policy::COMPANION_SUBTITLE_EXTENSIONS;
 
 /// Tamaño máximo de un extracto de vista previa «sample / trailer» (85 MiB).
 pub const SAMPLE_MAX_BYTES: u64 = 85 * 1024 * 1024;

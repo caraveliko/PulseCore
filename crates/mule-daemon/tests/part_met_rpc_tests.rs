@@ -83,8 +83,10 @@ fn test_part_met_inspection_and_import_nominal() {
     let db_path = temp_dir.path().join("mule.db");
     let mut service = DownloadService::new(&db_path, temp_dir.path().join("temp")).unwrap();
 
-    // Crear datos de archivo de 1000 bytes y su hash eD2K
-    let part_data = vec![0x42u8; 1000];
+    // Crear datos de archivo de 1000 bytes con cabecera Matroska válida y su hash eD2K
+    let mut part_data = vec![0x42u8; 1000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    part_data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::hash::Ed2kHasher::new();
     hasher.update(&part_data);
     let part_hash = hasher.finalize().unwrap().root_hash.0;
@@ -98,7 +100,7 @@ fn test_part_met_inspection_and_import_nominal() {
     // Crear .part.met sin intervalos (parte única 100 % completa)
     create_part_met_file(
         &met_path,
-        "sample.bin",
+        "sample.mkv",
         1000,
         1000,
         part_hash,
@@ -108,7 +110,7 @@ fn test_part_met_inspection_and_import_nominal() {
 
     // 1. Probar inspect_part_met
     let inspection = service.inspect_part_met(&met_path, None).unwrap();
-    assert_eq!(inspection.file_name, "sample.bin");
+    assert_eq!(inspection.file_name, "sample.mkv");
     assert_eq!(inspection.total_size, 1000);
     assert_eq!(inspection.part_count, 1);
     assert!(inspection.part_file_exists);
@@ -176,7 +178,7 @@ fn test_part_met_import_with_corrupted_part() {
 
     create_part_met_file(
         &met_path,
-        "corrupted.bin",
+        "corrupted.mkv",
         1000,
         1000,
         fake_expected_hash,
@@ -212,7 +214,7 @@ fn test_part_met_import_oversized_physical_file_rejected() {
 
     create_part_met_file(
         &met_path,
-        "oversized.bin",
+        "oversized.mkv",
         1000, // declared: 1000 bytes
         1000,
         [0; 16],
@@ -236,7 +238,9 @@ fn test_part_met_import_persists_across_daemon_restart() {
     let db_path = temp_dir.path().join("mule.db");
     let temp_staging_dir = temp_dir.path().join("temp");
 
-    let part_data = vec![0x42u8; 1000];
+    let mut part_data = vec![0x42u8; 1000];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    part_data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let mut hasher = mule_format::ed2k::hash::Ed2kHasher::new();
     hasher.update(&part_data);
     let part_hash = hasher.finalize().unwrap().root_hash.0;
@@ -247,7 +251,7 @@ fn test_part_met_import_persists_across_daemon_restart() {
 
     create_part_met_file(
         &met_path,
-        "reboot_preserved.bin",
+        "reboot_preserved.mkv",
         1000,
         1000,
         part_hash,
@@ -277,7 +281,7 @@ fn test_part_met_import_persists_across_daemon_restart() {
             .report
             .expect("Sanitized audit report must be present");
         assert!(report.contains("Format Version: 0xE0 (Standard eMule)"));
-        assert!(report.contains("reboot_preserved.bin"));
+        assert!(report.contains("reboot_preserved.mkv"));
         assert!(report.contains("STRICTLY PAUSED"));
         assert!(report.contains("Verified Valid Parts: 1"));
 
@@ -294,7 +298,7 @@ fn test_part_met_import_persists_across_daemon_restart() {
             .find(|d| d.id == imported_id)
             .expect("Imported download must persist across daemon reboot");
 
-        assert_eq!(dl.file_name, "reboot_preserved.bin");
+        assert_eq!(dl.file_name, "reboot_preserved.mkv");
         assert_eq!(dl.status, "paused");
         assert_eq!(dl.category_id.as_deref(), Some("cat-archives"));
         assert_eq!(dl.received_bytes, 1000);
@@ -318,7 +322,7 @@ fn test_part_met_import_persists_across_daemon_restart() {
             .expect("Import history entry must persist across daemon reboot");
 
         assert_eq!(import_event.event_type, "imported");
-        assert_eq!(import_event.file_name, "reboot_preserved.bin");
+        assert_eq!(import_event.file_name, "reboot_preserved.mkv");
     }
 }
 
@@ -338,7 +342,7 @@ fn test_part_met_import_safety_limits_enforced() {
     // Tamaño declarado de 2 TB (> límite de seguridad de 1 TB)
     create_part_met_file(
         &met_path,
-        "too_large.bin",
+        "too_large.mkv",
         2 * 1024 * 1024 * 1024 * 1024,
         0,
         [0; 16],

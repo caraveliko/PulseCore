@@ -20,7 +20,7 @@ use mule_test_support::{download_state, make_req};
 async fn test_adversarial_socket_open_then_complete_silence_times_out() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )
@@ -76,7 +76,7 @@ async fn test_adversarial_socket_open_then_complete_silence_times_out() {
 async fn test_adversarial_cooldown_rejection_and_force_bypass() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )
@@ -152,7 +152,7 @@ async fn test_adversarial_cooldown_rejection_and_force_bypass() {
 async fn test_adversarial_malformed_hello_answer_fails_handshake() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )
@@ -204,7 +204,7 @@ async fn test_adversarial_malformed_hello_answer_fails_handshake() {
 async fn test_adversarial_file_status_hash_mismatch() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )
@@ -309,7 +309,7 @@ async fn test_adversarial_file_status_hash_mismatch() {
 async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )
@@ -473,7 +473,7 @@ async fn test_adversarial_sending_part_out_of_bounds_range_rejected() {
 async fn test_adversarial_unexpected_disconnect_during_transfer() {
     let (state, _dir, hash) = download_state(
         "test_token_adversarial",
-        "test_payload.iso",
+        "test_payload.mkv",
         9728001,
         "31d6cfe0d16ae931b73c59d7e0c089c0",
     )

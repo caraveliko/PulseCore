@@ -77,7 +77,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     );
 
     // 4. Añadir un enlace ed2k
-    let link = "ed2k://|file|test_history.iso|1024|31d6cfe0d16ae931b73c59d7e0c089c0|/";
+    let link = "ed2k://|file|test_history.mkv|1024|31d6cfe0d16ae931b73c59d7e0c089c0|/";
     send_json(
         &mut write,
         json!({
@@ -137,7 +137,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     assert_eq!(list_resume.len(), 1);
     assert_eq!(list_resume[0]["eventType"], "resumed");
     assert_eq!(list_resume[0]["downloadId"], dl_id);
-    assert_eq!(list_resume[0]["fileName"], "test_history.iso");
+    assert_eq!(list_resume[0]["fileName"], "test_history.mkv");
     assert_eq!(list_resume[0]["resumeCount"], 1);
 
     // 7. Eliminar la descarga (debe registrar el evento de historial 'removed')
@@ -207,7 +207,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
     let json_content = res_exp_json["result"]["content"]
         .as_str()
         .expect("json content string");
-    assert!(json_content.contains("test_history.iso"));
+    assert!(json_content.contains("test_history.mkv"));
 
     // 10. Probar history.export en formato CSV
     send_json(
@@ -229,7 +229,7 @@ async fn test_history_rpc_lifecycle_stats_export_and_retention() {
         .as_str()
         .expect("csv content string");
     assert!(csv_content.starts_with("id,download_id,file_name"));
-    assert!(csv_content.contains("test_history.iso"));
+    assert!(csv_content.contains("test_history.mkv"));
 
     // 11. Probar settings.setRetentionDays
     send_json(

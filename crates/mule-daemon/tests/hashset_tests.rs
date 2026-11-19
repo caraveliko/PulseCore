@@ -21,7 +21,7 @@ fn part_hashes_are_stored_from_ed2k_link_and_roundtrip() {
     let p0 = [0x11u8; 16];
     let p1 = [0x22u8; 16];
     let link = format!(
-        "ed2k://|file|two_parts.bin|{}|{}|p={}:{}|/",
+        "ed2k://|file|two_parts.mkv|{}|{}|p={}:{}|/",
         9_728_000 + 10,
         hex::encode([0xAAu8; 16]),
         hex::encode(p0),
@@ -41,10 +41,12 @@ fn completed_part_is_marked_verified_when_hash_matches() {
     let tmp = tempdir().unwrap();
     let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
 
-    let content = vec![0x42u8; 100];
+    let mut content = vec![0x42u8; 100];
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    content[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
     let file_hash = md4_of(&content); // single-part file: root hash == part hash
 
-    let link = format!("ed2k://|file|small.bin|100|{}|/", hex::encode(file_hash));
+    let link = format!("ed2k://|file|small.mkv|100|{}|/", hex::encode(file_hash));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -68,7 +70,7 @@ fn corrupted_part_is_evicted_for_redownload() {
     let content = vec![0x42u8; 100];
     let file_hash = md4_of(&content);
 
-    let link = format!("ed2k://|file|small.bin|100|{}|/", hex::encode(file_hash));
+    let link = format!("ed2k://|file|small.mkv|100|{}|/", hex::encode(file_hash));
     let snap = svc
         .add_ed2k_link(&link, tmp.path(), AllocationPolicy::None, None)
         .unwrap();
@@ -95,7 +97,7 @@ fn evict_corrupted_parts_resets_to_downloading() {
 
     let file_hash = [0xAAu8; 16];
     let link = format!(
-        "ed2k://|file|big.bin|{}|{}|/",
+        "ed2k://|file|big.mkv|{}|{}|/",
         9_728_000 + 10,
         hex::encode(file_hash)
     );

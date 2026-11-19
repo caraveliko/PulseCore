@@ -397,6 +397,13 @@ impl SwarmCoordinator {
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to prepare finalize for download {id}: {e}");
+                                    let maybe_snap = {
+                                        let dl_guard = state_clone.downloads.lock().await;
+                                        dl_guard.get_download(&id)
+                                    };
+                                    if let Some(snap) = maybe_snap {
+                                        state_clone.broadcast_download_update(snap);
+                                    }
                                 }
                             }
                         } else {
@@ -2104,7 +2111,7 @@ mod tests {
             .with_workdir_mode(crate::workdir::WorkDirMode::Portable);
         let mut downloads =
             crate::services::downloads::DownloadService::in_memory(dir.join("temp")).unwrap();
-        let link = format!("ed2k://|file|f.bin|10000000|{hash_hex}|/");
+        let link = format!("ed2k://|file|f.mkv|10000000|{hash_hex}|/");
         downloads
             .add_ed2k_link(
                 &link,

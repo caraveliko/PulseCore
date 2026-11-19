@@ -205,6 +205,8 @@ pub struct ActiveDownload {
     /// se efectúa desde estos búferes sin relectura de disco cuando están
     /// completos — véase [`super::staged`].
     pub staged_parts: std::collections::HashMap<u32, super::staged::StagedPart>,
+    /// Indica si la cabecera binaria de la parte 0 ya superó la validación de la política de vídeo.
+    pub content_header_verified: bool,
 }
 
 /// Cadencia máxima de vaciado a disco de la ruta de recepción: `sync_data`

@@ -7,7 +7,9 @@ use crate::ed2k::error::{Ed2kEncodeError, Ed2kErrorKind};
 use crate::ed2k::limits::Ed2kLimits;
 use crate::ed2k::opcodes::OP_SEARCHREQUEST;
 use crate::ed2k::protocol::PR_ED2K;
-use crate::ed2k::tags::{Ed2kTag, TagName, TagValue, TAG_SPECIAL_FILESIZE, TAG_SPECIAL_NAME};
+use crate::ed2k::tags::{
+    Ed2kTag, TagName, TagValue, TAG_SPECIAL_FILESIZE, TAG_SPECIAL_FILETYPE, TAG_SPECIAL_NAME,
+};
 use crate::framing::RawPacket;
 
 /// Petición para buscar archivos en un servidor eD2K (`OP_SEARCHREQUEST` = `0x16`).
@@ -19,8 +21,10 @@ pub struct SearchQuery {
     pub min_size: Option<u64>,
     /// Filtro opcional de tamaño máximo de archivo en bytes.
     pub max_size: Option<u64>,
-    /// Filtro opcional de extensión / formato de archivo (p. ej., "iso", "zip").
+    /// Filtro opcional de extensión / formato de archivo (p. ej., "mkv", "mp4").
     pub extension: Option<String>,
+    /// Filtro opcional de tipo de archivo eD2K (`FT_FILETYPE`, p. ej., "Video").
+    pub file_type: Option<String>,
 }
 
 impl SearchQuery {
@@ -31,6 +35,7 @@ impl SearchQuery {
             min_size: None,
             max_size: None,
             extension: None,
+            file_type: None,
         }
     }
 
@@ -81,12 +86,43 @@ impl SearchQuery {
 
         if let Some(ext) = &self.extension {
             let ext_bytes = ext.as_bytes();
+            if ext_bytes.len() > limits.max_string_bytes {
+                return Err(Ed2kEncodeError::new(
+                    OP_SEARCHREQUEST,
+                    "extension",
+                    Ed2kErrorKind::OversizedString {
+                        size: ext_bytes.len(),
+                        limit: limits.max_string_bytes,
+                    },
+                ));
+            }
             let mut leaf = Vec::with_capacity(6 + ext_bytes.len());
             leaf.push(0x02); // META
             leaf.extend_from_slice(&(ext_bytes.len() as u16).to_le_bytes());
             leaf.extend_from_slice(ext_bytes);
             leaf.extend_from_slice(&1u16.to_le_bytes());
             leaf.push(0x04); // EDONKEY_STAG_FORMAT
+            filter_leaves.push(leaf);
+        }
+
+        if let Some(ft) = self.file_type.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let ft_bytes = ft.as_bytes();
+            if ft_bytes.len() > limits.max_string_bytes {
+                return Err(Ed2kEncodeError::new(
+                    OP_SEARCHREQUEST,
+                    "file_type",
+                    Ed2kErrorKind::OversizedString {
+                        size: ft_bytes.len(),
+                        limit: limits.max_string_bytes,
+                    },
+                ));
+            }
+            let mut leaf = Vec::with_capacity(6 + ft_bytes.len());
+            leaf.push(0x02); // EDONKEY_SEARCH_META
+            leaf.extend_from_slice(&(ft_bytes.len() as u16).to_le_bytes());
+            leaf.extend_from_slice(ft_bytes);
+            leaf.extend_from_slice(&1u16.to_le_bytes());
+            leaf.push(TAG_SPECIAL_FILETYPE); // 0x03 = FT_FILETYPE
             filter_leaves.push(leaf);
         }
 

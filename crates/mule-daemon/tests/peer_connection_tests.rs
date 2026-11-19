@@ -18,7 +18,7 @@ use mule_test_support::{download_state, make_req};
 
 #[tokio::test]
 async fn test_sources_list_and_add_manual() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     // 1. La lista inicial debe estar vacía
@@ -56,7 +56,7 @@ async fn test_sources_list_and_add_manual() {
 
 #[tokio::test]
 async fn test_peer_connect_refused_when_ip_filtered() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     // Cargar una regla de filtrado de IP que bloquee 127.0.0.1
@@ -90,7 +90,7 @@ async fn test_peer_connect_refused_when_ip_filtered() {
 
 #[tokio::test]
 async fn test_peer_connect_refused_under_local_lab_profile() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     // El perfil por defecto es LocalLab. Conectar a una IP fuera de loopback debe ser rechazado.
@@ -112,7 +112,7 @@ async fn test_peer_connect_refused_under_local_lab_profile() {
 
 #[tokio::test]
 async fn test_peer_connect_nominal_handshake_and_transfer() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     // Iniciar servidor TCP de par eD2K simulado en 127.0.0.1
@@ -290,11 +290,11 @@ async fn test_peer_connect_a4af_socket_swap_on_fnf() {
     let hash_a = "11111111111111111111111111111111";
     let hash_b = "22222222222222222222222222222222";
     let (state, _dir, _) =
-        download_state("test_token_a4af", "file_a.iso", 9728001, hash_a).await;
+        download_state("test_token_a4af", "file_a.mkv", 9728001, hash_a).await;
     let mut authenticated = true;
 
     // Segunda descarga = candidata al intercambio (swap).
-    let link_b = format!("ed2k://|file|file_b.iso|9728001|{hash_b}|/");
+    let link_b = format!("ed2k://|file|file_b.mkv|9728001|{hash_b}|/");
     let req = make_req(0, "downloads.addEd2kLink", Some(json!({ "link": link_b })));
     let resp = handle_request(&state, req, &mut authenticated).await.unwrap();
     assert!(resp.error.is_none());
@@ -510,7 +510,7 @@ async fn test_peer_connect_a4af_socket_swap_on_fnf() {
 
 #[tokio::test]
 async fn test_peer_connect_swarm_peer_limit() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
     state.peer_session.set_swarm_limits(2, 4).await;
 
@@ -582,7 +582,7 @@ async fn test_peer_connect_swarm_peer_limit() {
 
 #[tokio::test]
 async fn test_peer_connect_aborted_by_kill_switch() {
-    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_peer", "test_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -631,7 +631,7 @@ async fn test_peer_connect_aborted_by_kill_switch() {
 /// transferencia).
 #[tokio::test]
 async fn test_peer_connect_multipacket_file_request() {
-    let (state, _dir, hash) = download_state("test_token_mp", "mp_payload.iso", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_mp", "mp_payload.mkv", 9728001, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -739,7 +739,7 @@ async fn test_peer_connect_multipacket_file_request() {
             file: req.file.clone(),
             sub_answers: vec![
                 mule_protocol::ed2k::Ed2kMultiPacketSubAnswer::FileName(
-                    "mp_payload.iso".to_string(),
+                    "mp_payload.mkv".to_string(),
                 ),
                 mule_protocol::ed2k::Ed2kMultiPacketSubAnswer::FileStatus {
                     part_count: 2,

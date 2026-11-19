@@ -190,7 +190,7 @@ fn spawn_mock_peer_recorder(
 
 #[tokio::test]
 async fn test_swarm_dual_peer_disjoint_block_allocation() {
-    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.iso", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.mkv", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let peer1_ranges = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -295,7 +295,7 @@ async fn test_swarm_dual_peer_disjoint_block_allocation() {
 
 #[tokio::test]
 async fn test_swarm_disconnect_releases_in_flight_block_for_reallocation() {
-    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.iso", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.mkv", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let peer1_ranges = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -346,7 +346,7 @@ async fn test_swarm_disconnect_releases_in_flight_block_for_reallocation() {
 
 #[tokio::test]
 async fn test_swarm_kill_switch_aborts_all_peers_and_releases_permits() {
-    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.iso", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.mkv", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let dummy_ranges1 = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -412,13 +412,13 @@ async fn test_swarm_kill_switch_aborts_all_peers_and_releases_permits() {
 
 #[tokio::test]
 async fn test_swarm_global_peer_limit_across_multiple_downloads() {
-    let (state, _dir, hash1) = download_state("test_token_swarm", "test_swarm_payload.iso", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash1) = download_state("test_token_swarm", "test_swarm_payload.mkv", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
     state.peer_session.set_swarm_limits(2, 4).await;
 
     // Add a second download
     let hash2 = "41d6cfe0d16ae931b73c59d7e0c089c1".to_string();
-    let link2 = format!("ed2k://|file|test_second_file.iso|18874368|{hash2}|/");
+    let link2 = format!("ed2k://|file|test_second_file.mkv|18874368|{hash2}|/");
     let _ = handle_request(
         &state,
         make_req(2, "downloads.addEd2kLink", Some(json!({ "link": link2 }))),
@@ -524,7 +524,7 @@ async fn test_swarm_global_peer_limit_across_multiple_downloads() {
 
 #[tokio::test]
 async fn test_swarm_pause_download_aborts_active_leases_and_sessions() {
-    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.iso", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
+    let (state, _dir, hash) = download_state("test_token_swarm", "test_swarm_payload.mkv", 18874368, "31d6cfe0d16ae931b73c59d7e0c089c0").await;
     let mut authenticated = true;
 
     let r1 = Arc::new(std::sync::Mutex::new(Vec::new()));

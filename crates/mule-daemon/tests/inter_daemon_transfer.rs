@@ -8,8 +8,7 @@ use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use mule_daemon::lab::LabSourceService;
 use mule_daemon::DirectoryLock;
-use mule_format::fixtures::{PatternReader, FIXTURE_EXACT_ONE_PART, REPEATING_0_TO_255};
-use mule_format::Ed2kHash;
+use mule_format::fixtures::{PatternReader, REPEATING_0_TO_255};
 use mule_protocol::lab::LabSourceEngine;
 use mule_test_support::RunningDaemon;
 use serde_json::{json, Value};
@@ -30,18 +29,21 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let dir_client = tempdir().unwrap();
     let client_target_dir = tempdir().unwrap();
 
-    let fixture_hash = Ed2kHash::from_hex(FIXTURE_EXACT_ONE_PART.expected_ed2k_hex).unwrap();
-
-    // Generar datos de prueba exactos (9.728.000 bytes)
+    // Generar datos de prueba exactos (9.728.000 bytes) con cabecera Matroska válida
     let mut pattern_reader = PatternReader::new(&REPEATING_0_TO_255, FIXTURE_FILE_SIZE);
     let mut fixture_data = Vec::with_capacity(FIXTURE_FILE_SIZE as usize);
     pattern_reader.read_to_end(&mut fixture_data).unwrap();
+    let mkv_hdr = mule_network_policy::content_policy::MINIMAL_VALID_MKV_HEADER;
+    fixture_data[..mkv_hdr.len()].copy_from_slice(mkv_hdr);
+    let mut hasher = mule_format::ed2k::Ed2kHasher::new();
+    hasher.update(&fixture_data);
+    let fixture_hash = hasher.finalize().unwrap().root_hash;
     let fixture_bytes = Bytes::from(fixture_data);
 
     // 2. Iniciar daemon de origen (Daemon A) con corte determinista antes del 50 %
     let _source_lock = DirectoryLock::acquire(dir_source.path()).unwrap();
     let mut engine = LabSourceEngine::new();
-    engine.host_file(fixture_hash.0, "fixture_9728000.bin", fixture_bytes.clone());
+    engine.host_file(fixture_hash.0, "fixture_9728000.mkv", fixture_bytes.clone());
     let source_service =
         LabSourceService::start_with_block_limit(engine.clone(), Some(INITIAL_INTERRUPT_MAX_BLOCKS))
             .await
@@ -90,7 +92,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
 
     // Añadir descarga ed2k para la prueba
     let ed2k_link = format!(
-        "ed2k://|file|fixture_9728000.bin|{}|{}|/",
+        "ed2k://|file|fixture_9728000.mkv|{}|{}|/",
         FIXTURE_FILE_SIZE, fixture_hash
     );
     let req_add = json!({
@@ -344,7 +346,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     assert!(saw_completed, "Expected completed state transition");
 
     // 10. Verificar archivo finalizado en disco
-    let finalized_path = client_target_dir.path().join("fixture_9728000.bin");
+    let finalized_path = client_target_dir.path().join("fixture_9728000.mkv");
     assert!(
         finalized_path.exists(),
         "Finalized target file must exist on disk"
@@ -359,7 +361,7 @@ async fn test_inter_daemon_loopback_transfer_and_interruption_resumption() {
     let final_ed2k = mule_format::ed2k::hash_reader(&mut target_file).unwrap();
     assert_eq!(
         final_ed2k.root_hash, fixture_hash,
-        "Final eD2K hash must match fixture_exact_one_part exactly"
+        "Final eD2K hash must match generated MKV fixture hash"
     );
 
     // Cierre limpio

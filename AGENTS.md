@@ -56,6 +56,7 @@ powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
 5. **Dependencias**: revisar `deny.toml` antes de añadir una crate; preferir las dependencias del workspace (`[workspace.dependencies]`).
 6. **Sin valores codificados a fuego (*hardcoded*)**: los ajustes de Rust (umbral, tiempo de espera, cuota, tamaño, reintentos) deben vivir en `DaemonConfig`, `ResourceBudgets`, `mule-protocol/src/limits.rs` o en una `const` documentada al principio del archivo. Un valor = una única fuente de verdad.
 7. **Un componente por archivo**: toda función o bloque lógico que pueda vivir en su propio archivo debe tenerlo — sin archivos monolíticos ni literales sueltos en la lógica. Al crear un archivo, aplicar la sección «Constantes y ajustes (Rust)» siguiente.
+8. **Política de contenido «Solo Vídeo» (invariante fijo en compilación)**: Pulse Core admite únicamente archivos de vídeo (y subtítulos complementarios dentro de torrents con vídeo). Prohibido añadir ajustes, banderas RPC o variables para desactivar esta política; toda comprobación nominal o binaria debe delegar en `mule_network_policy::content_policy` (ADR `docs/ed2k/decisions/0006-politica-contenido-solo-video.md`).
 
 ## Convenciones de código
 
@@ -108,6 +109,7 @@ Una funcionalidad = **un único propietario**. Antes de escribir un auxiliar o u
 | Esquemas de herramientas MCP (`obj_schema`, `prop`) | `mule-mcp::tools` |
 | Lectura acotada de archivos `.met` | `mule-format::met::reader` |
 | Errores SQL/contexto BD del servicio de descargas | `mule-daemon::services::downloads::db_err` |
+| Política «Solo Vídeo» (extensiones, cabeceras binarias y selección torrent) | `mule_network_policy::content_policy` |
 
 Distinciones **legítimas** que no deben fusionarse (nombres parecidos, semánticas distintas):
 - `mule-protocol::ed2k::tags::TagValue` (etiquetas de cable eD2K) ≠ `mule-format::met::MetTagValue` (etiquetas de archivos `.met`)

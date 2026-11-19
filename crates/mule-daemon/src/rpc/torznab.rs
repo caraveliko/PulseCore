@@ -245,7 +245,11 @@ pub async fn handle_torznab(
                         let size = r["fileSize"].as_u64().unwrap_or(0);
                         let sources = r["sourceCount"].as_u64().unwrap_or(1);
 
-                        if !hash.is_empty() && !name.is_empty() && seen_hashes.insert(hash.clone()) {
+                        if !hash.is_empty()
+                            && !name.is_empty()
+                            && mule_network_policy::content_policy::is_allowed_video_filename(name)
+                            && seen_hashes.insert(hash.clone())
+                        {
                             results.push((hash, name.to_string(), size, sources));
                         }
                     }
@@ -274,6 +278,9 @@ pub async fn handle_torznab(
             let mut matched_results: Vec<_> = all_results
                 .into_iter()
                 .filter(|(_hash, name, _size, _sources)| {
+                    if !mule_network_policy::content_policy::is_allowed_video_filename(name) {
+                        return false;
+                    }
                     let name_lower = name.to_lowercase();
                     if query_words.is_empty() {
                         true

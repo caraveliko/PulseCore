@@ -71,11 +71,11 @@ async fn test_lab_rpc_full_lifecycle() {
 
     let resp = recv_response_by_id(&mut read, 3).await;
     let fixture_link = resp["result"]["ed2kLink"].as_str().unwrap();
-    assert!(fixture_link.starts_with("ed2k://|file|sample_1mb.bin|1048576|"));
+    assert!(fixture_link.starts_with("ed2k://|file|sample_1mb.mkv|1048576|"));
     assert_eq!(resp["result"]["sizeBytes"], 1048576);
 
     // 4. Verificar que el archivo se haya creado en disco
-    let fixture_path = dir.path().join("fixtures").join("sample_1mb.bin");
+    let fixture_path = dir.path().join("fixtures").join("sample_1mb.mkv");
     assert!(fixture_path.exists());
     assert_eq!(std::fs::metadata(&fixture_path).unwrap().len(), 1048576);
 
@@ -247,12 +247,12 @@ async fn test_lab_create_fixture_pattern_9728001() {
         .unwrap();
 
     let resp: Value = recv_response_by_id(&mut read, 2).await;
-    assert_eq!(resp["result"]["fileName"], "fixture_part_9728001.bin");
+    assert_eq!(resp["result"]["fileName"], "fixture_part_9728001.mkv");
     assert_eq!(resp["result"]["sizeBytes"], 9_728_001);
     let link = resp["result"]["ed2kLink"].as_str().unwrap();
-    assert!(link.starts_with("ed2k://|file|fixture_part_9728001.bin|9728001|"));
+    assert!(link.starts_with("ed2k://|file|fixture_part_9728001.mkv|9728001|"));
 
-    let file_path = dir.path().join("fixtures").join("fixture_part_9728001.bin");
+    let file_path = dir.path().join("fixtures").join("fixture_part_9728001.mkv");
     assert!(file_path.exists());
     assert_eq!(std::fs::metadata(&file_path).unwrap().len(), 9_728_001);
 }

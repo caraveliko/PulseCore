@@ -46,6 +46,15 @@ impl StagedPart {
     fn is_fully_staged(&self, part_len: u64) -> bool {
         self.covered.covered_len() == part_len
     }
+
+    /// Devuelve una vista directa en memoria de los primeros `len` bytes si
+    /// el rango `[0, len)` está completamente preparado.
+    pub(crate) fn prefix_slice(&self, len: usize) -> Option<&[u8]> {
+        if len > self.data.len() || !self.covered.contains(0..len as u64) {
+            return None;
+        }
+        Some(&self.data[..len])
+    }
 }
 
 /// Copia los bytes de un rango inyectado en los búferes de las partes

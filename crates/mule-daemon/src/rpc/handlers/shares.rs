@@ -58,6 +58,9 @@ pub async fn handle_shares_add(
         .or_else(|| params["path"].as_str())
         .unwrap_or("");
 
+    mule_network_policy::content_policy::validate_video_filename(file_name)
+        .map_err(|e| JsonRpcError::invalid_params(&e.to_string()))?;
+
     let mut shared = mule_core::model::SharedFile::new(file_hash, file_name, file_size, file_path);
     {
         let mut dl_svc = state.downloads.lock().await;

@@ -210,7 +210,7 @@ mod tests {
 
     fn svc_with_two_files(hash_a: &str, hash_b: &str, tmp: &tempfile::TempDir) -> DownloadService {
         let mut svc = DownloadService::in_memory(tmp.path().join("temp")).unwrap();
-        for (name, h) in [("file_a.bin", hash_a), ("file_b.bin", hash_b)] {
+        for (name, h) in [("file_a.mkv", hash_a), ("file_b.mkv", hash_b)] {
             let link = format!("ed2k://|file|{name}|10000000|{h}|/");
             svc.add_ed2k_link(
                 &link,
@@ -282,7 +282,7 @@ mod tests {
         let (ha, hb, hc) = (hash_hex(0x55), hash_hex(0x66), hash_hex(0x77));
         let mut svc = svc_with_two_files(&ha, &hb, &tmp);
         // Tercera descarga cuyo registro de fuente está marcado como NNP.
-        let link_c = format!("ed2k://|file|file_c.bin|10000000|{hc}|/");
+        let link_c = format!("ed2k://|file|file_c.mkv|10000000|{hc}|/");
         svc.add_ed2k_link(
             &link_c,
             tmp.path(),

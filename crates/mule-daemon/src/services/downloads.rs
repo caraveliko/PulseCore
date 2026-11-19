@@ -169,6 +169,7 @@ impl DownloadService {
                 .list_peer_sources(&dl.ed2k_hash.to_hex())
                 .map(|s| s.iter().filter(|x| x.status.is_srclist_visible()).count() as u32)
                 .unwrap_or(0);
+            let is_completed = dl.status == DownloadStatus::Completed;
             active.insert(
                 dl.id,
                 ActiveDownload {
@@ -194,6 +195,7 @@ impl DownloadService {
                     persist_dirty: false,
                     last_persist_flush: Instant::now(),
                     staged_parts: HashMap::new(),
+                    content_header_verified: is_completed,
                 },
             );
         }

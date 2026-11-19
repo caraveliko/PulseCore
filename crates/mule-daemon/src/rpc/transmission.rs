@@ -599,7 +599,7 @@ async fn handle_torrent_add(
                 }
                 Err(e) => {
                     return TransmissionResponse::error(
-                        format!("Failed to parse .torrent metainfo: {e}"),
+                        format!("Torrent rejected or invalid .torrent metainfo: {e}"),
                         tag,
                     );
                 }
