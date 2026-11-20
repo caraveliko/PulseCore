@@ -5,6 +5,25 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.0-beta.3] - 2026-11-20
+
+- **Sistema integral de notificaciones y centros de avisos (`mule-core`, `mule-daemon`, `mule-mcp`, `mule-assistant`, WebUI)**:
+  - Persistencia SQLite dedicada (`persistence/sqlite/notifications.rs`) con centro histórico filtrable (`notifications.list`, `markRead`, `clear`, `getConfig`, `updateConfig`, `testChannel`) y empuje en tiempo real (`event.notificationCreated`).
+  - Monitorización automática (`services/notifications/monitor.rs`) ante descargas completadas, errores críticos, recuperación de huérfanos, actualizaciones disponibles y capturas multimedia.
+  - Canales push multiplataforma protegidos contra SSRF por `NetworkPolicyManager`: Webhook genérico, Telegram Bot API, Discord, Gotify, ntfy y Pushover (secretos enmascarados en RPC y persistidos con redacción segura).
+  - Centro interactivo en la WebUI (`web/index.html`) con campana animada, filtro por estado/severidad, toasts no intrusivos y configuración de canales.
+  - Seis herramientas MCP (`emule_list_notifications`, `emule_mark_notifications_read`, `emule_clear_notifications`, `emule_get_notifications_config`, `emule_update_notifications_config`, `emule_test_notification_channel`) integradas en `ToolProfile` (`read|safe|full`) y en `mule-assistant`.
+- **Endurecimiento Kad DHT para WAN (`mule-protocol`, `mule-core`, `mule-daemon`)**:
+  - Códec `KADEMLIA_FINDBUDDY_REQ` (`0x51`) y cliente saliente LowID Buddy (`services/kad/buddy_client.rs`): descubrimiento del buddy, enlace TCP con ofuscación RC4 opcional (`OP_HELLO`/`OP_HELLO_ANSWER`), latidos periódicos (`OP_BUDDYPING`/`OP_BUDDYPONG`) y respuesta ante `OP_CALLBACK`.
+  - Protección global anti-Sybil en `KBucketTable` (`MAX_GLOBAL_CONTACTS_PER_IP = 1`, `MAX_GLOBAL_CONTACTS_PER_SUBNET_24 = 10`, exención loopback) y revalidación LRU de contactos más antiguos.
+  - Limitador de caudal por opcode y dirección IP en `kad_udp`, emparejamiento estricto de transacciones UDP (`find_matching_tx_id` IP+puerto con respaldo NAT), codificación estándar de rechazo en `PublishRes` (`u8::MAX`) y límite de carga aceptada `<= 100`.
+  - Publicación de palabras clave por lotes (`publish_keywords_batch`: hasta 150 archivos por palabra clave y 50 entradas por paquete con cadencia controlada), *self-lookup* periódico (`NODECOMPLETE` cada 4 h) y *jitter* de republicación (`<= 300 s`).
+- **Arneses de pruebas consolidados y corredor inteligente (`scripts/smart_test.py`)**:
+  - Agrupación de pruebas de integración en arneses unificados (`assistant_suite`, `cli_suite`, `core_suite`, `daemon_suite`, `daemon_ed2k_suite`, `daemon_lab_suite`, `filter_suite`, `format_suite`, `mcp_suite`, `protocol_suite`, `protocol_ed2k_suite`, `protocol_lab_suite`) para eliminar cuellos de botella de enlazado en `target/debug`.
+  - Selector inteligente `--mode smart|fast|full` con comprobación sintáctica de la WebUI, detector B1 de duplicados (`find_duplicates.py`) y pruebas afectadas por Git.
+- **Limpieza del repositorio y unificación de documentación en español**:
+  - Traducción íntegra al español de España de los scripts auxiliares (`find_duplicates.py`, `dup_allowlist.txt`, `test_duplicates.ps1`, `test_phase_b_functional_bench.ps1`, `test_phase_d_public_network.ps1`) y de `mule-assistant`, actualización de `docs/INDEX.md`, `docs/architecture/rpc_protocol.md`, `docs/architecture/rapport_architecture_et_avancement.md` y la Wiki.
+
 - **Sistema híbrido de actualización Linux / `systemd`, rollback O(1), CLI y WebUI**:
   - Endurecimiento de `UpdaterService` frente a la política de red (`NetworkPolicyManager`, interruptor de corte, aislamiento `LocalLab` y redirecciones 302 validadas contra SSRF), descarga oficial en *streaming* con progreso real, reporte de entorno (`platformTriple`, `managedBySystemd`, `canSelfUpdate`, `hasRollbackBackup`) y manejo claro de HTTP 404.
   - Nuevo endpoint autenticado `POST /api/system/upload-update` (`Bearer <token>`, límite 64 MiB) para instalar binarios locales compilados con validación estricta de cabecera ELF64/PE y arquitectura (`x86_64` frente a `aarch64`).
