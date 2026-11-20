@@ -41,22 +41,25 @@ Si utilizas Antigravity, el servidor MCP se autodescubre a través de las extens
 
 ---
 
-## 3. Catálogo de Herramientas MCP Disponibles (~87 herramientas)
+## 3. Catálogo de Herramientas MCP Disponibles (~93 herramientas)
 
 Algunas de las capacidades que la IA puede ejecutar:
 
 | Herramienta MCP | Acción que realiza la Inteligencia Artificial |
 | :--- | :--- |
-| `downloads_list` | Lee todas las transferencias, su velocidad y su porcentaje. |
-| `downloads_add` | Añade nuevos enlaces `ed2k://`, `magnet:?` o `.torrent`. |
-| `downloads_pause` / `resume` | Pausa o reanuda descargas específicas. |
-| `downloads_set_priority` | Asigna prioridad Alta, Normal o Baja a un archivo. |
-| `kad_status` | Analiza el estado del enrutamiento Kad y el número de contactos. |
-| `servers_list` | Consulta la lista de servidores eD2K y el estado de la ID. |
-| `media_search` | Busca películas y series en la base de datos de metadatos. |
-| `media_organize` | Dispara el proceso de organización y creación de enlaces duros. |
-| `subtitles_download` | Busca y descarga subtítulos sincronizados con OpenSubtitles. |
-| `stats_get` | Proporciona un informe completo de telemetría de red y consumo de RAM. |
+| `emule_list_downloads` | Lee todas las transferencias, su velocidad y su porcentaje. |
+| `emule_add_link` | Añade nuevos enlaces `ed2k://`, `magnet:?` o `.torrent`. |
+| `emule_pause_download` / `emule_resume_download` | Pausa o reanuda descargas específicas. |
+| `emule_kad_status` | Analiza el estado del enrutamiento Kad y el número de contactos. |
+| `emule_list_servers` | Consulta la lista de servidores eD2K y el estado de la ID. |
+| `emule_media_list` | Consulta el catálogo de películas y series en la base de datos local. |
+| `emule_list_notifications` | Consulta el historial de alertas y el contador de notificaciones sin leer. |
+| `emule_mark_notifications_read` | Marca una alerta concreta o todas las notificaciones pendientes como leídas. |
+| `emule_clear_notifications` | Vacía el historial de notificaciones persistido en SQLite (perfil `full`). |
+| `emule_get_notifications_config` | Lee la configuración de canales *push* y horario silencioso con secretos enmascarados. |
+| `emule_update_notifications_config` | Actualiza eventos activos, horario silencioso y credenciales de canales externos. |
+| `emule_test_notification_channel` | Lanza una notificación de prueba hacia WebUI, Telegram, ntfy, Discord o Webhook. |
+| `emule_status` | Proporciona un informe completo de estado, velocidades, servidor y Kad DHT. |
 
 ---
 

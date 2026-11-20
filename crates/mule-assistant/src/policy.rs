@@ -42,6 +42,10 @@ const TOOL_ALLOWLIST: &[&str] = &[
     "emule_list_shares",
     "emule_swarm_status",
     "emule_list_sources",
+    // Notificaciones
+    "emule_list_notifications",
+    "emule_get_notifications_config",
+    "emule_mark_notifications_read",
 ];
 
 /// Herramientas de la lista de permitidos que exigen confirmación del usuario mostrando
@@ -120,6 +124,12 @@ const TOOL_CAPABILITY_PREFIXES: &[(&str, &str)] = &[
     ("emule_retry_download", "downloads"),
     ("emule_inspect_part_met", "downloads"),
     ("emule_import_part_met", "downloads"),
+    ("emule_list_notifications", "notifications"),
+    ("emule_mark_notifications_read", "notifications"),
+    ("emule_clear_notifications", "notifications"),
+    ("emule_get_notifications_config", "notifications"),
+    ("emule_update_notifications_config", "notifications"),
+    ("emule_test_notification_channel", "notifications"),
 ];
 
 /// Capacidad requerida para `tool_name`: `None` = sin capacidad dedicada.
@@ -156,22 +166,24 @@ pub fn check_call(
 ) -> Result<(), AssistantError> {
     if !TOOL_ALLOWLIST.contains(&tool_name) {
         return Err(AssistantError::Config(format!(
-            "outil '{tool_name}' hors de l'allowlist assistant"
+            "herramienta '{tool_name}' fuera de la lista de permitidos (allowlist) del asistente"
         )));
     }
     let risk = classify(tool_name).ok_or_else(|| {
-        AssistantError::Config(format!("outil '{tool_name}' non classé dans la policy MCP"))
+        AssistantError::Config(format!(
+            "herramienta '{tool_name}' no clasificada en la política MCP"
+        ))
     })?;
     if !profile.allows(risk) {
         return Err(AssistantError::Config(format!(
-            "outil '{tool_name}' bloqué par le profil '{}'",
+            "herramienta '{tool_name}' bloqueada por el perfil '{}'",
             profile.as_str()
         )));
     }
     if let Some(cap) = required_capability(tool_name) {
         if !capabilities.iter().any(|c| c == cap) {
             return Err(AssistantError::Config(format!(
-                "capacité '{cap}' absente du daemon pour '{tool_name}'"
+                "capacidad '{cap}' ausente en el demonio para '{tool_name}'"
             )));
         }
     }

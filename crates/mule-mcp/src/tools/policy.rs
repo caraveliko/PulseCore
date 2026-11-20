@@ -105,6 +105,9 @@ const READ_TOOLS: &[&str] = &[
     "emule_get_download_details",
     "emule_inspect_part_met",
     "emule_list_categories",
+    // notifications
+    "emule_list_notifications",
+    "emule_get_notifications_config",
 ];
 
 /// Herramientas destructivas o críticas: pérdida irreversible, parada, corte
@@ -121,12 +124,17 @@ const DESTRUCTIVE_TOOLS: &[&str] = &[
     "emule_cancel_upload",
     "emule_rotate_identity",
     "emule_clear_history",
+    "emule_clear_notifications",
     "emule_remove_download",
     "emule_delete_category",
 ];
 
 /// Herramientas de mutación de estado reversible o acotada.
 const MUTATE_TOOLS: &[&str] = &[
+    // notifications
+    "emule_mark_notifications_read",
+    "emule_update_notifications_config",
+    "emule_test_notification_channel",
     // system
     "emule_update_settings",
     "emule_reset_download_dir",

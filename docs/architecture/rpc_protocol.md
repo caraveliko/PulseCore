@@ -15,6 +15,7 @@ de inspección local (hash, enlaces, `.part.met`) y no consume el RPC.
 |---|---|
 | Endpoint | `ws://<host>:<port>/rpc` |
 | Health check | `GET /health` → `{"status":"healthy","daemonVersion":"x.y.z"}` |
+| Subida de actualización | `POST /api/system/upload-update` (`Bearer <token>`, validación ELF64/PE y arquitectura) |
 | UI web estática | `GET /` → `index.html` + recursos estáticos (`ServeDir` o `rust-embed` integrado — véase §8) |
 | Config de sesión | `GET /session-config.js` → `window.MULE_SESSION` (endpoint+token), solo loopback |
 | Framing | un mensaje de texto WebSocket = una petición **o** una respuesta **o** una notificación JSON |
@@ -110,7 +111,8 @@ Espacios de nombres estables (véase `methods.rs` para la lista exhaustiva mante
 
 | Espacio de nombres | Métodos representativos |
 |---|---|
-| `system.*` | `hello`, `status`, `stop`/`shutdown`, `checkUpdate`, `getUpdateStatus`, `applyUpdate` (véase `adr_auto_update.md`) |
+| `system.*` | `hello`, `status`, `stop`/`shutdown`, `checkUpdate`, `getUpdateStatus`, `applyUpdate`, `rollbackUpdate` (véase `adr_auto_update.md`) |
+| `notifications.*` | `list` (`{limit, unreadOnly, category}`), `markRead` (`{id}` o `{all: true}`), `clear`, `getConfig`, `setConfig`, `test` (`{channel}`) |
 | `downloads.*` | `list`, `get`, `addEd2kLink`, `pause`, `resume`, `remove`, `setDestination`, `rename` (`{id, newName}` — disco + `shared_files` si ha finalizado), `setCategory`, `getSources`, `inspectPartMet`, `importPartMet`, `retryConnection` |
 | `servers.*` | `list`, `connect`, `disconnect`, `status`, `search`, `querySources`, `importMet`, `updateFromUrl`, `setEnabled`, `delete`, `clear` |
 | `sources.*` | `list`, `addManual`, `connect`, `disconnect`, `clear`, `status`/`swarmStatus` |
@@ -174,6 +176,7 @@ emisores pasan por `DaemonEvent::send`. Formato de red = método con punto:
 | `server.searchResult` | `{sequence, files: [...]}` | `search` | por búsqueda |
 | `server.foundSources` | `{sequence, fileHash, sources}` | `search` | por búsqueda de fuentes |
 | `upnp.statusChanged` | `UpnpStatus` | `network` | por acción UPnP |
+| `event.notificationCreated` | `{sequence, notification: NotificationRecord}` | `notifications` | por nueva alerta persistida |
 | `event.snapshotRequired` | `{skipped: u64}` | — (siempre reenviado) | rarísima (lag) |
 
 `DownloadSnapshot` incluye `etaSeconds` (`Option<u64>`, segundos restantes

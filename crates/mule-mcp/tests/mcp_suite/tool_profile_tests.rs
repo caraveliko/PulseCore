@@ -102,3 +102,70 @@ async fn test_execute_tool_blocked_by_profile() {
     let res = execute_tool_for(ToolProfile::Read, &client, "emule_status", json!({})).await;
     assert!(!res.is_error, "status blocked unexpectedly: {:?}", res);
 }
+
+/// Las herramientas MCP de notificaciones respetan los perfiles read/safe/full y la RPC real.
+#[tokio::test]
+async fn test_notifications_mcp_tools_end_to_end_and_profile_guards() {
+    let (addr, token, _dir) =
+        spawn_test_daemon("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
+    let client = DaemonClient::connect(Some(format!("ws://{addr}/rpc")), Some(token), None, None)
+        .await
+        .expect("DaemonClient connection should succeed");
+
+    // Lectura autorizada bajo perfil Read.
+    let cfg_res = execute_tool_for(
+        ToolProfile::Read,
+        &client,
+        "emule_get_notifications_config",
+        json!({}),
+    )
+    .await;
+    assert!(!cfg_res.is_error, "getConfig failed: {:?}", cfg_res);
+
+    // Mutación bloqueada en Read pero permitida en Safe.
+    let blocked_test = execute_tool_for(
+        ToolProfile::Read,
+        &client,
+        "emule_test_notification_channel",
+        json!({ "channel": "webui" }),
+    )
+    .await;
+    assert!(blocked_test.is_error);
+
+    let ok_test = execute_tool_for(
+        ToolProfile::Safe,
+        &client,
+        "emule_test_notification_channel",
+        json!({ "channel": "webui" }),
+    )
+    .await;
+    assert!(!ok_test.is_error, "webui test notification failed: {:?}", ok_test);
+
+    let list_res = execute_tool_for(
+        ToolProfile::Read,
+        &client,
+        "emule_list_notifications",
+        json!({ "limit": 10 }),
+    )
+    .await;
+    assert!(!list_res.is_error);
+    assert!(list_res.content[0].text.contains("notifications"));
+
+    let mark_res = execute_tool_for(
+        ToolProfile::Safe,
+        &client,
+        "emule_mark_notifications_read",
+        json!({ "all": true }),
+    )
+    .await;
+    assert!(!mark_res.is_error, "mark_read failed: {:?}", mark_res);
+
+    // Destructiva bloqueada en Safe, permitida en Full.
+    let blocked_clear =
+        execute_tool_for(ToolProfile::Safe, &client, "emule_clear_notifications", json!({})).await;
+    assert!(blocked_clear.is_error);
+
+    let ok_clear =
+        execute_tool_for(ToolProfile::Full, &client, "emule_clear_notifications", json!({})).await;
+    assert!(!ok_clear.is_error, "clear_notifications failed: {:?}", ok_clear);
+}

@@ -3,6 +3,7 @@
 
 pub mod downloads;
 pub mod kad;
+pub mod notifications;
 pub mod policy;
 pub mod servers;
 pub mod shares;
@@ -35,12 +36,13 @@ pub(crate) fn obj_schema(properties: Value, required: &[&str]) -> Value {
 }
 
 pub fn list_tools() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(64);
+    let mut tools = Vec::with_capacity(96);
     tools.extend(system::list_tools());
     tools.extend(downloads::list_tools());
     tools.extend(servers::list_tools());
     tools.extend(shares::list_tools());
     tools.extend(kad::list_tools());
+    tools.extend(notifications::list_tools());
     tools
 }
 
@@ -93,6 +95,9 @@ pub async fn execute_tool(client: &DaemonClient, tool_name: &str, args: Value) -
         return res;
     }
     if let Some(res) = kad::handle_tool(client, tool_name, &args).await {
+        return res;
+    }
+    if let Some(res) = notifications::handle_tool(client, tool_name, &args).await {
         return res;
     }
 

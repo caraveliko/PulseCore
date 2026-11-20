@@ -128,3 +128,14 @@ Es el módulo de biblioteca multimedia propio de Pulse Core:
 Muestra las trazas de depuración de Rust generadas en tiempo real mediante `tracing`:
 - Permite filtrar por severidad: `Info`, `Warning`, `Error` o `Debug`.
 - Muy útil para comprobar por qué un servidor no responde, qué IPs han sido descartadas por el filtro anti-SSRF o por `ipfilter.dat`, o cuándo se ha completado un fragmento.
+
+---
+
+## 9. Centro de Notificaciones y Canales *Push* (🔔)
+
+Pulse Core integra un centro de alertas persistente y canales externos bajo demanda:
+- **Campana en la barra superior (`🔔`)**: muestra el contador de notificaciones no leídas, un desplegable con filtros temáticos (`Todas`, `No leídas`, `Descargas`, `Biblioteca`, `Sistema`), marcado individual o masivo como leídas y activación rápida de **notificaciones del navegador** y **aviso sonoro**.
+- **Pestaña `Opciones → 🔔 Notificaciones`**:
+  - Activa o desactiva por evento (`downloadCompleted`, `downloadFailed`, `mediaReady`, `mediaGrabbed`, `updateAvailable`, etc.) y fija un umbral mínimo de espacio libre en disco.
+  - Configura una franja de **horario silencioso (*No molestar*)** para avisos externos no críticos.
+  - Conecta canales *push* directos protegidos por la política anti-SSRF del demonio: **Telegram Bot API**, **ntfy**, **Discord Webhook** y **Webhook JSON genérico**, con botón de **prueba inmediata** por canal y estado de último envío.
