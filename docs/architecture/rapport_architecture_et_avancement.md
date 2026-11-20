@@ -397,15 +397,14 @@ Auditoría comparativa del demonio frente a las fuentes oficiales de **eMule 0.7
 
 1. ~~**Búsqueda UDP**: `OP_GLOBSEARCHREQ3` no emitido~~ — **entregado**: `encode_glob_search_req3` prefija el árbol REQ2 con la etiqueta `CT_SERVER_UDPSEARCH_FLAGS` (`SRVCAP_UDP_NEWTAGS_LARGEFILES`) cuando el servidor lo anuncia en `OP_GLOBSERVSTATRES`.
 
-2. **Kad — tareas pendientes del análisis WAN** (post-endurecimiento):
-   * *Agrupación de publicaciones de palabras clave*: `publish_keyword` converge ahora **por palabra clave** (eMule), pero sigue enviando 1 entrada por paquete (~70 paquetes/archivo); eMule agrupa hasta 150 fileIDs por palabra clave en lotes ≤50 entradas — relevante solo para la republicación masiva de múltiples archivos.
-   * *Limitación de caudal por opcode*: `IpRateLimiter` global (120 pkt/s/IP) debe sustituirse por token buckets por opcode (eMule: REQ ~10/min, HELLO ~3/min, BOOTSTRAP ~2/min, CALLBACK 1/min) — indispensable antes de exponer las respuestas ricas `0x29` (vector de amplificación ~800 B para ~35 B).
-   * *Topes anti-Sybil globales*: 1 KadID por IP y ≤10 contactos por /24 en toda la tabla (eMule), más allá del tope /24≤2 por bucket existente.
-   * *Emparejamiento estricto de transacciones*: el emparejamiento acepta `IP+puerto` exacto **o** solo IP (`tx.target == peer_addr || tx.target.ip() == peer_addr.ip()`) — un paquete parásito de otro puerto puede resolver una transacción si se itera primero; preferir exacto primero y respaldo solo IP (caso NAT documentado).
-   * *Recuentos*: `total_contacts` ignora los `replacements` de los k-buckets (expuestos aparte mediante `total_replacements` en `KadStatusSnapshot`, pero aún no contados en el total); el `status` de `PublishRes` es el *load* del indexador (0-100), no un booleano de éxito.
-   * *Autobúsqueda `NODECOMPLETE`* periódica (~4 h en eMule) y revalidación del contacto más antiguo de cada bucket (`OnSmallTimer`); jitter + cadencia de la republicación (eMule: 1 publish/2 s, máx. 3 concurrentes).
+2. ~~**Kad — endurecimiento WAN**~~ — **entregado**:
+   * *Limitación de caudal por opcode*: `IpRateLimiter::check_and_record_opcode` aplica cuotas por minuto e IP a solicitudes (`REQ`, `HELLO`, `BOOTSTRAP`, `CALLBACK`, `SEARCH`, `PUBLISH`) evitando la amplificación en `0x29`.
+   * *Topes anti-Sybil globales*: `KBucketTable::insert_or_update` impone `MAX_GLOBAL_CONTACTS_PER_IP = 1` y `MAX_GLOBAL_CONTACTS_PER_SUBNET_24 = 10` (eximiendo loopback para pruebas).
+   * *Emparejamiento estricto de transacciones*: `find_matching_tx_id` prioriza `IP+puerto` exacto y recurre solo por IP ante NAT simétrico; `PublishRes` evalúa cargas válidas `0..=100` (`KAD_PUBLISH_MAX_ACCEPTED_LOAD`).
+   * *Agrupación de publicaciones, `NODECOMPLETE` y revalidación LRU*: `publish_keywords_batch` agrupa hasta 150 archivos por término en bloques de ≤50 entradas con cadencia de 2 s; `start_background_maintenance` ejecuta autobúsqueda `NODECOMPLETE` (4 h), revalidación LRU (`oldest_contacts_per_bucket`, 10 min) y *jitter* en republicaciones.
+   * *Cliente compañero (`buddy`) LowID saliente y `DirectUDPCallback`*: `kad/buddy_client.rs` implementa `KADEMLIA_FINDBUDDY_REQ` (`0x51`), apertura TCP, keep-alive `OP_BUDDYPING`/`OP_BUDDYPONG` y despacho `OP_CALLBACK` → `connect_back`; `hello_caps::misc_options2` anuncia `DirectUDPCallback` cuando procede.
 
-Límites conocidos del buddy callback entregado: sin rol de *cliente buddy* (el demonio LowID no busca buddy para sí mismo — `FINDBUDDY_REQ` saliente no implementado), sin reemisión periódica de `BUDDYPING` en el lado solicitante. Límites conocidos de la prueba UDP entregada: la bandera «resultado sesgado» (solicitante ya conocido) en el servidor no se calcula (siempre 0), la clave de verificación UDP se acepta pero no se utiliza (sin cifrado Kad UDP) y el estado del cortafuegos aún no influye en las decisiones de publicación ni en el callback directo (MiscOptions2 `DirectUDPCallback` permanece en 0).
+Límites conocidos de la prueba UDP: la bandera «resultado sesgado» (solicitante ya conocido) en el servidor no se calcula (siempre 0).
 
 ---
 

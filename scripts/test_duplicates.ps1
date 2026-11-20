@@ -1,18 +1,18 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Laurent Geynet "Loulach"
 
 <#
 .SYNOPSIS
-    Garde-fou anti-duplication Rust pour eMuleRust.
+    Salvaguarda antiduplicación Rust para eMuleRust (Pulse Core).
 .DESCRIPTION
-    Execute scripts/find_duplicates.py (analyse hors-ligne : symboles homonymes,
-    corps de fonctions identiques ou identiques apres renommage, fenetres de
-    clones inter-fichiers) et echoue si un NOUVEAU groupe de clones exacts (B1)
-    apparait hors de la liste blanche versionnee scripts/dup_allowlist.txt.
+    Ejecuta scripts/find_duplicates.py (análisis sin conexión: símbolos homónimos,
+    cuerpos de funciones idénticos o idénticos tras renombrar, ventanas de clones entre
+    archivos) y falla si aparece algún NUEVO grupo de clones exactos (B1) fuera de la
+    lista blanca versionada scripts/dup_allowlist.txt.
 
-    Les sections A (homonymes) et B2 (corps normalises) sont informatives :
-    elles contiennent des faux positifs legitimes (methodes de trait, squelettes
-    d'encodeurs filaires, accesseurs bit-field) qui ne doivent pas bloquer la CI.
+    Las secciones A (homónimos) y B2 (cuerpos normalizados) son informativas: contienen
+    falsos positivos legítimos (métodos de trait, esqueletos de códecs de cable,
+    accesores bit-field) que no deben bloquear la integración continua.
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\test_duplicates.ps1
 #>
@@ -26,26 +26,26 @@ $Report = Join-Path $Root "target\dup-report.txt"
 $Allowlist = Join-Path $Root "scripts\dup_allowlist.txt"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Error "python introuvable - requis pour scripts/find_duplicates.py"
+    Write-Error "python no encontrado: es obligatorio para scripts/find_duplicates.py"
     exit 1
 }
 
-Write-Host "==> Analyse de duplication Rust (symboles + corps + fenetres)..." -ForegroundColor Yellow
+Write-Host "==> Análisis de duplicación Rust (símbolos + cuerpos + ventanas)..." -ForegroundColor Yellow
 python scripts/find_duplicates.py | Out-File -Encoding utf8 $Report
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "find_duplicates.py a echoue."
+    Write-Error "find_duplicates.py falló con error."
     exit $LASTEXITCODE
 }
-Write-Host "  Rapport complet : $Report" -ForegroundColor DarkGray
+Write-Host "  Informe completo: $Report" -ForegroundColor DarkGray
 
-# -- Baseline ---------------------------------------------------------------
-$baseline = Select-String -Path $Report -Pattern '^== Baseline ==\s+(\d+) fichiers, (\d+) lignes' |
+# -- Línea base -------------------------------------------------------------
+$baseline = Select-String -Path $Report -Pattern '^== Baseline ==\s+(\d+) archivos, (\d+) líneas' |
     Select-Object -First 1
 if ($baseline) {
-    Write-Host ("  Baseline : {0} fichiers, {1} lignes" -f $baseline.Matches[0].Groups[1].Value, $baseline.Matches[0].Groups[2].Value) -ForegroundColor DarkGray
+    Write-Host ("  Línea base: {0} archivos, {1} líneas" -f $baseline.Matches[0].Groups[1].Value, $baseline.Matches[0].Groups[2].Value) -ForegroundColor DarkGray
 }
 
-# -- Liste blanche ----------------------------------------------------------
+# -- Lista blanca -----------------------------------------------------------
 $allowed = @{}
 Get-Content $Allowlist | ForEach-Object {
     $line = $_.Trim()
@@ -54,7 +54,7 @@ Get-Content $Allowlist | ForEach-Object {
     }
 }
 
-# -- Section B1 : groupes de corps strictement identiques ---------------------
+# -- Sección B1: grupos de cuerpos estrictamente idénticos -----------------
 $lines = Get-Content $Report
 $inB1 = $false
 $newGroups = @()
@@ -74,18 +74,18 @@ foreach ($line in $lines) {
 }
 
 foreach ($stale in $allowed.Keys) {
-    Write-Host "  [INFO] Entree de liste blanche devenue obsolete : [$stale]" -ForegroundColor DarkYellow
+    Write-Host "  [INFO] Entrada de lista blanca obsoleta: [$stale]" -ForegroundColor DarkYellow
 }
 
 if ($newGroups.Count -gt 0) {
-    Write-Host "`n  [ECHEC] Nouveaux clones exacts detectes :" -ForegroundColor Red
+    Write-Host "`n  [FALLO] Nuevos clones exactos detectados:" -ForegroundColor Red
     foreach ($g in $newGroups) {
         Write-Host "    - [$g]" -ForegroundColor Red
     }
-    Write-Host "  Voir $Report (section B1). Mutualiser le code ou justifier" -ForegroundColor Red
-    Write-Host "  chaque exception dans scripts/dup_allowlist.txt." -ForegroundColor Red
+    Write-Host "  Consulta $Report (sección B1). Unifica el código o justifica" -ForegroundColor Red
+    Write-Host "  cada excepción en scripts/dup_allowlist.txt." -ForegroundColor Red
     exit 1
 }
 
-Write-Host ("  [OK] Aucun nouveau clone exact ({0} groupe(s) blanchi(s), voir liste)." -f $knownGroups.Count) -ForegroundColor Green
+Write-Host ("  [OK] Sin nuevos clones exactos ({0} grupo(s) permitido(s) según lista blanca)." -f $knownGroups.Count) -ForegroundColor Green
 exit 0

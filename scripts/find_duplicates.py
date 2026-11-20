@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Detecteur de duplication pour le workspace Rust eMuleRust.
+"""Detector de duplicación para el workspace Rust de eMuleRust (Pulse Core).
 
-Trois angles d'analyse, tous hors-ligne :
-  A. Symboles homonymes (fn/struct/enum/trait/const definis dans >=2 fichiers)
-  B. Corps de fonctions dupliques (hash du corps normalise : identique ou
-     identique apres renommage des identifiants)
-  C. Fenetres de clones (blocs de >=WINDOW lignes nettoyees identiques,
-     style CPD)
+Tres ángulos de análisis, todos 100 % sin conexión:
+  A. Símbolos homónimos (fn/struct/enum/trait/const definidos en >= 2 archivos)
+  B. Cuerpos de funciones duplicados (hash del cuerpo normalizado: idéntico o
+     idéntico tras renombrar identificadores)
+  C. Ventanas de clones (bloques de >= WINDOW líneas limpias idénticas)
 
-Usage : python scripts/find_duplicates.py [--window N] [--root crates]
-Sortie : rapport texte sur stdout (rediriger vers un fichier pour archiver).
+Uso: python3 scripts/find_duplicates.py [--window N] [--root crates]
+Salida: informe de texto en stdout (redirigir a un archivo para archivarlo).
 """
 
 import argparse
@@ -38,7 +37,7 @@ ATTR_LINE_RE = re.compile(r"^\s*#?\s*!\s*\[.*$")
 
 
 def clean_source(text: str) -> str:
-    """Remplace commentaires et litteraux par des espaces, conserve la structure."""
+    """Sustituye comentarios y literales por espacios conservando la estructura sintáctica."""
     out = list(text)
     i, n = 0, len(text)
     state = "code"
@@ -77,7 +76,7 @@ def clean_source(text: str) -> str:
                 out[i] = " "
                 i += 1
             elif c == "'":
-                # litteral char 'x' ou '\n' — distinguer du lifetime 'a
+                # Literal de carácter 'x' o '\n' — distinguir del tiempo de vida 'a
                 if i + 2 < n and text[i + 2] == "'":
                     out[i] = out[i + 1] = out[i + 2] = " "
                     i += 3
@@ -86,7 +85,7 @@ def clean_source(text: str) -> str:
                         out[k] = " "
                     i += 4
                 else:
-                    i += 1  # lifetime
+                    i += 1  # tiempo de vida (lifetime)
             else:
                 i += 1
         elif state == "block":
@@ -157,10 +156,10 @@ def find_matching_brace(cleaned: str, open_idx: int) -> int:
 
 
 def extract_functions(cleaned: str):
-    """Retourne [(name, body_text)] pour chaque fn avec corps (pas les decls trait)."""
+    """Devuelve [(nombre, texto_cuerpo)] para cada fn con cuerpo (excluye declaraciones de trait)."""
     fns = []
     for m in re.finditer(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)", cleaned):
-        # cherche la fin de signature : premier '{' ou ';' a profondeur 0
+        # Busca el final de la firma: primer '{' o ';' a profundidad 0
         i = m.end()
         depth_paren = depth_brack = depth_angle = 0
         brace_idx = -1
@@ -182,7 +181,7 @@ def extract_functions(cleaned: str):
                 brace_idx = i
                 break
             elif c == ";" and depth_paren == 0 and depth_brack == 0:
-                break  # declaration sans corps
+                break  # declaración sin cuerpo
             i += 1
         if brace_idx == -1:
             continue
@@ -214,19 +213,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="crates")
     ap.add_argument("--window", type=int, default=8,
-                    help="taille de fenetre en lignes nettoyees (defaut 8)")
+                    help="tamaño de ventana en líneas limpias (por defecto 8)")
     ap.add_argument("--min-body-tokens", type=int, default=25,
-                    help="taille min d'un corps de fn (en tokens) pour le hash")
+                    help="tamaño mínimo de cuerpo de función (en tokens) para el hash")
     args = ap.parse_args()
 
     root = Path(args.root)
     files = collect_rs_files(root)
     total_lines = 0
-    symbols = defaultdict(list)           # name -> [(file, line, kind)]
-    fn_exact = defaultdict(list)          # hash -> [(file, name, line)]
+    symbols = defaultdict(list)           # nombre -> [(archivo, línea, tipo)]
+    fn_exact = defaultdict(list)          # hash -> [(archivo, nombre, línea)]
     fn_renamed = defaultdict(list)
-    windows = defaultdict(list)           # hash -> [(file, win_start_clean_idx)]
-    clean_lines_of = {}                   # file -> [(orig_lineno, cleaned_line)]
+    windows = defaultdict(list)           # hash -> [(archivo, índice_inicio)]
+    clean_lines_of = {}                   # archivo -> [(núm_línea_orig, línea_limpia)]
 
     for p in files:
         text = p.read_text(encoding="utf-8", errors="replace")
@@ -257,9 +256,9 @@ def main():
             fn_exact[norm_body(body, False)].append((rel, name, line))
             fn_renamed[norm_body(body, True)].append((rel, name, line))
 
-    print(f"== Baseline ==  {len(files)} fichiers, {total_lines} lignes\n")
+    print(f"== Baseline ==  {len(files)} archivos, {total_lines} líneas\n")
 
-    print("== A. Symboles homonymes (meme nom, >=2 fichiers) ==")
+    print("== A. Símbolos homónimos (mismo nombre, >=2 archivos) ==")
     shown = 0
     for name in sorted(symbols, key=lambda k: -len({f for f, _, _ in symbols[k]})):
         locs = symbols[name]
@@ -269,19 +268,19 @@ def main():
         if name in ("new", "default", "fmt", "drop", "from", "clone",
                     "as_str", "len", "is_empty", "fmt", "eq", "hash",
                     "serialize", "deserialize", "borrow", "deref", "into"):
-            continue  # impls de traits standard — bruit
+            continue  # impls de traits estándar — ruido
         kinds0 = {k for _, _, k in locs}
         if kinds0 == {"mod"} and name in ("tests", "types"):
-            continue  # idiome Rust : modules tests/types par fichier — legitime
+            continue  # idioma Rust: módulos tests/types por archivo — legítimo
         shown += 1
         kinds = {k for _, _, k in locs}
         print(f"  {name}  x{len(locs)} ({'/'.join(sorted(kinds))})")
         for f, ln, k in locs:
             print(f"      {f}:{ln} [{k}]")
     if not shown:
-        print("  (aucun)")
+        print("  (ninguno)")
 
-    print("\n== B1. Corps de fonctions strictement identiques ==")
+    print("\n== B1. Cuerpos de funciones estrictamente idénticos ==")
     shown = 0
     for h, locs in sorted(fn_exact.items(), key=lambda kv: -len(kv[1])):
         uniq = {(f, l) for f, _, l in locs}
@@ -293,9 +292,9 @@ def main():
         for f, n, l in locs:
             print(f"      {f}:{l}  fn {n}")
     if not shown:
-        print("  (aucun)")
+        print("  (ninguno)")
 
-    print("\n== B2. Corps identiques apres renommage d'identifiants ==")
+    print("\n== B2. Cuerpos idénticos tras renombrar identificadores ==")
     shown = 0
     for h, locs in sorted(fn_renamed.items(), key=lambda kv: -len(kv[1])):
         uniq = {(f, l) for f, _, l in locs}
@@ -309,12 +308,12 @@ def main():
         for f, n, l in locs:
             print(f"      {f}:{l}  fn {n}")
     if not shown:
-        print("  (aucun)")
+        print("  (ninguno)")
 
-    print(f"\n== C. Blocs clones inter-fichiers (>={args.window} lignes nettoyees) ==")
-    # Fusionne les fenetres glissantes en blocs : deux fenetres identiques a
-    # (f1,l1) et (f2,l2) appartiennent au meme clone si meme delta l2-l1.
-    diagonals = defaultdict(set)  # (f1,f2,delta) -> set de l1
+    print(f"\n== C. Bloques clonados entre archivos (>={args.window} líneas limpias) ==")
+    # Fusiona ventanas deslizantes en bloques: dos ventanas idénticas en
+    # (f1,l1) y (f2,l2) pertenecen al mismo clon si mantienen el desplazamiento l2-l1.
+    diagonals = defaultdict(set)  # (f1,f2,delta) -> conjunto de l1
     for occs in windows.values():
         locs = sorted(set(occs))
         for i in range(len(locs)):
@@ -334,7 +333,7 @@ def main():
             while j + 1 < len(starts) and starts[j + 1] <= starts[j] + 1:
                 j += 1
             nlines = (starts[j] - starts[i]) + args.window
-            if nlines >= args.window + 2:  # au moins un vrai bloc fusionne
+            if nlines >= args.window + 2:  # al menos un bloque real fusionado
                 blocks.append((nlines, f1, starts[i], f2, starts[i] + delta))
             i = j + 1
 
@@ -347,12 +346,12 @@ def main():
             continue
         seen.add(key)
         shown += 1
-        print(f"  ~{nlines} lignes : {f1}:{l1}  <->  {f2}:{l2}")
+        print(f"  ~{nlines} líneas : {f1}:{l1}  <->  {f2}:{l2}")
         if shown >= 200:
-            print("  ... (tronque)")
+            print("  ... (truncado)")
             break
     if not shown:
-        print("  (aucun)")
+        print("  (ninguno)")
 
 
 if __name__ == "__main__":

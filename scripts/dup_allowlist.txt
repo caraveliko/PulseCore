@@ -1,27 +1,27 @@
-# Liste blanche des groupes B1 (corps de fonctions strictement identiques)
-# tolérés par scripts/test_duplicates.ps1 — une ligne = un groupe, tel que
-# rapporté entre crochets par scripts/find_duplicates.py.
+# Lista blanca de grupos B1 (cuerpos de funciones estrictamente idénticos)
+# tolerados por scripts/test_duplicates.ps1 — una línea = un grupo, tal como
+# los reporta entre corchetes scripts/find_duplicates.py.
 #
-# Chaque entrée DOIT être justifiée :
+# Cada entrada DEBE estar justificada:
 #
 # read_msg
-#   mule-daemon/src/lab/io.rs (prod, feature lab-loopback, renvoie Result) vs
-#   mule-protocol/tests/loopback_transfer.rs (test, panic-style). Impossible à
-#   mutualiser : le code src du daemon ne peut pas importer une dev-dependency,
-#   et mule-protocol interdit toute E/S réseau dans la crate.
+#   mule-daemon/src/lab/io.rs (producción, feature lab-loopback, devuelve Result) frente a
+#   mule-protocol/tests/protocol_suite/loopback_transfer.rs (prueba, estilo panic).
+#   Imposible de unificar: el código src del demonio no puede importar una dev-dependency,
+#   y mule-protocol prohíbe toda E/S de red en el crate.
 read_msg
 #
 # open
-#   PartMetFile::open / ServerMetFile::open — API inhérente par type de fichier,
-#   délègue déjà à met::reader::open_met_file. Corps trivial idiomatique.
+#   PartMetFile::open / ServerMetFile::open — API inherente por tipo de archivo,
+#   delega ya en met::reader::open_met_file. Cuerpo trivial idiomático.
 open
 #
 # test_compute_completed_ranges_nominal/test_compute_completed_ranges_overlapping_gaps
-#   Corps de tests paramétrés via gaps_met() — squelette identique, données
-#   différentes : style de test idiomatique.
+#   Cuerpos de pruebas parametrizados mediante gaps_met() — esqueleto idéntico, datos
+#   distintos: estilo de prueba idiomático.
 test_compute_completed_ranges_nominal/test_compute_completed_ranges_overlapping_gaps
 #
 # test_malformed_truncated_header/test_malformed_truncated_tag
-#   Corps de tests paramétrés via decode_malformed() — squelette identique,
-#   contexte/offset attendus différents.
+#   Cuerpos de pruebas parametrizados mediante decode_malformed() — esqueleto idéntico,
+#   contexto/desplazamiento esperados distintos.
 test_malformed_truncated_header/test_malformed_truncated_tag

@@ -1,21 +1,21 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Laurent Geynet "Loulach"
 
 <#
 .SYNOPSIS
-    Phase D - Validation reseau reel supervisee (docs/qa/PLAN_TEST_COMPLET.md).
+    Fase D - Validación supervisada de red real (docs/qa/PLAN_TEST_COMPLET.md).
 .DESCRIPTION
-    Extrait le bundle STANDARD (pas de lab.*), demarre le daemon en
-    profil public par defaut (UPnP actif) et exerce le vrai reseau :
-      D.1  bootstrap server.met via URL publique reelle (anti-SSRF
-           autorise le public en profil PublicEd2kKadPreview)
-      D.2  connexion TCP a un serveur eD2K reel + HighID/LowID
-      D.3  recherche globale serveur
-      D.4  bootstrap Kad via nodes.dat reel + contacts + recherche
-      D.5  kill switch : coupure nette puis reactivation
-      D.6  arret propre + unmap UPnP borne
-    ATTENTION : ce script EMET DU TRAFIC REEL (serveurs eD2K publics,
-    Kad DHT, gateway UPnP). A n'executer que sur une session supervisee.
+    Extrae el paquete STANDARD (sin herramientas lab.*), inicia el demonio en
+    perfil público predeterminado (UPnP activo) y ejercita la red real:
+      D.1  bootstrap de server.met vía URL pública real (anti-SSRF
+           permite tráfico público en perfil PublicEd2kKadPreview)
+      D.2  conexión TCP a un servidor eD2K real + HighID/LowID
+      D.3  búsqueda global en servidor
+      D.4  bootstrap Kad vía nodes.dat real + contactos + búsqueda
+      D.5  interruptor de corte (kill switch): corte limpio y reactivación
+      D.6  parada limpia + desmapeo UPnP acotado
+    ATENCIÓN: este script EMITE TRÁFICO REAL (servidores eD2K públicos,
+    Kad DHT, pasarela UPnP). Ejecutar únicamente en sesiones supervisadas.
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test_phase_d_public_network.ps1
 #>
@@ -24,8 +24,8 @@ $ErrorActionPreference = "Stop"
 $env:MULE_NO_TRAY = "1"  # Sin icono de bandeja en pruebas automatizadas
 $Root = Split-Path -Parent $PSScriptRoot
 
-# URLs canoniques eMule (upd.emule-security.org, maintenues par la
-# communaute eMule Security) - verifiees vivantes le 2026-10.
+# URLs canónicas eMule (upd.emule-security.org, mantenidas por la
+# comunidad eMule Security).
 $ServerMetUrl = "https://upd.emule-security.org/server.met"
 $NodesDatUrl  = "https://upd.emule-security.org/nodes.dat"
 
@@ -68,14 +68,14 @@ function Invoke-WsRpc([System.Net.WebSockets.ClientWebSocket]$ws, [hashtable]$re
         try {
             $respText = Receive-FullWsText $ws $recCts
         } catch {
-            throw "WS receive timeout/error for id $reqId"
+            throw "Tiempo de espera o error al recibir WS para id $reqId"
         }
         $parsed = $respText | ConvertFrom-Json
         if ($null -ne $parsed.id -and $parsed.id -eq $reqId) {
             return $parsed
         }
     }
-    throw "Timeout waiting for JSON-RPC response to request id $reqId after $timeoutMs ms"
+    throw "Tiempo de espera agotado para respuesta JSON-RPC id $reqId tras $timeoutMs ms"
 }
 
 function Test-Rpc {
@@ -94,7 +94,7 @@ function Test-Rpc {
         switch ($Expect) {
             "ok" {
                 if ($hasErr) {
-                    Add-Result $Section $Name "FAIL" "unexpected error: $($resp.error.message)"
+                    Add-Result $Section $Name "FAIL" "error inesperado: $($resp.error.message)"
                     return $null
                 }
                 if ($Validate) {
@@ -105,18 +105,18 @@ function Test-Rpc {
                 return $resp.result
             }
             "err" {
-                if ($hasErr) { Add-Result $Section $Name "PASS" "rejected: $($resp.error.message)"; return $resp.error }
-                Add-Result $Section $Name "FAIL" "expected error, got result"
+                if ($hasErr) { Add-Result $Section $Name "PASS" "rechazado: $($resp.error.message)"; return $resp.error }
+                Add-Result $Section $Name "FAIL" "se esperaba error y llegó resultado"
                 return $null
             }
             default {
-                if ($hasErr) { Add-Result $Section $Name "PASS" "business error accepted: $($resp.error.message)" }
+                if ($hasErr) { Add-Result $Section $Name "PASS" "error de negocio aceptado: $($resp.error.message)" }
                 else { Add-Result $Section $Name "PASS" "ok" }
                 return $resp
             }
         }
     } catch {
-        Add-Result $Section $Name "FAIL" "exception: $($_.Exception.Message)"
+        Add-Result $Section $Name "FAIL" "excepción: $($_.Exception.Message)"
         return $null
     }
 }
@@ -129,16 +129,16 @@ function Connect-DaemonWebSocket([string]$endpoint, [string]$token) {
 }
 
 # =======================================================================
-# 0. Sandbox + boot (bundle STANDARD, profil public par defaut)
+# 0. Entorno aislado y arranque (paquete STANDARD, perfil público por defecto)
 # =======================================================================
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "  Phase D - Reseau reel supervise (eD2K + Kad)   " -ForegroundColor Cyan
+Write-Host "  Fase D - Red real supervisada (eD2K + Kad)      " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "  ATTENTION: trafic reseau reel vers serveurs eD2K/Kad publics" -ForegroundColor Yellow
+Write-Host "  ATENCIÓN: tráfico de red real hacia servidores eD2K/Kad públicos" -ForegroundColor Yellow
 
 $zip = Get-ChildItem (Join-Path $Root "dist") -Filter "PulseCore-Server-Windows-x64.zip" |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (!$zip) { throw "Standard bundle ZIP not found in dist/ - run build_windows_server.ps1 first" }
+if (!$zip) { throw "No se encontró el ZIP estándar en dist/; ejecuta primero build_windows_server.ps1" }
 
 $WorkRoot = Join-Path $env:TEMP ("eMuleRust-PhaseD-" + (New-Guid).ToString("N").Substring(0,8))
 $BundleDir = Join-Path $WorkRoot "bundle"
@@ -146,16 +146,16 @@ $WorkDir = Join-Path $WorkRoot "workdir"
 New-Item -ItemType Directory -Force -Path $BundleDir, $WorkDir | Out-Null
 Expand-Archive -Path $zip.FullName -DestinationPath $BundleDir -Force
 $DaemonBin = Join-Path $BundleDir "mule-daemon.exe"
-if (!(Test-Path $DaemonBin)) { throw "mule-daemon.exe not found in extracted bundle" }
-Write-Host " -> Bundle: $($zip.Name)" -ForegroundColor Gray
-Write-Host " -> Sandbox: $WorkRoot" -ForegroundColor Gray
+if (!(Test-Path $DaemonBin)) { throw "No se encontró mule-daemon.exe en el paquete extraído" }
+Write-Host " -> Paquete : $($zip.Name)" -ForegroundColor Gray
+Write-Host " -> Entorno : $WorkRoot" -ForegroundColor Gray
 
 $daemonProcess = $null
 $ws = $null
 $exitCode = 0
 
 try {
-    # Boot : pas de --profile (public par defaut), UPnP actif.
+    # Arranque: sin --profile (público por defecto), UPnP activo.
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $DaemonBin
     $psi.Arguments = "--workdir `"$WorkDir`" --mode portable"
@@ -165,7 +165,7 @@ try {
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
     $daemonProcess = [System.Diagnostics.Process]::Start($psi)
-    # Drain continu - evite le blocage pipe ~64 Ko.
+    # Drenaje continuo: evita el bloqueo de tubería (~64 KiB).
     $script:DaemonStdoutTask = $daemonProcess.StandardOutput.ReadToEndAsync()
     $script:DaemonStderrTask = $daemonProcess.StandardError.ReadToEndAsync()
 
@@ -173,89 +173,89 @@ try {
     $t = 0
     while (!(Test-Path $sessionPath) -and $t -lt 15) {
         Start-Sleep -Milliseconds 200; $t += 0.2
-        if ($daemonProcess.HasExited) { throw "Daemon died during boot ($($daemonProcess.ExitCode))" }
+        if ($daemonProcess.HasExited) { throw "El demonio finalizó durante el arranque ($($daemonProcess.ExitCode))" }
     }
-    if (!(Test-Path $sessionPath)) { throw "Timeout waiting for session.json" }
+    if (!(Test-Path $sessionPath)) { throw "Tiempo de espera agotado esperando session.json" }
 
     $session = Get-Content $sessionPath -Raw | ConvertFrom-Json
     $endpoint = $session.endpoint
     $token = (Get-Content (Join-Path $WorkDir "auth.token") -Raw).Trim()
-    Write-Host " -> Daemon up (PID $($daemonProcess.Id)) on $endpoint" -ForegroundColor Gray
+    Write-Host " -> Demonio activo (PID $($daemonProcess.Id)) en $endpoint" -ForegroundColor Gray
 
     $ws = Connect-DaemonWebSocket $endpoint $token
-    # L'auth se valide via le handshake hello (protocolVersion + token).
+    # La autenticación se valida mediante el handshake hello (protocolVersion + token).
     $hello = Test-Rpc $ws "D.0" "system.hello" "system.hello" @{ protocolVersion = 1; token = $token }
-    if (!$hello) { throw "Handshake refused - aborting public network test" }
+    if (!$hello) { throw "Handshake rechazado; abortando prueba de red pública" }
 
-    $status = Test-Rpc $ws "D.0" "system.status (profil public)" "system.status" -Validate {
-        param($r) if ($r.networkProfile -notmatch 'public') { "unexpected profile: $($r.networkProfile)" }
+    $status = Test-Rpc $ws "D.0" "system.status (perfil público)" "system.status" -Validate {
+        param($r) if ($r.networkProfile -notmatch 'public') { "perfil inesperado: $($r.networkProfile)" }
     }
 
     # ===================================================================
-    # D.1 Bootstrap server.met via URL publique reelle
+    # D.1 Bootstrap server.met vía URL pública real
     # ===================================================================
-    Write-Host "`n[D.1] Import server.met (URL publique reelle)" -ForegroundColor Yellow
-    $upd = Test-Rpc $ws "D.1" "servers.updateFromUrl (reel)" "servers.updateFromUrl" @{ url = $ServerMetUrl } -TimeoutMs 30000
+    Write-Host "`n[D.1] Importación server.met (URL pública real)" -ForegroundColor Yellow
+    $upd = Test-Rpc $ws "D.1" "servers.updateFromUrl (real)" "servers.updateFromUrl" @{ url = $ServerMetUrl } -TimeoutMs 30000
     $srvList = Test-Rpc $ws "D.1" "servers.list" "servers.list" -Validate {
-        param($r) if ($r.servers.Count -lt 1) { "no servers imported" }
+        param($r) if ($r.servers.Count -lt 1) { "sin servidores importados" }
     }
-    if ($upd) { Write-Host "     -> imported=$($upd.imported) filtered=$($upd.filtered)" -ForegroundColor Gray }
+    if ($upd) { Write-Host "     -> importados=$($upd.imported) filtrados=$($upd.filtered)" -ForegroundColor Gray }
 
     # ===================================================================
-    # D.2 Connexion TCP serveur eD2K reel + ID
+    # D.2 Conexión TCP a servidor eD2K real + ID
     # ===================================================================
-    Write-Host "`n[D.2] Connexion serveur eD2K reel" -ForegroundColor Yellow
+    Write-Host "`n[D.2] Conexión a servidor eD2K real" -ForegroundColor Yellow
     $serverAddr = $null
     if ($srvList -and $srvList.servers.Count -gt 0) {
         $serverAddr = $srvList.servers[0].address
-        Write-Host "     -> trying server: $($srvList.servers[0].name) ($serverAddr)" -ForegroundColor Gray
+        Write-Host "     -> probando servidor: $($srvList.servers[0].name) ($serverAddr)" -ForegroundColor Gray
     }
     if ($serverAddr) {
-        Test-Rpc $ws "D.2" "servers.connect (reel)" "servers.connect" @{ address = $serverAddr } -TimeoutMs 30000 -Expect "any" | Out-Null
-        # Poll jusqu'a Connected (TCP handshake + login eD2K ~10-30s)
+        Test-Rpc $ws "D.2" "servers.connect (real)" "servers.connect" @{ address = $serverAddr } -TimeoutMs 30000 -Expect "any" | Out-Null
+        # Sondeo hasta Connected (handshake TCP + login eD2K ~10-30 s)
         $connected = $false
         for ($i = 0; $i -lt 12 -and !$connected; $i++) {
             Start-Sleep -Seconds 5
             $snap = $null
             try { $snap = (Invoke-WsRpc $ws @{ jsonrpc="2.0"; id=(++$script:ReqId); method="servers.status"; params=@{} } 10000).result } catch {}
             if ($snap -and $snap.status -eq "Connected") { $connected = $true }
-            elseif ($snap) { Write-Host "     -> status: $($snap.status)" -ForegroundColor Gray }
+            elseif ($snap) { Write-Host "     -> estado: $($snap.status)" -ForegroundColor Gray }
         }
         if ($connected) {
             $cid = $snap.clientId
             $idKind = if ($cid -ge 16777216) { "HighID" } else { "LowID" }
-            Add-Result "D.2" "server session Connected" "PASS" "$idKind (clientId=$cid, server=$($snap.server_address))"
-            Test-Rpc $ws "D.2" "servers.querySources (reel)" "servers.querySources" @{ fileHash = "0123456789ABCDEF0123456789ABCDEF" } -Expect "any" -TimeoutMs 20000 | Out-Null
+            Add-Result "D.2" "server session Connected" "PASS" "$idKind (clientId=$cid, servidor=$($snap.server_address))"
+            Test-Rpc $ws "D.2" "servers.querySources (real)" "servers.querySources" @{ fileHash = "0123456789ABCDEF0123456789ABCDEF" } -Expect "any" -TimeoutMs 20000 | Out-Null
         } else {
-            Add-Result "D.2" "server session Connected" "FAIL" "not connected after 60s (last: $($snap.status))"
+            Add-Result "D.2" "server session Connected" "FAIL" "no conectado tras 60 s (último: $($snap.status))"
         }
     } else {
-        Add-Result "D.2" "server session Connected" "SKIP" "no server in list"
+        Add-Result "D.2" "server session Connected" "SKIP" "sin servidores en lista"
     }
 
     # ===================================================================
-    # D.3 Recherche globale serveur
+    # D.3 Búsqueda global en servidor
     # ===================================================================
-    Write-Host "`n[D.3] Recherche globale" -ForegroundColor Yellow
+    Write-Host "`n[D.3] Búsqueda global" -ForegroundColor Yellow
     if ($connected) {
-        $sr = Test-Rpc $ws "D.3" "servers.search (reel)" "servers.search" @{ term = "ubuntu" } -Expect "any" -TimeoutMs 30000
-        if ($sr -and $sr.result) { Write-Host "     -> results received" -ForegroundColor Gray }
+        $sr = Test-Rpc $ws "D.3" "servers.search (real)" "servers.search" @{ term = "ubuntu" } -Expect "any" -TimeoutMs 30000
+        if ($sr -and $sr.result) { Write-Host "     -> resultados recibidos" -ForegroundColor Gray }
     } else {
-        Add-Result "D.3" "servers.search (reel)" "SKIP" "not connected"
+        Add-Result "D.3" "servers.search (real)" "SKIP" "no conectado"
     }
 
     # ===================================================================
-    # D.4 Kad : bootstrap nodes.dat reel + contacts + recherche
+    # D.4 Kad: bootstrap nodes.dat real + contactos + búsqueda
     # ===================================================================
-    Write-Host "`n[D.4] Kad bootstrap + recherche" -ForegroundColor Yellow
-    Test-Rpc $ws "D.4" "kad.bootstrapFromUrl (reel)" "kad.bootstrapFromUrl" @{ url = $NodesDatUrl } -TimeoutMs 30000 -Expect "any" | Out-Null
+    Write-Host "`n[D.4] Kad bootstrap + búsqueda" -ForegroundColor Yellow
+    Test-Rpc $ws "D.4" "kad.bootstrapFromUrl (real)" "kad.bootstrapFromUrl" @{ url = $NodesDatUrl } -TimeoutMs 30000 -Expect "any" | Out-Null
     Test-Rpc $ws "D.4" "kad.startUdp" "kad.startUdp" @{} -Expect "any" | Out-Null
-    # Bootstrap actif vers le 1er contact importe (ip+port requis)
+    # Bootstrap activo hacia el primer contacto importado (requiere ip+puerto)
     $contact = Test-Rpc $ws "D.4" "kad.listContacts" "kad.listContacts" -Expect "any"
     if ($contact -and $contact.contacts -and $contact.contacts.Count -gt 0) {
         $c0 = $contact.contacts[0]
-        Write-Host "     -> bootstrap vers $($c0.ip):$($c0.udpPort)" -ForegroundColor Gray
-        Test-Rpc $ws "D.4" "kad.bootstrap (contact reel)" "kad.bootstrap" @{ ip = $c0.ip; port = $c0.udpPort } -Expect "any" | Out-Null
+        Write-Host "     -> bootstrap hacia $($c0.ip):$($c0.udpPort)" -ForegroundColor Gray
+        Test-Rpc $ws "D.4" "kad.bootstrap (contacto real)" "kad.bootstrap" @{ ip = $c0.ip; port = $c0.udpPort } -Expect "any" | Out-Null
     }
     $kadOk = $false
     for ($i = 0; $i -lt 12 -and !$kadOk; $i++) {
@@ -263,34 +263,34 @@ try {
         $ks = $null
         try { $ks = (Invoke-WsRpc $ws @{ jsonrpc="2.0"; id=(++$script:ReqId); method="kad.status"; params=@{} } 10000).result } catch {}
         if ($ks) {
-            Write-Host "     -> kad.status: udp=$($ks.isUdpActive) contacts=$($ks.totalContacts) fw=$($ks.udpFirewallStatus) tx=$($ks.activeTransactions)" -ForegroundColor Gray
+            Write-Host "     -> kad.status: udp=$($ks.isUdpActive) contactos=$($ks.totalContacts) fw=$($ks.udpFirewallStatus) tx=$($ks.activeTransactions)" -ForegroundColor Gray
             if ($ks.totalContacts -gt 0) { $kadOk = $true }
         }
     }
     if ($kadOk) {
         Add-Result "D.4" "kad contacts > 0" "PASS"
-        Test-Rpc $ws "D.4" "kad.searchKeywords (reel)" "kad.searchKeywords" @{ term = "ubuntu" } -Expect "any" -TimeoutMs 30000 | Out-Null
-        Test-Rpc $ws "D.4" "kad.searchSources (reel)" "kad.searchSources" @{ fileHash = "0123456789ABCDEF0123456789ABCDEF"; fileSize = 1024 } -Expect "any" -TimeoutMs 30000 | Out-Null
+        Test-Rpc $ws "D.4" "kad.searchKeywords (real)" "kad.searchKeywords" @{ term = "ubuntu" } -Expect "any" -TimeoutMs 30000 | Out-Null
+        Test-Rpc $ws "D.4" "kad.searchSources (real)" "kad.searchSources" @{ fileHash = "0123456789ABCDEF0123456789ABCDEF"; fileSize = 1024 } -Expect "any" -TimeoutMs 30000 | Out-Null
     } else {
-        Add-Result "D.4" "kad contacts > 0" "FAIL" "no contacts after 40s"
+        Add-Result "D.4" "kad contacts > 0" "FAIL" "sin contactos tras 60 s"
     }
 
     # ===================================================================
-    # D.5 Kill switch : coupure nette puis reactivation
+    # D.5 Interruptor de corte (kill switch): corte y reactivación
     # ===================================================================
-    Write-Host "`n[D.5] Kill switch" -ForegroundColor Yellow
-    # Le kill switch produit est network.disconnectAll / network.enable.
+    Write-Host "`n[D.5] Interruptor de corte" -ForegroundColor Yellow
+    # El kill switch de producción es network.disconnectAll / network.enable.
     Test-Rpc $ws "D.5" "network.disconnectAll" "network.disconnectAll" @{} | Out-Null
     Start-Sleep -Seconds 3
-    Test-Rpc $ws "D.5" "servers.status (post-disconnectAll)" "servers.status" -Validate {
-        param($r) if ($r.status -eq "Connected") { "still connected after disconnectAll" }
+    Test-Rpc $ws "D.5" "servers.status (tras disconnectAll)" "servers.status" -Validate {
+        param($r) if ($r.status -eq "Connected") { "sigue conectado tras disconnectAll" }
     } | Out-Null
     Test-Rpc $ws "D.5" "network.enable" "network.enable" @{} | Out-Null
 
     # ===================================================================
-    # D.6 UPnP status + arret propre (unmap borne 500 ms)
+    # D.6 Estado UPnP + parada limpia (desmapeo acotado 500 ms)
     # ===================================================================
-    Write-Host "`n[D.6] UPnP + arret" -ForegroundColor Yellow
+    Write-Host "`n[D.6] UPnP + parada" -ForegroundColor Yellow
     $upnp = Test-Rpc $ws "D.6" "upnp.status" "upnp.status" -Expect "any"
     if ($upnp) { Write-Host "     -> upnp: $($upnp | ConvertTo-Json -Compress -Depth 3)" -ForegroundColor Gray }
     Test-Rpc $ws "D.6" "system.stop" "system.stop" @{} | Out-Null
@@ -299,16 +299,16 @@ try {
     $daemonProcess.WaitForExit(15000) | Out-Null
     if (!$daemonProcess.HasExited) {
         Stop-Process -Id $daemonProcess.Id -Force
-        Add-Result "D.6" "daemon exit" "FAIL" "did not exit within 15s"
+        Add-Result "D.6" "daemon exit" "FAIL" "no salió en 15 s"
     } else {
-        Add-Result "D.6" "daemon exit code $($daemonProcess.ExitCode) in $($sw2.ElapsedMilliseconds)ms" ($(if ($daemonProcess.ExitCode -eq 0) {"PASS"} else {"FAIL"}))
+        Add-Result "D.6" "daemon exit code $($daemonProcess.ExitCode) en $($sw2.ElapsedMilliseconds)ms" ($(if ($daemonProcess.ExitCode -eq 0) {"PASS"} else {"FAIL"}))
     }
-    if (Test-Path $sessionPath) { Add-Result "D.6" "session.json cleanup" "FAIL" "session.json still present" }
+    if (Test-Path $sessionPath) { Add-Result "D.6" "session.json cleanup" "FAIL" "session.json sigue presente" }
     else { Add-Result "D.6" "session.json cleanup" "PASS" }
 }
 catch {
     Write-Host "`nFATAL: $($_.Exception.Message)" -ForegroundColor Red
-    Add-Result "FATAL" "bench aborted" "FAIL" $_.Exception.Message
+    Add-Result "FATAL" "prueba abortada" "FAIL" $_.Exception.Message
     $exitCode = 1
 }
 finally {
@@ -316,26 +316,26 @@ finally {
     if ($daemonProcess -and !$daemonProcess.HasExited) {
         Stop-Process -Id $daemonProcess.Id -Force -ErrorAction SilentlyContinue
     }
-    # Dump stderr en cas d'echec pour diagnostic
+    # Volcar stderr en caso de fallo para diagnóstico
     if ($script:DaemonStderrTask -and $script:DaemonStderrTask.IsCompleted) {
         $err = $script:DaemonStderrTask.Result
         if ($err) {
             $logPath = Join-Path $WorkRoot "daemon-stderr.log"
             [System.IO.File]::WriteAllText($logPath, $err)
-            Write-Host " -> daemon stderr: $logPath" -ForegroundColor Gray
+            Write-Host " -> registro stderr del demonio: $logPath" -ForegroundColor Gray
         }
     }
 }
 
 # ===================================================================
-# Rapport
+# Informe final
 # ===================================================================
 $pass = ($script:Results | Where-Object { $_.Outcome -eq "PASS" }).Count
 $fail = ($script:Results | Where-Object { $_.Outcome -eq "FAIL" }).Count
 $skip = ($script:Results | Where-Object { $_.Outcome -eq "SKIP" }).Count
 
 Write-Host "`n==================================================" -ForegroundColor Cyan
-Write-Host "  RAPPORT PHASE D                                 " -ForegroundColor Cyan
+Write-Host "  INFORME FASE D                                  " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 $script:Results | Group-Object Section | ForEach-Object {
     $p = ($_.Group | Where-Object { $_.Outcome -eq "PASS" }).Count
@@ -350,5 +350,5 @@ $script:Results | Where-Object { $_.Outcome -eq "FAIL" } | ForEach-Object {
 }
 
 if ($fail -gt 0) { $exitCode = 1 }
-Write-Host ("`n  PHASE D PUBLIC NETWORK: {0}" -f $(if ($exitCode -eq 0) {"PASSED"} else {"FAILED"})) -ForegroundColor ($(if ($exitCode -eq 0) {"Green"} else {"Red"}))
+Write-Host ("`n  FASE D RED PÚBLICA: {0}" -f $(if ($exitCode -eq 0) {"APROBADA"} else {"FALLIDA"})) -ForegroundColor ($(if ($exitCode -eq 0) {"Green"} else {"Red"}))
 exit $exitCode
