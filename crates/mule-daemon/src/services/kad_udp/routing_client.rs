@@ -304,4 +304,88 @@ impl KadUdpService {
             }
         }
     }
+
+    /// Envía una solicitud `KADEMLIA_FINDBUDDY_REQ` (`0x51`) a un nodo candidato y espera su
+    /// aceptación `KADEMLIA_FINDBUDDY_RES` (`0x5A`).
+    pub async fn send_find_buddy(
+        &self,
+        target: SocketAddr,
+        buddy_id: &[u8; 16],
+        user_id: &[u8; 16],
+        tcp_port: u16,
+    ) -> Result<KadFindBuddyRes, String> {
+        let socket = {
+            let inner = self.inner.read().await;
+            inner
+                .socket
+                .clone()
+                .ok_or_else(|| "Kad UDP socket is not running".to_string())?
+        };
+
+        let _permit = self
+            .policy_mgr
+            .request_tcp_connect(target, ConnectionPurpose::KadNode)
+            .map_err(|e| format!("Policy denied Kad UDP send to {target}: {e}"))?;
+
+        let tx_id = self.next_tx_id.fetch_add(1, Ordering::SeqCst);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let in_flight_entry = InFlightTransaction {
+            target,
+            expected_response: KadExpectedResponse::FindBuddyRes,
+            expected_target_hash: Some(*buddy_id),
+            created_at: Instant::now(),
+            sender: tx,
+        };
+
+        let _tx_guard = {
+            let inner = self.inner.read().await;
+            inner.insert_in_flight(tx_id, in_flight_entry).await?
+        };
+
+        let req_bytes = KadCodec::encode_findbuddy_req(buddy_id, user_id, tcp_port);
+        tracing::debug!(
+            "Kad sending FindBuddyReq (0x51) to node {} (tcp_port={}, tx_id={})",
+            log_peer_addr(target),
+            tcp_port,
+            tx_id
+        );
+        self.packets_sent.fetch_add(1, Ordering::Relaxed);
+        socket
+            .send_to(&pack_kad_datagram(&req_bytes), target)
+            .await
+            .map_err(|e| format!("Failed to send UDP datagram: {e}"))?;
+
+        let timeout_fut = tokio::time::sleep(Duration::from_secs(KAD_TRANSACTION_TIMEOUT_SECS));
+
+        tokio::select! {
+            _ = timeout_fut => {
+                let inner = self.inner.read().await;
+                let mut inf = inner.in_flight.lock().await;
+                inf.remove(&tx_id);
+                tracing::debug!(
+                    "Kad FindBuddyReq to {} timed out after {}s (tx_id={})",
+                    log_peer_addr(target),
+                    KAD_TRANSACTION_TIMEOUT_SECS,
+                    tx_id
+                );
+                Err(format!("Kad find_buddy to {target} timed out after {KAD_TRANSACTION_TIMEOUT_SECS}s"))
+            }
+            res = rx.recv() => {
+                match res {
+                    Some(Ok(KadMessage::FindBuddyRes(buddy_res))) => {
+                        self.packets_received.fetch_add(1, Ordering::Relaxed);
+                        tracing::debug!(
+                            "Kad received FindBuddyRes (0x5A) from {} (tcp_port={})",
+                            log_peer_addr(target),
+                            buddy_res.tcp_port
+                        );
+                        Ok(buddy_res)
+                    }
+                    Some(Ok(_)) => Err("Unexpected Kad response type".to_string()),
+                    Some(Err(err)) => Err(err),
+                    None => Err("Transaction channel cancelled".to_string()),
+                }
+            }
+        }
+    }
 }

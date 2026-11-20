@@ -1,15 +1,40 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
+use futures_util::stream::StreamExt as _;
+use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 use mule_core::kad::{extract_kad_keywords, hash_kad_keyword, KBucketTable, KadContact, KadId};
 use mule_filter::IpFilter;
-use mule_network_policy::{classify_ip, IpCategory, NetworkPolicyManager, NetworkProfile};
+use mule_network_policy::{
+    classify_ip, CancellationToken, IpCategory, NetworkPolicyManager, NetworkProfile,
+};
 
 use crate::services::kad_udp::KadUdpService;
+
+/// Carga máxima devuelta en `KADEMLIA2_PUBLISH_RES` considerada como publicación aceptada (0-100 %).
+pub const KAD_PUBLISH_MAX_ACCEPTED_LOAD: u8 = 100;
+/// Entradas máximas de palabras clave empaquetadas por datagrama `PUBLISH_KEY_REQ`.
+pub const MAX_KEYWORD_ENTRIES_PER_PACKET: usize = 50;
+/// Máximo de archivos agrupados por palabra clave en una ronda de publicación por lotes (eMule).
+pub const MAX_FILES_PER_KEYWORD_BATCH: usize = 150;
+/// Concurrencia máxima de nodos indexadores al publicar un lote de palabra clave.
+pub const KAD_KEYWORD_PUBLISH_CONCURRENCY: usize = 3;
+/// Pausa de cadencia entre palabras clave durante la republicación en lote (eMule: 2 s).
+pub const KAD_KEYWORD_PUBLISH_PACING_MS: u64 = 2000;
+
+/// Elemento de archivo a indexar por palabras clave en Kad DHT.
+#[derive(Debug, Clone)]
+pub struct KeywordPublishItem {
+    pub file_hash_hex: String,
+    pub file_name: String,
+    pub file_size: u64,
+    pub aich_root: Option<[u8; 20]>,
+}
 
 /// Lista de etiquetas almacenada estándar publicada con cada entrada de palabra clave —
 /// `PreparePacketForTags` de eMule añade `TAG_SOURCES` (y metadatos opcionales)
@@ -229,32 +254,73 @@ pub async fn search_keywords_iterative(
     Ok(discovered_entries)
 }
 
-/// Publica entradas de palabras clave para un archivo en los contactos Kad más cercanos.
-///
-/// Los nodos eMule descartan silenciosamente un `PUBLISH_KEY_REQ` cuyo hash de palabra clave
-/// quede fuera de `SEARCHTOLERANCE` de su KadID, y solo los nodos activos responden —
-/// por tanto los destinos de publicación se convergen primero con una búsqueda iterativa
-/// `find_node`, restringiéndose luego a los contactos dentro de tolerancia.
-pub async fn publish_keyword(
-    file_hash_hex: &str,
-    file_name: &str,
-    file_size: u64,
-    aich_root: Option<[u8; 20]>,
+/// Entrada de palabra clave pendiente de envío junto a su raíz AICH opcional.
+pub(crate) type KeywordEntryWithAich = (mule_protocol::kad::KadKeywordEntryWire, Option<[u8; 20]>);
+/// Lote de entradas agrupadas por identificador Kad de palabra clave.
+pub(crate) type GroupedKeywordBatch = (KadId, Vec<KeywordEntryWithAich>);
+
+/// Agrupa una colección de archivos por hash de palabra clave único, limitando cada palabra
+/// clave a `MAX_FILES_PER_KEYWORD_BATCH` (150) archivos como hace eMule antes de publicar.
+pub(crate) fn group_files_by_keyword(items: &[KeywordPublishItem]) -> Vec<GroupedKeywordBatch> {
+    let mut grouped: BTreeMap<KadId, Vec<KeywordEntryWithAich>> = BTreeMap::new();
+
+    for item in items {
+        let Some(file_hash_kad_id) = KadId::from_hash_hex(&item.file_hash_hex) else {
+            continue;
+        };
+        let keywords = extract_kad_keywords(&item.file_name);
+        let mut seen_kw = std::collections::HashSet::with_capacity(keywords.len());
+        for (_word, kw_kad_id) in keywords {
+            if !seen_kw.insert(kw_kad_id) {
+                continue;
+            }
+            let list = grouped.entry(kw_kad_id).or_default();
+            if list.len() >= MAX_FILES_PER_KEYWORD_BATCH {
+                continue;
+            }
+            let entry = mule_protocol::kad::KadKeywordEntryWire {
+                file_hash: file_hash_kad_id.0,
+                file_name: item.file_name.clone(),
+                file_size: item.file_size,
+                source_count: 1,
+                // Lista de etiquetas publicada estándar (filename/filesize/sources) —
+                // los indexadores remotos evalúan expresiones de búsqueda restrictivas
+                // contra estas etiquetas (`WriteTagListWithPublishInfo` de eMule).
+                tags: standard_keyword_tags(&item.file_name, item.file_size, 1),
+                aich_pub: None,
+                aich_votes: Vec::new(),
+                publish_info: None,
+            };
+            list.push((entry, item.aich_root));
+        }
+    }
+
+    grouped.into_iter().collect()
+}
+
+/// Publica entradas de palabras clave agrupadas en lotes de hasta `MAX_KEYWORD_ENTRIES_PER_PACKET`
+/// entradas por palabra clave única y paquete, respetando cadencia y cancelación.
+pub async fn publish_keywords_batch(
+    items: &[KeywordPublishItem],
     routing_table: &Mutex<KBucketTable>,
     policy_mgr: &NetworkPolicyManager,
     ip_filter: &Arc<IpFilter>,
     udp: &Arc<KadUdpService>,
+    cancel_token: &CancellationToken,
+    pace_between_keywords: bool,
 ) -> Result<usize, String> {
-    let file_hash_kad_id = KadId::from_hash_hex(file_hash_hex)
-        .ok_or_else(|| format!("Invalid file hash hex: {file_hash_hex}"))?;
-
-    let keywords = extract_kad_keywords(file_name);
-    if keywords.is_empty() {
+    let groups = group_files_by_keyword(items);
+    if groups.is_empty() {
         return Ok(0);
     }
 
-    let mut total_published = 0;
-    for (_word, kw_kad_id) in keywords {
+    let groups_len = groups.len();
+    let mut total_published = 0usize;
+
+    for (idx, (kw_kad_id, entries_with_aich)) in groups.into_iter().enumerate() {
+        if cancel_token.is_cancelled() {
+            break;
+        }
         let candidates = super::lookup::converge_closest_contacts(
             &kw_kad_id,
             routing_table,
@@ -276,38 +342,51 @@ pub async fn publish_keyword(
         if targets.is_empty() {
             targets = candidates.into_iter().take(5).collect();
         }
-
-        let entries = vec![mule_protocol::kad::KadKeywordEntryWire {
-            file_hash: file_hash_kad_id.0,
-            file_name: file_name.to_string(),
-            file_size,
-            source_count: 1,
-            // Lista de etiquetas publicada estándar (filename/filesize/sources) —
-            // los indexadores remotos evalúan expresiones de búsqueda restrictivas
-            // contra estas etiquetas (`WriteTagListWithPublishInfo` de eMule).
-            tags: standard_keyword_tags(file_name, file_size, 1),
-            aich_pub: None,
-            aich_votes: Vec::new(),
-            publish_info: None,
-        }];
-
-        let mut futs = Vec::with_capacity(targets.len());
-        for contact in targets {
-            let addr = SocketAddr::new(IpAddr::V4(contact.ip), contact.udp_port);
-            let udp_c = Arc::clone(udp);
-            let kw = kw_kad_id.0;
-            let mut entries_c = entries.clone();
-            // `PreparePacketForTags` de eMule (`Search.cpp:1390`): la
-            // etiqueta `TAG_KADAICHHASHPUB` solo se adjunta cuando el nodo
-            // destino anuncia Kad >= v9.
-            if contact.version >= mule_protocol::kad::KADEMLIA_VERSION_AICH {
-                entries_c[0].aich_pub = aich_root;
-            }
-            futs.push(async move { udp_c.send_publish_keyword(addr, &kw, &entries_c).await });
+        if targets.is_empty() {
+            continue;
         }
-        for res in futures_util::future::join_all(futs).await {
-            if let Ok(0) = res {
-                total_published += 1;
+
+        let kw = kw_kad_id.0;
+        let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for packet_chunk in entries_with_aich.chunks(MAX_KEYWORD_ENTRIES_PER_PACKET) {
+            if cancel_token.is_cancelled() {
+                break;
+            }
+            let accepted_c = Arc::clone(&accepted);
+            let chunk_vec = packet_chunk.to_vec();
+            futures_util::stream::iter(targets.clone())
+                .for_each_concurrent(KAD_KEYWORD_PUBLISH_CONCURRENCY, move |contact| {
+                    let udp_c = Arc::clone(udp);
+                    let accepted_inner = Arc::clone(&accepted_c);
+                    let entries_c: Vec<_> = chunk_vec
+                        .iter()
+                        .map(|(e, aich_root)| {
+                            let mut clone = e.clone();
+                            // `PreparePacketForTags` de eMule (`Search.cpp:1390`): `TAG_KADAICHHASHPUB`
+                            // solo se adjunta cuando el nodo destino anuncia Kad >= v9.
+                            if contact.version >= mule_protocol::kad::KADEMLIA_VERSION_AICH {
+                                clone.aich_pub = *aich_root;
+                            }
+                            clone
+                        })
+                        .collect();
+                    async move {
+                        let addr = SocketAddr::new(IpAddr::V4(contact.ip), contact.udp_port);
+                        if let Ok(load) = udp_c.send_publish_keyword(addr, &kw, &entries_c).await {
+                            if load <= KAD_PUBLISH_MAX_ACCEPTED_LOAD {
+                                accepted_inner.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    }
+                })
+                .await;
+        }
+        total_published += accepted.load(std::sync::atomic::Ordering::Relaxed);
+
+        if pace_between_keywords && idx + 1 < groups_len {
+            tokio::select! {
+                _ = cancel_token.cancelled() => break,
+                _ = tokio::time::sleep(Duration::from_millis(KAD_KEYWORD_PUBLISH_PACING_MS)) => {}
             }
         }
     }
@@ -315,9 +394,70 @@ pub async fn publish_keyword(
     Ok(total_published)
 }
 
+/// Publica entradas de palabras clave para un archivo en los contactos Kad más cercanos.
+///
+/// Los nodos eMule descartan silenciosamente un `PUBLISH_KEY_REQ` cuyo hash de palabra clave
+/// quede fuera de `SEARCHTOLERANCE` de su KadID, y solo los nodos activos responden —
+/// por tanto los destinos de publicación se convergen primero con una búsqueda iterativa
+/// `find_node`, restringiéndose luego a los contactos dentro de tolerancia.
+pub async fn publish_keyword(
+    file_hash_hex: &str,
+    file_name: &str,
+    file_size: u64,
+    aich_root: Option<[u8; 20]>,
+    routing_table: &Mutex<KBucketTable>,
+    policy_mgr: &NetworkPolicyManager,
+    ip_filter: &Arc<IpFilter>,
+    udp: &Arc<KadUdpService>,
+) -> Result<usize, String> {
+    if KadId::from_hash_hex(file_hash_hex).is_none() {
+        return Err(format!("Invalid file hash hex: {file_hash_hex}"));
+    }
+    let item = KeywordPublishItem {
+        file_hash_hex: file_hash_hex.to_string(),
+        file_name: file_name.to_string(),
+        file_size,
+        aich_root,
+    };
+    let cancel_token = CancellationToken::new();
+    publish_keywords_batch(
+        &[item],
+        routing_table,
+        policy_mgr,
+        ip_filter,
+        udp,
+        &cancel_token,
+        false,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_group_files_by_keyword_batches_shared_terms_and_caps_at_150() {
+        let mut items = Vec::with_capacity(160);
+        for i in 0..160u16 {
+            let mut hash = [0u8; 16];
+            hash[0..2].copy_from_slice(&i.to_le_bytes());
+            items.push(KeywordPublishItem {
+                file_hash_hex: hex::encode(hash),
+                file_name: format!("Documental_Naturaleza_Ep_{i:03}.mkv"),
+                file_size: 1_000_000 + u64::from(i),
+                aich_root: Some([0x11u8; 20]),
+            });
+        }
+        let groups = group_files_by_keyword(&items);
+        let (_, kw_doc) = hash_kad_keyword("documental");
+        let doc_entries = groups
+            .iter()
+            .find(|(id, _)| *id == kw_doc)
+            .map(|(_, v)| v)
+            .expect("la palabra clave común debe estar presente");
+        assert_eq!(doc_entries.len(), MAX_FILES_PER_KEYWORD_BATCH);
+    }
 
     #[test]
     fn test_select_best_kad_keyword_avoids_stop_words_and_low_specificity() {

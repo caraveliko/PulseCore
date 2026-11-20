@@ -62,15 +62,9 @@ pub async fn handle_incoming_message(
         }
         KadMessage::Pong(pong) => {
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                if (tx.target == peer_addr || tx.target.ip() == peer_addr.ip())
-                    && tx.expected_response == KadExpectedResponse::Pong
-                {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                tx.expected_response == KadExpectedResponse::Pong
+            });
             tracing::debug!(
                 "Kad UDP: received Pong from {peer} (matched_tx={matched_tx:?})",
                 peer = log_peer_addr(peer_addr)
@@ -166,15 +160,9 @@ pub async fn handle_incoming_message(
             // get_snapshot → in_flight).
             let (matched_id, matched_sender) = {
                 let mut inf = in_flight.lock().await;
-                let mut matched_tx = None;
-                for (id, tx) in inf.iter() {
-                    if (tx.target == peer_addr || tx.target.ip() == peer_addr.ip())
-                        && tx.expected_response == KadExpectedResponse::HelloRes
-                    {
-                        matched_tx = Some(*id);
-                        break;
-                    }
-                }
+                let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                    tx.expected_response == KadExpectedResponse::HelloRes
+                });
                 (matched_tx, matched_tx.and_then(|id| inf.remove(&id)))
             };
             tracing::debug!(
@@ -346,16 +334,10 @@ pub async fn handle_incoming_message(
             // same in_flight → routing_table ordering hazard as HelloRes.
             let (matched_id, matched_sender) = {
                 let mut inf = in_flight.lock().await;
-                let mut matched_tx = None;
-                for (id, tx) in inf.iter() {
-                    if (tx.target == peer_addr || tx.target.ip() == peer_addr.ip())
-                        && (tx.expected_response == KadExpectedResponse::BootstrapRes
-                            || tx.expected_response == KadExpectedResponse::FindNodeRes)
-                    {
-                        matched_tx = Some(*id);
-                        break;
-                    }
-                }
+                let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                    tx.expected_response == KadExpectedResponse::BootstrapRes
+                        || tx.expected_response == KadExpectedResponse::FindNodeRes
+                });
                 (matched_tx, matched_tx.and_then(|id| inf.remove(&id)))
             };
             tracing::debug!(
@@ -407,18 +389,12 @@ pub async fn handle_incoming_message(
         }
         KadMessage::SearchSourceRes(search_res) => {
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                let ip_match = tx.target == peer_addr || tx.target.ip() == peer_addr.ip();
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
                 let hash_match = tx
                     .expected_target_hash
                     .is_none_or(|h| h == search_res.target_file_hash);
-                let resp_match = tx.expected_response == KadExpectedResponse::SearchSourceRes;
-                if ip_match && hash_match && resp_match {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+                hash_match && tx.expected_response == KadExpectedResponse::SearchSourceRes
+            });
             tracing::debug!(
                 "Kad UDP: received SearchSourceRes from {peer} with {} sources for file {} (matched_tx={matched_tx:?})",
                 search_res.sources.len(),
@@ -490,10 +466,10 @@ pub async fn handle_incoming_message(
                     persist_indexed_source(downloads, &req).await;
                     0
                 } else {
-                    1
+                    u8::MAX
                 }
             } else {
-                1
+                u8::MAX
             };
             tracing::debug!(
                 "Kad UDP: received PublishSourceReq from {peer} for file {} (status={})",
@@ -515,20 +491,15 @@ pub async fn handle_incoming_message(
             // El opcode 0x4B es la respuesta de publicación unificada tanto para fuentes como para palabras clave.
             // Match in-flight transactions expecting either PublishSourceRes or PublishKeywordRes.
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                let ip_match = tx.target == peer_addr || tx.target.ip() == peer_addr.ip();
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
                 let hash_match = tx
                     .expected_target_hash
                     .is_none_or(|h| h == pub_res.target_file_hash);
                 let resp_match = tx.expected_response == KadExpectedResponse::PublishSourceRes
                     || tx.expected_response == KadExpectedResponse::PublishKeywordRes
                     || tx.expected_response == KadExpectedResponse::PublishNotesRes;
-                if ip_match && hash_match && resp_match {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+                hash_match && resp_match
+            });
             tracing::debug!(
                 "Kad UDP: received PublishRes (0x4B) from {peer} with status {} (matched_tx={matched_tx:?})",
                 pub_res.status
@@ -608,18 +579,12 @@ pub async fn handle_incoming_message(
         }
         KadMessage::SearchKeywordRes(search_res) => {
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                let ip_match = tx.target == peer_addr || tx.target.ip() == peer_addr.ip();
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
                 let hash_match = tx
                     .expected_target_hash
                     .is_none_or(|h| h == search_res.keyword_hash);
-                let resp_match = tx.expected_response == KadExpectedResponse::SearchKeywordRes;
-                if ip_match && hash_match && resp_match {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+                hash_match && tx.expected_response == KadExpectedResponse::SearchKeywordRes
+            });
             tracing::debug!(
                 "Kad UDP: received SearchKeywordRes from {peer} with {} entries for keyword {} (matched_tx={matched_tx:?})",
                 search_res.entries.len(),
@@ -668,7 +633,7 @@ pub async fn handle_incoming_message(
                 if store.store_keyword_entries(keyword_hash, valid_entries, publisher_ip) {
                     0
                 } else {
-                    1
+                    u8::MAX
                 }
             };
             if status == 0 {
@@ -685,15 +650,9 @@ pub async fn handle_incoming_message(
         }
         KadMessage::PublishKeywordRes(pub_res) => {
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                if (tx.target == peer_addr || tx.target.ip() == peer_addr.ip())
-                    && tx.expected_response == KadExpectedResponse::PublishKeywordRes
-                {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                tx.expected_response == KadExpectedResponse::PublishKeywordRes
+            });
             tracing::debug!(
                 "Kad UDP: received PublishKeywordRes from {peer} with status {} (matched_tx={matched_tx:?})",
                 pub_res.status
@@ -772,13 +731,20 @@ pub async fn handle_incoming_message(
             let _ = socket.send_to(&pack_kad_datagram(&res), peer_addr).await;
         }
         KadMessage::FindBuddyRes(res) => {
-            // Nunca enviamos FINDBUDDY_REQ (el cliente buddy para uno mismo en LowID es
-            // not implemented); log unsolicited responses.
+            let mut inf = in_flight.lock().await;
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                tx.expected_response == KadExpectedResponse::FindBuddyRes
+            });
             tracing::debug!(
-                "Kad UDP: ignoring unsolicited FINDBUDDY_RES from {peer} (tcp_port={})",
+                "Kad UDP: received FINDBUDDY_RES from {peer} (tcp_port={}, matched_tx={matched_tx:?})",
                 res.tcp_port,
                 peer = log_peer_addr(peer_addr)
             );
+            if let Some(id) = matched_tx {
+                if let Some(tx) = inf.remove(&id) {
+                    let _ = tx.sender.send(Ok(KadMessage::FindBuddyRes(res)));
+                }
+            }
         }
         KadMessage::CallbackReq(req) => {
             // eMule Process_KADEMLIA_CALLBACK_REQ: forward to our buddy's
@@ -851,18 +817,12 @@ pub async fn handle_incoming_message(
         }
         KadMessage::SearchNotesRes(res) => {
             let mut inf = in_flight.lock().await;
-            let mut matched_tx = None;
-            for (id, tx) in inf.iter() {
-                let ip_match = tx.target == peer_addr || tx.target.ip() == peer_addr.ip();
+            let matched_tx = super::types::find_matching_tx_id(&inf, peer_addr, |tx| {
                 let hash_match = tx
                     .expected_target_hash
                     .is_none_or(|h| h == res.target_file_hash);
-                let resp_match = tx.expected_response == KadExpectedResponse::SearchNotesRes;
-                if ip_match && hash_match && resp_match {
-                    matched_tx = Some(*id);
-                    break;
-                }
-            }
+                hash_match && tx.expected_response == KadExpectedResponse::SearchNotesRes
+            });
             tracing::debug!(
                 "Kad UDP: received SearchNotesRes from {peer} with {} notes for file {} (matched_tx={matched_tx:?})",
                 res.notes.len(),

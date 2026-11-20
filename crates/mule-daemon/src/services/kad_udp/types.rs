@@ -18,16 +18,63 @@ pub const MAX_IN_FLIGHT_TRANSACTIONS: usize = 200;
 /// Solicitudes máximas por segundo permitidas por IP de origen (anti-amplificación / límite de tasa).
 pub const MAX_KAD_REQUESTS_PER_SEC_PER_IP: u32 = 120;
 
-/// Limitador de tasa deslizante simple por IP.
+/// Ventana deslizante para límites de caudal por opcode UDP Kad (segundos).
+pub const KAD_OPCODE_RATE_WINDOW_SECS: u64 = 60;
+
+/// Capacidad máxima de claves `(ip, opcode)` activas antes de purgar entradas expiradas.
+pub const MAX_OPCODE_RATE_ENTRIES: usize = 4096;
+
+/// Límite por minuto e IP para consultas `KADEMLIA2_REQ` (`0x21`, evita amplificación `0x29`).
+pub const MAX_KAD_REQ_PER_MIN_PER_IP: u32 = 10;
+
+/// Límite por minuto e IP para saludos `KADEMLIA2_HELLO_REQ` / `KADEMLIA_HELLO_REQ`.
+pub const MAX_KAD_HELLO_PER_MIN_PER_IP: u32 = 6;
+
+/// Límite por minuto e IP para arranques `KADEMLIA2_BOOTSTRAP_REQ`.
+pub const MAX_KAD_BOOTSTRAP_PER_MIN_PER_IP: u32 = 4;
+
+/// Límite por minuto e IP para relés y búsqueda de compañero (`0x51`, `0x52`).
+pub const MAX_KAD_CALLBACK_PER_MIN_PER_IP: u32 = 2;
+
+/// Límite por minuto e IP para búsquedas entrantes `KADEMLIA2_SEARCH_*_REQ`.
+pub const MAX_KAD_SEARCH_PER_MIN_PER_IP: u32 = 20;
+
+/// Límite por minuto e IP para publicaciones entrantes `KADEMLIA2_PUBLISH_*_REQ`.
+pub const MAX_KAD_PUBLISH_PER_MIN_PER_IP: u32 = 30;
+
+/// Devuelve el límite por minuto aplicable al opcode de solicitud Kad (ninguno para respuestas/ACK).
+fn opcode_rate_limit_per_min(opcode: u8) -> Option<u32> {
+    use mule_protocol::kad::*;
+    match opcode {
+        KADEMLIA2_REQ => Some(MAX_KAD_REQ_PER_MIN_PER_IP),
+        KADEMLIA2_HELLO_REQ | KADEMLIA_HELLO_REQ => Some(MAX_KAD_HELLO_PER_MIN_PER_IP),
+        KADEMLIA2_BOOTSTRAP_REQ | KADEMLIA_BOOTSTRAP_REQ_OLD => {
+            Some(MAX_KAD_BOOTSTRAP_PER_MIN_PER_IP)
+        }
+        KADEMLIA_CALLBACK_REQ | KADEMLIA_FINDBUDDY_REQ => Some(MAX_KAD_CALLBACK_PER_MIN_PER_IP),
+        KADEMLIA2_SEARCH_KEY_REQ
+        | KADEMLIA2_SEARCH_SOURCE_REQ
+        | KADEMLIA2_SEARCH_NOTES_REQ
+        | KADEMLIA_SEARCH_NOTES_REQ_LEGACY => Some(MAX_KAD_SEARCH_PER_MIN_PER_IP),
+        KADEMLIA2_PUBLISH_KEY_REQ
+        | KADEMLIA2_PUBLISH_SOURCE_REQ
+        | KADEMLIA2_PUBLISH_NOTES_REQ => Some(MAX_KAD_PUBLISH_PER_MIN_PER_IP),
+        _ => None,
+    }
+}
+
+/// Limitador de tasa deslizante por IP y por opcode de solicitud Kad.
 #[derive(Debug, Default)]
 pub struct IpRateLimiter {
     counts: HashMap<IpAddr, (u32, Instant)>,
+    opcode_counts: HashMap<(IpAddr, u8), (u32, Instant)>,
 }
 
 impl IpRateLimiter {
     pub fn new() -> Self {
         Self {
             counts: HashMap::new(),
+            opcode_counts: HashMap::new(),
         }
     }
 
@@ -49,6 +96,38 @@ impl IpRateLimiter {
             false
         }
     }
+
+    /// Comprueba primero el techo por segundo e IP y luego aplica la cuota por minuto del
+    /// opcode de solicitud entrante (eximiendo las respuestas y la interfaz loopback local).
+    pub fn check_and_record_opcode(&mut self, ip: IpAddr, opcode: u8) -> bool {
+        if !self.check_and_record(ip) {
+            return false;
+        }
+        if ip.is_loopback() {
+            return true;
+        }
+        let Some(limit) = opcode_rate_limit_per_min(opcode) else {
+            return true;
+        };
+
+        let now = Instant::now();
+        let window = Duration::from_secs(KAD_OPCODE_RATE_WINDOW_SECS);
+        if self.opcode_counts.len() > MAX_OPCODE_RATE_ENTRIES {
+            self.opcode_counts
+                .retain(|_, (_, ts)| now.duration_since(*ts) < window);
+        }
+
+        let entry = self.opcode_counts.entry((ip, opcode)).or_insert((0, now));
+        if now.duration_since(entry.1) >= window {
+            *entry = (1, now);
+            true
+        } else if entry.0 < limit {
+            entry.0 += 1;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// Variante de respuesta esperada para una transacción en curso pendiente.
@@ -64,6 +143,25 @@ pub enum KadExpectedResponse {
     PublishKeywordRes,
     SearchNotesRes,
     PublishNotesRes,
+    FindBuddyRes,
+}
+
+/// Busca el identificador de transacción coincidente priorizando `IP+puerto` exactos
+/// y usando coincidencia solo por IP como respaldo ante NAT simétrico.
+pub(crate) fn find_matching_tx_id(
+    inf: &HashMap<u32, InFlightTransaction>,
+    peer_addr: SocketAddr,
+    pred: impl Fn(&InFlightTransaction) -> bool,
+) -> Option<u32> {
+    if let Some((&id, _)) = inf
+        .iter()
+        .find(|(_, tx)| tx.target == peer_addr && pred(tx))
+    {
+        return Some(id);
+    }
+    inf.iter()
+        .find(|(_, tx)| tx.target.ip() == peer_addr.ip() && pred(tx))
+        .map(|(&id, _)| id)
 }
 
 /// Estado de transacción en curso pendiente.
@@ -627,5 +725,67 @@ mod tests {
         t.pending_tcp_ips
             .push((ip, Instant::now() - TCP_FW_CHECK_IP_TTL - Duration::from_secs(1)));
         assert!(!t.is_tcp_check_ip(ip));
+    }
+
+    #[test]
+    fn opcode_rate_limiter_enforces_per_min_and_exempts_loopback_and_responses() {
+        let mut rl = IpRateLimiter::new();
+        let pub_ip = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 42));
+        let loop_ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
+
+        for _ in 0..MAX_KAD_REQ_PER_MIN_PER_IP {
+            assert!(rl.check_and_record_opcode(pub_ip, mule_protocol::kad::KADEMLIA2_REQ));
+        }
+        assert!(
+            !rl.check_and_record_opcode(pub_ip, mule_protocol::kad::KADEMLIA2_REQ),
+            "el exceso de KADEMLIA2_REQ por minuto debe bloquearse"
+        );
+        // Las respuestas no consumen el cupo del opcode de solicitud.
+        assert!(rl.check_and_record_opcode(pub_ip, mule_protocol::kad::KADEMLIA2_RES));
+        // La interfaz loopback queda exenta para las pruebas locales.
+        for _ in 0..(MAX_KAD_REQ_PER_MIN_PER_IP + 5) {
+            assert!(rl.check_and_record_opcode(loop_ip, mule_protocol::kad::KADEMLIA2_REQ));
+        }
+    }
+
+    #[test]
+    fn find_matching_tx_id_prefers_exact_port_and_falls_back_to_ip() {
+        let mut inf = HashMap::new();
+        let (tx_alt, _rx_alt) = mpsc::unbounded_channel();
+        let (tx_exact, _rx_exact) = mpsc::unbounded_channel();
+        inf.insert(
+            1,
+            InFlightTransaction {
+                target: "198.51.100.10:4000".parse().unwrap(),
+                expected_response: KadExpectedResponse::Pong,
+                expected_target_hash: None,
+                created_at: Instant::now(),
+                sender: tx_alt,
+            },
+        );
+        inf.insert(
+            2,
+            InFlightTransaction {
+                target: "198.51.100.10:4672".parse().unwrap(),
+                expected_response: KadExpectedResponse::Pong,
+                expected_target_hash: None,
+                created_at: Instant::now(),
+                sender: tx_exact,
+            },
+        );
+
+        let exact_hit = find_matching_tx_id(
+            &inf,
+            "198.51.100.10:4672".parse().unwrap(),
+            |tx| tx.expected_response == KadExpectedResponse::Pong,
+        );
+        assert_eq!(exact_hit, Some(2));
+
+        let nat_fallback = find_matching_tx_id(
+            &inf,
+            "198.51.100.10:59999".parse().unwrap(),
+            |tx| tx.expected_response == KadExpectedResponse::Pong,
+        );
+        assert!(matches!(nat_fallback, Some(1) | Some(2)));
     }
 }

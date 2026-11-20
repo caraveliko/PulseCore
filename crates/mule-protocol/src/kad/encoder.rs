@@ -49,6 +49,20 @@ impl KadEncoder {
         buf.freeze()
     }
 
+    /// Encodes a KADEMLIA_FINDBUDDY_REQ (0x51) request packet:
+    /// [buddy_id:16][user_id:16][tcp_port:2] — official eMule 0.72a format.
+    pub fn encode_findbuddy_req(
+        buddy_id: &KadIdBytes,
+        user_id: &KadIdBytes,
+        tcp_port: u16,
+    ) -> Bytes {
+        let mut buf = kad_buf(KADEMLIA_FINDBUDDY_REQ, 36);
+        buf.put_slice(buddy_id);
+        buf.put_slice(user_id);
+        buf.put_u16_le(tcp_port);
+        buf.freeze()
+    }
+
     /// Encodes a KADEMLIA_FINDBUDDY_RES (0x5A) acceptance packet:
     /// [buddy_id:16][client_id:16][tcp_port:2][connect_opts:1] — official
     /// eMule format (`Process_KADEMLIA_FINDBUDDY_REQ` response).

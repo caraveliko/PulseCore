@@ -15,6 +15,10 @@ pub const REPLACEMENT_CACHE_SIZE: usize = 10;
 pub const NUM_BUCKETS: usize = 128;
 /// Número máximo de contactos permitidos de la misma subred IPv4 /24 por cubeta (anti-Sybil).
 pub const MAX_CONTACTS_PER_SUBNET_24: usize = 2;
+/// Número máximo de identidades Kad distintas admitidas para una misma IPv4 pública en toda la tabla.
+pub const MAX_GLOBAL_CONTACTS_PER_IP: usize = 1;
+/// Número máximo de contactos permitidos de la misma subred IPv4 /24 en toda la tabla (anti-Sybil global).
+pub const MAX_GLOBAL_CONTACTS_PER_SUBNET_24: usize = 10;
 
 #[derive(Debug, Clone)]
 pub struct KBucket {
@@ -141,11 +145,54 @@ impl KBucketTable {
         if contact.kad_id == self.local_id {
             return None; // No insertarse a sí mismo
         }
-        if let Some(idx) = self.bucket_index_for(&contact.kad_id) {
-            self.buckets[idx].insert_or_update(contact)
-        } else {
-            None
+        let idx = self.bucket_index_for(&contact.kad_id)?;
+        let already_known = self.buckets[idx]
+            .contacts
+            .iter()
+            .chain(self.buckets[idx].replacements.iter())
+            .any(|c| c.kad_id == contact.kad_id);
+
+        if !already_known && !contact.ip.is_loopback() {
+            let mut same_ip_count = 0usize;
+            let mut same_subnet_24_count = 0usize;
+            let new_prefix = contact.ip.octets();
+            for existing in self
+                .buckets
+                .iter()
+                .flat_map(|b| b.contacts.iter().chain(b.replacements.iter()))
+            {
+                if existing.ip == contact.ip {
+                    same_ip_count += 1;
+                    if same_ip_count >= MAX_GLOBAL_CONTACTS_PER_IP {
+                        return None;
+                    }
+                }
+                if existing.ip.octets()[..3] == new_prefix[..3] {
+                    same_subnet_24_count += 1;
+                    if same_subnet_24_count >= MAX_GLOBAL_CONTACTS_PER_SUBNET_24 {
+                        return None;
+                    }
+                }
+            }
         }
+
+        self.buckets[idx].insert_or_update(contact)
+    }
+
+    /// Devuelve hasta `max_count` contactos más antiguos (cabeza LRU de cada cubeta no vacía),
+    /// ordenados por `last_seen_unix_ms` ascendente para su revalidación periódica (`OnSmallTimer`).
+    pub fn oldest_contacts_per_bucket(&self, max_count: usize) -> Vec<KadContact> {
+        if max_count == 0 {
+            return Vec::new();
+        }
+        let mut oldest: Vec<KadContact> = self
+            .buckets
+            .iter()
+            .filter_map(|b| b.contacts.front().cloned())
+            .collect();
+        oldest.sort_by_key(|c| c.last_seen_unix_ms);
+        oldest.truncate(max_count);
+        oldest
     }
 
     pub fn remove(&mut self, kad_id: &KadId) -> Option<KadContact> {

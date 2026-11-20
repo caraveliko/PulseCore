@@ -477,6 +477,7 @@ impl AppState {
         server_session.set_kad(Arc::clone(&kad));
         inbound_listener.set_kad_udp(Arc::clone(kad.udp()));
         inbound_listener.set_kad(Arc::clone(&kad));
+        kad.set_inbound_listener(inbound_listener.clone());
         inbound_listener.set_kad_udp_port(kad_port_eff);
         let client_udp = crate::services::ClientUdpService::new();
         client_udp.set_downloads(Arc::clone(&dl_arc));

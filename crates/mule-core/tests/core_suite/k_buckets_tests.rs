@@ -121,6 +121,79 @@ fn test_routing_table_subnet_sybil_protection() {
 }
 
 #[test]
+fn test_routing_table_global_ip_and_subnet_24_sybil_caps() {
+    let local_id = KadId([0u8; 16]);
+    let mut table = KBucketTable::new(local_id);
+
+    // 1. Segundo KadID con la misma IPv4 pública en distinta cubeta -> rechazado.
+    let mut id1 = [0u8; 16];
+    id1[3] = 0x80; // cubeta 127
+    let c1 = KadContact::new(
+        KadId(id1),
+        Ipv4Addr::new(198, 51, 100, 10),
+        39737,
+        None,
+        8,
+        1000,
+    );
+    table.insert_or_update(c1);
+
+    let mut id2 = [0u8; 16];
+    id2[3] = 0x40; // cubeta 126
+    let c2_same_ip = KadContact::new(
+        KadId(id2),
+        Ipv4Addr::new(198, 51, 100, 10),
+        39738,
+        None,
+        8,
+        2000,
+    );
+    table.insert_or_update(c2_same_ip);
+    assert_eq!(
+        table.total_contacts(),
+        1,
+        "un segundo KadID con la misma IPv4 pública debe ser rechazado"
+    );
+
+    // 2. La dirección loopback (127.0.0.1) sigue exenta para pruebas locales.
+    for b in [0x20u8, 0x10u8] {
+        let mut lb_id = [0u8; 16];
+        lb_id[3] = b;
+        table.insert_or_update(KadContact::new(
+            KadId(lb_id),
+            Ipv4Addr::LOCALHOST,
+            39739,
+            None,
+            8,
+            3000,
+        ));
+    }
+    assert_eq!(table.total_contacts(), 3);
+
+    // 3. Límite global de 10 contactos por subred /24 distribuidos en 6 cubetas distintas (2 por cubeta).
+    for i in 0..12u8 {
+        let bucket_idx = i / 2; // 0..5 -> bit en byte 12+... o desplazamientos distintos de MSB
+        let mut id = [0u8; 16];
+        id[3] = 0x01 << bucket_idx;
+        id[12] = i + 1;
+        table.insert_or_update(KadContact::new(
+            KadId(id),
+            Ipv4Addr::new(203, 0, 113, i + 1),
+            39737,
+            None,
+            8,
+            4000 + u64::from(i),
+        ));
+    }
+    let subnet_24_count = table
+        .find_closest(&KadId([0u8; 16]), 50)
+        .into_iter()
+        .filter(|c| c.ip.octets()[..3] == [203, 0, 113])
+        .count();
+    assert_eq!(subnet_24_count, 10);
+}
+
+#[test]
 fn test_sqlite_kad_contacts_persistence() {
     let mut db = Database::open_in_memory().unwrap();
 

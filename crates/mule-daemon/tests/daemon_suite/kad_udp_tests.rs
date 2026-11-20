@@ -375,7 +375,7 @@ async fn test_kad_buddy_findbuddy_accept_and_callback_drop() {
     match KadCodec::decode(&buf[..len]).expect("decode res") {
         KadMessage::FindBuddyRes(r) => {
             assert_eq!(r.buddy_id, buddy_id);
-            assert_eq!(r.tcp_port, 39735);
+            assert_eq!(r.tcp_port, 49662);
         }
         other => panic!("expected FindBuddyRes, got {other:?}"),
     }
@@ -562,8 +562,8 @@ async fn test_kad_tcp_firewall_check_round() {
         .network_policy
         .set_profile(mule_network_policy::NetworkProfile::LocalLab);
 
-    // `FIREWALLED2_REQ` transporta nuestro puerto TCP eD2K + hash de usuario — ambos deben estar
-    // conectados antes de `start()` (el oyente toma una instantánea de ellos).
+    // `FIREWALLED2_REQ` transporta nuestro puerto TCP eD2K + hash de usuario — ambos se
+    // leen dinámicamente en tiempo de ejecución desde los atómicos compartidos de `KadUdpService`.
     state.kad.udp().set_buddy_tcp_info(49662, 0x03);
     state.kad.udp().set_fw_user_hash([0x42; 16]);
 

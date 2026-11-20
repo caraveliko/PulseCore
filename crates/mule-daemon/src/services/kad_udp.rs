@@ -301,8 +301,8 @@ impl KadUdpService {
         let firewall_arc = Arc::clone(&self.firewall);
         let buddy_arc = Arc::clone(&self.buddy);
         let user_hash_arc = Arc::clone(&self.fw_user_hash);
-        let buddy_tcp_port = self.buddy_tcp_port.load(Ordering::Relaxed);
-        let buddy_connect_options = self.buddy_connect_options.load(Ordering::Relaxed);
+        let buddy_tcp_port_arc = Arc::clone(&self.buddy_tcp_port);
+        let buddy_connect_options_arc = Arc::clone(&self.buddy_connect_options);
         if let Some(svc) = self.client_udp.read().await.as_ref() {
             svc.set_socket(socket_arc.clone()).await;
         }
@@ -471,8 +471,8 @@ impl KadUdpService {
                                                             &downloads_arc,
                                                             &firewall_arc,
                                                             &buddy_arc,
-                                                            buddy_tcp_port,
-                                                            buddy_connect_options,
+                                                            buddy_tcp_port_arc.load(Ordering::Relaxed),
+                                                            buddy_connect_options_arc.load(Ordering::Relaxed),
                                                             routing_table,
                                                         ).await;
                                                         decrypted = true;
@@ -517,14 +517,18 @@ impl KadUdpService {
                                     continue;
                                 }
 
-                                // 3. Anti-amplificación / límite de tasa por IP de origen
+                                // 3. Anti-amplificación / límite de tasa por IP y por opcode de origen
                                 {
                                     let mut rl = rate_limiter_arc.lock().await;
-                                    if !rl.check_and_record(peer_addr.ip()) {
+                                    if !rl.check_and_record_opcode(peer_addr.ip(), opcode_byte) {
                                         let _ = policy_mgr_clone
                                             .ip_filter()
                                             .record_protocol_strike(peer_addr.ip(), "Kad UDP flood");
-                                        tracing::debug!("Kad UDP rate limit exceeded for {}", log_peer_ip(peer_addr.ip()));
+                                        tracing::debug!(
+                                            "Kad UDP rate limit exceeded for {} (opcode=0x{:02X})",
+                                            log_peer_ip(peer_addr.ip()),
+                                            opcode_byte
+                                        );
                                         continue;
                                     }
                                 }
@@ -550,12 +554,11 @@ impl KadUdpService {
                                         if opcode_byte == KADEMLIA2_SEARCH_RES {
                                             let expects_notes = {
                                                 let inf = in_flight_arc.lock().await;
-                                                inf.values().any(|tx| {
-                                                    (tx.target == peer_addr
-                                                        || tx.target.ip() == peer_addr.ip())
-                                                        && tx.expected_response
-                                                            == KadExpectedResponse::SearchNotesRes
+                                                types::find_matching_tx_id(&inf, peer_addr, |tx| {
+                                                    tx.expected_response
+                                                        == KadExpectedResponse::SearchNotesRes
                                                 })
+                                                .is_some()
                                             };
                                             if expects_notes {
                                                 match KadCodec::decode_search_notes_res(
@@ -603,8 +606,8 @@ impl KadUdpService {
                                             &downloads_arc,
                                             &firewall_arc,
                                             &buddy_arc,
-                                            buddy_tcp_port,
-                                            buddy_connect_options,
+                                            buddy_tcp_port_arc.load(Ordering::Relaxed),
+                                            buddy_connect_options_arc.load(Ordering::Relaxed),
                                             routing_table,
                                         ).await;
                                     }

@@ -220,6 +220,16 @@ impl KadCodec {
         KadEncoder::encode_firewall_udp(error_code, udp_port)
     }
 
+    /// Codifica un paquete `KADEMLIA_FINDBUDDY_REQ` (0x51).
+    #[inline]
+    pub fn encode_findbuddy_req(
+        buddy_id: &KadIdBytes,
+        user_id: &KadIdBytes,
+        tcp_port: u16,
+    ) -> Bytes {
+        KadEncoder::encode_findbuddy_req(buddy_id, user_id, tcp_port)
+    }
+
     /// Encodes a KADEMLIA_FINDBUDDY_RES (0x5A) packet.
     #[inline]
     pub fn encode_findbuddy_res(

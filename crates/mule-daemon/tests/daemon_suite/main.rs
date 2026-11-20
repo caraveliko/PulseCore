@@ -14,6 +14,7 @@ mod filter_rpc_tests;
 mod hashset_tests;
 mod history_rpc_tests;
 mod kad_bootstrap_tests;
+mod kad_hardening_tests;
 mod kad_keywords_tests;
 mod kad_rpc_tests;
 mod kad_sources_tests;

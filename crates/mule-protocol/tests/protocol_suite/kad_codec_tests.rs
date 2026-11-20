@@ -594,6 +594,27 @@ fn test_kad_findbuddy_req_decode() {
 }
 
 #[test]
+fn test_kad_findbuddy_req_roundtrip() {
+    let buddy_id = [0x12u8; 16];
+    let user_id = [0x34u8; 16];
+    let encoded = KadCodec::encode_findbuddy_req(&buddy_id, &user_id, 49662);
+    assert_eq!(encoded.len(), 36);
+    assert_eq!(encoded[0], PR_KADEMLIA);
+    assert_eq!(encoded[1], KADEMLIA_FINDBUDDY_REQ);
+
+    match KadCodec::decode(&encoded).expect("decode findbuddy req") {
+        KadMessage::FindBuddyReq(r) => {
+            assert_eq!(r.buddy_id, buddy_id);
+            assert_eq!(r.user_id, user_id);
+            assert_eq!(r.tcp_port, 49662);
+        }
+        _ => panic!("expected FindBuddyReq"),
+    }
+
+    assert!(KadCodec::decode(&encoded[..20]).is_err());
+}
+
+#[test]
 fn test_kad_findbuddy_res_roundtrip() {
     let buddy_id = [0x33u8; 16];
     let client_id = [0x44u8; 16];

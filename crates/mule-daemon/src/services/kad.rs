@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
+pub mod buddy_client;
 pub mod firewall;
 pub mod lookup;
 pub mod nodes_dat;
@@ -59,6 +60,12 @@ pub struct KadService {
     /// Cada candidato solo se intenta una vez (`RemoveHead`); nuevos
     /// handshakes reabastecen la cola. Límite de 50 como en eMule.
     bootstrap_candidates: Mutex<std::collections::VecDeque<(SocketAddr, u8)>>,
+    /// Estado del enlace saliente de compañero (*buddy*) cuando este nodo está tras cortafuegos TCP.
+    outgoing_buddy: Arc<Mutex<buddy_client::OutgoingBuddyState>>,
+    /// Escuchador entrante inyectado desde `AppState` para atender devoluciones `OP_CALLBACK`
+    /// recibidas a través del enlace de compañero (`connect_back`).
+    inbound_listener:
+        std::sync::RwLock<Option<Arc<crate::services::inbound_listener::InboundListenerService>>>,
     /// Canal de eventos broadcast + contador de secuencia compartido —
     /// inyectado por `set_event_channel` para emitir `kad.statusChanged`
     /// cuando la tabla de enrutamiento evoluciona fuera de las acciones RPC (paquetes
@@ -82,6 +89,20 @@ const KAD_SOURCE_REPUBLISH_INTERVAL: std::time::Duration =
 /// `m_tNextKeyPublishTime`, `Kademlia.cpp`).
 const KAD_KEYWORD_REPUBLISH_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(24 * 60 * 60);
+/// Autobúsqueda periódica `NODECOMPLETE` sobre nuestro propio KadID (4 h, eMule).
+const KAD_SELF_LOOKUP_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(4 * 60 * 60);
+/// Intervalo de revalidación periódica de los contactos más antiguos por cubeta (`OnSmallTimer`).
+const KAD_OLDEST_REVALIDATE_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(10 * 60);
+/// Cantidad máxima de contactos LRU revalidados por ciclo de mantenimiento.
+const KAD_OLDEST_REVALIDATE_BATCH: usize = 4;
+/// Dispersión aleatoria (*jitter*) máxima añadida a las rondas de republicación periódica (s).
+const KAD_REPUBLISH_JITTER_MAX_SECS: u64 = 300;
+/// Carga máxima (0-100) en `PUBLISH_RES` aceptada como publicación válida (eMule devuelve % de carga).
+const KAD_PUBLISH_MAX_ACCEPTED_LOAD: u8 = 100;
+/// Límite de entradas compartidas elegibles en cada ronda de republicación periódica.
+const KAD_REPUBLISH_SHARED_LIMIT: usize = 200;
 /// Concurrencia máxima para la publicación de fuentes y palabras clave en Kad.
 const KAD_PUBLISH_CONCURRENCY: usize = 4;
 
@@ -112,6 +133,8 @@ impl KadService {
             fw_user_hash: std::sync::RwLock::new([0u8; 16]),
             last_bootstrap: std::sync::Mutex::new(None),
             bootstrap_candidates: Mutex::new(std::collections::VecDeque::new()),
+            outgoing_buddy: Arc::new(Mutex::new(buddy_client::OutgoingBuddyState::default())),
+            inbound_listener: std::sync::RwLock::new(None),
             event_channel: std::sync::RwLock::new(None),
         }
     }
@@ -120,6 +143,15 @@ impl KadService {
     pub fn set_ed2k_tcp_port(&self, port: u16) {
         self.ed2k_tcp_port
             .store(port, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Inyecta el escuchador TCP eD2K entrante para responder a los `OP_CALLBACK` recibidos
+    /// a través de nuestro enlace de compañero (*buddy*) saliente.
+    pub fn set_inbound_listener(
+        &self,
+        listener: crate::services::inbound_listener::InboundListenerService,
+    ) {
+        *self.inbound_listener.write().unwrap() = Some(Arc::new(listener));
     }
 
     /// Inyecta el canal de eventos del daemon — activa la emisión de
@@ -638,6 +670,14 @@ impl KadService {
                 Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
             let last_keyword_publish =
                 Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
+            let source_jitter_secs = Arc::new(std::sync::atomic::AtomicU64::new(
+                rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
+            ));
+            let keyword_jitter_secs = Arc::new(std::sync::atomic::AtomicU64::new(
+                rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
+            ));
+            let mut last_self_lookup = std::time::Instant::now();
+            let mut last_oldest_revalidate = std::time::Instant::now();
             let republish_running = Arc::new(std::sync::atomic::AtomicBool::new(false));
             // Contador de contactos ya notificado — solo se emite
             // `kad.statusChanged` cuando el valor observable cambia.
@@ -692,6 +732,55 @@ impl KadService {
                             let _ = kad.find_node(&random_target).await;
                         }
 
+                        // Autobúsqueda periódica `NODECOMPLETE` sobre nuestro propio KadID (4 h, eMule).
+                        if total_contacts > 0
+                            && last_self_lookup.elapsed() >= KAD_SELF_LOOKUP_INTERVAL
+                        {
+                            last_self_lookup = std::time::Instant::now();
+                            let kad_self = Arc::clone(&kad);
+                            tokio::spawn(async move {
+                                let my_id = kad_self.local_id();
+                                let _ = kad_self.find_node(&my_id).await;
+                            });
+                        }
+
+                        // Revalidación periódica de los contactos LRU más antiguos por cubeta (`OnSmallTimer`).
+                        if total_contacts > 0
+                            && last_oldest_revalidate.elapsed() >= KAD_OLDEST_REVALIDATE_INTERVAL
+                        {
+                            last_oldest_revalidate = std::time::Instant::now();
+                            let kad_reval = Arc::clone(&kad);
+                            tokio::spawn(async move {
+                                let oldest = {
+                                    let table = kad_reval.routing_table.lock().await;
+                                    table.oldest_contacts_per_bucket(KAD_OLDEST_REVALIDATE_BATCH)
+                                };
+                                for c in oldest {
+                                    let addr = SocketAddr::new(IpAddr::V4(c.ip), c.udp_port);
+                                    let res = kad_reval.udp.ping(addr).await;
+                                    let now_ms = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as u64;
+                                    let mut table = kad_reval.routing_table.lock().await;
+                                    if res.is_ok() {
+                                        table.mark_seen(&c.kad_id, now_ms);
+                                    } else {
+                                        table.mark_failed(&c.kad_id);
+                                    }
+                                }
+                            });
+                        }
+
+                        // Cliente compañero (*buddy*) LowID saliente cuando TCP está tras cortafuegos.
+                        if total_contacts > 0 {
+                            let kad_buddy = Arc::clone(&kad);
+                            let cancel_buddy = cancel_token.clone();
+                            tokio::spawn(async move {
+                                kad_buddy.ensure_outgoing_buddy(cancel_buddy).await;
+                            });
+                        }
+
                         // Comprobación de accesibilidad del cortafuegos UDP (eMule la ejecuta cuando
                         // Kad pasa a conectado y vuelve a comprobar mientras no esté verificado).
                         // Se lanza en una tarea independiente para no bloquear el bucle de mantenimiento
@@ -733,17 +822,25 @@ impl KadService {
                         }
 
                         // Republicación periódica de archivos compartidos — ejecutada en segundo
-                        // plano con concurrencia acotada para no bloquear el mantenimiento de
-                        // cubetas Kad; prioriza la publicación de fuentes sobre las palabras clave.
+                        // plano con concurrencia acotada y jitter para no bloquear el mantenimiento
+                        // ni sincronizar ráfagas; prioriza fuentes sobre palabras clave por lotes.
+                        let src_wait = KAD_SOURCE_REPUBLISH_INTERVAL
+                            + std::time::Duration::from_secs(
+                                source_jitter_secs.load(std::sync::atomic::Ordering::Relaxed),
+                            );
+                        let kw_wait = KAD_KEYWORD_REPUBLISH_INTERVAL
+                            + std::time::Duration::from_secs(
+                                keyword_jitter_secs.load(std::sync::atomic::Ordering::Relaxed),
+                            );
                         let source_due = last_source_publish
                             .lock()
                             .unwrap()
-                            .map(|t| t.elapsed() >= KAD_SOURCE_REPUBLISH_INTERVAL)
+                            .map(|t| t.elapsed() >= src_wait)
                             .unwrap_or(true);
                         let keyword_due = last_keyword_publish
                             .lock()
                             .unwrap()
-                            .map(|t| t.elapsed() >= KAD_KEYWORD_REPUBLISH_INTERVAL)
+                            .map(|t| t.elapsed() >= kw_wait)
                             .unwrap_or(true);
                         if (source_due || keyword_due)
                             && total_contacts > 0
@@ -764,6 +861,8 @@ impl KadService {
                             let running_flag = Arc::clone(&republish_running);
                             let last_src = Arc::clone(&last_source_publish);
                             let last_kw = Arc::clone(&last_keyword_publish);
+                            let src_jit = Arc::clone(&source_jitter_secs);
+                            let kw_jit = Arc::clone(&keyword_jitter_secs);
                             tokio::spawn(async move {
                                 use futures_util::stream::StreamExt as _;
                                 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -783,8 +882,11 @@ impl KadService {
                                     let dl = kad_pub.downloads.lock().await;
                                     dl.list_all_shared_files().unwrap_or_default()
                                 };
-                                let batch: Vec<_> =
-                                    shared.into_iter().filter(|f| f.enabled).take(200).collect();
+                                let batch: Vec<_> = shared
+                                    .into_iter()
+                                    .filter(|f| f.enabled)
+                                    .take(KAD_REPUBLISH_SHARED_LIMIT)
+                                    .collect();
                                 let batch_len = batch.len();
                                 let published = Arc::new(AtomicUsize::new(0));
 
@@ -815,37 +917,42 @@ impl KadService {
                                         .await;
                                     if !cancel_pub.is_cancelled() {
                                         *last_src.lock().unwrap() = Some(std::time::Instant::now());
+                                        src_jit.store(
+                                            rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
+                                            Ordering::Relaxed,
+                                        );
                                     }
                                 }
 
-                                // Fase 2: publicar palabras clave solo para archivos completos.
+                                // Fase 2: publicar palabras clave agrupadas en lotes por término
+                                // únicamente para archivos completos.
                                 if keyword_due && !cancel_pub.is_cancelled() {
-                                    let kad_kw = Arc::clone(&kad_pub);
-                                    let cancel_kw = cancel_pub.clone();
-                                    futures_util::stream::iter(
-                                        batch.into_iter().filter(|f| !f.is_partial),
+                                    let kw_items: Vec<search_keywords::KeywordPublishItem> = batch
+                                        .into_iter()
+                                        .filter(|f| !f.is_partial)
+                                        .map(|f| search_keywords::KeywordPublishItem {
+                                            file_hash_hex: f.file_hash.trim().to_string(),
+                                            file_name: f.file_name,
+                                            file_size: f.file_size,
+                                            aich_root: f.aich_root,
+                                        })
+                                        .collect();
+                                    let _ = search_keywords::publish_keywords_batch(
+                                        &kw_items,
+                                        kad_pub.routing_table.as_ref(),
+                                        &kad_pub.policy_mgr,
+                                        &kad_pub.ip_filter,
+                                        &kad_pub.udp,
+                                        &cancel_pub,
+                                        true,
                                     )
-                                    .for_each_concurrent(KAD_PUBLISH_CONCURRENCY, move |f| {
-                                        let kad = Arc::clone(&kad_kw);
-                                        let cancel = cancel_kw.clone();
-                                        async move {
-                                            if cancel.is_cancelled() {
-                                                return;
-                                            }
-                                            let hash = f.file_hash.trim().to_string();
-                                            let _ = kad
-                                                .publish_keyword(
-                                                    &hash,
-                                                    &f.file_name,
-                                                    f.file_size,
-                                                    f.aich_root,
-                                                )
-                                                .await;
-                                        }
-                                    })
                                     .await;
                                     if !cancel_pub.is_cancelled() {
                                         *last_kw.lock().unwrap() = Some(std::time::Instant::now());
+                                        kw_jit.store(
+                                            rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
+                                            Ordering::Relaxed,
+                                        );
                                     }
                                 }
 
@@ -1065,8 +1172,8 @@ impl KadService {
         }
 
         let mut success_count = 0;
-        for res in futures_util::future::join_all(futs).await {
-            if let Ok(0) = res {
+        for load in futures_util::future::join_all(futs).await.into_iter().flatten() {
+            if load <= KAD_PUBLISH_MAX_ACCEPTED_LOAD {
                 success_count += 1;
             }
         }
