@@ -3,13 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-  <meta name="theme-color" content="#08090c">
+  <meta name="theme-color" content="#050810">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>PulseCore P2P - Unified Torrent & eMule Enterprise Client</title>
+  <title>PulseCore P2P - Cliente P2P y Filmoteca Inteligente</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1">
+  <link rel="manifest" href="/manifest.webmanifest?v=1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <script>try{var _a=localStorage.getItem('pulsecore_atmosphere');if(_a)document.documentElement.dataset.atmosphere=_a;}catch(_){}</script>
 
   <script src="/session-config.js"></script>
   <style>
@@ -2907,19 +2911,48 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/assets/theme.css?v=1">
 </head>
 <body>
+  <!-- Escena atmosférica fija detrás de las superficies translúcidas -->
+  <div id="ambient-scene" class="ambient-scene" aria-hidden="true">
+    <div id="ambient-bg-layer" class="ambient-bg-layer"></div>
+    <div id="ambient-media-backdrop" class="ambient-media-backdrop"></div>
+    <svg class="ambient-constellation" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+      <g stroke="currentColor" stroke-width="0.9" stroke-opacity="0.32" fill="none">
+        <line x1="90" y1="110" x2="210" y2="170" />
+        <line x1="210" y1="170" x2="150" y2="290" />
+        <line x1="210" y1="170" x2="340" y2="120" />
+        <line x1="1460" y1="760" x2="1340" y2="690" />
+        <line x1="1340" y1="690" x2="1410" y2="570" />
+        <line x1="1340" y1="690" x2="1210" y2="750" />
+      </g>
+      <g fill="currentColor" fill-opacity="0.55">
+        <circle cx="90" cy="110" r="2.2" />
+        <circle cx="210" cy="170" r="3" />
+        <circle cx="150" cy="290" r="2" />
+        <circle cx="340" cy="120" r="1.8" />
+        <circle cx="1460" cy="760" r="2.2" />
+        <circle cx="1340" cy="690" r="3" />
+        <circle cx="1410" cy="570" r="2" />
+        <circle cx="1210" cy="750" r="1.8" />
+      </g>
+    </svg>
+    <div id="ambient-vignette" class="ambient-vignette"></div>
+    <div id="ambient-grain" class="ambient-grain"></div>
+  </div>
 
   <header>
     <!-- Izquierda: Marca y Navegación Principal Unificada -->
-    <div class="header-left-cluster" style="display: flex; align-items: center; gap: 20px; height: 100%;">
+    <div class="header-left-cluster" style="display: flex; align-items: center; gap: 18px; height: 100%;">
       <!-- Marca -->
-      <div class="brand-section" style="min-width: auto; gap: 9px;">
-        <div class="brand-logo" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: rgba(56, 189, 248, 0.15); color: var(--primary);">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <div class="brand-section" style="min-width: auto;">
+        <div class="brand-mark-wrap">
+          <img src="/assets/pulse-core-mark.svg?v=1" alt="Pulse Core" class="brand-mark-img">
         </div>
-        <div class="brand-title" style="font-size: 14.5px;">
-          PulseCore
+        <div class="brand-wordmark">
+          <span>PulseCore</span>
+          <span class="brand-core-pill" id="brand-version-pill" onclick="openUpdateModal()" title="Versión del daemon en ejecución (clic para abrir Centro de actualizaciones)">Core</span>
         </div>
       </div>
 
@@ -2956,8 +2989,66 @@
       </nav>
     </div>
 
-    <!-- Derecha: Acciones Rápidas (Notificaciones + Actualizaciones + Tortuga + Spotlight) -->
+    <!-- Derecha: Acciones Rápidas (Atmósfera + Notificaciones + Actualizaciones + Tortuga + Spotlight + Copiloto) -->
     <div class="header-right-cluster" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+      <!-- Selector de Atmósfera Visual -->
+      <div style="position: relative; display: inline-flex;" id="atmosphere-header-container">
+        <button class="btn btn-sm header-icon-btn" id="btn-header-atmosphere" onclick="toggleAtmospherePopover(event)" aria-label="Atmósfera visual" aria-expanded="false" title="Personalizar atmósfera y fondo difuminado">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+          </svg>
+        </button>
+        <div id="atmosphere-popover" class="atmosphere-popover" onclick="event.stopPropagation()">
+          <div class="atmosphere-popover-head">
+            <div>
+              <div class="atmosphere-popover-title">Atmósfera de Interfaz</div>
+              <div class="atmosphere-popover-sub">Elige el ambiente y la profundidad del fondo</div>
+            </div>
+          </div>
+          <div class="atmosphere-grid">
+            <button type="button" class="atmosphere-card active" data-atmosphere-choice="aurora" onclick="setAtmosphere('aurora')">
+              <div class="atmosphere-swatch swatch-aurora"></div>
+              <div class="atmosphere-card-label">
+                <span>Pulse Aurora</span>
+                <span class="atmosphere-check">✓</span>
+              </div>
+            </button>
+            <button type="button" class="atmosphere-card" data-atmosphere-choice="cinema" onclick="setAtmosphere('cinema')">
+              <div class="atmosphere-swatch swatch-cinema"></div>
+              <div class="atmosphere-card-label">
+                <span>Cine Ámbar</span>
+                <span class="atmosphere-check">✓</span>
+              </div>
+            </button>
+            <button type="button" class="atmosphere-card" data-atmosphere-choice="silk" onclick="setAtmosphere('silk')">
+              <div class="atmosphere-swatch swatch-silk"></div>
+              <div class="atmosphere-card-label">
+                <span>Seda Nocturna</span>
+                <span class="atmosphere-check">✓</span>
+              </div>
+            </button>
+            <button type="button" class="atmosphere-card" data-atmosphere-choice="obsidian" onclick="setAtmosphere('obsidian')">
+              <div class="atmosphere-swatch swatch-obsidian"></div>
+              <div class="atmosphere-card-label">
+                <span>Obsidiana Pura</span>
+                <span class="atmosphere-check">✓</span>
+              </div>
+            </button>
+          </div>
+          <div class="atmosphere-slider-box">
+            <div class="atmosphere-slider-row">
+              <span>Intensidad del fondo</span>
+              <strong id="atmosphere-intensity-val" style="font-family: var(--font-mono); color: var(--text);">85%</strong>
+            </div>
+            <input type="range" id="atmosphere-intensity-range" class="atmosphere-range" min="0" max="100" step="5" value="85" oninput="setAtmosphereIntensity(this.value)">
+          </div>
+        </div>
+      </div>
+
       <!-- Centro de Notificaciones -->
       <div style="position: relative; display: inline-flex;" id="notif-header-container">
         <button class="btn btn-sm notif-bell-btn" id="btn-header-notifications" onclick="toggleNotificationsPopover(event)" aria-label="Centro de notificaciones" title="Centro de notificaciones">
@@ -2970,14 +3061,18 @@
         <div id="notifications-popover" class="notif-popover" onclick="event.stopPropagation()">
           <div class="notif-popover-header">
             <div style="display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.85rem; color: #fff;">
-              <span>🔔</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
               <span>Notificaciones</span>
-              <span id="popover-unread-label" class="badge" style="font-size: 0.65rem; background: rgba(94, 106, 210, 0.22); color: #c7d2fe;">0 nuevas</span>
+              <span id="popover-unread-label" class="badge" style="font-size: 0.65rem; background: rgba(var(--primary-rgb), 0.2); color: var(--primary);">0 nuevas</span>
             </div>
             <div style="display: flex; align-items: center; gap: 5px;">
               <button type="button" class="btn btn-sm" onclick="markAllNotificationsRead()" title="Marcar todas como leídas" style="padding: 3px 7px; font-size: 0.7rem;">✓ Leídas</button>
-              <button type="button" class="btn btn-sm" onclick="clearNotificationsHistory()" title="Limpiar historial" style="padding: 3px 7px; font-size: 0.7rem;">🧹</button>
-              <button type="button" class="btn btn-sm" onclick="openNotificationSettingsTab()" title="Configurar notificaciones y canales push" style="padding: 3px 7px; font-size: 0.7rem;">⚙️</button>
+              <button type="button" class="btn btn-sm" onclick="clearNotificationsHistory()" title="Limpiar historial" style="padding: 4px 6px; display: inline-flex; align-items: center;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+              <button type="button" class="btn btn-sm" onclick="openNotificationSettingsTab()" title="Configurar notificaciones y canales push" style="padding: 4px 6px; display: inline-flex; align-items: center;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              </button>
             </div>
           </div>
           <div class="notif-popover-filters" id="notif-popover-filters">
@@ -3019,7 +3114,8 @@
         </button>
         <div id="update-tooltip" class="update-hover-card">
           <div style="font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; font-size: 0.82rem; margin-bottom: 4px;">
-            <span>🔄</span> <span>Actualizaciones</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>
+            <span>Actualizaciones</span>
             <span id="header-update-tt-badge" class="badge" style="margin-left: auto; font-size: 0.65rem; background: rgba(255,255,255,0.08); color: var(--text-muted);">En espera</span>
           </div>
           <div id="header-update-tt-desc" style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.35;">
@@ -3047,7 +3143,7 @@
 
       <!-- Modo Tortuga -->
       <div style="position: relative; display: inline-flex;" id="turtle-container">
-        <button class="btn btn-sm" id="btn-turtle-mode" aria-label="Modo Tortuga" title="Modo Tortuga: Limita temporalmente el ancho de banda a 500 kB/s bajada y 100 kB/s subida" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; transition: all 0.2s ease;">
+        <button class="btn btn-sm" id="btn-turtle-mode" aria-label="Modo Tortuga" title="Modo Tortuga: Limita temporalmente el ancho de banda a 500 kB/s bajada y 100 kB/s subida" style="width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s ease;">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
             <path d="M3 13.5C3 8.8 6.8 5 11.5 5c3.6 0 6.7 2.2 7.9 5.5"/>
             <path d="M17 12c.9-.7 2-.9 3-.4 1.2.6 1.9 1.8 1.7 3.1-.2 1.2-1.2 2-2.4 2H4a2 2 0 0 1-2-2c0-.6.3-1.2.8-1.6L3 13.5z"/>
@@ -3060,7 +3156,8 @@
         <!-- Tarjeta emergente explicativa en hover -->
         <div id="turtle-tooltip" class="turtle-hover-card">
           <div style="font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; font-size: 0.82rem; margin-bottom: 4px;">
-            <span>🐢</span> <span>Modo Tortuga</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13.5C3 8.8 6.8 5 11.5 5c3.6 0 6.7 2.2 7.9 5.5"/><path d="M17 12c.9-.7 2-.9 3-.4 1.2.6 1.9 1.8 1.7 3.1-.2 1.2-1.2 2-2.4 2H4a2 2 0 0 1-2-2c0-.6.3-1.2.8-1.6L3 13.5z"/></svg>
+            <span>Modo Tortuga</span>
             <span id="turtle-tt-badge" class="badge" style="margin-left: auto; font-size: 0.65rem; background: rgba(255,255,255,0.08); color: var(--text-muted);">Inactivo</span>
           </div>
           <div id="turtle-tt-desc" style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.35;">
@@ -3074,15 +3171,15 @@
       </div>
 
       <!-- Buscador Global Rápido Spotlight (Ctrl+K) -->
-      <button class="btn btn-sm" id="btn-spotlight-trigger" onclick="openSpotlight()" title="Buscador global rápido en todo el sistema (Ctrl + K)" style="padding: 4px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; background: rgba(30, 41, 59, 0.7); border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); cursor: pointer;">
+      <button class="btn btn-sm btn-spotlight-trigger" id="btn-spotlight-trigger" onclick="openSpotlight()" title="Buscador global rápido en todo el sistema (Ctrl + K)" style="padding: 4px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); cursor: pointer;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <span style="font-size: 0.78rem;">Buscar</span>
-        <kbd style="font-size: 0.65rem; background: #0f172a; padding: 1px 5px; border-radius: 3px; border: 1px solid #334155; color: #94a3b8; font-family: var(--font-mono);">Ctrl K</kbd>
+        <kbd style="font-size: 0.65rem; background: rgba(6, 9, 17, 0.75); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); color: #94a3b8; font-family: var(--font-mono);">Ctrl K</kbd>
       </button>
 
       <!-- Botón Asistente IA Copilot -->
-      <button class="btn btn-sm" id="btn-toggle-assistant" onclick="toggleAssistantDrawer()" title="Abrir Copiloto IA de eMuleRust (Asistente inteligente)" style="padding: 4px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25)); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 6px; color: #e0e7ff; cursor: pointer; font-weight: 600;">
-        <span style="font-size: 0.95rem;">🤖</span>
+      <button class="btn btn-sm copilot-header-btn" id="btn-toggle-assistant" onclick="toggleAssistantDrawer()" title="Abrir Copiloto IA de Pulse Core (Asistente inteligente)">
+        <img src="/assets/copilot-avatar.svg?v=1" alt="" class="copilot-btn-avatar">
         <span style="font-size: 0.78rem;">Copiloto IA</span>
       </button>
     </div>
@@ -3214,8 +3311,12 @@
           </thead>
           <tbody id="downloads-list">
             <tr>
-              <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                Conectando con el daemon eMule-Rust...
+              <td colspan="9" style="padding: 20px;">
+                <div class="empty-state-box">
+                  <img src="/assets/empty-downloads.svg?v=1" alt="" class="empty-state-img">
+                  <div class="empty-state-title">Conectando con Pulse Core</div>
+                  <div class="empty-state-sub">Sincronizando cola de transferencias y nodos del enjambre eD2K / Kad / BitTorrent…</div>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -3236,10 +3337,22 @@
           </div>
         </div>
         <div class="inspector-nav">
-          <button class="insp-tab-btn active" data-insp-tab="insp-general">📋 General</button>
-          <button class="insp-tab-btn" data-insp-tab="insp-peers">👥 Pares y Fuentes (<span id="insp-peers-count">0</span>)</button>
-          <button class="insp-tab-btn" data-insp-tab="insp-parts">🧩 Mapa de Partes (<span id="insp-parts-count">0</span>)</button>
-          <button class="insp-tab-btn" data-insp-tab="insp-perf">📈 Rendimiento & Tráfico</button>
+          <button class="insp-tab-btn active" data-insp-tab="insp-general" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/></svg>
+            <span>General</span>
+          </button>
+          <button class="insp-tab-btn" data-insp-tab="insp-peers" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Pares y Fuentes (<span id="insp-peers-count">0</span>)</span>
+          </button>
+          <button class="insp-tab-btn" data-insp-tab="insp-parts" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            <span>Mapa de Partes (<span id="insp-parts-count">0</span>)</span>
+          </button>
+          <button class="insp-tab-btn" data-insp-tab="insp-perf" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <span>Rendimiento &amp; Tráfico</span>
+          </button>
         </div>
         <div class="inspector-content">
           <!-- SUB-TAB GENERAL -->
@@ -3507,8 +3620,12 @@
         <div class="media-grid" id="media-grid-container">
           <!-- Renderizado dinámicamente con JavaScript -->
         </div>
-        <div id="media-empty-msg" style="display: none; text-align: center; padding: 48px; color: var(--text-muted); font-size: 0.95rem;">
-          No hay títulos que coincidan con los filtros seleccionados.
+        <div id="media-empty-msg" style="display: none;">
+          <div class="empty-state-box">
+            <img src="/assets/empty-media.svg?v=1" alt="" class="empty-state-img">
+            <div class="empty-state-title">Sin coincidencias en la filmoteca</div>
+            <div class="empty-state-sub">No hay títulos que coincidan con los filtros seleccionados. Prueba a añadir una película o serie o limpia los filtros activos.</div>
+          </div>
         </div>
       </div>
 
@@ -3531,8 +3648,12 @@
         <div id="calendar-events-container" style="display: flex; flex-direction: column; gap: 14px;">
           <!-- Renderizado dinámico con JavaScript -->
         </div>
-        <div id="calendar-empty-msg" style="display: none; text-align: center; padding: 48px; color: var(--text-muted); font-size: 0.95rem;">
-          No hay episodios programados para este mes en tus series monitorizadas.
+        <div id="calendar-empty-msg" style="display: none;">
+          <div class="empty-state-box">
+            <img src="/assets/empty-calendar.svg?v=1" alt="" class="empty-state-img">
+            <div class="empty-state-title">Calendario despejado este mes</div>
+            <div class="empty-state-sub">No hay episodios programados para este mes en tus series monitorizadas.</div>
+          </div>
         </div>
       </div>
     </section>
@@ -3675,8 +3796,8 @@
       <!-- Cabecera de la Sección con Guardado Rápido -->
       <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 20px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(94, 106, 210, 0.16); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
-            ⚙️
+          <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(var(--primary-rgb), 0.14); border: 1px solid rgba(var(--primary-rgb), 0.28); color: var(--primary); display: flex; align-items: center; justify-content: center;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           </div>
           <div>
             <h2 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Opciones del Sistema P2P</h2>
@@ -3684,8 +3805,9 @@
           </div>
           <span id="pref-saved-badge" class="badge badge-completed" style="display: none; margin-left: 10px;">✓ Opciones guardadas en daemon</span>
         </div>
-        <button class="btn btn-primary" id="btn-save-preferences" onclick="savePreferences()" style="padding: 8px 22px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px;">
-          <span>💾 Guardar Opciones</span>
+        <button class="btn btn-primary" id="btn-save-preferences" onclick="savePreferences()" style="padding: 8px 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span>Guardar Opciones</span>
         </button>
       </div>
 
@@ -4681,6 +4803,7 @@
         <div id="ws-indicator" class="indicator online"></div>
         <span id="host-name-label" style="font-weight: 600; color: #fff;">Servidor</span>
         <span id="host-addr-label" style="color: #10b981; font-family: var(--font-mono);">127.0.0.1</span>
+        <span id="statusbar-version-label" style="color: var(--primary); font-family: var(--font-mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: rgba(var(--primary-rgb), 0.1); border: 1px solid rgba(var(--primary-rgb), 0.22);">v—</span>
         <span id="ws-label" style="display: none;">Conectado</span>
       </div>
 
@@ -5101,11 +5224,13 @@
   <!-- MODAL: AVISO LEGAL Y CONDICIONES DE USO (PRIMER INICIO) -->
   <div class="modal-overlay" id="legal-disclaimer-modal" style="z-index: 10050; background: rgba(5, 7, 12, 0.94); backdrop-filter: blur(6px); display: none;">
     <div class="modal" style="max-width: 680px; width: 92%; max-height: 90vh; display: flex; flex-direction: column; border-color: rgba(59, 130, 246, 0.4); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
-        <span style="font-size: 1.6rem;">⚖️</span>
+      <div class="brand-modal-hero">
+        <div class="brand-hero-badge">
+          <img src="/assets/pulse-core-hero.svg?v=1" alt="Pulse Core">
+        </div>
         <div>
           <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Aviso Legal y Condiciones de Uso</h3>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Pulse Core / eMule-Rust — Términos de utilización de software de red</span>
+          <span style="font-size: 0.76rem; color: var(--text-muted);">Pulse Core / eMule-Rust — Términos de utilización de software de red</span>
         </div>
       </div>
 
@@ -5857,10 +5982,10 @@
   <!-- PANEL / DRAWER ASISTENTE COPILOTO IA -->
   <div id="assistant-drawer" class="assistant-drawer" style="display: none;">
     <div class="assistant-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 1.25rem;">🤖</span>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="/assets/copilot-avatar.svg?v=1" alt="Copiloto IA" style="width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;">
         <div>
-          <div style="font-weight: 600; font-size: 0.9rem; color: #fff;">Copiloto eMuleRust</div>
+          <div style="font-weight: 600; font-size: 0.9rem; color: #fff;">Copiloto PulseCore</div>
           <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
             <span id="ast-status-dot" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #94a3b8;"></span>
             <span id="ast-status-text">Desconectado</span>
@@ -5868,31 +5993,33 @@
         </div>
       </div>
       <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-sm" onclick="clearAssistantChat()" title="Limpiar conversación" style="padding: 2px 7px; font-size: 0.8rem;">🧹</button>
+        <button class="btn btn-sm" onclick="clearAssistantChat()" title="Limpiar conversación" style="padding: 4px 7px; display: inline-flex; align-items: center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
         <button class="btn btn-sm" onclick="toggleAssistantDrawer()" title="Cerrar panel" style="padding: 2px 7px; font-size: 0.9rem;">✕</button>
       </div>
     </div>
 
     <!-- Sugerencias rápidas -->
     <div class="assistant-quick-prompts" id="ast-quick-prompts">
-      <button class="ast-chip" onclick="sendQuickPrompt('¿Cuál es el estado general del nodo y las transferencias?')">📊 Estado general</button>
-      <button class="ast-chip" onclick="sendQuickPrompt('¿Por qué tengo LowID o firewall y cómo solucionarlo?')">⚠️ Guía LowID / Router</button>
-      <button class="ast-chip" onclick="sendQuickPrompt('¿Cómo añado enlaces eD2k o torrents en la app?')">📥 Cómo descargar</button>
-      <button class="ast-chip" onclick="sendQuickPrompt('Busca fuentes para descargas paradas o lentas')">🔍 Reanimar descargas</button>
-      <button class="ast-chip" onclick="sendQuickPrompt('Verifica si hay descargas completadas listas para limpiar')">🧹 Limpieza</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Cuál es el estado general del nodo y las transferencias?')">Estado general</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Por qué tengo LowID o firewall y cómo solucionarlo?')">Guía LowID / Router</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('¿Cómo añado enlaces eD2k o torrents en la app?')">Cómo descargar</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('Busca fuentes para descargas paradas o lentas')">Reanimar descargas</button>
+      <button class="ast-chip" onclick="sendQuickPrompt('Verifica si hay descargas completadas listas para limpiar')">Limpieza</button>
     </div>
 
     <!-- Contenedor de mensajes -->
     <div class="assistant-messages" id="ast-messages">
       <div class="ast-msg assistant">
-        <div class="ast-msg-avatar">🤖</div>
+        <div class="ast-msg-avatar"><img src="/assets/copilot-avatar.svg?v=1" alt="IA" class="ast-avatar-img"></div>
         <div class="ast-msg-body">
-          ¡Hola! Soy el asistente de <b>eMuleRust</b>. Funciono tanto con <b>IA conectada</b> como en <b>modo local interactivo autónomo</b> sin IA.<br><br>
+          ¡Hola! Soy el asistente de <b>Pulse Core</b>. Funciono tanto con <b>IA conectada</b> como en <b>modo local interactivo autónomo</b> sin IA.<br><br>
           Puedo explicarte cómo funciona cada sección del programa, cómo abrir los puertos en tu router o ejecutar diagnósticos sobre tus descargas y redes.
           <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
-            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:router')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8;">🌐 Tutorial Abrir Puertos</button>
-            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:links')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80;">🧲 Añadir Enlaces</button>
-            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:kad')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc;">🚀 Kademlia DHT</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:router')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8;">Tutorial Abrir Puertos</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:links')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80;">Añadir Enlaces</button>
+            <button class="btn btn-sm" onclick="sendQuickPrompt('tutorial:kad')" style="font-size: 0.73rem; padding: 2px 8px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc;">Kademlia DHT</button>
           </div>
         </div>
       </div>
@@ -5928,9 +6055,11 @@
 
   <!-- MODAL: INICIO DE SESIÓN WEBUI (RED LOCAL PROTEGIDA) -->
   <div class="modal-overlay" id="webui-login-modal" style="z-index: 10050;">
-    <div class="modal" style="max-width: 400px; width: 92%; padding: 24px;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-        <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(94, 106, 210, 0.16); border: 1px solid rgba(94, 106, 210, 0.35); display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0;">🔒</div>
+    <div class="modal" style="max-width: 420px; width: 92%; padding: 24px;">
+      <div class="brand-modal-hero">
+        <div class="brand-hero-badge">
+          <img src="/assets/pulse-core-hero.svg?v=1" alt="Pulse Core">
+        </div>
         <div>
           <h3 style="margin: 0; font-size: 1.08rem;">Acceso Protegido — Pulse Core</h3>
           <div style="font-size: 0.78rem; color: var(--text-muted);">Introduce la contraseña configurada para la red local</div>
@@ -5942,7 +6071,10 @@
           <input type="password" class="form-control" id="webui-login-password" autocomplete="current-password" placeholder="Contraseña..." required autofocus>
         </div>
         <div id="webui-login-error" style="display: none; font-size: 0.8rem; color: #fb7185; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.25); border-radius: 6px; padding: 8px 10px;"></div>
-        <button type="submit" class="btn btn-primary" id="webui-login-submit-btn" style="justify-content: center;">🔓 Desbloquear Interfaz</button>
+        <button type="submit" class="btn btn-primary" id="webui-login-submit-btn" style="justify-content: center;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+          <span>Desbloquear Interfaz</span>
+        </button>
       </form>
     </div>
   </div>
@@ -6009,6 +6141,10 @@
                 document.getElementById('cfg-version').value = helloRes.daemonVersion;
                 const updateBadge = document.getElementById('update-current-ver-badge');
                 if (updateBadge) updateBadge.textContent = `Versión instalada: v${helloRes.daemonVersion}`;
+                const brandVer = document.getElementById('brand-version-pill');
+                if (brandVer) brandVer.textContent = `v${helloRes.daemonVersion}`;
+                const statusVer = document.getElementById('statusbar-version-label');
+                if (statusVer) statusVer.textContent = `v${helloRes.daemonVersion}`;
               }
               if (typeof window._updateEnvFromHello === 'function') {
                 window._updateEnvFromHello(helloRes);
@@ -7273,7 +7409,7 @@
 
       if (filtered.length === 0) {
         lastRenderedDownloadIds = '';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">No hay descargas que coincidan con los filtros aplicados.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px;"><div class="empty-state-box"><img src="/assets/empty-downloads.svg?v=1" alt="" class="empty-state-img"><div class="empty-state-title">Sin transferencias visibles</div><div class="empty-state-sub">No hay descargas que coincidan con los filtros aplicados. Añade un enlace eD2k/Magnet o ajusta los filtros superiores.</div></div></td></tr>`;
         return;
       }
 
@@ -7393,10 +7529,10 @@
         const rawClean = rawName.replace(/^⚡ \[Torrent\]\s*/i, '').replace(/^\[Torrent\]\s*/i, '');
         const displayName = fixMojibake(rawClean);
 
-        // Icono minimalista de protocolo (sin caja de fondo llamativa)
-        const protocolIcon = isTorrent 
-          ? `<span class="proto-icon torrent" title="BitTorrent"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>`
-          : `<span class="proto-icon ed2k" title="eDonkey / Kad"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span>`;
+        // Micro-insignia vectorial de protocolo
+        const protocolIcon = isTorrent
+          ? `<span class="proto-icon torrent" title="BitTorrent"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>`
+          : `<span class="proto-icon ed2k" title="eDonkey / Kad"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="9"/><line x1="4.2" y1="16.5" x2="9.4" y2="13.5"/><line x1="19.8" y1="16.5" x2="14.6" y2="13.5"/></svg></span>`;
 
         // Categoría con estilo outline sutil
         const category = dl.categoryId || dl.category_id || item.categoryId;
@@ -9249,7 +9385,7 @@
       const msgDiv = document.createElement('div');
       msgDiv.className = 'ast-msg user';
       msgDiv.innerHTML = `
-        <div class="ast-msg-avatar">👤</div>
+        <div class="ast-msg-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>
         <div class="ast-msg-body">${escapeHtml(text)}</div>
       `;
       container.appendChild(msgDiv);
@@ -9263,7 +9399,7 @@
       const msgDiv = document.createElement('div');
       msgDiv.className = 'ast-msg assistant';
       msgDiv.innerHTML = `
-        <div class="ast-msg-avatar">🤖</div>
+        <div class="ast-msg-avatar"><img src="/assets/copilot-avatar.svg?v=1" alt="IA" class="ast-avatar-img"></div>
         <div class="ast-msg-body"></div>
       `;
       container.appendChild(msgDiv);
@@ -10196,6 +10332,10 @@
 
       const verBadge = document.getElementById('update-current-ver-badge');
       if (verBadge && env.currentVersion) verBadge.textContent = `Versión instalada: ${verLabel}`;
+      const brandVer = document.getElementById('brand-version-pill');
+      if (brandVer && env.currentVersion) brandVer.textContent = verLabel;
+      const statusVer = document.getElementById('statusbar-version-label');
+      if (statusVer && env.currentVersion) statusVer.textContent = verLabel;
 
       const archEl = document.getElementById('update-arch-val');
       if (archEl) archEl.textContent = triple;
@@ -11882,10 +12022,10 @@
           ? `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>`;
 
-        const posterHtml = item.posterPath 
+        const posterHtml = item.posterPath
           ? `<img class="media-poster-img movie-poster-img" src="${escapeHtml(item.posterPath)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='flex';">
-             <div class="media-poster-fallback" style="display: none;">${typeIcon}<br><strong style="margin-top:6px;">${escapeHtml(item.title)}</strong><br><small style="color:var(--text-muted);">${yearStr}</small></div>`
-          : `<div class="media-poster-fallback">${typeIcon}<br><strong style="margin-top:6px;">${escapeHtml(item.title)}</strong><br><small style="color:var(--text-muted);">${yearStr}</small></div>`;
+             <div class="media-poster-fallback" style="display: none;">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`
+          : `<div class="media-poster-fallback">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`;
 
         return `
           <div class="media-card movie-card" id="media-card-${item.id}" onclick="openMediaDetail('${item.id}')" title="Ver ficha de ${escapeHtml(item.title)}">
@@ -14092,5 +14232,6 @@
     window.testNotificationChannel = testNotificationChannel;
 
   </script>
+  <script src="/assets/atmosphere.js?v=1"></script>
 </body>
 </html>

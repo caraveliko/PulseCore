@@ -25,6 +25,12 @@ use crate::state::AppState;
 #[folder = "../../web"]
 pub struct EmbeddedWebAssets;
 
+/// Política de caché para documentos HTML dinámicos de entrada.
+const NO_CACHE_CONTROL: &str = "no-cache, no-store, must-revalidate";
+
+/// Política de caché para recursos gráficos y manifiesto estático en `/assets/`.
+const STATIC_ASSET_CACHE_CONTROL: &str = "public, max-age=86400, must-revalidate";
+
 /// Dirección IP del cliente propagada por el guardia de seguridad de plano de control.
 #[derive(Clone, Copy)]
 pub(crate) struct ClientIp(pub(crate) IpAddr);
@@ -249,7 +255,7 @@ async fn embedded_index_handler() -> impl IntoResponse {
         Some(content) => (
             [
                 (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-                (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+                (header::CACHE_CONTROL, NO_CACHE_CONTROL),
                 (header::PRAGMA, "no-cache"),
                 (header::EXPIRES, "0"),
             ],
@@ -269,10 +275,16 @@ async fn embedded_asset_handler(
     match EmbeddedWebAssets::get(target) {
         Some(content) => {
             let mime = mime_guess::from_path(target).first_or_octet_stream();
+            let cache_control =
+                if target.starts_with("assets/") || target == "manifest.webmanifest" {
+                    STATIC_ASSET_CACHE_CONTROL
+                } else {
+                    NO_CACHE_CONTROL
+                };
             (
                 [
                     (header::CONTENT_TYPE, mime.as_ref()),
-                    (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+                    (header::CACHE_CONTROL, cache_control),
                 ],
                 content.data,
             )
@@ -282,7 +294,7 @@ async fn embedded_asset_handler(
             Some(index) => (
                 [
                     (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-                    (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+                    (header::CACHE_CONTROL, NO_CACHE_CONTROL),
                     (header::PRAGMA, "no-cache"),
                     (header::EXPIRES, "0"),
                 ],

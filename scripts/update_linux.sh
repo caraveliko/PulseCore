@@ -321,6 +321,14 @@ desplegar_ssh() {
       ln -f ~/.local/bin/mule-daemon ~/.local/bin/mule-daemon.old 2>/dev/null || cp -f ~/.local/bin/mule-daemon ~/.local/bin/mule-daemon.old
       chmod 755 ~/.local/bin/mule-daemon.old
     fi
+    if [[ -f ~/.local/web/index.html ]]; then
+      dest_bak="$HOME/.local/web.bak-legacy"
+      if [[ -e "${dest_bak}" ]]; then
+        dest_bak="${dest_bak}.$(date +%s)"
+      fi
+      mv ~/.local/web "${dest_bak}"
+      echo "==> Archivado directorio heredado ~/.local/web en ${dest_bak} para usar la WebUI embebida."
+    fi
     chmod 755 ~/.local/bin/mule-daemon.update
     mv -f ~/.local/bin/mule-daemon.update ~/.local/bin/mule-daemon
   '

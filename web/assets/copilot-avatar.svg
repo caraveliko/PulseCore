@@ -1,0 +1,31 @@
+<!-- Avatar vectorial propio del Copiloto IA de Pulse Core -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" fill="none">
+  <defs>
+    <linearGradient id="copilotBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#191330" />
+      <stop offset="100%" stop-color="#0b1324" />
+    </linearGradient>
+    <linearGradient id="copilotRing" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="55%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#00f5d4" />
+    </linearGradient>
+    <linearGradient id="copilotStar" x1="12" y1="10" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e9d5ff" />
+      <stop offset="50%" stop-color="#a78bfa" />
+      <stop offset="100%" stop-color="#00f5d4" />
+    </linearGradient>
+  </defs>
+
+  <rect x="1.5" y="1.5" width="37" height="37" rx="11" fill="url(#copilotBg)" stroke="url(#copilotRing)" stroke-width="1.5" stroke-opacity="0.75" />
+  <circle cx="20" cy="20" r="13" stroke="url(#copilotRing)" stroke-width="0.9" stroke-opacity="0.35" stroke-dasharray="2.5 3" />
+
+  <!-- Destello neural central -->
+  <path d="M 20 9.5 C 21.1 15.8 24.2 18.9 30.5 20 C 24.2 21.1 21.1 24.2 20 30.5 C 18.9 24.2 15.8 21.1 9.5 20 C 15.8 18.9 18.9 15.8 20 9.5 Z"
+        fill="url(#copilotStar)" />
+  <circle cx="20" cy="20" r="2.2" fill="#090d16" />
+
+  <!-- Puntos orbitales de telemetría -->
+  <circle cx="29.5" cy="11.5" r="1.4" fill="#00f5d4" />
+  <circle cx="10.5" cy="28.5" r="1.3" fill="#a78bfa" />
+</svg>

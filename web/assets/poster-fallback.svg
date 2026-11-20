@@ -1,0 +1,37 @@
+<!-- Carátula vectorial de respaldo 2:3 para títulos sin póster en TMDB -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360" width="240" height="360" fill="none">
+  <defs>
+    <linearGradient id="pfBg" x1="0" y1="0" x2="240" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#111a2c" />
+      <stop offset="55%" stop-color="#0b101d" />
+      <stop offset="100%" stop-color="#070a12" />
+    </linearGradient>
+    <radialGradient id="pfGlow" cx="50%" cy="38%" r="48%">
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.18" />
+      <stop offset="55%" stop-color="#38bdf8" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#070a12" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="pfStroke" x1="40" y1="60" x2="200" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.45" />
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.25" />
+    </linearGradient>
+  </defs>
+
+  <rect width="240" height="360" fill="url(#pfBg)" />
+  <rect width="240" height="360" fill="url(#pfGlow)" />
+
+  <!-- Marco interior cinematográfico -->
+  <rect x="14" y="14" width="212" height="332" rx="10" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+
+  <!-- Órbita sutil de Pulse Core -->
+  <circle cx="120" cy="142" r="56" stroke="url(#pfStroke)" stroke-width="1" stroke-dasharray="4 6" />
+  <circle cx="120" cy="142" r="36" stroke="url(#pfStroke)" stroke-width="1.2" />
+
+  <!-- Diagonales orbitales tenues -->
+  <g stroke="url(#pfStroke)" stroke-opacity="0.4" stroke-width="1">
+    <line x1="64" y1="142" x2="24" y2="142" />
+    <line x1="176" y1="142" x2="216" y2="142" />
+    <line x1="120" y1="86" x2="120" y2="46" />
+  </g>
+</svg>

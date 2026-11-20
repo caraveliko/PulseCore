@@ -1,0 +1,39 @@
+<!-- Ilustración vectorial de estado vacío para la biblioteca de Cine & Series -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 140" width="180" height="140" fill="none">
+  <defs>
+    <radialGradient id="emGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.22" />
+      <stop offset="65%" stop-color="#0ea5e9" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#050810" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="emGrad" x1="36" y1="26" x2="144" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="55%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#00f5d4" />
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="90" cy="70" rx="74" ry="52" fill="url(#emGlow)" />
+
+  <!-- Tarjeta trasera en perspectiva -->
+  <rect x="44" y="34" width="76" height="62" rx="10" transform="rotate(-7 82 65)" fill="#0c1220" fill-opacity="0.75" stroke="rgba(255,255,255,0.12)" stroke-width="1.2" />
+
+  <!-- Fotograma principal cristalino -->
+  <rect x="48" y="32" width="84" height="72" rx="12" fill="#09101d" fill-opacity="0.92" stroke="url(#emGrad)" stroke-width="1.5" />
+
+  <!-- Perforaciones laterales de película -->
+  <g fill="rgba(255,255,255,0.22)">
+    <rect x="54" y="42" width="5" height="6" rx="1.5" />
+    <rect x="54" y="56" width="5" height="6" rx="1.5" />
+    <rect x="54" y="70" width="5" height="6" rx="1.5" />
+    <rect x="54" y="84" width="5" height="6" rx="1.5" />
+    <rect x="121" y="42" width="5" height="6" rx="1.5" />
+    <rect x="121" y="56" width="5" height="6" rx="1.5" />
+    <rect x="121" y="70" width="5" height="6" rx="1.5" />
+    <rect x="121" y="84" width="5" height="6" rx="1.5" />
+  </g>
+
+  <!-- Botón de reproducción minimalista -->
+  <circle cx="90" cy="68" r="16" fill="rgba(255,255,255,0.04)" stroke="url(#emGrad)" stroke-width="1.5" />
+  <path d="M 86 61.5 L 97 68 L 86 74.5 Z" fill="#00f5d4" fill-opacity="0.88" />
+</svg>
