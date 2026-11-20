@@ -39,47 +39,17 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [[test]]
-name = "lab_state_machine"
+name = "protocol_lab_suite"
+path = "tests/protocol_lab_suite/main.rs"
 required-features = ["lab-loopback"]
 
 [[test]]
-name = "lab_in_flight_and_blocks"
-required-features = ["lab-loopback"]
-
-[[test]]
-name = "loopback_transfer"
-required-features = ["lab-loopback"]
-
-[[test]]
-name = "lab_adversarial"
-required-features = ["lab-loopback"]
-
-[[test]]
-name = "in_flight_properties"
-required-features = ["lab-loopback"]
-
-[[test]]
-name = "ed2k_session_tests"
+name = "protocol_ed2k_suite"
+path = "tests/protocol_ed2k_suite/main.rs"
 required-features = ["ed2k-loopback"]
-
-[[test]]
-name = "ed2k_file_status_tests"
-required-features = ["ed2k-loopback"]
-
-[[test]]
-name = "ed2k_reference_interop_tests"
-required-features = ["ed2k-reference-loopback"]
 
 [[test]]
 name = "tier3_loopback"
 required-features = ["ed2k-reference-loopback"]
-
-[[test]]
-name = "ed2k_block_transfer_tests"
-required-features = ["ed2k-loopback"]
-
-[[test]]
-name = "ed2k_part_resume_tests"
-required-features = ["ed2k-loopback"]
 
 

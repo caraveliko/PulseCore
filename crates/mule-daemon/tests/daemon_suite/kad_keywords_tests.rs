@@ -225,11 +225,24 @@ async fn test_kad_aich_pub_gated_on_target_version() {
             .await
             .expect("publish keyword");
 
-        // Recopilar entradas publicadas durante una ventana acotada.
+        // Recopilar entradas publicadas durante una ventana acotada: hasta 5 s para el
+        // primer paquete y 300 ms de inactividad para drenar envíos adicionales.
         let mut observed: Vec<Option<[u8; 20]>> = Vec::new();
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
-        while let Ok(Some(v)) = tokio::time::timeout_at(deadline, aich_seen_rx.recv()).await {
-            observed.push(v);
+        if let Ok(Some(first)) = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            aich_seen_rx.recv(),
+        )
+        .await
+        {
+            observed.push(first);
+            while let Ok(Some(extra)) = tokio::time::timeout(
+                std::time::Duration::from_millis(300),
+                aich_seen_rx.recv(),
+            )
+            .await
+            {
+                observed.push(extra);
+            }
         }
         mock_task.abort();
         assert!(

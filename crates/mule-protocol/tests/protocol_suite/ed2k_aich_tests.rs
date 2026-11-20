@@ -12,8 +12,7 @@ use mule_protocol::ed2k::{
     OP_AICH_ANSWER, OP_AICH_REQUEST, PR_EMULE,
 };
 
-mod common;
-use common::fixtures::sample_file_hash;
+use crate::common::fixtures::sample_file_hash;
 
 fn sample_aich_root() -> [u8; 20] {
     let mut h = [0u8; 20];

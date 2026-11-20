@@ -85,23 +85,13 @@ tempfile.workspace = true
 md-5.workspace = true
 
 [[test]]
-name = "inter_daemon_transfer"
+name = "daemon_lab_suite"
+path = "tests/daemon_lab_suite/main.rs"
 required-features = ["lab-loopback"]
 
 [[test]]
-name = "daemon_adversarial"
-required-features = ["lab-loopback"]
-
-[[test]]
-name = "ed2k_source_discovery"
+name = "daemon_ed2k_suite"
+path = "tests/daemon_ed2k_suite/main.rs"
 required-features = ["ed2k-loopback"]
-
-[[test]]
-name = "ed2k_transfer_tests"
-required-features = ["ed2k-loopback"]
-
-[[test]]
-name = "lab_rpc_tests"
-required-features = ["lab-tools"]
 
 

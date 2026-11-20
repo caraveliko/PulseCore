@@ -1,17 +1,23 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Laurent Geynet "Loulach"
 
 <#
 .SYNOPSIS
-    Unified Verification Script for Pulse Core / eMuleRust (Rust server + WebUI).
+    Script unificado de verificación para Pulse Core / eMuleRust (servidor Rust + WebUI).
 .DESCRIPTION
-    Runs:
-    1. Cargo Clippy on workspace with -D warnings
-    2. Rust duplication guard
-    3. Cargo Test on all workspace crates
+    Delega en `scripts/smart_test.py` según el modo seleccionado:
+    - full  (predeterminado): clippy completo, guardia de duplicados B1, validación JS y todas las pruebas.
+    - smart: únicamente crates y suites afectadas por los cambios locales en Git.
+    - fast:  pruebas unitarias rápidas (--lib) sobre los crates afectados.
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
+    powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1 -Mode smart
 #>
+
+param(
+    [ValidateSet("full", "smart", "fast")]
+    [string]$Mode = "full"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -19,36 +25,33 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "  Pulse Core / eMuleRust Verification (Rust)     " -ForegroundColor Cyan
+Write-Host "  Verificación de Pulse Core / eMuleRust ($Mode)  " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
-# 1. Cargo Clippy
-Write-Host "`n==> [1/3] Running Cargo Clippy (lints & safety checks)..." -ForegroundColor Yellow
+$PythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if (-not $PythonCmd) {
+    $PythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
+}
+
+if ($PythonCmd) {
+    & $PythonCmd.Source "$Root\scripts\smart_test.py" --mode $Mode
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "La validación en modo '$Mode' falló con código $LASTEXITCODE."
+        exit $LASTEXITCODE
+    }
+    Write-Host "`n[OK] Validación completada con éxito (100 % verde)." -ForegroundColor Green
+    exit 0
+}
+
+# Respaldo sin Python (solo modo secuencial tradicional)
+Write-Warning "Python no encontrado; ejecutando validación tradicional sin análisis inteligente."
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Cargo Clippy failed."
-    exit $LASTEXITCODE
-}
-Write-Host "  [OK] Cargo Clippy passed." -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# 2. Duplication Guard (Rust)
-Write-Host "`n==> [2/3] Running Rust duplication guard..." -ForegroundColor Yellow
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File "$Root\scripts\test_duplicates.ps1"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Duplication guard failed."
-    exit $LASTEXITCODE
-}
-Write-Host "  [OK] No new exact code clones." -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# 3. Cargo Test
-Write-Host "`n==> [3/3] Running Cargo Test Suite across workspace crates..." -ForegroundColor Yellow
-cargo test --workspace
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Cargo Test suite failed."
-    exit $LASTEXITCODE
-}
-Write-Host "  [OK] All Cargo tests passed." -ForegroundColor Green
+cargo test --workspace --all-features --lib --tests
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "`n==================================================" -ForegroundColor Green
-Write-Host "  [SUCCESS] All verification steps passed (100% Green)! " -ForegroundColor Green
-Write-Host "==================================================" -ForegroundColor Green
+Write-Host "`n[OK] Validación completada con éxito (100 % verde)." -ForegroundColor Green

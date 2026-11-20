@@ -31,19 +31,24 @@ Licencia: GPL-2.0-or-later. Plataformas objetivo: Windows 10/11 x64 y Linux (`x8
 
 ## Comandos de validación
 
-Ejecutar antes de dar por terminado cualquier cambio:
+Ejecutar antes de dar por terminado cualquier cambio (usando los *harnesses* consolidados y el corredor inteligente para evitar cuellos de botella de enlazado):
 
 ```powershell
-# Rust — lint (siempre, todo el workspace: detecta roturas entre crates)
+# Validación inteligente (recomendada durante el desarrollo: solo crates y suites afectadas por Git)
+python3 scripts/smart_test.py --mode smart
+
+# Pruebas unitarias rápidas (--lib) sobre los crates afectados (o añadir --all)
+python3 scripts/smart_test.py --mode fast
+
+# Ejecutar un módulo concreto dentro de un arnés consolidado sin enlazar el resto
+cargo test -p mule-daemon --test daemon_suite notifications_tests --all-features
+
+# Rust — lint y pruebas completas (100 % sin conexión)
 cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features --lib --tests
 
-# Rust — pruebas (100 % sin conexión): el/los crate(s) modificado(s)
-cargo test -p <crate> --all-features
-# ampliar al workspace si el cambio afecta a varios crates o a APIs públicas:
-cargo test --workspace --all-features
-
-# Validación completa
+# Validación completa (o añadir -Mode smart / -Mode fast)
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
 ```
 

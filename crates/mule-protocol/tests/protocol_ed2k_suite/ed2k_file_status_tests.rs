@@ -17,8 +17,7 @@ use mule_protocol::ed2k::{
     TestPeerMode,
 };
 
-mod common;
-use common::fixtures::{nominal_client, sample_client_tags, sample_user_hash};
+use crate::common::fixtures::{nominal_client, sample_client_tags, sample_user_hash};
 
 // ---------------------------------------------------------------------------
 // 1. Wire Layout & Fixture Byte-by-Byte Verification

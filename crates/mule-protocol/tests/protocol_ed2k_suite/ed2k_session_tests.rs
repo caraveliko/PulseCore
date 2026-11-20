@@ -14,8 +14,7 @@ use mule_protocol::ed2k::{
 };
 use mule_protocol::framing::RawPacket;
 
-mod common;
-use common::fixtures::{sample_client_tags, sample_user_hash};
+use crate::common::fixtures::{sample_client_tags, sample_user_hash};
 
 // ---------------------------------------------------------------------------
 // 1. Nominal Loopback Handshake & TCP Confinement

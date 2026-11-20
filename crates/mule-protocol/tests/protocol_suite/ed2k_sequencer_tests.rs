@@ -24,8 +24,7 @@ use mule_protocol::ed2k::{
 use mule_protocol::framing::RawPacket;
 use mule_protocol::PacketCodec;
 
-mod common;
-use common::fixtures::resume_file_hash as sample_hash;
+use crate::common::fixtures::resume_file_hash as sample_hash;
 
 // ---------------------------------------------------------------------------
 // 1. Complete Source Eligibility (part_count == 0)

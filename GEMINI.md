@@ -31,15 +31,22 @@ Licencia: GPL-2.0-or-later. Plataformas objetivo: Windows 10/11 x64 y Linux (`x8
 
 ## Comandos de validación
 
-Ejecutar antes de dar por terminado cualquier cambio:
+Ejecutar antes de dar por terminado cualquier cambio (aprovechando los *harnesses* consolidados y el corredor inteligente):
 
 ```powershell
-# Rust — lint y pruebas (100 % sin conexión)
+# Validación inteligente según cambios locales (recomendada en iteraciones rápidas)
+python3 scripts/smart_test.py --mode smart
+python3 scripts/smart_test.py --mode fast
+
+# Filtrar un módulo concreto dentro de un arnés consolidado
+cargo test -p mule-daemon --test daemon_suite notifications_tests --all-features
+
+# Rust — lint y pruebas completas (100 % sin conexión)
 cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+cargo test --workspace --all-features --lib --tests
 
-# Validación completa
+# Validación completa (o -Mode smart / -Mode fast)
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\verify_all.ps1
 ```
 

@@ -6,6 +6,7 @@
 //! Expone la gestión del entorno, la validación de binarios, la protección de procesos y la generación de informes de divergencias
 //! para ejecutar binarios externos fijados frente a eMuleRust.
 
+pub mod ed2k_reference_interop_tests;
 pub mod environment;
 pub mod harness;
 pub mod report;

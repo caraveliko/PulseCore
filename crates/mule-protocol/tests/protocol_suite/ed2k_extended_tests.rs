@@ -28,8 +28,7 @@ use mule_protocol::ed2k::encoder::{
 };
 use mule_protocol::ed2k::Ed2kLimits;
 
-mod common;
-use common::fixtures::seeded_hash;
+use crate::common::fixtures::seeded_hash;
 
 fn limits() -> Ed2kLimits {
     Ed2kLimits::default()

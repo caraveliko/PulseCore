@@ -44,8 +44,7 @@ fn fixtures_root() -> PathBuf {
         .join("ed2k")
 }
 
-mod common;
-use common::sha256::compute_sha256;
+use crate::common::sha256::compute_sha256;
 
 #[test]
 fn test_corpus_manifest_and_hash_integrity() {

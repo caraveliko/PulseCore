@@ -243,7 +243,7 @@ fn test_part_met_write_large_file_uses_0xe2_and_int64() {
 fn test_part_met_save_and_open_via_filesystem() {
     use mule_format::Ed2kHash;
 
-    let dir = std::env::temp_dir().join(format!("mule_partmet_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("mule_partmet_save_open_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let met_path = dir.join("001.part.met");
 

@@ -9,8 +9,7 @@ use mule_protocol::ed2k::{
     OP_HASHSETANSWER, OP_HASHSETREQUEST, PR_ED2K,
 };
 
-mod common;
-use common::fixtures::sample_file_hash;
+use crate::common::fixtures::sample_file_hash;
 
 fn sample_hashes(n: usize) -> Vec<[u8; 16]> {
     (0..n)

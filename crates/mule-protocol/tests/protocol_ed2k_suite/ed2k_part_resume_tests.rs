@@ -15,8 +15,7 @@ use std::fs;
 use std::time::Duration;
 use tempfile::tempdir;
 
-mod common;
-use common::fixtures::resume_file_hash as test_file_hash;
+use crate::common::fixtures::resume_file_hash as test_file_hash;
 
 const TEST_FILE_SIZE: u64 = 9_728_001; // Part 0 (9,728,000) + Part 1 (1 byte)
 
