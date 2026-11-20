@@ -1,12 +1,135 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach" & Antigravity
 
+use std::path::Path;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::info;
 
+use crate::services::notifications::{
+    NotificationCategory, NotificationEventInput, NotificationKind, NotificationSeverity,
+};
 use crate::services::{AutoGrabber, IndexerAggregator, MediaCleaner, MediaOrganizer, SubtitleService};
 use crate::state::AppState;
+
+/// Número máximo de títulos incluidos de forma explícita en el resumen de biblioteca lista.
+const MAX_MEDIA_SUMMARY_TITLES: usize = 3;
+
+fn extract_organized_titles(org_res: &serde_json::Value) -> Vec<String> {
+    org_res["organized"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|entry| entry.get("target").and_then(|v| v.as_str()))
+                .filter_map(|target| Path::new(target).file_stem().and_then(|s| s.to_str()))
+                .map(mule_format::fix_mojibake)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+async fn emit_media_ready_notification(
+    state: &AppState,
+    org_res: &serde_json::Value,
+    sub_res: &serde_json::Value,
+) {
+    let titles = extract_organized_titles(org_res);
+    if titles.is_empty() {
+        return;
+    }
+
+    let sub_count = sub_res["downloaded"]
+        .as_array()
+        .map(|arr| arr.len())
+        .unwrap_or(0);
+    let sub_suffix = if sub_count > 0 {
+        format!(" · {sub_count} subtítulo(s) ES descargado(s)")
+    } else {
+        " · Biblioteca actualizada".to_string()
+    };
+
+    let (title, body) = if titles.len() == 1 {
+        ("Listo para ver".to_string(), format!("{}{sub_suffix}", titles[0]))
+    } else {
+        let preview: Vec<&str> = titles
+            .iter()
+            .take(MAX_MEDIA_SUMMARY_TITLES)
+            .map(String::as_str)
+            .collect();
+        let extra = titles.len().saturating_sub(MAX_MEDIA_SUMMARY_TITLES);
+        let list_text = if extra > 0 {
+            format!("{} y {extra} más", preview.join(", "))
+        } else {
+            preview.join(", ")
+        };
+        (
+            format!("{} títulos listos en tu biblioteca", titles.len()),
+            format!("{list_text}{sub_suffix}"),
+        )
+    };
+
+    let _ = state
+        .notifications
+        .notify(
+            state,
+            NotificationEventInput {
+                kind: NotificationKind::MediaReady,
+                severity: NotificationSeverity::Success,
+                category: NotificationCategory::Media,
+                title,
+                body,
+                metadata: Some(serde_json::json!({
+                    "organizedCount": titles.len(),
+                    "subtitlesCount": sub_count,
+                })),
+                dedupe_key: None,
+                cooldown_secs: 0,
+            },
+        )
+        .await;
+}
+
+async fn emit_media_grabbed_notification(state: &AppState, grab_res: &serde_json::Value) {
+    let movies = grab_res["grabbedMovies"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let eps = grab_res["grabbedEpisodes"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    if movies == 0 && eps == 0 {
+        return;
+    }
+
+    let mut parts = Vec::new();
+    if movies > 0 {
+        parts.push(format!("{movies} película(s)"));
+    }
+    if eps > 0 {
+        parts.push(format!("{eps} episodio(s)"));
+    }
+
+    let _ = state
+        .notifications
+        .notify(
+            state,
+            NotificationEventInput {
+                kind: NotificationKind::MediaGrabbed,
+                severity: NotificationSeverity::Info,
+                category: NotificationCategory::Media,
+                title: "Auto-captura multimedia iniciada".to_string(),
+                body: format!("Se ha iniciado la descarga de {}.", parts.join(" y ")),
+                metadata: Some(serde_json::json!({
+                    "movies": movies,
+                    "episodes": eps,
+                })),
+                dedupe_key: None,
+                cooldown_secs: 0,
+            },
+        )
+        .await;
+}
 
 pub struct MediaAutomation;
 
@@ -37,10 +160,9 @@ impl MediaAutomation {
 
                         // 1. Organizar descargas completadas en la biblioteca (enlaces duros / carpetas de Jellyfin)
                         let org_res = MediaOrganizer::sweep_and_organize(&state).await;
-                        if let Some(arr) = org_res["organized"].as_array() {
-                            if !arr.is_empty() {
-                                info!("[MEDIA_AUTOMATION] Organized {} completed items", arr.len());
-                            }
+                        let organized_count = org_res["organized"].as_array().map(|a| a.len()).unwrap_or(0);
+                        if organized_count > 0 {
+                            info!("[MEDIA_AUTOMATION] Organized {} completed items", organized_count);
                         }
 
                         // 2. Escaneo profundo y limpieza del NAS solo cada 6 horas o al arrancar (ahorra E/S de red y RAM del NAS)
@@ -62,6 +184,10 @@ impl MediaAutomation {
                             }
                         }
 
+                        if organized_count > 0 {
+                            emit_media_ready_notification(&state, &org_res, &sub_res).await;
+                        }
+
                         // 4. Capturar automáticamente películas deseadas y episodios emitidos
                         let aggregator = IndexerAggregator::new();
                         let grab_res = AutoGrabber::run_auto_grab_round(&state, &aggregator, false).await;
@@ -69,6 +195,7 @@ impl MediaAutomation {
                         let eps = grab_res["grabbedEpisodes"].as_array().map(|a| a.len()).unwrap_or(0);
                         if movies > 0 || eps > 0 {
                             info!("[MEDIA_AUTOMATION] Auto-grabbed {} movies and {} episodes", movies, eps);
+                            emit_media_grabbed_notification(&state, &grab_res).await;
                         }
                     }
                     Ok(event_str) = event_rx.recv() => {
@@ -85,7 +212,8 @@ impl MediaAutomation {
                             // Limpiar duplicados y residuos de forma reactiva
                             let _ = MediaCleaner::clean_all(&state, false).await;
                             // Obtener automáticamente subtítulos en español faltantes para medios recién vinculados
-                            let _ = SubtitleService::auto_fetch_all_missing(&state, "spa").await;
+                            let sub_res = SubtitleService::auto_fetch_all_missing(&state, "spa").await;
+                            emit_media_ready_notification(&state, &org_res, &sub_res).await;
                         }
                     }
                 }

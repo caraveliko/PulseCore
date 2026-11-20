@@ -469,6 +469,23 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             aich_hash BLOB NOT NULL,
             PRIMARY KEY(file_hash, part_index)
         );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            metadata_json TEXT,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at_unix_ms INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_notifications_created_at
+            ON notifications(created_at_unix_ms DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_notifications_read
+            ON notifications(is_read);
         ",
     )?;
 

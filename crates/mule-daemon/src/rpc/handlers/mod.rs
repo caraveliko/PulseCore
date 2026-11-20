@@ -9,6 +9,7 @@ pub mod kad;
 pub mod lab;
 pub mod media;
 pub mod network;
+pub mod notifications;
 pub mod servers;
 pub mod settings;
 pub mod shares;

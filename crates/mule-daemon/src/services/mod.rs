@@ -22,6 +22,7 @@ pub mod media_metadata;
 pub mod media_probe;
 pub mod nas_transfer;
 pub mod nfs_mount;
+pub mod notifications;
 pub mod obfuscation_stream;
 pub mod organizer;
 pub mod pc26_stream;

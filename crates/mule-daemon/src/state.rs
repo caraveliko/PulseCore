@@ -179,6 +179,8 @@ pub struct AppState {
     pub webui_password_hash: Arc<std::sync::RwLock<Option<String>>>,
     /// Servicio de comprobación, descarga y aplicación de actualizaciones en caliente.
     pub updater: Arc<crate::services::updater::UpdaterService>,
+    /// Servicio central de notificaciones en tiempo real y canales externos.
+    pub notifications: Arc<crate::services::notifications::NotificationService>,
     /// Transporte QUIC P2P autenticado por Ed25519 (gestionado con el ciclo de vida UDP).
     pub quic_transport:
         Arc<tokio::sync::RwLock<Option<Arc<crate::services::quic_transport::QuicPeerTransport>>>>,
@@ -382,6 +384,15 @@ impl AppState {
             .flatten()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let initial_notifications_cfg = downloads
+            .get_setting(crate::services::notifications::constants::SETTING_NOTIFICATIONS_CONFIG)
+            .ok()
+            .flatten();
+        let notifications = Arc::new(
+            crate::services::notifications::NotificationService::new_from_setting(
+                initial_notifications_cfg.as_deref(),
+            ),
+        );
         let kad_id = downloads
             .get_setting("kad_local_id")
             .ok()
@@ -718,6 +729,7 @@ impl AppState {
             media_metadata: Arc::new(crate::services::MediaMetadataService::new()),
             webui_password_hash: Arc::new(std::sync::RwLock::new(initial_webui_pass_hash)),
             updater,
+            notifications,
             quic_transport: Arc::new(tokio::sync::RwLock::new(None)),
         }
     }

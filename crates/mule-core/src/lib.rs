@@ -16,7 +16,8 @@ pub use kad::{
 pub use error::CoreError;
 pub use model::{
     Download, DownloadCategory, DownloadStatus, Ed2kServer, HistoryEntry, HistoryFilter,
-    HistoryStats, PeerSource, PeerSourceOrigin, PeerSourceStatus, ServerFilterStatus,
+    HistoryStats, NotificationFilter, NotificationRecord, PeerSource, PeerSourceOrigin,
+    PeerSourceStatus, ServerFilterStatus,
 };
 pub use persistence::{
     Database, DownloadRepository, KadRepository, PeerSourceRepository, ServerRepository,

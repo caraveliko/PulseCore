@@ -597,6 +597,8 @@ pub async fn handle_settings_restore_backup(
             dls.set_setting(k, v)?;
             if k == SETTING_WEBUI_PASSWORD_HASH {
                 state.set_webui_password_hash(Some(v.clone()));
+            } else if k == crate::services::notifications::constants::SETTING_NOTIFICATIONS_CONFIG {
+                state.notifications.reload_from_json(v).await;
             } else if k == "lifetime_downloaded_bytes" {
                 if let Ok(bytes) = v.parse::<u64>() {
                     state

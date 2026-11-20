@@ -853,6 +853,194 @@
       border-color: var(--primary-hover);
       background: rgba(94, 106, 210, 0.14);
     }
+
+    /* Centro de Notificaciones en Barra Superior y Opciones */
+    .notif-bell-btn {
+      position: relative;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .notif-bell-btn:hover,
+    .notif-bell-btn.open {
+      color: #fff;
+      border-color: rgba(99, 102, 241, 0.6);
+      background: rgba(30, 41, 59, 0.95);
+    }
+    .notif-bell-btn.has-unread {
+      color: #e0e7ff;
+      border-color: rgba(99, 102, 241, 0.55);
+      background: rgba(94, 106, 210, 0.16);
+    }
+    .notif-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      min-width: 17px;
+      height: 17px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.64rem;
+      font-weight: 700;
+      line-height: 17px;
+      text-align: center;
+      box-shadow: 0 0 0 2px #0f172a;
+      pointer-events: none;
+    }
+    .notif-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 380px;
+      max-width: calc(100vw - 24px);
+      max-height: 520px;
+      background: #0f1422;
+      border: 1px solid rgba(94, 106, 210, 0.45);
+      border-radius: 10px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      display: none;
+      flex-direction: column;
+      z-index: 1100;
+      overflow: hidden;
+    }
+    .notif-popover.open {
+      display: flex;
+    }
+    .notif-popover-header {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+    }
+    .notif-popover-filters {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .notif-filter-chip {
+      border: 1px solid var(--border);
+      background: rgba(30, 41, 59, 0.65);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      padding: 3px 9px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .notif-filter-chip:hover {
+      color: #fff;
+      border-color: rgba(99, 102, 241, 0.5);
+    }
+    .notif-filter-chip.active {
+      background: rgba(94, 106, 210, 0.28);
+      border-color: var(--primary);
+      color: #fff;
+      font-weight: 600;
+    }
+    .notif-popover-list {
+      overflow-y: auto;
+      flex: 1;
+      max-height: 360px;
+      display: flex;
+      flex-direction: column;
+    }
+    .notif-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      border-left: 3px solid transparent;
+    }
+    .notif-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .notif-item.unread {
+      border-left-color: var(--primary);
+      background: rgba(94, 106, 210, 0.1);
+    }
+    .notif-item-icon {
+      font-size: 1rem;
+      line-height: 1.2;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .notif-item-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .notif-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .notif-item-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .notif-item-time {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .notif-item-body {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .notif-popover-footer {
+      padding: 9px 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+    }
+    .notif-channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+      gap: 16px;
+    }
+    .notif-secret-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 5px;
+      font-size: 0.72rem;
+    }
     .log-console {
       background: #090d13;
       border: 1px solid var(--border);
@@ -2768,8 +2956,55 @@
       </nav>
     </div>
 
-    <!-- Derecha: Acciones Rápidas (Actualizaciones + Tortuga + Spotlight) -->
+    <!-- Derecha: Acciones Rápidas (Notificaciones + Actualizaciones + Tortuga + Spotlight) -->
     <div class="header-right-cluster" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+      <!-- Centro de Notificaciones -->
+      <div style="position: relative; display: inline-flex;" id="notif-header-container">
+        <button class="btn btn-sm notif-bell-btn" id="btn-header-notifications" onclick="toggleNotificationsPopover(event)" aria-label="Centro de notificaciones" title="Centro de notificaciones">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+          </svg>
+          <span class="notif-badge" id="header-notif-badge" style="display: none;">0</span>
+        </button>
+        <div id="notifications-popover" class="notif-popover" onclick="event.stopPropagation()">
+          <div class="notif-popover-header">
+            <div style="display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.85rem; color: #fff;">
+              <span>🔔</span>
+              <span>Notificaciones</span>
+              <span id="popover-unread-label" class="badge" style="font-size: 0.65rem; background: rgba(94, 106, 210, 0.22); color: #c7d2fe;">0 nuevas</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <button type="button" class="btn btn-sm" onclick="markAllNotificationsRead()" title="Marcar todas como leídas" style="padding: 3px 7px; font-size: 0.7rem;">✓ Leídas</button>
+              <button type="button" class="btn btn-sm" onclick="clearNotificationsHistory()" title="Limpiar historial" style="padding: 3px 7px; font-size: 0.7rem;">🧹</button>
+              <button type="button" class="btn btn-sm" onclick="openNotificationSettingsTab()" title="Configurar notificaciones y canales push" style="padding: 3px 7px; font-size: 0.7rem;">⚙️</button>
+            </div>
+          </div>
+          <div class="notif-popover-filters" id="notif-popover-filters">
+            <button type="button" class="notif-filter-chip active" data-notif-filter="all" onclick="setNotificationFilter('all')">Todas</button>
+            <button type="button" class="notif-filter-chip" data-notif-filter="unread" onclick="setNotificationFilter('unread')">No leídas</button>
+            <button type="button" class="notif-filter-chip" data-notif-filter="downloads" onclick="setNotificationFilter('downloads')">Descargas</button>
+            <button type="button" class="notif-filter-chip" data-notif-filter="media" onclick="setNotificationFilter('media')">Biblioteca</button>
+            <button type="button" class="notif-filter-chip" data-notif-filter="system" onclick="setNotificationFilter('system')">Sistema</button>
+          </div>
+          <div class="notif-popover-list" id="notifications-popover-list">
+            <div style="padding: 24px 14px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">
+              Sin notificaciones registradas todavía.
+            </div>
+          </div>
+          <div class="notif-popover-footer">
+            <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+              <input type="checkbox" id="notif-quick-browser" onchange="toggleQuickBrowserNotifications(this.checked)">
+              <span>Avisos navegador</span>
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+              <input type="checkbox" id="notif-quick-sound" onchange="toggleQuickSoundNotifications(this.checked)">
+              <span>Sonido discreto</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Indicador Inteligente de Actualizaciones -->
       <div style="position: relative; display: inline-flex;" id="update-header-container">
         <button class="btn btn-sm update-pill update-idle" id="btn-header-update" onclick="openUpdateModal()" aria-label="Centro de actualizaciones">
@@ -3463,6 +3698,7 @@
         <button class="filter-btn" id="btn-opt-security" onclick="switchOptionsTab('opt-security')">🛡️ Seguridad & Privacidad</button>
         <button class="filter-btn" id="btn-opt-integration" onclick="switchOptionsTab('opt-integration')">🔌 Integraciones & API</button>
         <button class="filter-btn" id="btn-opt-mcp" onclick="switchOptionsTab('opt-mcp')">🤖 Protocolo MCP & IA</button>
+        <button class="filter-btn" id="btn-opt-notifications" onclick="switchOptionsTab('opt-notifications')">🔔 Notificaciones</button>
         <button class="filter-btn" id="btn-opt-updates" onclick="switchOptionsTab('opt-updates')">🔄 Actualizaciones</button>
       </div>
 
@@ -4157,6 +4393,253 @@
               <button class="btn btn-success" id="btn-apply-update" onclick="openUpdateModal()" style="display: none; width: 100%; padding: 10px; font-weight: 700; font-size: 0.88rem; justify-content: center; align-items: center; gap: 8px;">
                 <span>🚀 Revisar e Instalar Actualización</span>
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTENEDOR 9: 🔔 NOTIFICACIONES Y CANALES PUSH -->
+      <div id="opt-notifications" class="opt-subpanel" style="display: none;">
+        <div style="background: linear-gradient(135deg, rgba(30, 42, 68, 0.85) 0%, rgba(20, 28, 48, 0.95) 100%); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(94, 106, 210, 0.2); border: 1px solid rgba(94, 106, 210, 0.4); display: flex; align-items: center; justify-content: center; font-size: 1.45rem;">
+              🔔
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h3 style="margin: 0; font-size: 1.12rem; font-weight: 700; color: #fff;">Centro de Notificaciones &amp; Alertas Push</h3>
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #e2e8f0; cursor: pointer; background: rgba(15, 23, 42, 0.65); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);">
+                  <input type="checkbox" id="notif-cfg-enabled" checked>
+                  <span>Sistema activo</span>
+                </label>
+              </div>
+              <div id="notif-hero-summary" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.35;">
+                Recibe avisos en tiempo real en la WebUI, en el navegador o en tu móvil mediante Telegram, ntfy, Discord o Webhook.
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-sm" onclick="testNotificationChannel('webui', this)" style="padding: 7px 14px; font-weight: 600;">
+              <span>🔔 Probar en WebUI</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-save-notifications" onclick="saveNotificationConfig(false)" style="padding: 7px 18px; font-weight: 600;">
+              <span>💾 Guardar Notificaciones</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; margin-bottom: 16px;">
+          <!-- Tarjeta 1: Eventos que generan aviso -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+              <span>🎯</span> <span>Eventos que generan aviso</span>
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 9px; font-size: 0.82rem;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-download-completed" checked>
+                <span>Descarga completada (eD2K y BitTorrent)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-download-failed" checked>
+                <span>Fallo o error de verificación en descarga</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-media-ready" checked>
+                <span>«Listo para ver» (tras organizar en NAS y descargar subtítulos)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-media-grabbed" checked>
+                <span>Auto-captura de películas o episodios nuevos</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-update-available" checked>
+                <span>Nueva actualización disponible de Pulse Core</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-server-disconnected" checked>
+                <span>Pérdida de conexión con servidor eD2K</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-ev-system-warning" checked>
+                <span>Alertas y advertencias generales del sistema</span>
+              </label>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="notif-ev-disk-low" checked>
+                  <span>Poco espacio libre en disco / NAS</span>
+                </label>
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.74rem; color: var(--text-muted);">Umbral (GiB):</span>
+                  <input type="number" id="notif-cfg-disk-gb" class="form-control" min="1" max="1000" value="5" style="width: 78px; height: 30px; padding: 3px 8px; font-size: 0.8rem;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tarjeta 2: Navegador, sonido y horario silencioso -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+              <span>🖥️</span> <span>Navegador, Sonido y Horario Silencioso</span>
+            </h4>
+            <div style="background: rgba(15, 23, 42, 0.55); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.82rem;">
+                  <input type="checkbox" id="notif-pref-browser" onchange="toggleQuickBrowserNotifications(this.checked)">
+                  <span>Notificaciones nativas del navegador</span>
+                </label>
+                <button type="button" class="btn btn-sm" id="btn-notif-request-browser" onclick="enableBrowserNotifications()" style="font-size: 0.72rem; padding: 3px 9px;">Solicitar permiso</button>
+              </div>
+              <div id="notif-browser-status-text" style="font-size: 0.73rem; color: var(--text-muted); margin-top: 5px;">Comprobando soporte del navegador...</div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 0.82rem;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="notif-pref-sound" onchange="toggleQuickSoundNotifications(this.checked)">
+                <span>Sonido discreto al recibir notificación</span>
+              </label>
+              <button type="button" class="btn btn-sm" onclick="playNotificationChime('success')" style="font-size: 0.72rem; padding: 3px 9px;">🔊 Probar sonido</button>
+            </div>
+
+            <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.83rem; font-weight: 600; color: #e2e8f0;">
+                <input type="checkbox" id="notif-cfg-external-enabled">
+                <span>Activar envío a canales externos (móvil / webhooks)</span>
+              </label>
+              <span class="help-text">Si está desactivado, las alertas se guardan solo en la WebUI (puedes probar cada canal manualmente con su botón «Probar»).</span>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.55); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.82rem; font-weight: 600;">
+                <input type="checkbox" id="notif-qh-enabled">
+                <span>Horario silencioso (No molestar en móvil/webhooks)</span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.78rem;">
+                <span>Desde:</span>
+                <input type="time" id="notif-qh-start" class="form-control" value="23:00" style="width: 112px; height: 30px; padding: 3px 8px;">
+                <span>Hasta:</span>
+                <input type="time" id="notif-qh-end" class="form-control" value="08:00" style="width: 112px; height: 30px; padding: 3px 8px;">
+              </div>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.78rem; color: var(--text-muted);">
+                <input type="checkbox" id="notif-qh-allow-critical" checked>
+                <span>Permitir errores críticos aunque esté en horario silencioso</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjeta 3: Canales externos Push y Webhooks -->
+        <div class="notif-channel-grid">
+          <!-- Telegram -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+                <span>✈️</span> <span>Telegram Bot</span>
+              </h4>
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer;">
+                <input type="checkbox" id="notif-tg-enabled">
+                <span>Habilitado</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>Token del Bot (@BotFather)</label>
+              <input type="password" class="form-control" id="notif-tg-token" placeholder="123456789:AA..." autocomplete="off">
+              <div class="notif-secret-row" id="notif-tg-token-row" style="display: none;">
+                <span class="badge badge-completed" id="notif-tg-token-badge">Guardado ✓</span>
+                <button type="button" class="btn btn-sm" id="btn-notif-tg-clear" onclick="clearNotificationSecret('telegram')" style="padding: 2px 7px; font-size: 0.7rem;">Borrar</button>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+              <label>Chat ID (@userinfobot)</label>
+              <input type="text" class="form-control" id="notif-tg-chat-id" placeholder="Ej. 123456789 o -100...">
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span id="notif-tg-status" style="font-size: 0.73rem; color: var(--text-muted);">Sin pruebas recientes</span>
+              <button type="button" class="btn btn-sm" onclick="testNotificationChannel('telegram', this)">🧪 Probar Telegram</button>
+            </div>
+          </div>
+
+          <!-- ntfy -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+                <span>📲</span> <span>ntfy Push</span>
+              </h4>
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer;">
+                <input type="checkbox" id="notif-ntfy-enabled">
+                <span>Habilitado</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>URL del tema ntfy</label>
+              <input type="url" class="form-control" id="notif-ntfy-url" placeholder="https://ntfy.sh/mi-canal-pulse">
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+              <label>Token Bearer (opcional)</label>
+              <input type="password" class="form-control" id="notif-ntfy-token" placeholder="tk_... (dejar vacío si el tema es abierto)" autocomplete="off">
+              <div class="notif-secret-row" id="notif-ntfy-token-row" style="display: none;">
+                <span class="badge badge-completed" id="notif-ntfy-token-badge">Guardado ✓</span>
+                <button type="button" class="btn btn-sm" id="btn-notif-ntfy-clear" onclick="clearNotificationSecret('ntfy')" style="padding: 2px 7px; font-size: 0.7rem;">Borrar</button>
+              </div>
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span id="notif-ntfy-status" style="font-size: 0.73rem; color: var(--text-muted);">Sin pruebas recientes</span>
+              <button type="button" class="btn btn-sm" onclick="testNotificationChannel('ntfy', this)">🧪 Probar ntfy</button>
+            </div>
+          </div>
+
+          <!-- Discord -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+                <span>💬</span> <span>Discord Webhook</span>
+              </h4>
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer;">
+                <input type="checkbox" id="notif-discord-enabled">
+                <span>Habilitado</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>URL del Webhook de Discord</label>
+              <input type="password" class="form-control" id="notif-discord-url" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
+              <div class="notif-secret-row" id="notif-discord-url-row" style="display: none;">
+                <span class="badge badge-completed" id="notif-discord-url-badge">Guardado ✓</span>
+                <button type="button" class="btn btn-sm" id="btn-notif-discord-clear" onclick="clearNotificationSecret('discord')" style="padding: 2px 7px; font-size: 0.7rem;">Borrar</button>
+              </div>
+              <span class="help-text">Por seguridad, la URL del webhook no vuelve a mostrarse tras guardarla.</span>
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span id="notif-discord-status" style="font-size: 0.73rem; color: var(--text-muted);">Sin pruebas recientes</span>
+              <button type="button" class="btn btn-sm" onclick="testNotificationChannel('discord', this)">🧪 Probar Discord</button>
+            </div>
+          </div>
+
+          <!-- Webhook genérico -->
+          <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary-hover); display: flex; align-items: center; gap: 8px;">
+                <span>🪝</span> <span>Webhook JSON Genérico</span>
+              </h4>
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer;">
+                <input type="checkbox" id="notif-webhook-enabled">
+                <span>Habilitado</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>URL destino (HTTP/HTTPS)</label>
+              <input type="url" class="form-control" id="notif-webhook-url" placeholder="https://mi-servicio.ejemplo.com/hooks/pulse">
+              <span class="help-text">Sujeto a la validación anti-SSRF del perfil de red activo (bloquea direcciones privadas en perfil público).</span>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+              <label>Token secreto opcional (cabecera <code>X-PulseCore-Token</code>)</label>
+              <input type="password" class="form-control" id="notif-webhook-secret" placeholder="Opcional" autocomplete="off">
+              <div class="notif-secret-row" id="notif-webhook-secret-row" style="display: none;">
+                <span class="badge badge-completed" id="notif-webhook-secret-badge">Guardado ✓</span>
+                <button type="button" class="btn btn-sm" id="btn-notif-webhook-clear" onclick="clearNotificationSecret('webhook')" style="padding: 2px 7px; font-size: 0.7rem;">Borrar</button>
+              </div>
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span id="notif-webhook-status" style="font-size: 0.73rem; color: var(--text-muted);">Sin pruebas recientes</span>
+              <button type="button" class="btn btn-sm" onclick="testNotificationChannel('webhook', this)">🧪 Probar Webhook</button>
             </div>
           </div>
         </div>
@@ -9286,6 +9769,9 @@
       if (target) target.style.display = 'block';
       const btn = document.getElementById('btn-' + tabId);
       if (btn) btn.classList.add('active');
+      if (tabId === 'opt-notifications' && typeof loadNotificationConfig === 'function') {
+        loadNotificationConfig();
+      }
     }
 
     function updateRamProfileBadge() {
@@ -9612,6 +10098,9 @@
         if (mcpProf) payload.mcpToolProfile = mcpProf;
 
         await client.call('settings.set', payload);
+        if (window._notifConfigLoaded && typeof saveNotificationConfig === 'function') {
+          await saveNotificationConfig(true);
+        }
         if (payload.webuiPassword) {
           const webuiPassInput = document.getElementById('pref-webui-password');
           if (webuiPassInput) webuiPassInput.value = '';
@@ -10357,6 +10846,555 @@
 
     setupLocalUpdateDropzone();
 
+    // ==========================================
+    // CENTRO DE NOTIFICACIONES Y CANALES PUSH
+    // ==========================================
+    let notifItems = [];
+    let notifUnreadCount = 0;
+    let notifActiveFilter = 'all';
+    let notifLastServerStatus = '';
+    window._notifConfigLoaded = false;
+
+    function escapeHtmlNotif(str) {
+      return escapeHtml(str);
+    }
+
+    function notifIconFor(item) {
+      if (!item) return '🔔';
+      switch (item.kind) {
+        case 'downloadCompleted': return '✅';
+        case 'downloadFailed': return '❌';
+        case 'mediaReady': return '🎬';
+        case 'mediaGrabbed': return '🧲';
+        case 'updateAvailable': return '🚀';
+        case 'diskLow': return '💾';
+        case 'serverDisconnected': return '📡';
+        case 'systemWarning': return '⚠️';
+        default:
+          if (item.severity === 'success') return '✅';
+          if (item.severity === 'error') return '🚨';
+          if (item.severity === 'warning') return '⚠️';
+          return '🔔';
+      }
+    }
+
+    function formatNotifRelativeTime(unixMs) {
+      if (!unixMs) return '';
+      const diffSec = Math.max(0, Math.floor((Date.now() - unixMs) / 1000));
+      if (diffSec < 60) return 'Ahora';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `Hace ${diffMin} min`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `Hace ${diffHr} h`;
+      try {
+        return new Date(unixMs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function isBrowserNotifPrefEnabled() {
+      return localStorage.getItem('pulse_browser_notifs') === '1';
+    }
+
+    function isSoundNotifPrefEnabled() {
+      return localStorage.getItem('pulse_sound_notifs') === '1';
+    }
+
+    function syncNotificationLocalPrefControls() {
+      const browserOn = isBrowserNotifPrefEnabled();
+      const soundOn = isSoundNotifPrefEnabled();
+      const qBrowser = document.getElementById('notif-quick-browser');
+      const pBrowser = document.getElementById('notif-pref-browser');
+      const qSound = document.getElementById('notif-quick-sound');
+      const pSound = document.getElementById('notif-pref-sound');
+      if (qBrowser) qBrowser.checked = browserOn;
+      if (pBrowser) pBrowser.checked = browserOn;
+      if (qSound) qSound.checked = soundOn;
+      if (pSound) pSound.checked = soundOn;
+
+      const statusEl = document.getElementById('notif-browser-status-text');
+      const reqBtn = document.getElementById('btn-notif-request-browser');
+      if (statusEl) {
+        if (!('Notification' in window)) {
+          statusEl.textContent = 'Este navegador o contexto HTTP no admite Web Notifications API (requiere HTTPS o localhost).';
+          if (reqBtn) reqBtn.disabled = true;
+        } else if (Notification.permission === 'granted') {
+          statusEl.textContent = browserOn
+            ? '✅ Permiso concedido y avisos del navegador activos.'
+            : 'ℹ️ Permiso concedido en el navegador (desactivado en esta sesión).';
+          if (reqBtn) reqBtn.style.display = 'none';
+        } else if (Notification.permission === 'denied') {
+          statusEl.textContent = '⚠️ Permiso bloqueado en la configuración del navegador para este sitio.';
+          if (reqBtn) reqBtn.style.display = 'inline-flex';
+        } else {
+          statusEl.textContent = 'Permiso pendiente: pulsa «Solicitar permiso» para recibir avisos aunque la pestaña esté en segundo plano.';
+          if (reqBtn) reqBtn.style.display = 'inline-flex';
+        }
+      }
+    }
+
+    async function enableBrowserNotifications() {
+      if (!('Notification' in window)) {
+        showToast('Este navegador o dirección HTTP no permite notificaciones nativas.', 'warning', '⚠️');
+        syncNotificationLocalPrefControls();
+        return false;
+      }
+      if (Notification.permission === 'granted') {
+        localStorage.setItem('pulse_browser_notifs', '1');
+        syncNotificationLocalPrefControls();
+        return true;
+      }
+      if (Notification.permission === 'denied') {
+        showToast('El navegador bloqueó el permiso. Habilítalo en el candado de la barra de direcciones.', 'warning', '⚠️');
+        syncNotificationLocalPrefControls();
+        return false;
+      }
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          localStorage.setItem('pulse_browser_notifs', '1');
+          showToast('Notificaciones del navegador activadas.', 'success', '🔔');
+          syncNotificationLocalPrefControls();
+          return true;
+        }
+        localStorage.setItem('pulse_browser_notifs', '0');
+        syncNotificationLocalPrefControls();
+        return false;
+      } catch (e) {
+        console.warn('Error solicitando permiso de notificaciones:', e);
+        return false;
+      }
+    }
+
+    async function toggleQuickBrowserNotifications(checked) {
+      if (checked) {
+        const ok = await enableBrowserNotifications();
+        if (!ok) {
+          localStorage.setItem('pulse_browser_notifs', '0');
+          syncNotificationLocalPrefControls();
+        }
+      } else {
+        localStorage.setItem('pulse_browser_notifs', '0');
+        syncNotificationLocalPrefControls();
+      }
+    }
+
+    function toggleQuickSoundNotifications(checked) {
+      localStorage.setItem('pulse_sound_notifs', checked ? '1' : '0');
+      syncNotificationLocalPrefControls();
+      if (checked) playNotificationChime('info');
+    }
+
+    function playNotificationChime(severity = 'info') {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        const freqs = severity === 'error' || severity === 'warning' ? [523.25, 440] : [587.33, 880];
+        freqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+          gain.gain.setValueAtTime(0.0001, now + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.055, now + idx * 0.09 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.09 + 0.22);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.09);
+          osc.stop(now + idx * 0.09 + 0.24);
+        });
+        setTimeout(() => { ctx.close().catch(() => {}); }, 600);
+      } catch (_) {}
+    }
+
+    function updateNotificationBadges() {
+      const btn = document.getElementById('btn-header-notifications');
+      const badge = document.getElementById('header-notif-badge');
+      const popLabel = document.getElementById('popover-unread-label');
+      const count = Math.max(0, Number(notifUnreadCount) || 0);
+      if (badge) {
+        if (count > 0) {
+          badge.textContent = count > 99 ? '99+' : String(count);
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+      if (btn) btn.classList.toggle('has-unread', count > 0);
+      if (popLabel) popLabel.textContent = count === 1 ? '1 nueva' : `${count} nuevas`;
+    }
+
+    function renderNotificationsPopover() {
+      const listEl = document.getElementById('notifications-popover-list');
+      if (!listEl) return;
+
+      const filtered = notifItems.filter(item => {
+        if (notifActiveFilter === 'unread') return !item.isRead;
+        if (notifActiveFilter !== 'all') return item.category === notifActiveFilter;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<div style="padding: 26px 14px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">No hay notificaciones en esta vista.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(item => {
+        const icon = notifIconFor(item);
+        const title = escapeHtmlNotif(item.title || 'Notificación');
+        const body = escapeHtmlNotif(item.body || '');
+        const rel = escapeHtmlNotif(formatNotifRelativeTime(item.createdAtUnixMs));
+        const cls = item.isRead ? 'notif-item' : 'notif-item unread';
+        return `<div class="${cls}" onclick="markNotificationRead(${Number(item.id)})">
+          <div class="notif-item-icon">${icon}</div>
+          <div class="notif-item-content">
+            <div class="notif-item-top">
+              <div class="notif-item-title">${title}</div>
+              <div class="notif-item-time">${rel}</div>
+            </div>
+            <div class="notif-item-body">${body}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function refreshNotifications() {
+      try {
+        const res = await client.call('notifications.list', { limit: 60 });
+        if (res) {
+          notifItems = Array.isArray(res.notifications) ? res.notifications : [];
+          notifUnreadCount = Number(res.unreadCount || 0);
+          updateNotificationBadges();
+          renderNotificationsPopover();
+        }
+      } catch (e) {
+        console.debug('Error cargando notificaciones:', e);
+      }
+    }
+
+    function toggleNotificationsPopover(ev) {
+      if (ev) ev.stopPropagation();
+      const pop = document.getElementById('notifications-popover');
+      const btn = document.getElementById('btn-header-notifications');
+      if (!pop) return;
+      const opening = !pop.classList.contains('open');
+      pop.classList.toggle('open', opening);
+      if (btn) btn.classList.toggle('open', opening);
+      if (opening) {
+        syncNotificationLocalPrefControls();
+        refreshNotifications();
+      }
+    }
+
+    function closeNotificationsPopover() {
+      const pop = document.getElementById('notifications-popover');
+      const btn = document.getElementById('btn-header-notifications');
+      if (pop) pop.classList.remove('open');
+      if (btn) btn.classList.remove('open');
+    }
+
+    function setNotificationFilter(filterKey) {
+      notifActiveFilter = filterKey || 'all';
+      document.querySelectorAll('#notif-popover-filters .notif-filter-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.notifFilter === notifActiveFilter);
+      });
+      renderNotificationsPopover();
+    }
+
+    async function markNotificationRead(id) {
+      if (!id) return;
+      try {
+        const res = await client.call('notifications.markRead', { id });
+        const target = notifItems.find(n => Number(n.id) === Number(id));
+        if (target) target.isRead = true;
+        if (res && typeof res.unreadCount === 'number') {
+          notifUnreadCount = res.unreadCount;
+        }
+        updateNotificationBadges();
+        renderNotificationsPopover();
+      } catch (e) {
+        console.warn('Error marcando notificación como leída:', e);
+      }
+    }
+
+    async function markAllNotificationsRead() {
+      try {
+        const res = await client.call('notifications.markRead', { all: true });
+        notifItems.forEach(n => { n.isRead = true; });
+        notifUnreadCount = res && typeof res.unreadCount === 'number' ? res.unreadCount : 0;
+        updateNotificationBadges();
+        renderNotificationsPopover();
+      } catch (e) {
+        showToast('Error marcando notificaciones: ' + (e.message || e), 'error', '❌');
+      }
+    }
+
+    async function clearNotificationsHistory() {
+      try {
+        await client.call('notifications.clear', {});
+        notifItems = [];
+        notifUnreadCount = 0;
+        updateNotificationBadges();
+        renderNotificationsPopover();
+        showToast('Historial de notificaciones limpiado.', 'info', '🧹');
+      } catch (e) {
+        showToast('Error limpiando historial: ' + (e.message || e), 'error', '❌');
+      }
+    }
+
+    function openNotificationSettingsTab() {
+      closeNotificationsPopover();
+      const settingsNavBtn = document.querySelector('.nav-btn[data-tab="tab-settings"]');
+      if (settingsNavBtn) settingsNavBtn.click();
+      switchOptionsTab('opt-notifications');
+    }
+
+    function formatChannelStatusText(statusObj) {
+      if (!statusObj || !statusObj.lastAttemptUnixMs) {
+        return { text: 'Sin pruebas recientes', color: 'var(--text-muted)' };
+      }
+      if (statusObj.lastError) {
+        return { text: `❌ ${statusObj.lastError}`, color: '#fca5a5' };
+      }
+      const ms = statusObj.lastLatencyMs != null ? ` (${statusObj.lastLatencyMs} ms)` : '';
+      return { text: `✅ Último envío correcto${ms}`, color: '#4ade80' };
+    }
+
+    function applyNotificationConfigViewToUi(view) {
+      if (!view) return;
+      window._notifConfigLoaded = true;
+      const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+      const pad2 = n => String(Math.max(0, Number(n) || 0)).padStart(2, '0');
+
+      setChk('notif-cfg-enabled', view.enabled);
+      setChk('notif-cfg-external-enabled', view.externalEnabled);
+      setVal('notif-cfg-disk-gb', view.diskLowThresholdGb ?? 5);
+
+      const ev = view.events || {};
+      setChk('notif-ev-download-completed', ev.downloadCompleted);
+      setChk('notif-ev-download-failed', ev.downloadFailed);
+      setChk('notif-ev-media-ready', ev.mediaReady);
+      setChk('notif-ev-media-grabbed', ev.mediaGrabbed);
+      setChk('notif-ev-update-available', ev.updateAvailable);
+      setChk('notif-ev-disk-low', ev.diskLow);
+      setChk('notif-ev-server-disconnected', ev.serverDisconnected);
+      setChk('notif-ev-system-warning', ev.systemWarning);
+
+      const qh = view.quietHours || {};
+      setChk('notif-qh-enabled', qh.enabled);
+      setVal('notif-qh-start', `${pad2(qh.startHour ?? 23)}:${pad2(qh.startMinute ?? 0)}`);
+      setVal('notif-qh-end', `${pad2(qh.endHour ?? 8)}:${pad2(qh.endMinute ?? 0)}`);
+      setChk('notif-qh-allow-critical', qh.allowCritical !== false);
+
+      const tg = view.telegram || {};
+      setChk('notif-tg-enabled', tg.enabled);
+      setVal('notif-tg-chat-id', tg.chatId || '');
+      setVal('notif-tg-token', '');
+      const tgRow = document.getElementById('notif-tg-token-row');
+      if (tgRow) tgRow.style.display = tg.hasBotToken ? 'flex' : 'none';
+
+      const ntfy = view.ntfy || {};
+      setChk('notif-ntfy-enabled', ntfy.enabled);
+      setVal('notif-ntfy-url', ntfy.url || '');
+      setVal('notif-ntfy-token', '');
+      const ntfyRow = document.getElementById('notif-ntfy-token-row');
+      if (ntfyRow) ntfyRow.style.display = ntfy.hasToken ? 'flex' : 'none';
+
+      const disc = view.discord || {};
+      setChk('notif-discord-enabled', disc.enabled);
+      setVal('notif-discord-url', '');
+      const discRow = document.getElementById('notif-discord-url-row');
+      if (discRow) discRow.style.display = disc.hasWebhookUrl ? 'flex' : 'none';
+
+      const wh = view.webhook || {};
+      setChk('notif-webhook-enabled', wh.enabled);
+      setVal('notif-webhook-url', wh.url || '');
+      setVal('notif-webhook-secret', '');
+      const whRow = document.getElementById('notif-webhook-secret-row');
+      if (whRow) whRow.style.display = wh.hasSecret ? 'flex' : 'none';
+
+      const statuses = view.channelStatuses || {};
+      const applySt = (elId, key) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        const info = formatChannelStatusText(statuses[key]);
+        el.textContent = info.text;
+        el.style.color = info.color;
+      };
+      applySt('notif-tg-status', 'telegram');
+      applySt('notif-ntfy-status', 'ntfy');
+      applySt('notif-discord-status', 'discord');
+      applySt('notif-webhook-status', 'webhook');
+      syncNotificationLocalPrefControls();
+    }
+
+    async function loadNotificationConfig() {
+      try {
+        const view = await client.call('notifications.getConfig', {});
+        applyNotificationConfigViewToUi(view);
+      } catch (e) {
+        console.debug('Error cargando configuración de notificaciones:', e);
+      }
+    }
+
+    function parseTimeInput(id, fallbackHour, fallbackMin) {
+      const el = document.getElementById(id);
+      if (!el || !el.value || !el.value.includes(':')) return [fallbackHour, fallbackMin];
+      const [hStr, mStr] = el.value.split(':');
+      const h = Math.max(0, Math.min(23, parseInt(hStr, 10) || 0));
+      const m = Math.max(0, Math.min(59, parseInt(mStr, 10) || 0));
+      return [h, m];
+    }
+
+    function buildNotificationPatchFromUi() {
+      const getChk = id => !!document.getElementById(id)?.checked;
+      const getStr = id => (document.getElementById(id)?.value || '').trim();
+      const diskGb = Math.max(1, Math.min(1000, parseInt(getStr('notif-cfg-disk-gb'), 10) || 5));
+      const [sh, sm] = parseTimeInput('notif-qh-start', 23, 0);
+      const [eh, em] = parseTimeInput('notif-qh-end', 8, 0);
+
+      const patch = {
+        enabled: getChk('notif-cfg-enabled'),
+        externalEnabled: getChk('notif-cfg-external-enabled'),
+        diskLowThresholdGb: diskGb,
+        events: {
+          downloadCompleted: getChk('notif-ev-download-completed'),
+          downloadFailed: getChk('notif-ev-download-failed'),
+          mediaReady: getChk('notif-ev-media-ready'),
+          mediaGrabbed: getChk('notif-ev-media-grabbed'),
+          serverDisconnected: getChk('notif-ev-server-disconnected'),
+          updateAvailable: getChk('notif-ev-update-available'),
+          diskLow: getChk('notif-ev-disk-low'),
+          systemWarning: getChk('notif-ev-system-warning'),
+        },
+        quietHours: {
+          enabled: getChk('notif-qh-enabled'),
+          startHour: sh,
+          startMinute: sm,
+          endHour: eh,
+          endMinute: em,
+          allowCritical: getChk('notif-qh-allow-critical'),
+        },
+        telegram: {
+          enabled: getChk('notif-tg-enabled'),
+          chatId: getStr('notif-tg-chat-id'),
+        },
+        ntfy: {
+          enabled: getChk('notif-ntfy-enabled'),
+          url: getStr('notif-ntfy-url'),
+        },
+        discord: {
+          enabled: getChk('notif-discord-enabled'),
+        },
+        webhook: {
+          enabled: getChk('notif-webhook-enabled'),
+          url: getStr('notif-webhook-url'),
+        },
+      };
+
+      const tgTok = getStr('notif-tg-token');
+      if (tgTok) patch.telegram.botToken = tgTok;
+      const ntfyTok = getStr('notif-ntfy-token');
+      if (ntfyTok) patch.ntfy.token = ntfyTok;
+      const discUrl = getStr('notif-discord-url');
+      if (discUrl) patch.discord.webhookUrl = discUrl;
+      const whSec = getStr('notif-webhook-secret');
+      if (whSec) patch.webhook.secret = whSec;
+
+      return patch;
+    }
+
+    async function saveNotificationConfig(silent = false) {
+      const btn = document.getElementById('btn-save-notifications');
+      if (btn && !silent) {
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+      }
+      try {
+        const patch = buildNotificationPatchFromUi();
+        const view = await client.call('notifications.setConfig', patch);
+        applyNotificationConfigViewToUi(view);
+        if (!silent) {
+          showToast('Configuración de notificaciones guardada.', 'success', '🔔');
+        }
+      } catch (e) {
+        const msg = e.message || JSON.stringify(e);
+        if (!silent) {
+          showToast('Error guardando notificaciones: ' + msg, 'error', '❌');
+        } else {
+          throw e;
+        }
+      } finally {
+        if (btn && !silent) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>💾 Guardar Notificaciones</span>';
+        }
+      }
+    }
+
+    async function clearNotificationSecret(channel) {
+      const patch = {};
+      if (channel === 'telegram') patch.telegram = { clearBotToken: true };
+      else if (channel === 'ntfy') patch.ntfy = { clearToken: true };
+      else if (channel === 'discord') patch.discord = { clearWebhookUrl: true };
+      else if (channel === 'webhook') patch.webhook = { clearSecret: true };
+      else return;
+
+      try {
+        const view = await client.call('notifications.setConfig', patch);
+        applyNotificationConfigViewToUi(view);
+        showToast(`Credencial de ${channel} eliminada.`, 'info', '🧹');
+      } catch (e) {
+        showToast('Error eliminando credencial: ' + (e.message || e), 'error', '❌');
+      }
+    }
+
+    async function testNotificationChannel(channel, btnEl) {
+      const originalHtml = btnEl ? btnEl.innerHTML : '';
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = 'Probando...';
+      }
+      try {
+        if (channel !== 'webui' && window._notifConfigLoaded) {
+          await saveNotificationConfig(true);
+        }
+        const res = await client.call('notifications.test', { channel });
+        if (channel !== 'webui') {
+          await loadNotificationConfig();
+        }
+        if (res && res.ok) {
+          if (channel !== 'webui') {
+            showToast(`Prueba enviada por ${channel} (${res.latencyMs || 0} ms).`, 'success', '✅');
+          }
+        } else {
+          const errMsg = (res && res.error) || 'Fallo al enviar prueba';
+          showToast(`Error probando ${channel}: ${errMsg}`, 'error', '❌');
+        }
+      } catch (e) {
+        showToast(`Error probando ${channel}: ` + (e.message || e), 'error', '❌');
+      } finally {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    document.addEventListener('click', (ev) => {
+      const container = document.getElementById('notif-header-container');
+      if (container && !container.contains(ev.target)) {
+        closeNotificationsPopover();
+      }
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeNotificationsPopover();
+    });
+
     client.on('connected', () => {
       const host = window.location.hostname || '192.168.1.166';
       if (document.getElementById('arr-host-input')) {
@@ -10374,6 +11412,8 @@
       try { refreshDownloads(); } catch (e) { console.error('Error refreshDownloads:', e); }
       try { refreshStorage(); } catch (e) { console.error('Error refreshStorage:', e); }
       try { refreshBandwidthLimits(); } catch (e) { console.error('Error refreshBandwidthLimits:', e); }
+      try { refreshNotifications(); } catch (e) { console.error('Error refreshNotifications:', e); }
+      try { loadNotificationConfig(); } catch (e) { console.error('Error loadNotificationConfig:', e); }
       try {
         refreshSystemUpdateStatus().then(scheduleSilentUpdateCheckIfEnabled);
       } catch (e) {
@@ -10449,14 +11489,19 @@
       });
     });
 
-    // Enrutamiento de eventos push del daemon al Registro en Vivo
-    client.on('server.connected', (d) => {
-      const sName = (d && (d.serverName || d.serverAddress)) || 'Servidor';
-      const idType = d && d.isHighId ? 'HighID' : 'LowID';
-      addLog('success', `Conectado a servidor eD2k: ${sName} (${idType})`);
-    });
-    client.on('server.disconnected', () => {
-      addLog('warn', 'Desconectado del servidor eD2k.');
+    // Enrutamiento de eventos push del daemon al Registro en Vivo y Centro de Notificaciones
+    client.on('server.sessionUpdated', (d) => {
+      const session = d && d.session ? d.session : d;
+      if (!session || !session.status) return;
+      if (session.status === notifLastServerStatus) return;
+      notifLastServerStatus = session.status;
+      if (session.status === 'connected') {
+        const sName = session.serverName || session.serverAddress || 'Servidor';
+        const idType = session.isHighId ? 'HighID' : 'LowID';
+        addLog('success', `Conectado a servidor eD2k: ${sName} (${idType})`);
+      } else if (session.status === 'disconnected') {
+        addLog('warn', 'Desconectado del servidor eD2k.');
+      }
     });
     client.on('event.statsTick', (d) => {
       if (d && d.stats) {
@@ -10467,14 +11512,15 @@
         }
       }
     });
-    client.on('download.downloadAdded', (d) => {
-      const name = fixMojibake((d && (d.fileName || d.file_name)) || 'Nuevo archivo');
+    client.on('event.downloadAdded', (d) => {
+      const dl = d && d.download ? d.download : d;
+      const name = fixMojibake((dl && (dl.fileName || dl.file_name)) || 'Nuevo archivo');
       addLog('info', `Nueva descarga en cola: ${name}`);
     });
     // Sistema de notificaciones nativas de escritorio (HTML5 Web Notifications)
     function sendDesktopNotification(title, message) {
-      if (!("Notification" in window)) return;
-      if (Notification.permission === "granted") {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
         try {
           new Notification(title, {
             body: message,
@@ -10483,26 +11529,55 @@
         } catch (e) {
           console.warn('Error enviando notificación desktop:', e);
         }
-      } else if (Notification.permission !== "denied") {
-        Notification.requestPermission();
       }
     }
 
-    const notifiedCompletedSet = new Set();
-    client.on('download.downloadUpdated', (d) => {
-      if (!d) return;
-      const status = (d.status || '').toLowerCase();
-      const id = d.id;
-      const total = d.totalBytes || d.total_bytes || 0;
-      const transferred = d.receivedBytes || d.received_bytes || 0;
-      if ((status === 'completed' || (total > 0 && transferred >= total)) && id && !notifiedCompletedSet.has(id)) {
-        notifiedCompletedSet.add(id);
-        const name = fixMojibake(d.fileName || d.file_name || 'Archivo');
-        addLog('success', `Descarga COMPLETADA: ${name}`);
-        showToast(`✅ Descarga completada: ${name}`);
-        sendDesktopNotification("PulseCore P2P Enterprise", `✅ Descarga completada: ${name}`);
+    client.on('event.downloadUpdated', (d) => {
+      if (!d || !d.download) return;
+      const status = (d.download.status || '').toLowerCase();
+      if (status === 'completed') {
         refreshDownloads();
-        loadMediaLibrary();
+      }
+    });
+
+    client.on('event.downloadCompleted', (d) => {
+      const dl = d && d.download ? d.download : d;
+      const name = fixMojibake((dl && (dl.fileName || dl.file_name)) || 'Archivo');
+      addLog('success', `Descarga COMPLETADA: ${name}`);
+      refreshDownloads();
+      loadMediaLibrary();
+    });
+
+    client.on('event.downloadFailed', (d) => {
+      const dl = d && d.download ? d.download : d;
+      const name = fixMojibake((dl && (dl.fileName || dl.file_name)) || 'Archivo');
+      const reason = d && d.reason ? ` (${d.reason})` : '';
+      addLog('error', `Error en descarga: ${name}${reason}`);
+      refreshDownloads();
+    });
+
+    client.on('event.notificationCreated', (d) => {
+      const item = d && d.notification ? d.notification : d;
+      if (!item || !item.title) return;
+      notifItems = [item, ...notifItems.filter(n => n.id !== item.id)].slice(0, 60);
+      if (!item.isRead) {
+        notifUnreadCount = (Number(notifUnreadCount) || 0) + 1;
+      }
+      updateNotificationBadges();
+      renderNotificationsPopover();
+
+      const toastType = ['success', 'warning', 'error', 'info'].includes(item.severity)
+        ? item.severity
+        : 'info';
+      const icon = notifIconFor(item);
+      showToast(item.body ? `${item.title}: ${item.body}` : item.title, toastType, icon);
+      addLog(toastType === 'error' ? 'error' : (toastType === 'warning' ? 'warn' : toastType), `${item.title} — ${item.body || ''}`);
+
+      if (isBrowserNotifPrefEnabled()) {
+        sendDesktopNotification(`Pulse Core · ${item.title}`, item.body || '');
+      }
+      if (isSoundNotifPrefEnabled()) {
+        playNotificationChime(item.severity);
       }
     });
 
@@ -13002,6 +14077,19 @@
     window.clearWebuiPassword = clearWebuiPassword;
     window.exportFullBackup = exportFullBackup;
     window.restoreFullBackupFromFile = restoreFullBackupFromFile;
+    window.toggleNotificationsPopover = toggleNotificationsPopover;
+    window.setNotificationFilter = setNotificationFilter;
+    window.markNotificationRead = markNotificationRead;
+    window.markAllNotificationsRead = markAllNotificationsRead;
+    window.clearNotificationsHistory = clearNotificationsHistory;
+    window.openNotificationSettingsTab = openNotificationSettingsTab;
+    window.toggleQuickBrowserNotifications = toggleQuickBrowserNotifications;
+    window.toggleQuickSoundNotifications = toggleQuickSoundNotifications;
+    window.enableBrowserNotifications = enableBrowserNotifications;
+    window.playNotificationChime = playNotificationChime;
+    window.saveNotificationConfig = saveNotificationConfig;
+    window.clearNotificationSecret = clearNotificationSecret;
+    window.testNotificationChannel = testNotificationChannel;
 
   </script>
 </body>

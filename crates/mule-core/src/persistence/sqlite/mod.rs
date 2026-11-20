@@ -9,8 +9,8 @@ use crate::error::CoreError;
 use crate::kad::{KadContact, KadIndexedNote, KadIndexedSource, KadKeywordEntry};
 use crate::model::{
     CalendarEpisode, Download, DownloadCategory, DownloadStatus, Ed2kServer, EpisodeItem, ExternalIndexer, Friend,
-    HistoryEntry, HistoryFilter, HistoryStats, MediaItem, PeerCredit, PeerSource,
-    PeerSourceStatus, SharedFile,
+    HistoryEntry, HistoryFilter, HistoryStats, MediaItem, NotificationFilter, NotificationRecord,
+    PeerCredit, PeerSource, PeerSourceStatus, SharedFile,
 };
 use crate::persistence::traits::{
     DownloadRepository, KadRepository, PeerSourceRepository, ServerRepository,
@@ -26,6 +26,7 @@ pub mod friends;
 pub mod history;
 pub mod kad;
 pub mod media;
+pub mod notifications;
 pub mod schema;
 pub mod servers;
 pub mod shares;
@@ -1063,5 +1064,48 @@ impl Database {
         download_id: &str,
     ) -> Result<Option<EpisodeItem>, CoreError> {
         media::find_episode_by_download_id(&self.conn, download_id)
+    }
+
+    // ── Notificaciones ──────────────────────────────────────────────────────
+
+    /// Inserta una notificación en el historial persistente.
+    pub fn insert_notification(
+        &mut self,
+        record: &NotificationRecord,
+    ) -> Result<NotificationRecord, CoreError> {
+        notifications::insert_notification(&mut self.conn, record)
+    }
+
+    /// Lista notificaciones persistidas aplicando filtro y límite.
+    pub fn list_notifications(
+        &self,
+        filter: &NotificationFilter,
+    ) -> Result<Vec<NotificationRecord>, CoreError> {
+        notifications::list_notifications(&self.conn, filter)
+    }
+
+    /// Devuelve el total de notificaciones no leídas.
+    pub fn count_unread_notifications(&self) -> Result<usize, CoreError> {
+        notifications::count_unread_notifications(&self.conn)
+    }
+
+    /// Marca una notificación concreta como leída.
+    pub fn mark_notification_read(&mut self, id: i64) -> Result<bool, CoreError> {
+        notifications::mark_notification_read(&mut self.conn, id)
+    }
+
+    /// Marca todas las notificaciones como leídas.
+    pub fn mark_all_notifications_read(&mut self) -> Result<usize, CoreError> {
+        notifications::mark_all_notifications_read(&mut self.conn)
+    }
+
+    /// Elimina todo el historial de notificaciones.
+    pub fn clear_notifications(&mut self) -> Result<usize, CoreError> {
+        notifications::clear_notifications(&mut self.conn)
+    }
+
+    /// Poda notificaciones antiguas manteniendo las `max_keep` más recientes.
+    pub fn prune_old_notifications(&mut self, max_keep: usize) -> Result<usize, CoreError> {
+        notifications::prune_old_notifications(&mut self.conn, max_keep)
     }
 }

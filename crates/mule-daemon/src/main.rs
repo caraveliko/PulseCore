@@ -494,6 +494,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let media_automation_handle = mule_daemon::services::MediaAutomation::start(state.clone());
     state.register_task(media_automation_handle.abort_handle()).await;
 
+    // Auto-iniciar monitor reactivo de notificaciones (eventos, torrents y espacio libre)
+    let notification_monitor_handle =
+        mule_daemon::services::notifications::start_notification_monitor(state.clone());
+    state
+        .register_task(notification_monitor_handle.abort_handle())
+        .await;
+
     let shutdown_notify = state.shutdown_notify.clone();
     let upnp_cleanup = state.upnp.clone();
     let listener_cleanup = state.inbound_listener.clone();

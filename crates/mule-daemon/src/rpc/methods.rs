@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::error::JsonRpcError;
 use crate::rpc::handlers::{
     categories::*, downloads::*, friends::*, history::*, kad::*, lab::*, media::*, network::*,
-    servers::*, settings::*, shares::*, sources::*, upnp::*, updater::*,
+    notifications::*, servers::*, settings::*, shares::*, sources::*, upnp::*, updater::*,
 };
 use crate::rpc::types::{JsonRpcRequest, JsonRpcResponse};
 use crate::state::AppState;
@@ -66,6 +66,12 @@ pub async fn handle_request(
         "history.stats" => handle_history_stats(state).await,
         "history.clear" => handle_history_clear(state).await,
         "history.export" => handle_history_export(state, req.params).await,
+        "notifications.list" => handle_notifications_list(state, req.params).await,
+        "notifications.markRead" => handle_notifications_mark_read(state, req.params).await,
+        "notifications.clear" => handle_notifications_clear(state).await,
+        "notifications.getConfig" => handle_notifications_get_config(state).await,
+        "notifications.setConfig" => handle_notifications_set_config(state, req.params).await,
+        "notifications.test" => handle_notifications_test(state, req.params).await,
         "settings.get" => handle_settings_get(state).await,
         "settings.set" => handle_settings_set(state, req.params).await,
         "settings.listDirs" => handle_settings_list_dirs(state, req.params).await,

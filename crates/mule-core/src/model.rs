@@ -799,3 +799,27 @@ pub struct ExternalIndexer {
     pub enabled: bool,
     pub created_at: i64,
 }
+
+/// Registro persistido de una notificación de usuario generada por el demonio.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationRecord {
+    pub id: i64,
+    pub kind: String,
+    pub severity: String,
+    pub category: String,
+    pub title: String,
+    pub body: String,
+    pub metadata_json: Option<String>,
+    pub is_read: bool,
+    pub created_at_unix_ms: i64,
+}
+
+/// Filtro de consulta para listar el historial de notificaciones.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationFilter {
+    pub category: Option<String>,
+    pub unread_only: bool,
+    pub limit: Option<usize>,
+}

@@ -113,6 +113,11 @@ pub enum DaemonEvent {
     /// El estado de pasarela/mapeo UPnP cambió (habilitar, mapear, desmapear).
     /// `params` es la instantánea completa de `UpnpStatus` — sin `sequence`.
     UpnpStatusChanged { snapshot: UpnpStatusSnapshot },
+    /// Se creó y persistió una nueva notificación para el usuario.
+    NotificationCreated {
+        sequence: u64,
+        notification: mule_core::model::NotificationRecord,
+    },
     /// Una notificación fuera del conjunto tipado (resultados de búsqueda, fuentes
     /// encontradas, eventos de control como `event.snapshotRequired`).
     Custom {
@@ -139,6 +144,7 @@ impl DaemonEvent {
             Self::SettingsChanged { .. } => "settings.changed",
             Self::NetworkPolicyChanged { .. } => "network.policyChanged",
             Self::UpnpStatusChanged { .. } => "upnp.statusChanged",
+            Self::NotificationCreated { .. } => "event.notificationCreated",
             Self::Custom { method, .. } => method.as_str(),
         }
     }
@@ -160,9 +166,11 @@ impl DaemonEvent {
             Self::HistoryEntryAdded { .. } => Some("history"),
             Self::SettingsChanged { .. } => Some("settings"),
             Self::NetworkPolicyChanged { .. } | Self::UpnpStatusChanged { .. } => Some("network"),
+            Self::NotificationCreated { .. } => Some("notifications"),
             Self::Custom { method, .. } => match method.as_str() {
                 "server.searchResult" | "server.foundSources" => Some("search"),
                 "upnp.statusChanged" => Some("network"),
+                "event.notificationCreated" => Some("notifications"),
                 "event.snapshotRequired" => None,
                 _ => Some("other"),
             },
@@ -226,6 +234,13 @@ impl DaemonEvent {
             Self::UpnpStatusChanged { snapshot } => {
                 serde_json::to_value(snapshot).unwrap_or_default()
             }
+            Self::NotificationCreated {
+                sequence,
+                notification,
+            } => serde_json::json!({
+                "sequence": sequence,
+                "notification": notification,
+            }),
             Self::Custom { payload, .. } => payload.clone(),
         };
         serde_json::to_string(&JsonRpcNotification::new(self.method(), params)).ok()

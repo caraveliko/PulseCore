@@ -8,6 +8,10 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::error::JsonRpcError;
+use crate::services::notifications::{
+    constants::DISK_LOW_COOLDOWN_SECS, NotificationCategory, NotificationEventInput,
+    NotificationKind, NotificationSeverity,
+};
 use crate::services::updater::{
     is_managed_by_systemd, UpdateStatusSnapshot, UpdaterError, RESTART_RESPONSE_GRACE_MS,
 };
@@ -42,7 +46,37 @@ pub async fn handle_check_update(
     _params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
     match state.updater.check_for_updates(&state.network_policy).await {
-        Ok(snapshot) => Ok(attach_environment(state, snapshot).await),
+        Ok(snapshot) => {
+            if let UpdateStatusSnapshot::UpdateAvailable {
+                ref version,
+                ref current_version,
+                ..
+            } = snapshot
+            {
+                let _ = state
+                    .notifications
+                    .notify(
+                        state,
+                        NotificationEventInput {
+                            kind: NotificationKind::UpdateAvailable,
+                            severity: NotificationSeverity::Info,
+                            category: NotificationCategory::System,
+                            title: "Nueva actualización disponible".to_string(),
+                            body: format!(
+                                "Pulse Core v{version} disponible (actual: v{current_version})."
+                            ),
+                            metadata: Some(json!({
+                                "version": version,
+                                "currentVersion": current_version,
+                            })),
+                            dedupe_key: Some(format!("update:{version}")),
+                            cooldown_secs: DISK_LOW_COOLDOWN_SECS,
+                        },
+                    )
+                    .await;
+            }
+            Ok(attach_environment(state, snapshot).await)
+        }
         Err(
             UpdaterError::HttpStatus { .. }
             | UpdaterError::NetworkBlocked(_)
