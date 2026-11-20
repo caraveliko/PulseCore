@@ -13,9 +13,9 @@
 | `Cargo.lock` | Bloqueo de versiones de las dependencias Rust |
 | `README.md` | Presentación general del proyecto y portal hacia `docs/` |
 | `AGENTS.md` | Reglas para agentes de IA (cartografía, validación, reglas críticas) |
-| `CLAUDE.md` | Enlace físico hacia `AGENTS.md` (compatibilidad Claude Code) |
-| `GEMINI.md` | Enlace físico hacia `AGENTS.md` (compatibilidad Gemini CLI) |
-| `.github/copilot-instructions.md` | Enlace físico hacia `AGENTS.md` (compatibilidad GitHub Copilot) |
+| `CLAUDE.md` | Puntero hacia `AGENTS.md` (compatibilidad Claude Code) |
+| `GEMINI.md` | Puntero hacia `AGENTS.md` (compatibilidad Gemini CLI) |
+| `.github/copilot-instructions.md` | Puntero hacia `AGENTS.md` (compatibilidad GitHub Copilot) |
 | `deny.toml` | Configuración `cargo-deny` (auditoría de licencias/vulnerabilidades) |
 | `LICENSE` | Licencia del proyecto: GPL-2.0-or-later (texto canónico FSF) |
 | `AUTHORS` | Titular del copyright y mantenedor (Laurent Geynet "Loulach") |
@@ -29,7 +29,9 @@
 | `.github/dependabot.yml` | Actualizaciones automáticas de dependencias (cargo, actions) |
 | `.github/ISSUE_TEMPLATE/` | Formularios de incidencias GitHub (bug, funcionalidad, contacto de seguridad) |
 | `.github/PULL_REQUEST_TEMPLATE.md` | Lista de verificación PR (validación, fidelidad de protocolo, seguridad) |
-| `Asset/generated-image.png` | Imagen fuente del icono de la aplicación (1254×1254 RGBA) — adaptada a `app_icon.ico` Windows/tray e iconos web/macOS/iOS |
+| `Asset/pulse-core-logo.svg` | Logotipo vectorial oficial de Pulse Core |
+| `web/index.html` | Interfaz web integrada (WebUI) servida por `mule-daemon` |
+| `wiki/` | Documentación de usuario para la Wiki de GitHub |
 
 ## .agents/ — Configuración de agentes/MCP
 
@@ -38,170 +40,6 @@
 | `.agents/mcp_config.json` | Configuración del servidor MCP |
 | `.agents/plugins/emulerust/mcp_config.json` | Configuración MCP del plugin emulerust |
 | `.agents/plugins/emulerust/plugin.json` | Manifiesto del plugin de agente |
-
-## apps/desktop/ — Aplicación Flutter (Windows, histórico)
-
-### Núcleo de la aplicación (`lib/`)
-
-| Archivo | Función |
-|---|---|
-| `lib/main.dart` | Punto de entrada: compone `app_shell` + `mule_client` |
-| `lib/core/deep_link_handler.dart` | Enlaces `ed2k://` entrantes |
-| `lib/core/download_notifier.dart` | Notificaciones del sistema sobre eventos de descarga |
-| `lib/core/tray_setup.dart` | Icono y menú de la bandeja del sistema |
-| `lib/core/window_setup.dart` | Configuración de la ventana nativa |
-| `lib/services/daemon_supervisor.dart` | Supervisión del ciclo de vida del demonio (inicio/parada) |
-| `lib/services/work_directory_resolver.dart` | Resolución del directorio de trabajo del demonio |
-
-### Configuración Flutter / plataformas
-
-| Archivo | Función |
-|---|---|
-| `pubspec.yaml` | Manifiesto del paquete Flutter (dependencias) |
-| `pubspec.lock` | Bloqueo de dependencias Dart/Flutter |
-| `analysis_options.yaml` | Reglas de análisis estático Dart |
-| `.metadata` | Metadatos del proyecto Flutter |
-| `README.md` | Documentación de la app de escritorio |
-| `assets/app_icon.ico` | Icono de la aplicación |
-| `android/`, `ios/`, `linux/`, `macos/`, `windows/` | Runners nativos generados por Flutter (solo `windows/` es el objetivo soportado: `windows/ed2k_protocol.reg` registra el protocolo `ed2k://`, `runner/` contiene el código Win32) |
-
-### Pruebas Flutter (`test/`)
-
-| Archivo | Función |
-|---|---|
-| `test/domain/download_item_test.dart` | Pruebas del modelo `DownloadItem` |
-| `test/integration/live_daemon_e2e_test.dart` | Prueba E2E frente a un demonio real |
-| `test/services/daemon_supervisor_test.dart` | Pruebas del supervisor del demonio |
-| `test/services/work_directory_resolver_test.dart` | Pruebas del resolvedor de directorio de trabajo |
-| `test/ui/*.dart` (18 archivos) | Pruebas UI: categorías, diagnósticos, detalles, pantallas downloads/history/Kad/search/servers, importación part.met, IP filter, política de red, fuentes de pares, responsive, rendimiento en listas grandes, settings, compartidos, barra de disponibilidad de partes (`part_availability_bar_test`) |
-
-## apps/web/ — Aplicación Flutter Web (histórico)
-
-| Archivo | Función |
-|---|---|
-| `lib/main.dart` | Punto de entrada de la app web — resolución del demonio: `?daemon=` > `window.MULE_SESSION` (inyectado por `session-config.js` cuando lo sirve el demonio) > dart-define > prefs > formulario; token mediante `?token=`/formulario/prefs |
-| `lib/daemon_connect_screen.dart` | Pantalla de conexión al demonio (URL ws/wss + campo de token opcional) |
-| `pubspec.yaml` / `pubspec.lock` / `analysis_options.yaml` | Configuración Flutter |
-| `web/` | Plantilla base web (index.html + `<script src="session-config.js">`, manifiesto, iconos) |
-
-## packages/app_shell/ — Shell UI compartido (MVVM, histórico)
-
-Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib/app/`), servicios transversales (`lib/core/`), localización (`lib/l10n/`) y pantallas por funcionalidad (`lib/ui/features/`).
-
-### Configuración y composición
-
-| Archivo | Función |
-|---|---|
-| `pubspec.yaml` / `analysis_options.yaml` / `l10n.yaml` | Configuración del paquete (incluida generación i18n) |
-| `lib/emulerust_app.dart` | Widget raíz de la aplicación |
-| `lib/app/app_controller.dart` | Raíz de composición: sesión del demonio + cableado de controladores |
-| `lib/app/providers.dart` | Providers Riverpod de la aplicación |
-| `lib/app/router.dart` | Enrutamiento/navegación entre pantallas |
-| `lib/app/shell_controller.dart` | Controlador del shell (estado global de la UI) |
-| `lib/app/locale_controller.dart` | Controlador de idioma |
-| `lib/app/stats_controller.dart` | Controlador de estadísticas globales |
-| `lib/app/transfer_rate_tracker.dart` | Seguimiento de velocidades de transferencia |
-
-### Servicios transversales (`lib/core/`)
-
-| Archivo | Función |
-|---|---|
-| `lib/core/assistant_token.dart` (+`_io`, `_stub`) | Resolución del token de sesión para `assistant.hello` (`<workdir>/auth.token`) — solo escritorio |
-| `lib/core/daemon_lifecycle.dart` | Ciclo de vida de la conexión al demonio |
-| `lib/core/folder_picker.dart` (+`_io`, `_stub`) | Selector de carpetas (abstracción + impl nativa/stub) |
-| `lib/core/file_picker_helper.dart` (+`_io`, `_stub`) | Selector de archivos nativo (`pickFile`, `file_picker` 12.3) — ipfilter.dat, server.met, nodes.dat, .part.met |
-| `lib/core/system_actions.dart` (+`_io`, `_stub`) | Acciones del sistema (abrir carpeta, mostrar archivo, abrir URL en navegador) |
-| `lib/core/work_dirs.dart` | Directorios de trabajo (downloads, incoming…) |
-
-### Localización (`lib/l10n/`)
-
-| Archivo | Función |
-|---|---|
-| `lib/l10n/l10n.dart` | Punto de acceso a las localizaciones |
-| `lib/l10n/l10n_lookup.dart` | `L10nLookup`: acceso a `AppLocalizations` sin `BuildContext` (mensajes de los controladores), sincronizado con `LocaleController` |
-| `lib/l10n/enum_labels.dart` | Extensiones localizadas sobre los enums de `mule_client` (`DownloadStatus`, `DaemonConnectionState`, `SupervisorState`, `NetworkProfile`, prioridades…) |
-| `lib/l10n/app_fr.arb` / `app_en.arb` | Recursos de traducción |
-| `lib/l10n/generated/` | Localizaciones generadas (`app_localizations*.dart`) |
-
-### Funcionalidad `downloads` (`lib/ui/features/downloads/`)
-
-| Archivo | Función |
-|---|---|
-| `view_models/downloads_store_controller.dart` | Store principal de descargas |
-| `view_models/categories_controller.dart` | Controlador de categorías |
-| `view_models/lab_controller.dart` | Controlador del laboratorio |
-| `view_models/network_policy_controller.dart` | Controlador de la política de red |
-| `view_models/peer_sources_controller.dart` | Controlador de fuentes de pares — `getVisibleSourcesForHash` filtra la deadlist de eMule (fallidos/rechazados/filtrados ocultos) |
-| `views/downloads_screen.dart` | Pantalla principal de descargas |
-| `widgets/downloads_list.dart`, `downloads_top_bar.dart`, `downloads_sidebar.dart`, `downloads_empty_state.dart` | Lista, barra de herramientas, barra lateral y estado vacío |
-| `widgets/download_row.dart`, `download_details_panel.dart`, `download_detail_dialog.dart` | Fila de descarga y panel/diálogo de detalle |
-| `widgets/download_sources_expansion.dart` | Expansión de fuentes de una descarga — solo muestra la srclist de eMule (vivas), no las entradas deadlist |
-| `widgets/speed_sparkline.dart`, `debug_simulation_bar.dart` | Sparkline de velocidad, barra de simulación |
-| `widgets/add_link_dialog.dart` + `widgets/add_link/` | Diálogo para añadir enlace ed2k (`ed2k_link_parser`, desplegables categoría/asignación, vista previa) |
-| `widgets/category_edit_dialog.dart` + `widgets/category/` | Edición de categoría (selector de color, desplegable de prioridad) |
-| `widgets/detail/` (16 archivos) | Tarjetas de detalle: cabecera, barra de acciones, identidad, métricas, mapa de partes, rutas, fuentes, diagnósticos, diálogos destino/eliminación, `peer_source_row` |
-| `widgets/diagnostic_dialog.dart` + `widgets/diagnostic/` (8 archivos) | Tarjeta de diagnóstico: chips de capacidades, filas de información, formato, banner de perfil de red |
-| `widgets/import/` (7 archivos) + `import_part_met_dialog.dart` | Importación defensiva `.part.met`: inspección, informe, aviso de seguridad |
-| `widgets/lab/` (9 archivos) + `lab_guide_dialog.dart` | Asistente de laboratorio: pasos fixture/enlace/par/conexión/limpieza |
-| `widgets/network/` (8 archivos) + `network_policy_dialog.dart`, `ip_filter_dialog.dart` | Pestañas IP filter y límites de velocidad, cuotas, banner de estado de red, registro de auditoría |
-| `widgets/row/` (9 archivos) | Fila de descarga: variantes compacta/completa, insignias, iconos, barra de acciones, píldora de estado, chip de prioridad (`download_priority_chip.dart`), diálogo de renombrado (`rename_file_dialog.dart`) |
-| `widgets/settings/` (5 archivos) | Bloques reutilizados por la página Ajustes: carpeta, idioma, retención, amigos, mensaje inline |
-| `widgets/sidebar/` (9 archivos) | Barra lateral: cabecera de marca, elementos nav/categoría/filtro, tarjeta de estado del demonio (`sidebar_status_card` — versión, indicadores eD2K/Kad en color, nombre del servidor), eliminación de categoría |
-| `widgets/incompatible_version_dialog.dart` | Aviso de versión del demonio incompatible |
-
-### Funcionalidades `assistant`, `history`, `kad`, `search`, `servers`, `settings`, `shares`, `uploads`
-
-| Archivo | Función |
-|---|---|
-| `assistant/view_models/assistant_controller.dart` + `views/assistant_view.dart` + `widgets/` (6 archivos) | Asistente de IA local (`/assistant`): chat en streaming, tarjetas de herramientas, banner de confirmación, estado sin conexión/reintento, barra de entrada; `AssistantController` gestiona conexión WS, entradas, confirmaciones y cancelación |
-| `history/view_models/history_controller.dart` + `views/history_view.dart` + `widgets/` (9 archivos) | Historial: vista, barra de herramientas, filtro, panel de estadísticas, filas de entrada, diálogos detalle/exportación/borrado |
-| `kad/view_models/kad_controller.dart` + `views/kad_screen.dart` + `widgets/` (12 archivos) | Kad: tabla de contactos, bootstrap (diálogo + URL), importación `nodes.dat`, insignias/estados, banner de seguridad |
-| `search/view_models/search_controller.dart` + `views/search_screen.dart` + `widgets/` (7 archivos) | Búsqueda: formulario, tabla de resultados, banner de conexión, estados |
-| `servers/view_models/servers_controller.dart` + `views/servers_screen.dart` + `widgets/` (12 archivos) | Servidores: tabla y tarjetas, importación `server.met`, barra de sesión, insignias, diálogos limpiar/actualizar |
-| `settings/view_models/settings_controller.dart` + `views/settings_view.dart` + `views/sections/` (6 archivos) + `widgets/` (3 archivos) | Página Ajustes (`/settings`): barra General/Conexión/Transferencias/Seguridad/Amigos/Avanzado; apodo, compartición Incoming, **interruptores Red eD2K/Kad** (`network_toggles_card`), kill switch/cuotas, **capacidades y puertos TCP/UDP, interruptores UDP+UPnP**, ofuscación, conexiones máx., USS, límites de fuentes, cola de subida, IP filter, amigos, herramientas avanzadas |
-| `shares/views/shares_view.dart` + `shares/view_models/shares_controller.dart` | Pestaña «Compartidos» (`/shares`): archivos servidos (persistidos + parciales `.part` con insignia «parcial», **descargas activas siempre publicadas desde su creación**), **velocidad de subida actual + total acumulado por archivo** (`uploadRateBps`/`uploadedBytes`), **agrupación por categoría** (`shared_files.category_id` vía `shares.setCategory`, orden por total subido descendente, «Sin categoría» al final), **buscador** (nombre + hash), renombrado (`shares.rename`), prioridad de subida (powershare), interruptor activado/suspendido, **botón reescanear Incoming** (`shares.rescan`); el controlador alimenta la insignia de la barra lateral en vivo |
-| `uploads/view_models/uploads_controller.dart` + `views/uploads_view.dart` + `widgets/uploads_table.dart` | Subidas: vista y tabla de envíos |
-
-## packages/mule_client/ — Cliente del demonio compartido (histórico)
-
-| Archivo | Función |
-|---|---|
-| `lib/mule_client.dart` | Barrel: exportación única del paquete |
-| `lib/data/assistant_client.dart` | Cliente WS/JSON-RPC de `mule-assistant` (`assistant.hello/chat/confirm/cancel`, eventos en streaming) |
-| `lib/data/rpc_daemon_client.dart` | Cliente RPC real que se comunica con el demonio (WebSocket/JSON-RPC) |
-| `lib/data/fake_daemon_client.dart` | Cliente del demonio simulado para pruebas/desarrollo sin demonio |
-| `lib/data/dto/rpc_dto.dart` | Objetos de transferencia de datos para el protocolo RPC |
-| `lib/domain/services/mule_daemon_client.dart` | Interfaz abstracta del cliente del demonio (contrato) |
-| `lib/domain/models/assistant_models.dart` | Modelos: `AssistantEvent`, `AssistantConfirmRequest`, `ChatEntry`, estados de conexión del asistente |
-| `lib/domain/models/category_item.dart` | Modelo: categoría de descarga |
-| `lib/domain/models/daemon_event.dart` | Modelo: evento emitido por el demonio |
-| `lib/domain/models/daemon_info.dart` | Modelo: información de estado del demonio |
-| `lib/domain/models/download_item.dart` | Modelo: elemento de descarga (`parts[]` con `receivedMask` mapa de bits de 64 celdas, `pendingRanges` bloques en vuelo, `ByteRange`) |
-| `lib/domain/models/filter_models.dart` | Modelos: filtros (IP filter, etc.) |
-| `lib/domain/models/history_entry.dart` | Modelo: entrada de historial |
-| `lib/domain/models/history_stats.dart` | Modelo: estadísticas de historial |
-| `lib/domain/models/lab_models.dart` | Modelos: funcionalidades «lab» experimentales |
-| `lib/domain/models/network_policy_models.dart` | Modelos: política de red |
-| `lib/domain/models/part_met_models.dart` | Modelos: metadatos de archivos `.part.met` |
-| `lib/domain/models/server_models.dart` | Modelos: servidores eD2K |
-| `pubspec.yaml` | Manifiesto del paquete |
-| `test/assistant_client_test.dart` | Pruebas del cliente asistente (servidor WS loopback falso) |
-| `test/fake_daemon_client_test.dart` | Pruebas del cliente simulado |
-| `test/rpc_daemon_client_test.dart` | Pruebas del cliente RPC |
-| `README.md` | Uso, protocolo y comportamientos de transporte del cliente |
-
-## packages/ui_kit/ — Sistema de diseño compartido (histórico)
-
-| Archivo | Función |
-|---|---|
-| `lib/ui_kit.dart` | Barrel: exportación única del paquete |
-| `lib/src/theme.dart` | `AppTheme`: colores de marca/estado, `dark()` ThemeData |
-| `lib/src/tokens.dart` | Design tokens (espaciados, radios, colores) |
-| `lib/src/formatters.dart` | `Formatters`: bytes, velocidades, ETA, porcentajes |
-| `lib/src/strings.dart` | `AppStrings`: cadenas UI centralizadas (base i18n) |
-| `lib/src/part_availability_bar.dart` | Barra `DrawStatusBar` eMule 0.72a precisa por bytes (CustomPaint), paleta estándar plana: azul = recibido, rojo = sin fuente, degradado cian→azul `RGB(0,g,255)` eMule raro→común, amarillo = en vuelo, verde = verificado y franja de progreso; constantes `partHaveColor`/`partVerifiedColor`/`partMissingColor`/`partPendingColor`/`partProgressColor` compartidas con la tarjeta part-map |
-| `pubspec.yaml` | Manifiesto del paquete |
-| `README.md` | Contenido y reglas del sistema de diseño |
 
 ## crates/ — Crates Rust
 
@@ -690,23 +528,6 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `docs/architecture/conectividad_nat_quic_2026.md` | Especificación de conectividad 2026: cascada UPnP/PCP/NAT-PMP, IPv6 Pinhole, Happy Eyeballs v2, QUIC RFC 9000 y UDP Hole Punching |
 | `docs/architecture/bittorrent_negociacion_2026.md` | Especificación de seguridad, IP filter, uTP, Dual-Stack IPv6 y capacidades en `mule-torrent` |
 
-### docs/walkthroughs/ — Guías de ejecución e interoperabilidad por fase
-| Archivo | Función |
-|---|---|
-| `docs/walkthroughs/README.md` (o `INDEX.md`) | Índice maestro y tabla de orientación de todos los walkthroughs |
-| `docs/walkthroughs/walkthrough_Phase_01_a_03c.md` | Guía de ejecución y endurecimiento del producto (Fases 1 a 3C) |
-| `docs/walkthroughs/walkthrough_Tier3_eMule050a.md` | Interoperabilidad loopback con eMule 0.50a oficial (Tier 3.1 a 3.6) |
-| `docs/walkthroughs/walkthrough_Phase_07.md` | Modo portátil, aislamiento `data/` frente a `downloads/` y persistencia SQLite (Fase 7) |
-| `docs/walkthroughs/walkthrough_Phase_08.md` | Mapa de partes interactivo, historial local, categorías e importación `.part.met` (Fase 8) |
-| `docs/walkthroughs/walkthrough_Phase_09.md` | Política de red defensiva en 7 capas, permisos RAII, Kill Switch e IP Filter (Fase 9) |
-| `docs/walkthroughs/walkthrough_Phase_10.md` | Infraestructura de servidores eD2K, TCP Lugdunum, HighID/LowID, búsqueda y fuentes (Fase 10) |
-| `docs/walkthroughs/walkthrough_Phase_11.md` | Swarm multifuente, asignador Water-Filling y arranque de baja latencia (Fase 11) |
-| `docs/walkthroughs/walkthrough_Phase_12.md` | Fundamentos Kad DHT, KadId de 128 bits, K-Buckets y transporte UDP (Fase 12) |
-| `docs/walkthroughs/walkthrough_Phase_13.md` | Source Exchange v4 (SX1/SX2), compresión zlib y servidor MCP de 83 herramientas (Fase 13) |
-| `docs/walkthroughs/walkthrough_Phase_14.md` | Convergencia de búsqueda Kad DHT (`CUInt128`) y Clean Architecture completa (Fase 14) |
-| `docs/walkthroughs/walkthrough_Phase_15.md` | Swarm multipares real, conformidad de colas de eMule y registros estratégicos (Fase 15) |
-| — (Fases 16 y 17) | Documentadas en línea en `docs/architecture/rapport_architecture_et_avancement.md` §10/§11 + `docs/CHANGELOG.md` (interoperabilidad eMule 0.72a; fidelidad UI: compartidos parciales, contadores en tiempo real, barra de partes `DrawStatusBar`) |
-
 ### docs/releases/ — Notas de versión detalladas
 | Archivo | Función |
 |---|---|
@@ -758,31 +579,22 @@ Paquete Dart que contiene toda la interfaz: composición de la aplicación (`lib
 | `ed2k/negociacion_endurecimiento_2026.md` | Especificación de endurecimiento pre-handshake, SUI V2/caché, AICH, BDP, LEDBAT++ y peer scoring |
 | `ed2k/criptografia_moderna_pc26.md` | Especificación criptográfica `PC26`: X25519 + ML-KEM-768, ChaCha20-Poly1305, Ed25519 SUI v3, BLAKE3 Merkle y Zstd |
 
-### docs/plans/ — Planes de implementación
+## scripts/ — Scripts PowerShell, Python y Linux
 
 | Archivo | Función |
 |---|---|
-| `docs/plans/kad/00_index.md` | Hoja de ruta Kad DHT: diagnóstico verificado (eMule 0.72a), orden de los 9 pasos, exclusiones de protocolo |
-| `docs/plans/kad/01_probing_lru.md` | Paso 1: `ContactVerifier` — sondeo de candidatos LRU devueltos por `insert_or_update` |
-| `docs/plans/kad/02_hello_req.md` | Paso 2: emisión `HELLO_REQ` (verificación activa de contactos Kad2, ACK de 3 vías) |
-| `docs/plans/kad/03_firewall_revalidation.md` | Paso 3: revalidación de cortafuegos UDP ante cambio de IP/NAT/expiración |
-| `docs/plans/kad/04_bootstrap_health.md` | Paso 4: `BootstrapHealth` multiestado (Empty/Fragile/Building/Healthy) para el drenaje |
-| `docs/plans/kad/05_udp_robustesse.md` | Paso 5: errores tipados `KadTxError`, reintento acotado, ventana de recogida deslizante, emparejamiento endurecido |
-| `docs/plans/kad/06_contention_mutex.md` | Paso 6: instantánea de la tabla bajo bloqueo + ordenación fuera de bloqueo |
-| `docs/plans/kad/07_recherche.md` | Paso 7: codificador de expresión restrictiva, multitérmino, paginación, coalescing compartido |
-| `docs/plans/kad/08_buddy_client.md` | Paso 8: rol cliente buddy LowID (`FINDBUDDY_REQ`, enlace TCP, publicación LowID) |
-| `docs/plans/kad/09_validation_interop.md` | Paso 9: golden packets eMule/aMule, proptest, laboratorio loopback (pérdida/duplicación/reordenación) |
-
-## scripts/ — Scripts PowerShell y Linux
-
-| Archivo | Función |
-|---|---|
-| `build_windows_release.ps1` | Compilación de release Windows (desktop + web empaquetada bajo `web/`, lanzador `Interface Web.bat`, `-SkipWeb`/`-WebBaseHref`) |
+| `build_windows_server.ps1` | Compilación y empaquetado de la edición Servidor Windows (`mule-daemon.exe`, `mule-cli.exe`, SBOM y `.zip`) |
+| `dup_allowlist.txt` | Lista de excepciones autorizadas para el detector de clones exactos (`find_duplicates.py`) |
+| `find_duplicates.py` | Análisis estático de funciones Rust duplicadas en los crates del workspace |
 | `generate_sbom.ps1` | Generación del SBOM (Bill of Materials) |
 | `generate_update_manifest.py` | Firma criptográfica Ed25519 y generación de `manifest.json` para actualizaciones |
 | `mule-daemon.service` | Unidad `systemd --user` para Linux / Raspberry Pi (`ReadWritePaths` incluye `%h/.local/bin`, `RestartSec=2`) |
+| `smart_test.py` | Corredor inteligente de pruebas y guardias locales (`--mode smart\|fast\|full`, sintaxis JS WebUI y clones B1) |
+| `test_duplicates.ps1` | Guardia antiduplicación que falla si aparecen clones exactos fuera de `dup_allowlist.txt` |
 | `test_packaged_bundle.ps1` | Prueba del paquete empaquetado |
+| `test_phase_b_functional_bench.ps1` | Banco funcional JSON-RPC completo en loopback sin conexión (Fase B) |
+| `test_phase_d_public_network.ps1` | Validación supervisada sobre red pública real (Fase D) |
 | `test_qa_loopback_e2e.ps1` | Prueba E2E loopback QA |
 | `test_rc_matrix.ps1` | Matriz de pruebas release candidate |
 | `update_linux.sh` | Compilación local/cruzada (`aarch64`), subida HTTP autenticada, despliegue SSH, instalación de unidad `systemd` y rollback |
-| `verify_all.ps1` | Script de verificación global |
+| `verify_all.ps1` | Script de verificación global (modos `-Mode smart \| fast \| full`) |

@@ -346,29 +346,14 @@ cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # 3. Ejecución de todas las pruebas unitarias y de integración Rust
-cargo test --workspace --all-features
+cargo test --workspace --all-features --lib --tests
 ```
 
 ---
 
-## 9. Inventario exhaustivo de guías técnicas y walkthroughs (`docs/`)
+## 9. Historial de fases y documentación técnica (`docs/`)
 
-Cada fase y subsistema de eMuleRust dispone de una guía técnica detallada de ejecución y validación, accesible mediante el índice maestro [`docs/walkthroughs/README.md`](../walkthroughs/README.md):
-
-| Documento | Fase cubierta | Contenido clave |
-| :--- | :--- | :--- |
-| [`docs/walkthroughs/README.md`](../walkthroughs/README.md) | **Todas (1 a 15)** | Índice maestro, orientación temática y comandos de validación globales. |
-| [`docs/walkthroughs/walkthrough_Phase_01_a_03c.md`](../walkthroughs/walkthrough_Phase_01_a_03c.md) | **Fase 1 a 3C** | Fundamentos Rust, demonio Tokio, UI inicial, endurecimiento del producto, bloqueos `fs4`, tokens CSPRNG, empaquetado. |
-| [`docs/walkthroughs/walkthrough_Tier3_eMule050a.md`](../walkthroughs/walkthrough_Tier3_eMule050a.md) | **Tier 3.1 a 3.6** | Interoperabilidad loopback con eMule 0.50a oficial, handshake, bitfields, bloques de 9,28 MiB, residuo de 1 byte, recuperación ante fallos. |
-| [`docs/walkthroughs/walkthrough_Phase_07.md`](../walkthroughs/walkthrough_Phase_07.md) | **Fase 7.2** | Modo portátil híbrido, aislamiento `data/` frente a `downloads/`, persistencia de eliminación SQLite, pipeline QA E2E. |
-| [`docs/walkthroughs/walkthrough_Phase_08.md`](../walkthroughs/walkthrough_Phase_08.md) | **Fase 8.1 a 8.5** | Mapa de partes interactivo, historial local y estadísticas, categorías jerárquicas, importación defensiva `.part.met`, empaquetado multivariante. |
-| [`docs/walkthroughs/walkthrough_Phase_09.md`](../walkthroughs/walkthrough_Phase_09.md) | **Fase 9.0 y 9.1** | Política de red defensiva (7 capas, permisos RAII, Kill Switch), filtro IP (`ipfilter.dat`), Token Bucket, seudonimización con sal. |
-| [`docs/walkthroughs/walkthrough_Phase_10.md`](../walkthroughs/walkthrough_Phase_10.md) | **Fase 10.0 a 10.2** | Análisis local de `server.met`, sesión TCP real de servidor eD2K (Lugdunum), HighID/LowID, búsqueda y fuentes de servidor. |
-| [`docs/walkthroughs/walkthrough_Phase_11.md`](../walkthroughs/walkthrough_Phase_11.md) | **Fase 11** | Swarm multifuente, asignador dinámico Water-Filling Max-Min, arranque de baja latencia (30s/60s/300s), etiquetas fijas eD2K. |
-| [`docs/walkthroughs/walkthrough_Phase_12.md`](../walkthroughs/walkthrough_Phase_12.md) | **Fase 12** | Fundamentos Kad DHT, KadId de 128 bits, K-Buckets LRU, transporte UDP, bootstrap local y pantalla Kad UI. |
-| [`docs/walkthroughs/walkthrough_Phase_13.md`](../walkthroughs/walkthrough_Phase_13.md) | **Fase 13** | Source Exchange v4 (SX1/SX2), bloques comprimidos zlib (`OP_COMPRESSEDPART`), y servidor nativo para Agente IA MCP (83 herramientas). |
-| [`docs/walkthroughs/walkthrough_Phase_14.md`](../walkthroughs/walkthrough_Phase_14.md) | **Fase 14** | Convergencia de búsqueda Kad DHT (CUInt128 DWORDs, opcode 0x3B, decaimiento antiestancamiento) y refactorización Clean Architecture. |
-| [`docs/walkthroughs/walkthrough_Phase_15.md`](../walkthroughs/walkthrough_Phase_15.md) | **Fase 15** | Descarga multipares real (`sync_transfer_rates`), respeto a las colas de eMule (`Disconnected in queue`), registros estratégicos, `INDEX.md`. |
+El registro detallado de las fases 1 a 15 se conserva en el historial de Git; el resumen evolutivo actualizado y las especificaciones de red vigentes pueden consultarse en [`docs/CHANGELOG.md`](../CHANGELOG.md) y [`docs/ed2k/compatibility-notes.md`](../ed2k/compatibility-notes.md).
 
 ---
 

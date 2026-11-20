@@ -40,10 +40,10 @@ jobs:
       - name: cargo clippy (-D warnings)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: cargo test (100% hors-ligne)
-        run: cargo test --workspace --all-features
+      - name: cargo test (100 % sin conexión)
+        run: cargo test --workspace --all-features --lib --tests
 
-      - name: cargo deny (licences & advisories)
+      - name: cargo deny (licencias y avisos)
         if: matrix.os == 'ubuntu-latest'
         run: |
           cargo install cargo-deny --locked

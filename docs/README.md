@@ -16,25 +16,12 @@ docs/
 ├── INDEX.md                       # Inventario cartografiado de TODOS los archivos del repositorio
 ├── CHANGELOG.md                   # Registro de cambios (Keep a Changelog)
 ├── SETTINGS.md                    # Referencia de ajustes (settings.*, limits.*) y registro
+├── ASSISTANT.md                   # Guía de uso del asistente de IA local
 │
 ├── architecture/                  # Arquitectura del sistema e informes técnicos
 │   ├── rapport_architecture_et_avancement.md
 │   ├── rpc_protocol.md
 │   └── plan_daemon_events.md
-│
-├── walkthroughs/                  # Guías de ejecución e interoperabilidad (Fases 1 a 15)
-│   ├── README.md                  # Índice maestro de walkthroughs
-│   ├── walkthrough_Phase_01_a_03c.md
-│   ├── walkthrough_Tier3_eMule050a.md
-│   ├── walkthrough_Phase_07.md
-│   ├── walkthrough_Phase_08.md
-│   ├── walkthrough_Phase_09.md
-│   ├── walkthrough_Phase_10.md
-│   ├── walkthrough_Phase_11.md
-│   ├── walkthrough_Phase_12.md
-│   ├── walkthrough_Phase_13.md
-│   ├── walkthrough_Phase_14.md
-│   └── walkthrough_Phase_15.md
 │
 ├── releases/                      # Notas de versión detalladas
 │   ├── RELEASE_NOTES_0.1.0-lab.md
@@ -73,21 +60,7 @@ docs/
 * **[Cartografía global de archivos](INDEX.md)**: Directorio exhaustivo de cada archivo del repositorio.
 * **[Registro de cambios](CHANGELOG.md)**: Historial de versiones y evoluciones.
 
-### 2. Guías técnicas por fase (Walkthroughs)
-* **[Índice maestro de walkthroughs](walkthroughs/README.md)**
-  * [Fases 1 a 3C](walkthroughs/walkthrough_Phase_01_a_03c.md): Fundamentos Rust, almacenamiento disperso, demonio local, bloqueos `fs4` y empaquetado.
-  * [Tier 3 eMule 0.50a](walkthroughs/walkthrough_Tier3_eMule050a.md): Cualificación frente al binario oficial de eMule 0.50a en loopback.
-  * [Fase 7 (v0.1.2-lab)](walkthroughs/walkthrough_Phase_07.md): Modo portátil, aislamiento `data/` frente a `downloads/` y persistencia SQLite.
-  * [Fase 8](walkthroughs/walkthrough_Phase_08.md): Mapa de partes bloque a bloque, historial y estadísticas, categorías, importación defensiva `.part.met`.
-  * [Fase 9](walkthroughs/walkthrough_Phase_09.md): Política de red defensiva en 7 capas, permisos RAII, Kill Switch y filtro IP `ipfilter.dat`.
-  * [Fase 10](walkthroughs/walkthrough_Phase_10.md): Infraestructura de servidores eD2K (Lugdunum TCP, HighID/LowID, búsqueda y fuentes).
-  * [Fase 11](walkthroughs/walkthrough_Phase_11.md): Swarm multifuente, asignador Water-Filling y arranque de baja latencia.
-  * [Fase 12](walkthroughs/walkthrough_Phase_12.md): Fundamentos de Kademlia DHT (tabla K-Buckets LRU, transporte UDP, bootstrap local).
-  * [Fase 13](walkthroughs/walkthrough_Phase_13.md): Source Exchange v4 (SX1/SX2), bloques comprimidos zlib y servidor MCP (83 herramientas de IA).
-  * [Fase 14](walkthroughs/walkthrough_Phase_14.md): Convergencia de búsqueda Kad DHT (`CUInt128`, opcode universal `0x3B`) y Clean Architecture.
-  * [Fase 15](walkthroughs/walkthrough_Phase_15.md): Swarm multipares real (`sync_transfer_rates`), respeto a las colas de eMule y registros estratégicos.
-
-### 3. Garantía de calidad y especificaciones de red
+### 2. Garantía de calidad y especificaciones de red
 * **[Protocolo de recepción QA](qa/QA_RECEPTION_PROTOCOL.md)**: Guía de pruebas para la cualificación de una versión.
 * **[Matriz de compatibilidad de protocolos](qa/compatibility-matrix.md)**: Síntesis de los perfiles `Emule072a`, `Emule050a` (histórico), `Amule233`, etc.
 * **[Especificaciones eD2K y ADRs](ed2k/compatibility-notes.md)**: Decisiones de diseño y codificación de red.
@@ -97,6 +70,9 @@ docs/
 ## 🛠️ Comandos de verificación global (100 % sin conexión)
 
 ```powershell
+# 0. Validación inteligente recomendada durante el desarrollo (crates y suites afectadas)
+python3 scripts/smart_test.py --mode smart
+
 # 1. Compilación y verificación del workspace completo
 cargo check --workspace --all-targets --all-features
 
@@ -104,5 +80,5 @@ cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # 3. Suite completa de pruebas Rust
-cargo test --workspace --all-features
+cargo test --workspace --all-features --lib --tests
 ```

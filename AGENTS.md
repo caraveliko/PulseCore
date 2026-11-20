@@ -26,7 +26,7 @@ Licencia: GPL-2.0-or-later. Plataformas objetivo: Windows 10/11 x64 y Linux (`x8
 | `crates/mule-torrent` | Motor BitTorrent integrado |
 | `crates/mule-assistant` | Asistente y automatización integrada |
 | `crates/mule-test-support` | Utilidades compartidas de pruebas de integración |
-| `docs/` | Documentación: `docs/ed2k/` (especificaciones + ADRs), `docs/walkthroughs/`, `docs/qa/`, `docs/INDEX.md` (mapa) |
+| `docs/` | Documentación: `docs/ed2k/` (especificaciones + ADRs), `docs/architecture/`, `docs/qa/`, `docs/INDEX.md` (mapa) |
 | `scripts/` | Scripts PowerShell de compilación y validación |
 
 ## Comandos de validación
