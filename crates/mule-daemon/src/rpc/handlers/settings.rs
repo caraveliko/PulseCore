@@ -63,7 +63,14 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "jellyfinUrl",
     "jellyfinApiKey",
     "plexUrl",
+    "plexToken",
+    "kodiUrl",
     "autoGrabberEnabled",
+    "organizeEnabled",
+    "mediaServerProfile",
+    "generateNfoAndArtwork",
+    "qualityUpgradeEnabled",
+    "qualityMaxResolution",
     "scorerAntiFake",
     "subtitlesAutoDownload",
     "subtitlesLanguage",
@@ -747,7 +754,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             String::new()
         };
 
-        json!({
+    let mut base_settings = json!({
             "minUploadKbs": min_up,
             "ichEnabled": read("ich_enabled", true),
             "rememberCancelled": read("remember_cancelled", true),
@@ -781,6 +788,19 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             "nasRootDir": nas_root_dir_out,
             "nasRequireNfs": read("nas_require_nfs", false),
             "autoGrabberEnabled": read("auto_grabber_enabled", true),
+            "organizeEnabled": read("organize_enabled", true),
+            "mediaServerProfile": dls
+                .get_setting("media_server_profile")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "jellyfin".to_string()),
+            "generateNfoAndArtwork": read("generate_nfo_and_artwork", true),
+            "qualityUpgradeEnabled": read("quality_upgrade_enabled", true),
+            "qualityMaxResolution": dls
+                .get_setting("quality_max_resolution")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "1080p".to_string()),
             "scorerAntiFake": read("scorer_anti_fake", true),
             "subtitlesAutoDownload": read("subtitles_auto_download", true),
             "subtitlesLanguage": dls
@@ -804,7 +824,14 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             "sonarrUrl": dls.get_setting("sonarr_url").ok().flatten().unwrap_or_default(),
             "radarrUrl": dls.get_setting("radarr_url").ok().flatten().unwrap_or_default(),
             "jellyfinUrl": dls.get_setting("jellyfin_url").ok().flatten().unwrap_or_default(),
-        })
+        });
+        if let Some(obj) = base_settings.as_object_mut() {
+            obj.insert("jellyfinApiKey".to_string(), json!(dls.get_setting("jellyfin_api_key").ok().flatten().unwrap_or_default()));
+            obj.insert("plexUrl".to_string(), json!(dls.get_setting("plex_url").ok().flatten().unwrap_or_default()));
+            obj.insert("plexToken".to_string(), json!(dls.get_setting("plex_token").ok().flatten().unwrap_or_default()));
+            obj.insert("kodiUrl".to_string(), json!(dls.get_setting("kodi_url").ok().flatten().unwrap_or_default()));
+        }
+        base_settings
     };
 
     let effective_movies_dir = state.effective_movies_dir().await;
@@ -1504,6 +1531,9 @@ pub async fn handle_settings_set(
     }
     for (camel, snake) in [
         ("autoGrabberEnabled", "auto_grabber_enabled"),
+        ("organizeEnabled", "organize_enabled"),
+        ("generateNfoAndArtwork", "generate_nfo_and_artwork"),
+        ("qualityUpgradeEnabled", "quality_upgrade_enabled"),
         ("scorerAntiFake", "scorer_anti_fake"),
         ("subtitlesAutoDownload", "subtitles_auto_download"),
         ("cleanerEnabled", "cleaner_enabled"),
@@ -1520,6 +1550,42 @@ pub async fn handle_settings_set(
                 .set_setting(snake, if v { "1" } else { "0" })?;
             keys.push(camel);
         }
+    }
+    if let Some(val) = params.get("mediaServerProfile") {
+        let profile = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'mediaServerProfile'"))?
+            .trim()
+            .to_lowercase();
+        if !["jellyfin", "plex", "kodi"].contains(&profile.as_str()) {
+            return Err(JsonRpcError::invalid_params(
+                "'mediaServerProfile' must be 'jellyfin', 'plex' or 'kodi'",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("media_server_profile", &profile)?;
+        keys.push("mediaServerProfile");
+    }
+    if let Some(val) = params.get("qualityMaxResolution") {
+        let res = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'qualityMaxResolution'"))?
+            .trim()
+            .to_lowercase();
+        if !["720p", "1080p", "2160p"].contains(&res.as_str()) {
+            return Err(JsonRpcError::invalid_params(
+                "'qualityMaxResolution' must be '720p', '1080p' or '2160p'",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("quality_max_resolution", &res)?;
+        keys.push("qualityMaxResolution");
     }
     if let Some(val) = params.get("subtitlesLanguage") {
         let lang = val
@@ -1604,6 +1670,10 @@ pub async fn handle_settings_set(
         ("sonarrUrl", "sonarr_url"),
         ("radarrUrl", "radarr_url"),
         ("jellyfinUrl", "jellyfin_url"),
+        ("jellyfinApiKey", "jellyfin_api_key"),
+        ("plexUrl", "plex_url"),
+        ("plexToken", "plex_token"),
+        ("kodiUrl", "kodi_url"),
     ] {
         if let Some(val) = params.get(camel) {
             let s = val

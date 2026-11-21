@@ -104,12 +104,63 @@ pub fn sanitize_name(name: &str) -> String {
         .to_string()
 }
 
-/// Resuelve la carpeta de serie existente en disco si ya existe una; de lo contrario construye el nombre canónico
+/// Perfil de compatibilidad de nombres de carpetas y metadatos para servidores multimedia.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaServerProfile {
+    Jellyfin,
+    Plex,
+    Kodi,
+}
+
+impl MediaServerProfile {
+    pub fn from_str_lossy(raw: &str) -> Self {
+        match raw.trim().to_lowercase().as_str() {
+            "plex" => Self::Plex,
+            "kodi" | "infuse" | "universal" => Self::Kodi,
+            _ => Self::Jellyfin,
+        }
+    }
+}
+
+/// Construye el nombre de carpeta para una película según el perfil del servidor multimedia.
+pub fn format_movie_folder_name(
+    title: &str,
+    year: Option<u32>,
+    tmdb_id: Option<u64>,
+    profile: MediaServerProfile,
+) -> String {
+    let title_clean = sanitize_name(title);
+    let year_part = year.map(|y| format!(" ({y})")).unwrap_or_default();
+    match (profile, tmdb_id) {
+        (MediaServerProfile::Jellyfin, Some(tid)) => format!("{title_clean}{year_part} [tmdbid-{tid}]"),
+        (MediaServerProfile::Plex, Some(tid)) => format!("{title_clean}{year_part} {{tmdb-{tid}}}"),
+        _ => format!("{title_clean}{year_part}"),
+    }
+}
+
+/// Construye el nombre de carpeta para una serie según el perfil del servidor multimedia.
+pub fn format_series_folder_name(
+    title: &str,
+    year: Option<u32>,
+    tvdb_id: Option<u64>,
+    profile: MediaServerProfile,
+) -> String {
+    let sanitized_title = sanitize_name(title);
+    let year_str = year.map(|y| format!(" ({y})")).unwrap_or_default();
+    match (profile, tvdb_id) {
+        (MediaServerProfile::Jellyfin, Some(tid)) => format!("{sanitized_title}{year_str} [tvdbid-{tid}]"),
+        (MediaServerProfile::Plex, Some(tid)) => format!("{sanitized_title}{year_str} {{tvdb-{tid}}}"),
+        _ => format!("{sanitized_title}{year_str}"),
+    }
+}
+
+/// Resuelve la carpeta de serie existente en disco si ya existe una; de lo contrario construye el nombre canónico.
 pub fn resolve_series_folder_name(
     root_folder: &Path,
     series_title: &str,
     year: Option<u32>,
     tvdb_id: Option<u64>,
+    profile: MediaServerProfile,
 ) -> String {
     let clean_target = clean_movie_title(series_title).to_lowercase();
     let norm_target = crate::services::scorer::normalize_accents_and_symbols(&clean_target);
@@ -140,13 +191,7 @@ pub fn resolve_series_folder_name(
         }
     }
 
-    let sanitized_title = sanitize_name(series_title);
-    let year_str = year.map(|y| format!(" ({y})")).unwrap_or_default();
-    if let Some(tid) = tvdb_id {
-        format!("{}{year_str} [tvdbid-{tid}]", sanitized_title)
-    } else {
-        format!("{}{year_str}", sanitized_title)
-    }
+    format_series_folder_name(series_title, year, tvdb_id, profile)
 }
 
 /// Detecta la etiqueta de calidad a partir del nombre de archivo
@@ -455,39 +500,258 @@ fn resolve_active_root_folder(
     stored_path.to_path_buf()
 }
 
+fn xml_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Genera un archivo `movie.nfo` XML compatible con Kodi, Jellyfin, Emby e Infuse.
+pub fn build_movie_nfo_xml(item: &MediaItem) -> String {
+    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<movie>\n");
+    xml.push_str(&format!("  <title>{}</title>\n", xml_escape(&item.title)));
+    if let Some(ref orig) = item.original_title {
+        xml.push_str(&format!("  <originaltitle>{}</originaltitle>\n", xml_escape(orig)));
+    }
+    if let Some(y) = item.year {
+        xml.push_str(&format!("  <year>{y}</year>\n"));
+    }
+    if let Some(ref ov) = item.overview {
+        xml.push_str(&format!("  <plot>{}</plot>\n", xml_escape(ov)));
+    }
+    if let Some(tid) = item.tmdb_id {
+        xml.push_str(&format!("  <uniqueid type=\"tmdb\" default=\"true\">{tid}</uniqueid>\n"));
+    }
+    if let Some(ref imdb) = item.imdb_id {
+        xml.push_str(&format!("  <uniqueid type=\"imdb\">{}</uniqueid>\n", xml_escape(imdb)));
+    }
+    xml.push_str("</movie>\n");
+    xml
+}
+
+/// Genera un archivo `tvshow.nfo` XML compatible con Kodi, Jellyfin, Emby e Infuse.
+pub fn build_tvshow_nfo_xml(item: &MediaItem) -> String {
+    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<tvshow>\n");
+    xml.push_str(&format!("  <title>{}</title>\n", xml_escape(&item.title)));
+    if let Some(ref orig) = item.original_title {
+        xml.push_str(&format!("  <originaltitle>{}</originaltitle>\n", xml_escape(orig)));
+    }
+    if let Some(y) = item.year {
+        xml.push_str(&format!("  <year>{y}</year>\n"));
+    }
+    if let Some(ref ov) = item.overview {
+        xml.push_str(&format!("  <plot>{}</plot>\n", xml_escape(ov)));
+    }
+    if let Some(tvdb) = item.tvdb_id {
+        xml.push_str(&format!("  <uniqueid type=\"tvdb\" default=\"true\">{tvdb}</uniqueid>\n"));
+    }
+    if let Some(tid) = item.tmdb_id {
+        xml.push_str(&format!("  <uniqueid type=\"tmdb\">{tid}</uniqueid>\n"));
+    }
+    if let Some(ref imdb) = item.imdb_id {
+        xml.push_str(&format!("  <uniqueid type=\"imdb\">{}</uniqueid>\n", xml_escape(imdb)));
+    }
+    xml.push_str("</tvshow>\n");
+    xml
+}
+
+fn resolve_artwork_url(raw: &str, size_segment: &str) -> String {
+    if raw.starts_with("http://") || raw.starts_with("https://") {
+        raw.to_string()
+    } else if raw.starts_with('/') {
+        format!("https://image.tmdb.org/t/p/{size_segment}{raw}")
+    } else {
+        format!("https://image.tmdb.org/t/p/{size_segment}/{raw}")
+    }
+}
+
+/// Comprueba si la organización automática en modo Media Center está activa (por defecto: `true`).
+pub async fn is_organize_enabled(state: &AppState) -> bool {
+    let dl_svc = state.downloads.lock().await;
+    dl_svc
+        .get_setting("organize_enabled")
+        .ok()
+        .flatten()
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true)
+}
+
+async fn active_media_server_profile(state: &AppState) -> MediaServerProfile {
+    let dl_svc = state.downloads.lock().await;
+    let raw = dl_svc
+        .get_setting("media_server_profile")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "jellyfin".to_string());
+    MediaServerProfile::from_str_lossy(&raw)
+}
+
+async fn is_nfo_artwork_enabled(state: &AppState) -> bool {
+    let dl_svc = state.downloads.lock().await;
+    dl_svc
+        .get_setting("generate_nfo_and_artwork")
+        .ok()
+        .flatten()
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true)
+}
+
+async fn write_nfo_and_artwork_if_enabled(
+    state: &AppState,
+    target_dir: &Path,
+    item: &MediaItem,
+    is_movie: bool,
+) {
+    if !is_nfo_artwork_enabled(state).await {
+        return;
+    }
+    if let Err(e) = std::fs::create_dir_all(target_dir) {
+        warn!("[ORGANIZER] Failed creating dir for NFO/artwork '{}': {e}", target_dir.display());
+        return;
+    }
+    let nfo_name = if is_movie { "movie.nfo" } else { "tvshow.nfo" };
+    let nfo_path = target_dir.join(nfo_name);
+    if !nfo_path.exists() {
+        let xml = if is_movie {
+            build_movie_nfo_xml(item)
+        } else {
+            build_tvshow_nfo_xml(item)
+        };
+        let _ = std::fs::write(&nfo_path, xml);
+    }
+
+    if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
+        return;
+    }
+    let poster_url = item.poster_path.as_deref().filter(|s| !s.is_empty()).map(|s| resolve_artwork_url(s, "w500"));
+    let fanart_url = item.backdrop_path.as_deref().filter(|s| !s.is_empty()).map(|s| resolve_artwork_url(s, "w1280"));
+    let poster_dest = target_dir.join("poster.jpg");
+    let fanart_dest = target_dir.join("fanart.jpg");
+
+    if poster_url.is_none() && fanart_url.is_none() {
+        return;
+    }
+    tokio::spawn(async move {
+        let Ok(client) = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        else {
+            return;
+        };
+        if let Some(url) = poster_url {
+            if !poster_dest.exists() {
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            let _ = std::fs::write(&poster_dest, &bytes);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(url) = fanart_url {
+            if !fanart_dest.exists() {
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            let _ = std::fs::write(&fanart_dest, &bytes);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 pub struct MediaOrganizer;
 
 impl MediaOrganizer {
-    /// Notifica a los servidores de medios locales (Jellyfin, Plex) para refrescar sus bibliotecas
+    /// Notifica a los servidores de medios locales (Jellyfin/Emby, Plex, Kodi) para refrescar sus bibliotecas
     pub fn notify_media_servers(state: &AppState) {
         if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
             return;
         }
-        let jellyfin_url = state.config.jellyfin_url.clone();
-        let jellyfin_key = state.config.jellyfin_api_key.clone();
-        let plex_url = state.config.plex_url.clone();
+        let downloads = state.downloads.clone();
+        let cfg_jf_url = state.config.jellyfin_url.clone();
+        let cfg_jf_key = state.config.jellyfin_api_key.clone();
+        let cfg_plex_url = state.config.plex_url.clone();
 
         tokio::spawn(async move {
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(5))
-                .build();
+            let (jf_url, jf_key, plex_url, plex_token, kodi_url) = {
+                let dls = downloads.lock().await;
+                let read_s = |k: &str| dls.get_setting(k).ok().flatten().unwrap_or_default().trim().to_string();
+                let j_u = {
+                    let s = read_s("jellyfin_url");
+                    if s.is_empty() { cfg_jf_url } else { s }
+                };
+                let j_k = {
+                    let s = read_s("jellyfin_api_key");
+                    if s.is_empty() { cfg_jf_key.unwrap_or_default() } else { s }
+                };
+                let p_u = {
+                    let s = read_s("plex_url");
+                    if s.is_empty() { cfg_plex_url.unwrap_or_default() } else { s }
+                };
+                let p_t = read_s("plex_token");
+                let k_u = read_s("kodi_url");
+                (j_u, j_k, p_u, p_t, k_u)
+            };
 
-            if let Ok(client) = client {
-                // 1. Jellyfin / Emby
-                let token = jellyfin_key.unwrap_or_else(|| "aac2dc7a7dd13af864a06776ca806fe8".to_string());
-                let url = format!("{}/Library/Refresh", jellyfin_url.trim_end_matches('/'));
+            let Ok(client) = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+            else {
+                return;
+            };
+
+            // 1. Jellyfin / Emby
+            if !jf_url.is_empty() {
+                let url = format!("{}/Library/Refresh", jf_url.trim_end_matches('/'));
+                let mut req = client.post(&url);
+                if !jf_key.is_empty() {
+                    req = req.header("Authorization", format!("MediaBrowser Token=\"{jf_key}\""));
+                }
+                let _ = req.send().await;
+            }
+
+            // 2. Plex Media Server
+            if !plex_url.is_empty() {
+                let base = plex_url.trim_end_matches('/');
+                let refresh_url = if base.contains("/library/") {
+                    base.to_string()
+                } else {
+                    format!("{base}/library/sections/all/refresh")
+                };
+                let final_url = if !plex_token.is_empty() && !refresh_url.contains("X-Plex-Token=") {
+                    let sep = if refresh_url.contains('?') { '&' } else { '?' };
+                    format!("{refresh_url}{sep}X-Plex-Token={plex_token}")
+                } else {
+                    refresh_url
+                };
+                let _ = client.get(&final_url).send().await;
+            }
+
+            // 3. Kodi JSON-RPC
+            if !kodi_url.is_empty() {
+                let url = format!("{}/jsonrpc", kodi_url.trim_end_matches('/'));
+                let payload = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "VideoLibrary.Scan",
+                    "id": 1
+                })
+                .to_string();
                 let _ = client
                     .post(&url)
-                    .header("Authorization", format!("MediaBrowser Token=\"{token}\""))
+                    .header("Content-Type", "application/json")
+                    .body(payload)
                     .send()
                     .await;
-
-                // 2. Plex Media Server
-                let p_url = plex_url.unwrap_or_else(|| "http://127.0.0.1:32400/library/sections/all/refresh".to_string());
-                let _ = client.get(&p_url).send().await;
-
-                info!("[ORGANIZER] Dispatched library refresh signal to media servers (Jellyfin/Plex)");
             }
+
+            info!("[ORGANIZER] Dispatched library refresh signal to configured media servers");
         });
     }
 
@@ -497,9 +761,14 @@ impl MediaOrganizer {
         download_id: &str,
         completed_file_path: &Path,
     ) -> Result<Option<PathBuf>, String> {
+        if !is_organize_enabled(state).await {
+            return Ok(None);
+        }
         if !completed_file_path.is_file() {
             return Ok(None);
         }
+
+        let server_profile = active_media_server_profile(state).await;
 
         // Omitir archivos que ya están organizados dentro de una subcarpeta de película o serie
         if is_already_in_organized_library(state, completed_file_path).await {
@@ -567,6 +836,7 @@ impl MediaOrganizer {
                     &series.title,
                     series.year,
                     series.tvdb_id,
+                    server_profile,
                 );
 
                 let season_folder = format!("Season {:02}", ep.season_number);
@@ -652,6 +922,8 @@ impl MediaOrganizer {
                 });
 
                 Self::notify_media_servers(state);
+                let series_root_dir = active_series_root.join(&series_folder);
+                write_nfo_and_artwork_if_enabled(state, &series_root_dir, &series, false).await;
                 return Ok(Some(dest_file));
             }
         }
@@ -666,17 +938,7 @@ impl MediaOrganizer {
             let year_str = item.year.map(|y| y.to_string()).unwrap_or_else(|| "".to_string());
             let title_clean = sanitize_name(&item.title);
 
-            let folder_name = if let Some(tmdb_id) = item.tmdb_id {
-                if !year_str.is_empty() {
-                    format!("{} ({}) [tmdbid-{}]", title_clean, year_str, tmdb_id)
-                } else {
-                    format!("{} [tmdbid-{}]", title_clean, tmdb_id)
-                }
-            } else if !year_str.is_empty() {
-                format!("{} ({})", title_clean, year_str)
-            } else {
-                title_clean.clone()
-            };
+            let folder_name = format_movie_folder_name(&item.title, item.year, item.tmdb_id, server_profile);
 
             let file_name = if !year_str.is_empty() {
                 format!("{} ({}) [{}].{}", title_clean, year_str, quality, ext)
@@ -717,6 +979,7 @@ impl MediaOrganizer {
                 "[ORGANIZER] Organized movie '{}' -> '{}'",
                 item.title, dest_str
             );
+            write_nfo_and_artwork_if_enabled(state, &dest_dir, &item, true).await;
 
             // Obtener subtítulos en español en segundo plano automáticamente (funcionalidad de Bazarr)
             let sub_target = dest_file.clone();
@@ -785,6 +1048,7 @@ impl MediaOrganizer {
                         &series.title,
                         series.year,
                         series.tvdb_id,
+                        server_profile,
                     );
                     let season_folder = format!("Season {:02}", s_num);
                     let dest_dir = active_series_root
@@ -957,17 +1221,12 @@ impl MediaOrganizer {
             let year_str = final_movie.year.map(|y| y.to_string()).unwrap_or_default();
             let title_clean = sanitize_name(&final_movie.title);
 
-            let folder_name = if let Some(tmdb_id) = final_movie.tmdb_id {
-                if !year_str.is_empty() {
-                    format!("{} ({}) [tmdbid-{}]", title_clean, year_str, tmdb_id)
-                } else {
-                    format!("{} [tmdbid-{}]", title_clean, tmdb_id)
-                }
-            } else if !year_str.is_empty() {
-                format!("{} ({})", title_clean, year_str)
-            } else {
-                title_clean.clone()
-            };
+            let folder_name = format_movie_folder_name(
+                &final_movie.title,
+                final_movie.year,
+                final_movie.tmdb_id,
+                server_profile,
+            );
 
             let file_name = if !year_str.is_empty() {
                 format!("{} ({}) [{}].{}", title_clean, year_str, quality, ext)
@@ -1004,6 +1263,7 @@ impl MediaOrganizer {
             }
 
             info!("[ORGANIZER] Auto-organized manual download movie '{}' -> '{}'", final_movie.title, dest_str);
+            write_nfo_and_artwork_if_enabled(state, &dest_dir, &final_movie, true).await;
 
             let sub_target = dest_file.clone();
             let sub_title = final_movie.title.clone();
@@ -1024,6 +1284,9 @@ impl MediaOrganizer {
 
     /// Barrido completo sobre descargas activas de eMule y torrents de BitTorrent para organizar archivos terminados
     pub async fn sweep_and_organize(state: &AppState) -> Value {
+        if !is_organize_enabled(state).await {
+            return serde_json::json!({ "organized": [], "skipped": "simple_mode" });
+        }
         let mut organized_files = Vec::new();
 
         // 1. Comprobar descargas de eMule
@@ -1305,5 +1568,54 @@ mod tests {
         assert!(res.is_err(), "Debe bloquear la transferencia a disco local cuando nasRequireNfs está activo");
         assert!(src_file.exists(), "El archivo fuente en incoming debe conservarse intacto");
         assert!(!nas_dir.path().join("Movies").exists(), "No debe crear subcarpetas en destino bloqueado");
+    }
+
+    #[test]
+    fn test_format_folder_names_by_profile() {
+        assert_eq!(
+            format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Jellyfin),
+            "Matrix (1999) [tmdbid-603]"
+        );
+        assert_eq!(
+            format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Plex),
+            "Matrix (1999) {tmdb-603}"
+        );
+        assert_eq!(
+            format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Kodi),
+            "Matrix (1999)"
+        );
+        assert_eq!(
+            format_series_folder_name("Band of Brothers", Some(2001), Some(74205), MediaServerProfile::Plex),
+            "Band of Brothers (2001) {tvdb-74205}"
+        );
+    }
+
+    #[test]
+    fn test_build_movie_nfo_xml_escapes_special_chars() {
+        let item = MediaItem {
+            id: "m1".to_string(),
+            tmdb_id: Some(603),
+            imdb_id: Some("tt0133093".to_string()),
+            tvdb_id: None,
+            media_type: "movie".to_string(),
+            title: "Tom & Jerry <Test>".to_string(),
+            original_title: None,
+            year: Some(1999),
+            overview: Some("Sinopsis \"especial\"".to_string()),
+            poster_path: None,
+            backdrop_path: None,
+            status: "completed".to_string(),
+            monitored: true,
+            quality_profile: "1080p-es".to_string(),
+            root_folder: "/movies".to_string(),
+            file_path: None,
+            download_id: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+        let xml = build_movie_nfo_xml(&item);
+        assert!(xml.contains("<title>Tom &amp; Jerry &lt;Test&gt;</title>"));
+        assert!(xml.contains("<plot>Sinopsis &quot;especial&quot;</plot>"));
+        assert!(xml.contains("<uniqueid type=\"tmdb\" default=\"true\">603</uniqueid>"));
     }
 }

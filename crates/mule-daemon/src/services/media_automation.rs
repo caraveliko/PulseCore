@@ -158,8 +158,12 @@ impl MediaAutomation {
                             is_deep_scan_cycle
                         );
 
-                        // 1. Organizar descargas completadas en la biblioteca (enlaces duros / carpetas de Jellyfin)
-                        let org_res = MediaOrganizer::sweep_and_organize(&state).await;
+                        // 1. Organizar descargas completadas en la biblioteca (si no está en Modo Simple)
+                        let org_res = if crate::services::organizer::is_organize_enabled(&state).await {
+                            MediaOrganizer::sweep_and_organize(&state).await
+                        } else {
+                            serde_json::json!({ "organized": [], "skipped": "simple_mode" })
+                        };
                         let organized_count = org_res["organized"].as_array().map(|a| a.len()).unwrap_or(0);
                         if organized_count > 0 {
                             info!("[MEDIA_AUTOMATION] Organized {} completed items", organized_count);

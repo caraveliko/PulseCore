@@ -75,11 +75,26 @@ pub const SAMPLE_MAX_BYTES: u64 = 85 * 1024 * 1024;
 /// Antigüedad mínima (en segundos) de un archivo part temporal huérfano antes de su eliminación (1 hora).
 pub const ORPHAN_TEMP_MIN_AGE_SECS: u64 = 3600;
 
+/// Par de archivos duplicados detectado (ganador conservado frente a copia eliminada).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateMatch {
+    pub kind: String,
+    pub group_label: String,
+    pub kept_path: String,
+    pub kept_score: i32,
+    pub kept_size: u64,
+    pub removed_path: String,
+    pub removed_score: i32,
+    pub removed_size: u64,
+}
+
 #[derive(Default, Debug)]
 pub struct CleanReport {
     pub dry_run: bool,
     pub duplicate_episodes_removed: Vec<String>,
     pub duplicate_movies_removed: Vec<String>,
+    pub duplicate_pairs: Vec<DuplicateMatch>,
     pub junk_files_removed: Vec<String>,
     pub orphan_subtitles_removed: Vec<String>,
     pub incoming_cleaned: Vec<String>,
@@ -94,6 +109,7 @@ impl CleanReport {
             "dryRun": self.dry_run,
             "duplicateEpisodesRemoved": self.duplicate_episodes_removed,
             "duplicateMoviesRemoved": self.duplicate_movies_removed,
+            "duplicatePairs": self.duplicate_pairs,
             "junkFilesRemoved": self.junk_files_removed,
             "orphanSubtitlesRemoved": self.orphan_subtitles_removed,
             "incomingCleaned": self.incoming_cleaned,
@@ -101,8 +117,8 @@ impl CleanReport {
             "redundantDownloadsCancelled": self.redundant_downloads_cancelled,
             "bytesFreed": self.bytes_freed,
             "summary": format!(
-                "Nettoyage {}: {} doublons épisodes, {} doublons films, {} fichiers junk, {} sous-titres orphelins, {} dossiers vides supprimés ({} Mo libérés)",
-                if self.dry_run { "[Simulation]" } else { "[Exécuté]" },
+                "Limpieza {}: {} episodios duplicados, {} películas duplicadas, {} archivos residuales, {} subtítulos huérfanos, {} carpetas vacías ({} MB liberados)",
+                if self.dry_run { "[Simulación]" } else { "[Ejecutada]" },
                 self.duplicate_episodes_removed.len(),
                 self.duplicate_movies_removed.len(),
                 self.junk_files_removed.len() + self.incoming_cleaned.len(),
@@ -447,15 +463,27 @@ impl MediaCleaner {
                 // Mayor puntuación primero; en caso de empate, mayor tamaño de archivo primero
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
 
-                let winner = &scored[0].1;
+                let (winner_score, winner, winner_size) = (&scored[0].0, &scored[0].1, &scored[0].2);
                 let winner_str = winner.to_string_lossy().to_string();
 
-                for (_, loser_path, loser_size) in &scored[1..] {
-                    report.duplicate_episodes_removed.push(loser_path.to_string_lossy().to_string());
+                for (loser_score, loser_path, loser_size) in &scored[1..] {
+                    let loser_str = loser_path.to_string_lossy().to_string();
+                    report.duplicate_episodes_removed.push(loser_str.clone());
+                    report.duplicate_pairs.push(DuplicateMatch {
+                        kind: "episode".to_string(),
+                        group_label: format!("{s_folder_name} S{s_num:02}E{ep_num:02}"),
+                        kept_path: winner_str.clone(),
+                        kept_score: *winner_score,
+                        kept_size: *winner_size,
+                        removed_path: loser_str.clone(),
+                        removed_score: *loser_score,
+                        removed_size: *loser_size,
+                    });
                     report.bytes_freed += loser_size;
                     if !dry_run {
                         remove_companion_subtitles_sync(loser_path);
                         let _ = std::fs::remove_file(loser_path);
+                        Self::purge_shared_file_by_path(state, &loser_str).await;
                         info!(
                             "[CLEANER] Deleted duplicate episode file: '{}' (kept '{}')",
                             loser_path.display(),
@@ -486,7 +514,61 @@ impl MediaCleaner {
         }
     }
 
-    /// Deduplica películas en movies_dir
+    /// Elimina de `shared_files` cualquier entrada huérfana cuya ruta coincida con el archivo borrado.
+    async fn purge_shared_file_by_path(state: &AppState, removed_path: &str) {
+        let hashes: Vec<String> = {
+            let dl_svc = state.downloads.lock().await;
+            dl_svc
+                .list_all_shared_files()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|sf| sf.file_path == removed_path)
+                .map(|sf| sf.file_hash)
+                .collect()
+        };
+        if hashes.is_empty() {
+            return;
+        }
+        let mut dl_svc = state.downloads.lock().await;
+        for hash in hashes {
+            let _ = dl_svc.remove_shared_file(&hash, false);
+        }
+    }
+
+    /// Calcula la identidad canónica de una carpeta de película para agrupar duplicados
+    /// incluso cuando existen carpetas distintas (con o sin `[tmdbid-...]`).
+    fn canonical_movie_key(folder_name: &str, movies: &[mule_core::model::MediaItem]) -> (String, String) {
+        if let Some(pos) = folder_name.find("tmdbid-") {
+            let digits: String = folder_name[pos + 7..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if !digits.is_empty() {
+                let label = movies
+                    .iter()
+                    .find(|m| m.tmdb_id.map(|id| id.to_string()) == Some(digits.clone()))
+                    .map(|m| m.title.clone())
+                    .unwrap_or_else(|| clean_movie_title(folder_name));
+                return (format!("tmdb:{digits}"), label);
+            }
+        }
+
+        let clean_folder = clean_movie_title(folder_name).to_lowercase();
+        if let Some(m) = movies
+            .iter()
+            .find(|m| clean_movie_title(&m.title).to_lowercase() == clean_folder)
+        {
+            if let Some(tmdb_id) = m.tmdb_id {
+                return (format!("tmdb:{tmdb_id}"), m.title.clone());
+            }
+            return (format!("title:{clean_folder}"), m.title.clone());
+        }
+
+        (format!("title:{clean_folder}"), clean_movie_title(folder_name))
+    }
+
+    /// Deduplica películas en `movies_dir`, detectando copias repetidas tanto dentro de la misma
+    /// carpeta como entre carpetas distintas que correspondan a la misma película.
     async fn deduplicate_movies(state: &AppState, dry_run: bool, report: &mut CleanReport) {
         let movies_dir = state.effective_movies_dir().await;
         if !movies_dir.is_dir() {
@@ -502,6 +584,14 @@ impl MediaCleaner {
             dl_svc.db().list_media_items(Some("movie"), None).unwrap_or_default()
         };
 
+        struct MovieGroup {
+            label: String,
+            folder_names: Vec<String>,
+            videos: Vec<(PathBuf, u64)>,
+        }
+
+        let mut grouped: HashMap<String, MovieGroup> = HashMap::new();
+
         for m_entry in movie_entries.flatten() {
             let m_path = m_entry.path();
             if !m_path.is_dir() {
@@ -509,9 +599,15 @@ impl MediaCleaner {
             }
 
             let m_folder_name = m_entry.file_name().to_string_lossy().to_string();
+            let (key, label) = Self::canonical_movie_key(&m_folder_name, &movies);
 
-            // Recopilar archivos de vídeo en la carpeta de la película (excluyendo muestra/tráiler)
-            let mut video_files = Vec::new();
+            let entry_group = grouped.entry(key).or_insert_with(|| MovieGroup {
+                label,
+                folder_names: Vec::new(),
+                videos: Vec::new(),
+            });
+            entry_group.folder_names.push(m_folder_name);
+
             if let Ok(entries) = std::fs::read_dir(&m_path) {
                 for entry in entries.flatten() {
                     let p = entry.path();
@@ -520,21 +616,29 @@ impl MediaCleaner {
                         if VIDEO_EXTENSIONS.contains(&ext.as_str()) {
                             let size = p.metadata().map(|m| m.len()).unwrap_or(0);
                             if !Self::is_sample_or_trailer(&p, size) {
-                                video_files.push((p, size));
+                                entry_group.videos.push((p, size));
                             }
                         }
                     }
                 }
             }
+        }
 
+        for (key, group) in grouped {
+            let MovieGroup {
+                label: group_label,
+                folder_names,
+                videos: video_files,
+            } = group;
             if video_files.len() <= 1 {
                 continue;
             }
 
             info!(
-                "[CLEANER] Found {} duplicate video files for movie folder '{}'",
+                "[CLEANER] Found {} duplicate video files for movie '{}' ({})",
                 video_files.len(),
-                m_folder_name
+                group_label,
+                key
             );
 
             let mut scored: Vec<(i32, PathBuf, u64)> = video_files
@@ -547,15 +651,27 @@ impl MediaCleaner {
 
             scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
 
-            let winner = &scored[0].1;
+            let (winner_score, winner, winner_size) = (scored[0].0, &scored[0].1, scored[0].2);
             let winner_str = winner.to_string_lossy().to_string();
 
-            for (_, loser_path, loser_size) in &scored[1..] {
-                report.duplicate_movies_removed.push(loser_path.to_string_lossy().to_string());
+            for (loser_score, loser_path, loser_size) in &scored[1..] {
+                let loser_str = loser_path.to_string_lossy().to_string();
+                report.duplicate_movies_removed.push(loser_str.clone());
+                report.duplicate_pairs.push(DuplicateMatch {
+                    kind: "movie".to_string(),
+                    group_label: group_label.clone(),
+                    kept_path: winner_str.clone(),
+                    kept_score: winner_score,
+                    kept_size: winner_size,
+                    removed_path: loser_str.clone(),
+                    removed_score: *loser_score,
+                    removed_size: *loser_size,
+                });
                 report.bytes_freed += loser_size;
                 if !dry_run {
                     remove_companion_subtitles_sync(loser_path);
                     let _ = std::fs::remove_file(loser_path);
+                    Self::purge_shared_file_by_path(state, &loser_str).await;
                     info!(
                         "[CLEANER] Deleted duplicate movie file: '{}' (kept '{}')",
                         loser_path.display(),
@@ -565,13 +681,17 @@ impl MediaCleaner {
             }
 
             if !dry_run {
+                let tmdb_opt = key.strip_prefix("tmdb:").and_then(|s| s.parse::<u64>().ok());
                 if let Some(m) = movies.iter().find(|m| {
-                    if let Some(tmdb_id) = m.tmdb_id {
-                        if m_folder_name.contains(&format!("tmdbid-{tmdb_id}")) {
+                    if let (Some(tid), Some(mtid)) = (tmdb_opt, m.tmdb_id) {
+                        if tid == mtid {
                             return true;
                         }
                     }
-                    clean_movie_title(&m.title).to_lowercase() == clean_movie_title(&m_folder_name).to_lowercase()
+                    let m_clean = clean_movie_title(&m.title).to_lowercase();
+                    folder_names
+                        .iter()
+                        .any(|fnm| clean_movie_title(fnm).to_lowercase() == m_clean)
                 }) {
                     let dl_svc = state.downloads.lock().await;
                     let _ = dl_svc.db().update_media_completed(&m.id, &winner_str, now_ms());
@@ -889,5 +1009,39 @@ mod tests {
         assert!(!empty_sub.exists(), "Unprotected empty directory must be purged");
         assert!(protected_sub.exists(), "Protected empty directory must NOT be purged");
         assert!(non_empty.exists(), "Non-empty directory must be kept");
+    }
+
+    #[test]
+    fn test_canonical_movie_key_and_scoring() {
+        let movies = vec![mule_core::model::MediaItem {
+            id: "m1".to_string(),
+            media_type: "movie".to_string(),
+            title: "The Matrix".to_string(),
+            original_title: None,
+            year: Some(1999),
+            tmdb_id: Some(603),
+            tvdb_id: None,
+            imdb_id: None,
+            overview: None,
+            poster_path: None,
+            backdrop_path: None,
+            quality_profile: "1080p-es".to_string(),
+            monitored: true,
+            status: "completed".to_string(),
+            root_folder: "/movies".to_string(),
+            file_path: None,
+            download_id: None,
+            created_at: 0,
+            updated_at: 0,
+        }];
+
+        let (k1, _) = MediaCleaner::canonical_movie_key("The Matrix (1999)", &movies);
+        let (k2, _) = MediaCleaner::canonical_movie_key("The Matrix (1999) [tmdbid-603]", &movies);
+        assert_eq!(k1, "tmdb:603");
+        assert_eq!(k1, k2);
+
+        let hd = Path::new("/movies/The Matrix (1999)/The Matrix (1999) [1080p] Castellano.mkv");
+        let sd = Path::new("/movies/The Matrix (1999)/The Matrix (1999) [720p].avi");
+        assert!(MediaCleaner::score_candidate(hd, 3_000_000_000) > MediaCleaner::score_candidate(sd, 1_500_000_000));
     }
 }

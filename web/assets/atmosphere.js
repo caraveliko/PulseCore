@@ -8,13 +8,26 @@
 
   const STORAGE_ATMOSPHERE_KEY = 'pulsecore_atmosphere';
   const STORAGE_INTENSITY_KEY = 'pulsecore_bg_intensity';
-  const VALID_ATMOSPHERES = new Set(['aurora', 'cinema', 'silk', 'obsidian']);
+  const VALID_ATMOSPHERES = new Set([
+    'aurora',
+    'cinema',
+    'silk',
+    'obsidian',
+    'black',
+    'graphite',
+    'midnight',
+    'emerald',
+  ]);
 
   const THEME_COLORS = {
     aurora: '#050810',
     cinema: '#08070a',
     silk: '#060911',
     obsidian: '#05070d',
+    black: '#000000',
+    graphite: '#111318',
+    midnight: '#0a1020',
+    emerald: '#071412',
   };
 
   let mediaBackdropTimer = null;

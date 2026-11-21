@@ -687,7 +687,26 @@ impl AutoGrabber {
         force: bool,
     ) -> Option<Value> {
         let now = now_ms();
-        let upgrade_ctx = Self::check_movie_upgrade_eligibility(item, ag_state, now, force).await;
+        let (upgrade_enabled, max_res) = {
+            let dl_svc = state.downloads.lock().await;
+            let upg = dl_svc
+                .get_setting("quality_upgrade_enabled")
+                .ok()
+                .flatten()
+                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+                .unwrap_or(true);
+            let res = dl_svc
+                .get_setting("quality_max_resolution")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "1080p".to_string());
+            (upg, res)
+        };
+        let upgrade_ctx = if upgrade_enabled || force {
+            Self::check_movie_upgrade_eligibility(item, ag_state, now, force).await
+        } else {
+            None
+        };
         let is_upgrade = upgrade_ctx.is_some();
 
         if item.status != "wanted" && !is_upgrade {
@@ -806,9 +825,17 @@ impl AutoGrabber {
             }
         }
 
+        let effective_profile = match max_res.as_str() {
+            "2160p" if !item.quality_profile.contains("2160p") && !item.quality_profile.contains("4k") => {
+                format!("{}-2160p", item.quality_profile)
+            }
+            "720p" => "720p-es".to_string(),
+            _ => item.quality_profile.clone(),
+        };
+
         let search_futs = queries
             .iter()
-            .map(|q| aggregator.search_all(state, q, true, &item.quality_profile));
+            .map(|q| aggregator.search_all(state, q, true, &effective_profile));
         let query_batches = join_all(search_futs).await;
 
         let mut all_releases = Vec::new();
