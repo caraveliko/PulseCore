@@ -261,7 +261,7 @@ async fn fill_and_send_block_requests(
         out_wire.extend_from_slice(&(pkt.frame_len() as u32).to_le_bytes());
         out_wire.push(pkt.opcode);
         out_wire.extend_from_slice(&pkt.payload);
-        tracing::info!(
+        tracing::debug!(
             "Peer {peer}: sending block request packet (proto=0x{:02X}, opcode=0x{:02X}, len={}, ranges={:?})",
             pkt.protocol,
             pkt.opcode,
@@ -287,7 +287,7 @@ async fn fill_and_send_block_requests(
         sent_any = true;
     }
     if planned > 0 {
-        tracing::info!(
+        tracing::debug!(
             "Peer {peer}: {planned} new pending block(s) planned ({sent} sent, cap {block_count})",
             peer = log_peer_addr(target_addr),
             sent = pending.iter().filter(|p| p.queued).count()
@@ -994,7 +994,7 @@ pub(crate) async fn run_transfer_loop(
                                     (part.file_hash, part.start_offset as u64, part.end_offset as u64, part.data)
                                 };
 
-                                tracing::info!(
+                                tracing::debug!(
                                     "Peer {peer}: received {} [{}, {}) ({} bytes) for {file_hash_str}",
                                     if packet.opcode == OP_SENDINGPART_I64 { "OP_SENDINGPART_I64" } else { "OP_SENDINGPART" },
                                     part_start,
@@ -1218,7 +1218,7 @@ pub(crate) async fn run_transfer_loop(
                                     (bs, &packet.payload[24..])
                                 };
 
-                                tracing::info!(
+                                tracing::debug!(
                                     "Peer {peer}: received {} at offset {} (chunk {} bytes) for {file_hash_str}",
                                     if is_i64 { "OP_COMPRESSEDPART_I64" } else { "OP_COMPRESSEDPART" },
                                     block_start,

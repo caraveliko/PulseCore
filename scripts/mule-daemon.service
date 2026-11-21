@@ -23,7 +23,9 @@ RestartSec=2
 # === Límites de recursos (protección en Raspberry Pi y servidores) ===
 LimitNOFILE=65535
 TasksMax=1024
-MemoryHigh=1536M
+# Nota: no fijar MemoryHigh < MemoryMax en sistemas sin swap (provoca thrashing/livelock
+# perpetuo de memoria anónima sin disparar OOM ni Restart=always).
+# MemoryHigh=1536M
 MemoryMax=2048M
 
 # === Endurecimiento de seguridad (systemd user sandboxing) ===

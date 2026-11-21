@@ -19,9 +19,14 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 // Configuración de purga agresiva de jemalloc para minimizar el RSS en Linux:
 // Libera páginas sucias y "muzzy" inmediatamente al kernel evitando la retención de memoria inactiva.
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[used]
 #[allow(non_upper_case_globals)]
-#[export_name = "malloc_conf"]
-pub static malloc_conf: &[u8] = b"dirty_decay_ms:0,muzzy_decay_ms:0,background_thread:true\0";
+#[export_name = "_rjem_malloc_conf"]
+pub static malloc_conf: Option<&'static std::ffi::c_char> = Some(unsafe {
+    // SAFETY: cadena C terminada en NUL con vida 'static; coincide exactamente con
+    // `extern "C" { static _rjem_malloc_conf: Option<&'static c_char>; }` en tikv-jemalloc-sys.
+    &*c"dirty_decay_ms:0,muzzy_decay_ms:0,background_thread:true".as_ptr()
+});
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
