@@ -7,7 +7,7 @@
 **Reinvención moderna y asíncrona en Rust de las redes eMule (eD2K + Kad DHT) y Torrent, con protocolo PC26, automatización multimedia nativa, centro de notificaciones e interfaz web integrada.**
 
 [![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/Licencia-GPL--2.0--or--later-blue.svg)](LICENSE)
-[![Versión: v0.4.0-beta.4](https://img.shields.io/badge/Versi%C3%B3n-v0.4.0--beta.4-success.svg)](docs/CHANGELOG.md)
+[![Versión: v0.4.0-beta.5](https://img.shields.io/badge/Versi%C3%B3n-v0.4.0--beta.5-success.svg)](docs/CHANGELOG.md)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux%20%7C%20aarch64-lightgrey)](README.md)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](Cargo.toml)
 [![Wiki](https://img.shields.io/badge/Documentaci%C3%B3n-Wiki-blueviolet.svg)](wiki/Home.md)
@@ -31,7 +31,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 
 > [![Advertencia](https://img.shields.io/badge/ADVERTENCIA-DESARROLLO%20ACTIVO-orange.svg)](README.md)
 >
-> **Estado actual del proyecto (`v0.4.0-beta.4`):** El núcleo operativo y la infraestructura de servidor están completos y probados: identificación eD2K (MD4 + AICH + SUI V2/V3), perfil de transporte moderno `PC26` (`X25519 + ML-KEM-768`, `ChaCha20-Poly1305` y `QUIC`), endurecimiento de Kad DHT para WAN (defensa anti-Sybil y cliente *LowID Buddy*), política fija «Solo Vídeo», centro de notificaciones multicanal, actualizador híbrido con *rollback* `O(1)`, guardián de montajes NFS/NAS, interfaz web con telemetría de ancho de banda en tiempo real y organización mediante enlaces duros. Actualmente seguimos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
+> **Estado actual del proyecto (`v0.4.0-beta.5`):** El núcleo operativo y la infraestructura de servidor están completos y probados: identificación eD2K (MD4 + AICH + SUI V2/V3), perfil de transporte moderno `PC26` (`X25519 + ML-KEM-768`, `ChaCha20-Poly1305` y `QUIC`), endurecimiento de Kad DHT para WAN (defensa anti-Sybil y cliente *LowID Buddy*), política fija «Solo Vídeo», centro de notificaciones multicanal, actualizador híbrido con *rollback* `O(1)`, guardián de montajes NFS/NAS, interfaz web con telemetría de ancho de banda en tiempo real y organización mediante enlaces duros. Actualmente seguimos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
 >
 > **Entornos validados:** Probado con éxito en estaciones de trabajo AMD Ryzen / Intel Core bajo Windows 10/11 x64, Linux x86_64 (Arch, Debian, Ubuntu) y procesadores ARM64 (Raspberry Pi 4 y 5 bajo Raspberry Pi OS, con consumos inferiores a ~45 MB de RAM en reposo).
 

@@ -5,6 +5,15 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.0-beta.5] - 2026-11-21
+
+- **Rediseño integral de la WebUI, responsividad elástica y navegación simplificada (`web`, `mule-daemon`)**:
+  - **Opciones (`#tab-settings`)**: nueva barra lateral por categorías, buscador instantáneo de ajustes, selector `Esencial` / `Avanzado`, interruptores `.opt-switch` y selector explícito de almacenamiento (Local/USB frente a NAS/Red).
+  - **Barra de estado inferior (`.bottom-statusbar`)**: celdas con divisores verticales, micromedidores (`CPU`, `RAM`, disco/NAS con etiquetado dinámico según la configuración real) y corrección del indicador de red (`#p2p-net-dot`).
+  - **Navegación superior simplificada (5 pestañas principales)**: unificación de *Servidores eD2k* y *Red Kademlia* bajo **Red P2P** con selector interno `.net-subview-bar` (`switchNetworkView`) y acceso directo desde la barra inferior, además de mover **Registro** al icono de consola `#btn-header-logs` en la cabecera derecha.
+  - **Descargas, inspector y Cine & Series**: cinta continua de partes (`.part-ribbon`) para descargas activas, ocultación del hash crudo en tabla, reemplazo de emojis por iconos vectoriales SVG en el selector de modo compacto, inspector inferior compacto con pestañas integradas en `.inspector-header`, escalones responsivos (`900px–1320px`) y pulido visual de tarjetas en **Cine & Series**.
+  - **Caché HTTP de activos estáticos (`crates/mule-daemon/src/rpc/server.rs`)**: exclusión de `.css` y `.js` de la caché de 24 h (`NO_CACHE_CONTROL`) para aplicar al instante las actualizaciones de interfaz sin limpieza manual de caché en el navegador.
+
 ## [0.4.0-beta.4] - 2026-11-21
 
 - **Estabilidad de memoria, visor de logs acotado y mitigación de *livelock* en Raspberry Pi (`mule-daemon`, `scripts`)**:
