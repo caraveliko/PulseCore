@@ -5,6 +5,15 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-21
+
+- **Fusión de Filmoteca y Descargas, compatibilidad Media Center y mejoras integrales de WebUI (`web`, `mule-daemon`)**:
+  - **Filmoteca unificada (`#tab-media`)**: fusión de las pestañas *Descargas* y *Filmoteca* en una única vista principal con 3 sub-vistas (**Cartelera**, **Cola**, **Calendario**), banda viva superior (*En descarga ahora*), acceso directo `+ Enlace` y botón CTA destacado **Añadir Título**.
+  - **Temas, logotipo y ayuda local**: selector de **Temas** con 4 colores lisos (*Negro Puro*, *Grafito*, *Azul Noche*, *Esmeralda Oscuro*), logotipo **Cristal + Pulso Vivo**, botón de ayuda sin texto y **Guía local** sin conexión a modelos LLM externos (orientada a `mule-mcp`).
+  - **Compartidos y tablas**: rediseño de **Compartidos** con 4 KPIs en vivo, buscador, filtros, ordenación, vista `Lista / Carpetas`, eliminación de columnas redundantes y contención estricta de *tooltips* y celdas largas.
+  - **Deduplicación avanzada y Upgrade de calidad (`cleaner.rs`, `auto_grabber.rs`, `settings.rs`)**: detección de películas duplicadas entre carpetas distintas por identidad canónica (`tmdb:<id>` / título), limpieza de entradas huérfanas en `shared_files`, ajustes `qualityUpgradeEnabled` / `qualityMaxResolution` y **Detector de duplicados con vista previa (`dryRun`)** en **Opciones**.
+  - **Modo Simple vs Modo Media Center (`organizer.rs`, `media_automation.rs`, `settings.rs`)**: interruptor para elegir entre descarga directa sin renombrado (`Modo Simple`) u organización automática compatible con **Jellyfin / Emby** (`[tmdbid-...]`), **Plex** (`{tmdb-...}`) y **Kodi / Infuse**, con generación opcional de `movie.nfo` / `tvshow.nfo`, `poster.jpg` / `fanart.jpg` y notificación de escaneo a Jellyfin, Plex y Kodi.
+
 ## [0.4.0-beta.5] - 2026-11-21
 
 - **Rediseño integral de la WebUI, responsividad elástica y navegación simplificada (`web`, `mule-daemon`)**:
