@@ -275,12 +275,15 @@ async fn embedded_asset_handler(
     match EmbeddedWebAssets::get(target) {
         Some(content) => {
             let mime = mime_guess::from_path(target).first_or_octet_stream();
-            let cache_control =
-                if target.starts_with("assets/") || target == "manifest.webmanifest" {
-                    STATIC_ASSET_CACHE_CONTROL
-                } else {
-                    NO_CACHE_CONTROL
-                };
+            let is_immutable_media = (target.starts_with("assets/")
+                && !target.ends_with(".css")
+                && !target.ends_with(".js"))
+                || target == "manifest.webmanifest";
+            let cache_control = if is_immutable_media {
+                STATIC_ASSET_CACHE_CONTROL
+            } else {
+                NO_CACHE_CONTROL
+            };
             (
                 [
                     (header::CONTENT_TYPE, mime.as_ref()),
