@@ -570,6 +570,7 @@
 | `docs/releases/RELEASE_NOTES_0.4.0-beta.1.md` | Notas de la versión 0.4.0-beta.1 |
 | `docs/releases/RELEASE_NOTES_0.4.0-beta.2.md` | Notas de la versión 0.4.0-beta.2 |
 | `docs/releases/RELEASE_NOTES_0.4.0-beta.3.md` | Notas de la versión 0.4.0-beta.3 |
+| `docs/releases/RELEASE_NOTES_0.4.0-beta.4.md` | Notas de la versión 0.4.0-beta.4 |
 
 ### docs/qa/ — Garantía de calidad y conformidad
 | Archivo | Función |

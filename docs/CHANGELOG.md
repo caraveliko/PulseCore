@@ -5,6 +5,18 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.0-beta.4] - 2026-11-21
+
+- **Estabilidad de memoria, visor de logs acotado y mitigación de *livelock* en Raspberry Pi (`mule-daemon`, `scripts`)**:
+  - Lectura inversa acotada por bloques de `64 KiB` en `system.logs` (`handle_logs`, `rpc/handlers/settings.rs`) con límite total de escaneo de `16 MiB` y máximo de `256 KiB` por línea, preservando secuencias UTF-8 multibyte entre bloques y el orden cronológico sin cargar ficheros completos en RAM (cubierto por `logs_tests`).
+  - Reducción del ruido en registros de producción: los mensajes por paquete/petición en `services/peer_session/transfer.rs` (`sending block request packet`, `new pending block(s) planned`, `OP_SENDINGPART*` y `OP_COMPRESSEDPART*`) pasan de `INFO` a `DEBUG`.
+  - Corrección de la configuración en tiempo de compilación de `jemalloc` (`#[export_name = "_rjem_malloc_conf"]` con `#[used]` y literal C para `tikv-jemalloc-sys` en `crates/mule-daemon/src/main.rs`), habilitando `background_thread:true` y purga agresiva (`dirty_decay_ms:0,muzzy_decay_ms:0`).
+  - Retirada de `MemoryHigh=1536M` en `scripts/mule-daemon.service` (manteniendo `MemoryMax=2048M`) para evitar *thrashing/livelock* perpetuo de memoria anónima en nodos sin swap.
+- **Renovación visual de la WebUI, activos estáticos, PWA y despliegue (`web`, `mule-daemon`, `scripts`)**:
+  - Nuevo tema visual (`web/assets/theme.css`), efectos ambientales (`web/assets/atmosphere.js`), ilustraciones y fondos (`SVG`/`WebP`), iconos `192`/`512` y manifiesto PWA (`web/manifest.webmanifest`), además de corregir el apilamiento del menú Herramientas.
+  - Política de caché HTTP diferenciada en `rpc/server.rs` (`public, max-age=86400, must-revalidate` para `/assets/` y `manifest.webmanifest`, manteniendo `no-cache` para HTML).
+  - Archivado automático de directorios heredados `~/.local/web` durante el despliegue SSH en `scripts/update_linux.sh` para servir siempre la WebUI embebida.
+
 ## [0.4.0-beta.3] - 2026-11-20
 
 - **Sistema integral de notificaciones y centros de avisos (`mule-core`, `mule-daemon`, `mule-mcp`, `mule-assistant`, WebUI)**:
