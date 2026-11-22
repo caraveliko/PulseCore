@@ -1627,6 +1627,7 @@ pub(crate) async fn apply_udp_state(state: &AppState, enabled: bool) {
 }
 
 /// Resuelve el primer ancestro existente de una ruta para consultar sus metadatos en disco.
+#[cfg(unix)]
 fn existing_ancestor_metadata(path: &std::path::Path) -> Option<std::fs::Metadata> {
     let mut current = Some(path);
     while let Some(p) = current {
@@ -1667,7 +1668,10 @@ mod tests {
         let dir_a = tmp.path().join("downloads");
         let dir_b = tmp.path().join("media/Movies");
         std::fs::create_dir_all(&dir_a).expect("crear downloads");
+        #[cfg(unix)]
         assert_eq!(are_paths_on_same_device(&dir_a, &dir_b), Some(true));
+        #[cfg(not(unix))]
+        assert_eq!(are_paths_on_same_device(&dir_a, &dir_b), None);
     }
 }
 

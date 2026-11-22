@@ -6,7 +6,9 @@
 .gemini
 .cargo
 target
-dist
+dist/*
+!dist/bin
+!dist/bin/**
 docs
 wiki
 Asset
