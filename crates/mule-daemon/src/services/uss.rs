@@ -218,15 +218,15 @@ impl UssService {
     }
 
     pub fn set_server_session(&self, mgr: ServerSessionManager) {
-        *self.server_session.write().unwrap() = Some(mgr);
+        *self.server_session.write().unwrap_or_else(|e| e.into_inner()) = Some(mgr);
     }
 
     pub fn set_upload_manager(&self, mgr: UploadManager) {
-        *self.upload_manager.write().unwrap() = Some(mgr);
+        *self.upload_manager.write().unwrap_or_else(|e| e.into_inner()) = Some(mgr);
     }
 
     pub fn set_downloads(&self, dl: Arc<tokio::sync::Mutex<DownloadService>>) {
-        *self.downloads.write().unwrap() = Some(dl);
+        *self.downloads.write().unwrap_or_else(|e| e.into_inner()) = Some(dl);
         // La configuración persistida se carga de forma diferida en la primera
         // iteración del bucle de control (evita bloqueos en `AppState::new`).
     }
@@ -252,7 +252,7 @@ impl UssService {
     ) -> bool {
         let now_ms = crate::services::downloads::types::now_ms();
         let (next_bps, cur_rtt, congested) = {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             if !inner.ledbat.has_fresh_samples(now_ms, LEDBAT_FRESH_WINDOW_MS) {
                 return false;
             }
@@ -277,14 +277,14 @@ impl UssService {
             .upload_bucket
             .set_rate(next_bps, next_bps.max(65536));
         let eff_dl = mule_network_policy::emule_ud_ratio(
-            self.inner.read().unwrap().download_limit_bps,
+            self.inner.read().unwrap_or_else(|e| e.into_inner()).download_limit_bps,
             next_bps,
         );
         limiters.download_bucket.set_rate(eff_dl, eff_dl.max(65536));
         if activate_state {
             self.set_state("active");
         }
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.current_limit_bps = next_bps;
         inner.latency_ms = cur_rtt;
         true
@@ -297,11 +297,11 @@ impl UssService {
     }
 
     pub fn config(&self) -> UssConfig {
-        self.inner.read().unwrap().config.clone()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).config.clone()
     }
 
     pub fn snapshot(&self) -> UssSnapshot {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
         UssSnapshot {
             enabled: inner.config.enabled,
             state: inner.state,
@@ -317,14 +317,14 @@ impl UssService {
     /// bucle de control reiniciando la tarea.
     pub async fn update_config<F: FnOnce(&mut UssConfig)>(&self, apply: F) {
         let (json, dl) = {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             apply(&mut inner.config);
             if !inner.config.enabled {
                 inner.state = "disabled";
                 inner.current_limit_bps = 0;
                 self.accept_new_client.store(true, Ordering::Relaxed);
             }
-            let dl = self.downloads.read().unwrap().clone();
+            let dl = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
             (serde_json::to_string(&inner.config).ok(), dl)
         };
         if let (Some(json), Some(dl)) = (json, dl) {
@@ -335,14 +335,14 @@ impl UssService {
     /// Registra el límite de subida manual configurado mediante `limits.set` para que USS
     /// pueda restaurarlo cuando se deshabilite.
     pub fn note_manual_limit(&self, bps: u64) {
-        self.inner.write().unwrap().manual_limit_bps = bps;
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).manual_limit_bps = bps;
     }
 
     /// Registra el límite de descarga *configurado* (`limits.set`, límite de capacidad,
     /// arranque) para que el bucle de control pueda volver a ajustar el cubo de descarga
     /// con la proporción de subida/descarga de eMule en cada actualización dinámica.
     pub fn note_manual_download_limit(&self, bps: u64) {
-        self.inner.write().unwrap().download_limit_bps = bps;
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).download_limit_bps = bps;
     }
 
     /// Inicia el bucle de control en segundo plano. Idempotente.
@@ -378,17 +378,17 @@ impl UssService {
         let mut cached_target: Option<(PingTarget, Instant)> = None;
 
         // Cargar configuración persistida una sola vez.
-        let dl_opt = { self.downloads.read().unwrap().clone() };
+        let dl_opt = { self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone() };
         if let Some(dl) = dl_opt {
             if let Ok(Some(json)) = dl.lock().await.get_setting(USS_SETTINGS_KEY) {
                 if let Ok(cfg) = serde_json::from_str::<UssConfig>(&json) {
-                    self.inner.write().unwrap().config = cfg;
+                    self.inner.write().unwrap_or_else(|e| e.into_inner()).config = cfg;
                 }
             }
             // Límite de descarga configurado persistido (ratio dinámico de eMule).
             if let Ok(Some(s)) = dl.lock().await.get_setting("rate_limit_download_bps") {
                 if let Ok(v) = s.trim().parse::<u64>() {
-                    self.inner.write().unwrap().download_limit_bps = v;
+                    self.inner.write().unwrap_or_else(|e| e.into_inner()).download_limit_bps = v;
                 }
             }
         }
@@ -397,7 +397,7 @@ impl UssService {
         /// (`GetMaxDownloadInBytesPerSec`) para el límite de subida actual.
         macro_rules! apply_ud_ratio {
             ($ul_eff:expr) => {{
-                let dl_cfg = self.inner.read().unwrap().download_limit_bps;
+                let dl_cfg = self.inner.read().unwrap_or_else(|e| e.into_inner()).download_limit_bps;
                 let eff = mule_network_policy::emule_ud_ratio(dl_cfg, $ul_eff);
                 download_bucket.set_rate(eff, eff.max(65536));
             }};
@@ -411,7 +411,7 @@ impl UssService {
             if !cfg.enabled {
                 // Restaurar límite manual una vez por transición.
                 {
-                    let mut inner = self.inner.write().unwrap();
+                    let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
                     if inner.state != "disabled" || inner.current_limit_bps != 0 {
                         let manual = inner.manual_limit_bps;
                         inner.state = "disabled";
@@ -454,7 +454,7 @@ impl UssService {
                 }
                 continue;
             };
-            self.inner.write().unwrap().ping_target = Some(target.to_string());
+            self.inner.write().unwrap_or_else(|e| e.into_inner()).ping_target = Some(target.to_string());
 
             // --- Línea base: el menor de hasta BASELINE_PROBES sondeos ---
             if !baseline_done {
@@ -513,7 +513,7 @@ impl UssService {
                 consecutive_failures = 0;
                 baseline_done = true;
                 self.set_state("active");
-                self.inner.write().unwrap().lowest_ping_ms = initial_ping_ms;
+                self.inner.write().unwrap_or_else(|e| e.into_inner()).lowest_ping_ms = initial_ping_ms;
             }
 
             // --- Bucle de control ---
@@ -550,7 +550,7 @@ impl UssService {
                     // Registrar nuevo ping más bajo (eMule reduce initial_ping).
                     if ms < initial_ping_ms && initial_ping_ms > LOWEST_INITIAL_PING_MS {
                         initial_ping_ms = ms.max(LOWEST_INITIAL_PING_MS);
-                        self.inner.write().unwrap().lowest_ping_ms = initial_ping_ms;
+                        self.inner.write().unwrap_or_else(|e| e.into_inner()).lowest_ping_ms = initial_ping_ms;
                     }
                     ms as i64
                 }
@@ -633,7 +633,7 @@ impl UssService {
             apply_ud_ratio!(upload_bps);
 
             {
-                let mut inner = self.inner.write().unwrap();
+                let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
                 inner.current_limit_bps = upload_bps;
                 inner.latency_ms = ping_average;
             }
@@ -643,7 +643,7 @@ impl UssService {
     /// Rendimiento de subida alcanzado actual (suma de tasas de ranuras activas) —
     /// eMule utiliza `uploadqueue->GetDatarate()` como `curUpload`.
     async fn current_upload_rate(&self) -> u64 {
-        let mgr = self.upload_manager.read().unwrap().clone();
+        let mgr = self.upload_manager.read().unwrap_or_else(|e| e.into_inner()).clone();
         match mgr {
             Some(mgr) => mgr
                 .active_snapshots()
@@ -673,7 +673,7 @@ impl UssService {
             return Some(PingTarget::Icmp(ip));
         }
         // Respaldo: RTT de conexión TCP al servidor eD2K conectado.
-        let mgr = self.server_session.read().unwrap().clone()?;
+        let mgr = self.server_session.read().unwrap_or_else(|e| e.into_inner()).clone()?;
         let snap = mgr.snapshot().await;
         if snap.status != ServerConnectionStatus::Connected {
             return None;
@@ -715,7 +715,7 @@ impl UssService {
     async fn collect_destinations(&self) -> Vec<std::net::Ipv4Addr> {
         let mut ips: Vec<std::net::Ipv4Addr> = Vec::new();
 
-        let server = { self.server_session.read().unwrap().clone() };
+        let server = { self.server_session.read().unwrap_or_else(|e| e.into_inner()).clone() };
         if let Some(mgr) = server {
             let snap = mgr.snapshot().await;
             if snap.status == ServerConnectionStatus::Connected {
@@ -726,7 +726,7 @@ impl UssService {
                 }
             }
         }
-        let uploader = { self.upload_manager.read().unwrap().clone() };
+        let uploader = { self.upload_manager.read().unwrap_or_else(|e| e.into_inner()).clone() };
         if let Some(mgr) = uploader {
             for s in mgr.active_snapshots().await {
                 if let Ok(SocketAddr::V4(a)) = s.client_address.parse::<SocketAddr>() {
@@ -734,7 +734,7 @@ impl UssService {
                 }
             }
         }
-        let downloads = { self.downloads.read().unwrap().clone() };
+        let downloads = { self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone() };
         if let Some(dl) = downloads {
             let dl = dl.lock().await;
             for d in dl.list_downloads() {
@@ -761,7 +761,7 @@ impl UssService {
     }
 
     fn set_state(&self, state: &'static str) {
-        self.inner.write().unwrap().state = state;
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).state = state;
     }
 }
 

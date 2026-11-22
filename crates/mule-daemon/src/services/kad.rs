@@ -114,7 +114,7 @@ impl KadService {
         ip_filter: Arc<IpFilter>,
     ) -> Self {
         let local_id = Arc::new(std::sync::RwLock::new(local_id));
-        let routing_table = Arc::new(Mutex::new(KBucketTable::new(*local_id.read().unwrap())));
+        let routing_table = Arc::new(Mutex::new(KBucketTable::new(*local_id.read().unwrap_or_else(|e| e.into_inner()))));
         let udp = Arc::new(KadUdpService::new(
             Arc::clone(&local_id),
             policy_mgr.clone(),
@@ -151,7 +151,7 @@ impl KadService {
         &self,
         listener: crate::services::inbound_listener::InboundListenerService,
     ) {
-        *self.inbound_listener.write().unwrap() = Some(Arc::new(listener));
+        *self.inbound_listener.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(listener));
     }
 
     /// Inyecta el canal de eventos del daemon — activa la emisión de
@@ -162,13 +162,13 @@ impl KadService {
         event_tx: tokio::sync::broadcast::Sender<String>,
         sequence: Arc<std::sync::atomic::AtomicU64>,
     ) {
-        *self.event_channel.write().unwrap() = Some((event_tx, sequence));
+        *self.event_channel.write().unwrap_or_else(|e| e.into_inner()) = Some((event_tx, sequence));
     }
 
     /// Emite un aviso `kad.statusChanged` si el canal está conectado —
     /// no-op en caso contrario (pruebas unitarias, fase de arranque antes de inyección).
     fn emit_status_changed(&self) {
-        if let Some((tx, seq)) = self.event_channel.read().unwrap().as_ref() {
+        if let Some((tx, seq)) = self.event_channel.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
             crate::services::DaemonEvent::KadStatusChanged {
                 sequence: seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             }
@@ -180,11 +180,11 @@ impl KadService {
     /// o de un eco `FIREWALLED_RES` de Kad). `None` si es LowID/desconocida — la publicación
     /// de fuentes recurre entonces a la dirección de enlace del socket.
     pub fn set_public_ipv4(&self, ip: Option<Ipv4Addr>) {
-        *self.public_ipv4.write().unwrap() = ip;
+        *self.public_ipv4.write().unwrap_or_else(|e| e.into_inner()) = ip;
     }
 
     pub fn local_id(&self) -> KadId {
-        *self.local_id.read().unwrap()
+        *self.local_id.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Regenera la identidad Kad local (`identityRotationHours`): nuevo
@@ -193,7 +193,7 @@ impl KadService {
     /// quedarían mal ordenadas).
     pub async fn rotate_local_id(&self) -> KadId {
         let new_id = KadId::random();
-        *self.local_id.write().unwrap() = new_id;
+        *self.local_id.write().unwrap_or_else(|e| e.into_inner()) = new_id;
         *self.routing_table.lock().await = KBucketTable::new(new_id);
         self.emit_status_changed();
         new_id
@@ -484,7 +484,7 @@ impl KadService {
             return;
         }
         {
-            let mut last = self.last_bootstrap.lock().unwrap();
+            let mut last = self.last_bootstrap.lock().unwrap_or_else(|e| e.into_inner());
             if last
                 .map(|t| t.elapsed() < PEER_BOOTSTRAP_MIN_INTERVAL)
                 .unwrap_or(false)
@@ -633,7 +633,7 @@ impl KadService {
                             std::time::Duration::from_secs(15)
                         };
                         {
-                            let last = drain_kad.last_bootstrap.lock().unwrap();
+                            let last = drain_kad.last_bootstrap.lock().unwrap_or_else(|e| e.into_inner());
                             if last
                                 .map(|t| t.elapsed() < min_interval)
                                 .unwrap_or(false)
@@ -649,7 +649,7 @@ impl KadService {
                         let Some((addr, kad_version)) = candidate else {
                             continue;
                         };
-                        *drain_kad.last_bootstrap.lock().unwrap() =
+                        *drain_kad.last_bootstrap.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(std::time::Instant::now());
                         tracing::info!(
                             "Kad: bootstrap drain — trying {peer} (kad v{kad_version}, table {contacts} contacts, {remaining} candidates left)"
@@ -916,7 +916,7 @@ impl KadService {
                                         })
                                         .await;
                                     if !cancel_pub.is_cancelled() {
-                                        *last_src.lock().unwrap() = Some(std::time::Instant::now());
+                                        *last_src.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                                         src_jit.store(
                                             rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
                                             Ordering::Relaxed,
@@ -948,7 +948,7 @@ impl KadService {
                                     )
                                     .await;
                                     if !cancel_pub.is_cancelled() {
-                                        *last_kw.lock().unwrap() = Some(std::time::Instant::now());
+                                        *last_kw.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                                         kw_jit.store(
                                             rand::random::<u64>() % KAD_REPUBLISH_JITTER_MAX_SECS,
                                             Ordering::Relaxed,
@@ -1127,7 +1127,7 @@ impl KadService {
             IpAddr::V4(v4) if !v4.is_unspecified() => Some(v4),
             _ => None,
         });
-        let has_high_id = self.public_ipv4.read().unwrap().is_some();
+        let has_high_id = self.public_ipv4.read().unwrap_or_else(|e| e.into_inner()).is_some();
         let Some(advertised_ip) = self
             .public_ipv4
             .read()

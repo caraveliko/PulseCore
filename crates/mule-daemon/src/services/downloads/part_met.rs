@@ -215,7 +215,12 @@ pub fn import_part_met(
         )));
     }
 
-    let actual_part_path = PathBuf::from(inspection.part_path.as_ref().unwrap());
+    let actual_part_path = PathBuf::from(
+        inspection
+            .part_path
+            .as_ref()
+            .ok_or_else(|| DaemonError::NotFound("Associated .part path missing in inspection".to_string()))?,
+    );
     if !actual_part_path.exists() {
         return Err(DaemonError::NotFound(format!(
             "Associated .part file not found: {}",

@@ -307,7 +307,9 @@ pub fn resume_download(
         None,
     );
 
-    let act = active.get(id).unwrap();
+    let act = active
+        .get(id)
+        .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
     Ok(act.snapshot())
 }
 
@@ -1330,7 +1332,9 @@ pub fn update_status(
         );
     }
 
-    let act = active.get(id).unwrap();
+    let act = active
+        .get(id)
+        .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
     Ok(act.snapshot())
 }
 
@@ -1406,7 +1410,9 @@ pub fn commit_finalize(
 
     let now = now_ms();
     {
-        let act = active.get_mut(id).unwrap();
+        let act = active
+            .get_mut(id)
+            .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
         act.download.status = DownloadStatus::Completed;
         act.download.target_path = final_path.clone();
         // `m_fullname` de eMule sigue el nombre renombrado; el nombre mostrado refleja
@@ -1657,7 +1663,9 @@ pub fn rename_download(
         }
     }
 
-    let act = active.get_mut(id).unwrap();
+    let act = active
+        .get_mut(id)
+        .ok_or_else(|| DaemonError::NotFound(format!("Download {id} not found")))?;
     act.download.display_name = new_name.to_string();
     act.download.target_path = new_target.clone();
     act.download.updated_at = now_ms();

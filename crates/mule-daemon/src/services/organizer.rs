@@ -568,15 +568,20 @@ fn resolve_artwork_url(raw: &str, size_segment: &str) -> String {
     }
 }
 
-/// Comprueba si la organización automática en modo Media Center está activa (por defecto: `true`).
-pub async fn is_organize_enabled(state: &AppState) -> bool {
+/// Lee un ajuste booleano en base de datos aplicando un valor por defecto.
+async fn get_bool_setting(state: &AppState, key: &str, default: bool) -> bool {
     let dl_svc = state.downloads.lock().await;
     dl_svc
-        .get_setting("organize_enabled")
+        .get_setting(key)
         .ok()
         .flatten()
         .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-        .unwrap_or(true)
+        .unwrap_or(default)
+}
+
+/// Comprueba si la organización automática en modo Media Center está activa (por defecto: `true`).
+pub async fn is_organize_enabled(state: &AppState) -> bool {
+    get_bool_setting(state, "organize_enabled", true).await
 }
 
 async fn active_media_server_profile(state: &AppState) -> MediaServerProfile {
@@ -590,13 +595,7 @@ async fn active_media_server_profile(state: &AppState) -> MediaServerProfile {
 }
 
 async fn is_nfo_artwork_enabled(state: &AppState) -> bool {
-    let dl_svc = state.downloads.lock().await;
-    dl_svc
-        .get_setting("generate_nfo_and_artwork")
-        .ok()
-        .flatten()
-        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-        .unwrap_or(true)
+    get_bool_setting(state, "generate_nfo_and_artwork", true).await
 }
 
 async fn write_nfo_and_artwork_if_enabled(

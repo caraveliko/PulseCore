@@ -79,7 +79,7 @@ impl IpFilter {
     }
 
     pub fn len(&self) -> usize {
-        self.ranges.read().unwrap().len()
+        self.ranges.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -87,10 +87,10 @@ impl IpFilter {
     }
 
     pub fn clear(&self) {
-        let mut w = self.ranges.write().unwrap();
+        let mut w = self.ranges.write().unwrap_or_else(|e| e.into_inner());
         w.clear();
-        self.dynamic_bans.write().unwrap().clear();
-        *self.last_report.write().unwrap() = None;
+        self.dynamic_bans.write().unwrap_or_else(|e| e.into_inner()).clear();
+        *self.last_report.write().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Comprueba si una dirección IP está exenta de baneo automático dinámico (loopback o LAN privada RFC1918).
@@ -116,7 +116,7 @@ impl IpFilter {
             return false;
         }
         let now = Instant::now();
-        let mut map = self.dynamic_bans.write().unwrap();
+        let mut map = self.dynamic_bans.write().unwrap_or_else(|e| e.into_inner());
         if map.len() >= MAX_TRACKED_DYNAMIC_IPS && !map.contains_key(&ip) {
             map.retain(|_, st| {
                 st.banned_until.is_some_and(|until| until > now)
@@ -172,7 +172,7 @@ impl IpFilter {
             return false;
         }
         let now = Instant::now();
-        let mut map = self.dynamic_bans.write().unwrap();
+        let mut map = self.dynamic_bans.write().unwrap_or_else(|e| e.into_inner());
         if map.len() >= MAX_TRACKED_DYNAMIC_IPS && !map.contains_key(&ip) {
             return false;
         }
@@ -216,11 +216,11 @@ impl IpFilter {
         let (ranges, report) = parse_ipfilter(reader)?;
 
         {
-            let mut w = self.ranges.write().unwrap();
+            let mut w = self.ranges.write().unwrap_or_else(|e| e.into_inner());
             *w = ranges;
         }
         {
-            let mut lr = self.last_report.write().unwrap();
+            let mut lr = self.last_report.write().unwrap_or_else(|e| e.into_inner());
             *lr = Some(report.clone());
         }
 
@@ -236,11 +236,11 @@ impl IpFilter {
         let (ranges, report) = parse_ipfilter(reader)?;
 
         {
-            let mut w = self.ranges.write().unwrap();
+            let mut w = self.ranges.write().unwrap_or_else(|e| e.into_inner());
             *w = ranges;
         }
         {
-            let mut lr = self.last_report.write().unwrap();
+            let mut lr = self.last_report.write().unwrap_or_else(|e| e.into_inner());
             *lr = Some(report.clone());
         }
 
@@ -255,7 +255,7 @@ impl IpFilter {
         }
 
         // 1. Comprobación de la tabla dinámica de baneo automático (anti-DDoS / inundación / penalizaciones)
-        if let Some(st) = self.dynamic_bans.read().unwrap().get(&ip) {
+        if let Some(st) = self.dynamic_bans.read().unwrap_or_else(|e| e.into_inner()).get(&ip) {
             if let Some(until) = st.banned_until {
                 if Instant::now() < until {
                     self.hits.fetch_add(1, Ordering::Relaxed);
@@ -278,7 +278,7 @@ impl IpFilter {
         let v4 = v4_opt?;
         let ip_u32 = u32::from(v4);
 
-        let guard = self.ranges.read().unwrap();
+        let guard = self.ranges.read().unwrap_or_else(|e| e.into_inner());
         let ranges = guard.as_slice();
 
         // Búsqueda binaria sobre los rangos. Dado que los rangos están ordenados por inicio ascendente y fusionados (disjuntos):
@@ -342,7 +342,7 @@ impl IpFilter {
             enabled: self.is_enabled(),
             range_count: self.len(),
             hits_count: self.hits.load(Ordering::Relaxed),
-            last_import_report: self.last_report.read().unwrap().clone(),
+            last_import_report: self.last_report.read().unwrap_or_else(|e| e.into_inner()).clone(),
         }
     }
 }

@@ -229,12 +229,14 @@ def resolve_test_target(
 
 
 def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
-    """Valida la sintaxis de todos los bloques <script> en `web/index.html`."""
-    if not WEB_INDEX_PATH.is_file():
+    """Valida la sintaxis de todos los bloques <script> en `web/index.html` y los módulos JS en `web/assets/`."""
+    assets_dir = ROOT / "web" / "assets"
+    external_js = sorted(assets_dir.rglob("*.js")) if assets_dir.is_dir() else []
+    if not WEB_INDEX_PATH.is_file() and not external_js:
         return True, 0.0
 
     node_bin = shutil.which("node")
-    print("\n==> Validando sintaxis JavaScript embebida en web/index.html...", flush=True)
+    print("\n==> Validando sintaxis JavaScript en web/index.html y web/assets/...", flush=True)
     if dry_run:
         return True, 0.0
     if not node_bin:
@@ -242,13 +244,17 @@ def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
         return True, 0.0
 
     t0 = time.monotonic()
-    html = WEB_INDEX_PATH.read_text(encoding="utf-8")
-    scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
+    scripts: List[str] = []
+    if WEB_INDEX_PATH.is_file():
+        html = WEB_INDEX_PATH.read_text(encoding="utf-8")
+        scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
     temp_paths: List[Path] = []
+    inline_count = 0
     try:
         for idx, block in enumerate(scripts):
             if not block.strip():
                 continue
+            inline_count += 1
             with tempfile.NamedTemporaryFile(
                 "w", suffix=f"_script_{idx}.js", encoding="utf-8", delete=False
             ) as tmp:
@@ -263,7 +269,21 @@ def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
             )
             if proc.returncode != 0:
                 print(
-                    f"  [ERROR] Error de sintaxis JS en bloque #{idx}:\n{proc.stderr}",
+                    f"  [ERROR] Error de sintaxis JS en bloque inline #{idx}:\n{proc.stderr}",
+                    file=sys.stderr,
+                )
+                return False, time.monotonic() - t0
+
+        for js_path in external_js:
+            proc = subprocess.run(
+                [node_bin, "--check", str(js_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            if proc.returncode != 0:
+                print(
+                    f"  [ERROR] Error de sintaxis JS en {js_path.relative_to(ROOT)}:\n{proc.stderr}",
                     file=sys.stderr,
                 )
                 return False, time.monotonic() - t0
@@ -275,7 +295,10 @@ def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
                 pass
 
     elapsed = time.monotonic() - t0
-    print(f"  [OK] {len(scripts)} bloques <script> validados en {elapsed:.2f}s.", flush=True)
+    print(
+        f"  [OK] {inline_count} bloque(s) inline y {len(external_js)} archivo(s) JS externos validados en {elapsed:.2f}s.",
+        flush=True,
+    )
     return True, elapsed
 
 

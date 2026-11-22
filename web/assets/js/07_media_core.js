@@ -1,0 +1,476 @@
+// Pulse Core WebUI — Núcleo de la biblioteca multimedia Cine y Series (Servarr nativo).
+// Extraído de web/index.html.
+
+// ==========================================
+// GESTIÓN DE CINE & SERIES (SERVARR NATIVO)
+// ==========================================
+let mediaLibraryItems = [];
+let currentMediaTypeFilter = 'all';
+let currentMediaStatusFilter = 'all';
+let mediaLibraryLoaded = false;
+let mediaLibraryLoading = false;
+let mediaLibraryReqSeq = 0;
+let mediaLibraryRetryTimer = null;
+
+async function loadMediaLibrary() {
+  const reqSeq = ++mediaLibraryReqSeq;
+  mediaLibraryLoading = true;
+  if (mediaLibraryRetryTimer) {
+    clearTimeout(mediaLibraryRetryTimer);
+    mediaLibraryRetryTimer = null;
+  }
+  try {
+    const res = await client.call('media.list', {});
+    if (reqSeq !== mediaLibraryReqSeq) return;
+    mediaLibraryItems = Array.isArray(res) ? res : (res && res.items ? res.items : []);
+    mediaLibraryLoaded = true;
+    updateMediaCounters();
+    updateMediaDiskSpace();
+    if (currentMediaSubView === 'calendar') {
+      loadCalendarView();
+    } else {
+      renderMediaCards();
+    }
+  } catch (err) {
+    console.error('Error cargando biblioteca:', err);
+    if (!mediaLibraryLoaded && client.ws && client.ws.readyState === WebSocket.OPEN && !mediaLibraryRetryTimer) {
+      mediaLibraryRetryTimer = setTimeout(() => {
+        mediaLibraryRetryTimer = null;
+        loadMediaLibrary();
+      }, 1500);
+    }
+  } finally {
+    if (reqSeq === mediaLibraryReqSeq) {
+      mediaLibraryLoading = false;
+    }
+  }
+}
+
+function updateMediaCounters() {
+  const total = mediaLibraryItems.length;
+  const movies = mediaLibraryItems.filter(i => i.mediaType === 'movie').length;
+  const tv = mediaLibraryItems.filter(i => i.mediaType === 'tv').length;
+  const completed = mediaLibraryItems.filter(i => i.status === 'completed').length;
+  const downloading = mediaLibraryItems.filter(i => i.status === 'downloading').length;
+  const wanted = mediaLibraryItems.filter(i => i.status === 'wanted').length;
+
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = `(${val})`; };
+  setEl('count-media-all', total);
+  setEl('count-media-movie', movies);
+  setEl('count-media-tv', tv);
+  setEl('count-media-completed', completed);
+  setEl('count-media-downloading', downloading);
+  setEl('count-media-wanted', wanted);
+}
+
+function filterMediaByType(type) {
+  currentMediaTypeFilter = type;
+  document.querySelectorAll('#media-type-filters button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mtype === type);
+  });
+  renderMediaCards();
+}
+
+function filterMediaByStatus(status) {
+  currentMediaStatusFilter = status;
+  document.querySelectorAll('#media-status-filters button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mstatus === status);
+  });
+  renderMediaCards();
+}
+
+function filterMediaCards() {
+  renderMediaCards();
+}
+
+// Sub-Vistas de Filmoteca (Cartelera vs Cola vs Calendario)
+let currentMediaSubView = 'library';
+let calendarDate = new Date();
+let liveDownloadsStripCollapsed = false;
+
+function switchMediaSubView(view) {
+  currentMediaSubView = view;
+  document.getElementById('btn-subview-library')?.classList.toggle('active', view === 'library');
+  document.getElementById('btn-subview-queue')?.classList.toggle('active', view === 'queue');
+  document.getElementById('btn-subview-calendar')?.classList.toggle('active', view === 'calendar');
+
+  const libEl = document.getElementById('media-library-view-wrap');
+  const queueEl = document.getElementById('tab-downloads');
+  const calEl = document.getElementById('media-calendar-view-wrap');
+  if (libEl) libEl.style.display = view === 'library' ? 'block' : 'none';
+  if (queueEl) queueEl.style.display = view === 'queue' ? 'flex' : 'none';
+  if (calEl) calEl.style.display = view === 'calendar' ? 'block' : 'none';
+
+  if (view !== 'library' && typeof window.clearMediaAmbientBackdrop === 'function') {
+    window.clearMediaAmbientBackdrop();
+  }
+
+  if (view === 'calendar') {
+    loadCalendarView();
+  } else if (view === 'queue') {
+    renderDownloadsTable();
+  } else if (!mediaLibraryLoaded) {
+    loadMediaLibrary();
+  } else {
+    renderMediaCards();
+  }
+}
+
+window.openDownloadInQueue = function(id) {
+  const tabBtn = document.querySelector('.nav-btn[data-tab="tab-media"]');
+  if (tabBtn && !tabBtn.classList.contains('active')) {
+    tabBtn.click();
+  }
+  switchMediaSubView('queue');
+  if (id) {
+    setTimeout(() => {
+      if (typeof selectDownload === 'function') selectDownload(id);
+    }, 80);
+  }
+};
+
+window.toggleLiveDownloadsStrip = function() {
+  liveDownloadsStripCollapsed = !liveDownloadsStripCollapsed;
+  const strip = document.getElementById('media-live-downloads-strip');
+  const btn = document.getElementById('btn-toggle-live-strip');
+  if (strip) strip.classList.toggle('collapsed', liveDownloadsStripCollapsed);
+  if (btn) btn.textContent = liveDownloadsStripCollapsed ? '▸' : '▾';
+};
+
+function renderLiveDownloadsStrip(allDownloads) {
+  const list = Array.isArray(allDownloads) ? allDownloads : [];
+  const activeOrPending = list.filter(item => {
+    const dl = item.snapshot || item;
+    const st = (dl.status || '').toLowerCase();
+    return st === 'downloading' || st === 'completing' || st === 'waiting' || st === 'queued' || st === 'paused';
+  });
+  const downloadingNow = activeOrPending.filter(item => {
+    const dl = item.snapshot || item;
+    const st = (dl.status || '').toLowerCase();
+    return st === 'downloading' || st === 'completing';
+  });
+
+  const queueCountEl = document.getElementById('subview-queue-count');
+  if (queueCountEl) queueCountEl.textContent = String(list.length);
+
+  const navBadge = document.getElementById('nav-media-active-badge');
+  if (navBadge) {
+    if (downloadingNow.length > 0) {
+      navBadge.textContent = String(downloadingNow.length);
+      navBadge.style.display = 'inline-flex';
+    } else {
+      navBadge.style.display = 'none';
+    }
+  }
+
+  const strip = document.getElementById('media-live-downloads-strip');
+  const grid = document.getElementById('media-live-downloads-grid');
+  const summary = document.getElementById('live-dl-strip-summary');
+  if (!strip || !grid) return;
+
+  if (activeOrPending.length === 0) {
+    strip.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+
+  strip.style.display = 'block';
+  const totalRate = downloadingNow.reduce((acc, item) => {
+    const dl = item.snapshot || item;
+    return acc + (dl.downloadRateBps || dl.download_rate_bps || 0);
+  }, 0);
+
+  if (summary) {
+    summary.textContent = totalRate > 0
+      ? `${activeOrPending.length} en curso · ${formatSpeed(totalRate)}`
+      : `${activeOrPending.length} en cola`;
+  }
+
+  // Priorizar las que descargan ahora
+  const sorted = [...activeOrPending].sort((a, b) => {
+    const da = a.snapshot || a;
+    const db = b.snapshot || b;
+    return (db.downloadRateBps || db.download_rate_bps || 0) - (da.downloadRateBps || da.download_rate_bps || 0);
+  });
+
+  grid.innerHTML = sorted.slice(0, 6).map(item => {
+    const dl = item.snapshot || item;
+    const id = dl.id || item.id || '';
+    const rawName = dl.fileName || dl.file_name || 'Archivo';
+    const displayName = fixMojibake(rawName.replace(/^⚡ \[Torrent\]\s*/i, '').replace(/^\[Torrent\]\s*/i, ''));
+    const total = dl.totalBytes || dl.total_bytes || 0;
+    const received = dl.receivedBytes || dl.received_bytes || 0;
+    const pct = total > 0 ? Math.min(100, (received / total) * 100) : (dl.progress ? Math.min(100, dl.progress * 100) : 0);
+    const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
+    const sources = dl.sourceCount || dl.source_count || 0;
+    const st = (dl.status || '').toLowerCase();
+    const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]');
+    const protoTag = isTorrent ? 'BT' : 'eD2k';
+
+    return `
+      <button type="button" class="live-dl-card ${st === 'paused' ? 'is-paused' : ''}" onclick="openDownloadInQueue('${escapeHtml(id)}')" title="${escapeHtml(displayName)}">
+        <div class="live-dl-card-top">
+          <span class="live-dl-proto ${isTorrent ? 'is-bt' : 'is-ed2k'}">${protoTag}</span>
+          <span class="live-dl-name">${escapeHtml(displayName)}</span>
+          <span class="live-dl-pct tabular-nums">${pct.toFixed(1)}%</span>
+        </div>
+        <div class="live-dl-bar"><div class="live-dl-bar-fill ${st === 'completing' ? 'completing' : (st === 'paused' ? 'paused' : '')}" style="width: ${pct.toFixed(1)}%"></div></div>
+        <div class="live-dl-card-meta tabular-nums">
+          <span>${speed > 0 ? formatSpeed(speed) : (st === 'paused' ? 'En pausa' : 'Esperando fuentes')}</span>
+          <span>${sources} ${sources === 1 ? 'fuente' : 'fuentes'}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+function changeCalendarMonth(delta) {
+  calendarDate.setMonth(calendarDate.getMonth() + delta);
+  loadCalendarView();
+}
+
+function resetCalendarToCurrentMonth() {
+  calendarDate = new Date();
+  loadCalendarView();
+}
+
+const MONTH_NAMES_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+const DAY_NAMES_ES = [
+  'Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'
+];
+
+async function loadCalendarView() {
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const monthLabelEl = document.getElementById('calendar-current-month-label');
+  if (monthLabelEl) {
+    monthLabelEl.textContent = `${MONTH_NAMES_ES[month]} ${year}`;
+  }
+
+  const container = document.getElementById('calendar-events-container');
+  const emptyMsg = document.getElementById('calendar-empty-msg');
+  if (!container) return;
+
+  container.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:8px;">⏳</div>Cargando emisiones para ${MONTH_NAMES_ES[month]}...</div>`;
+
+  const endDay = new Date(year, month + 1, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  const startDateStr = `${year}-${pad(month + 1)}-01`;
+  const endDateStr = `${year}-${pad(month + 1)}-${pad(endDay.getDate())}`;
+
+  const todayObj = new Date();
+  const todayStr = `${todayObj.getFullYear()}-${pad(todayObj.getMonth() + 1)}-${pad(todayObj.getDate())}`;
+
+  try {
+    const events = await client.call('media.calendar', { startDate: startDateStr, endDate: endDateStr });
+    const list = Array.isArray(events) ? events : [];
+
+    if (list.length === 0) {
+      container.innerHTML = '';
+      if (emptyMsg) emptyMsg.style.display = 'block';
+      return;
+    }
+    if (emptyMsg) emptyMsg.style.display = 'none';
+
+    // Agrupar por airDate
+    const groups = {};
+    for (const item of list) {
+      const d = item.episode.airDate || 'Sin fecha';
+      if (!groups[d]) groups[d] = [];
+      groups[d].push(item);
+    }
+
+    const sortedDates = Object.keys(groups).sort();
+
+    container.innerHTML = sortedDates.map(dateKey => {
+      const parts = dateKey.split('-');
+      let dayHeader = dateKey;
+      let isToday = false;
+      let isPast = false;
+
+      if (parts.length === 3) {
+        const dObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const dayName = DAY_NAMES_ES[dObj.getDay()] || '';
+        isToday = dateKey === todayStr;
+        isPast = dateKey < todayStr;
+        const tag = isToday ? '<span class="badge badge-dl" style="margin-left:8px;">★ HOY</span>' : (isPast ? '<span class="badge badge-wait" style="margin-left:8px; opacity:0.8;">Emitido</span>' : '<span class="badge badge-ed2k" style="margin-left:8px;">Próximo estreno</span>');
+        dayHeader = `${dayName}, ${parseInt(parts[2])} de ${MONTH_NAMES_ES[parseInt(parts[1]) - 1]} ${tag}`;
+      }
+
+      const dayBorder = isToday ? 'border: 1px solid var(--accent); box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);' : 'border: 1px solid var(--border);';
+
+      const episodesHtml = groups[dateKey].map(calItem => {
+        const ep = calItem.episode;
+        const epCode = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+        const posterSrc = calItem.seriesPosterPath || '';
+        const posterHtml = posterSrc 
+          ? `<img src="${posterSrc}" style="width: 44px; height: 64px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border);">`
+          : `<div style="width: 44px; height: 64px; background: #1e293b; border-radius: 4px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">📺</div>`;
+
+        let badgeHtml = '<span class="badge badge-wait">⚪ Próximamente</span>';
+        if (ep.status === 'completed') {
+          badgeHtml = '<span class="badge badge-dl">🟢 En Disco</span>';
+        } else if (ep.status === 'downloading') {
+          badgeHtml = '<span class="badge badge-ed2k">⬇ Descargando</span>';
+        } else if (isPast || isToday) {
+          badgeHtml = '<span class="badge badge-wait">⚡ Emitido (Buscando)</span>';
+        }
+
+        return `
+          <div style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+            ${posterHtml}
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 700; font-size: 0.92rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${escapeHtml(calItem.seriesTitle)} <span style="color: var(--accent); font-family: var(--font-mono); font-weight: 600;">${epCode}</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${escapeHtml(ep.title)}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+              ${badgeHtml}
+              <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${ep.mediaId}', '${escapeHtml(calItem.seriesTitle)}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Buscar fuentes">🔍 Fuentes</button>
+              ${ep.status === 'completed' ? `<button class="btn btn-sm" onclick="openSubtitlesModal('${ep.mediaId}', '${escapeHtml(calItem.seriesTitle)} ${epCode}', false, ${ep.seasonNumber}, ${ep.episodeNumber}, '${ep.filePath || ''}')" title="Subtítulos (Bazarr)">💬 Subs</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div style="background: var(--card-bg); ${dayBorder} border-radius: 8px; padding: 12px 14px;">
+          <div style="font-weight: 700; font-size: 0.92rem; color: var(--text); margin-bottom: 10px; display: flex; align-items: center;">
+            📅 ${dayHeader}
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${episodesHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center; padding: 40px; color: #f85149;">Error cargando calendario: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function updateMediaDiskSpace() {
+  try {
+    const res = await client.call('system.diskSpace', {});
+    if (res && res.freeBytes) {
+      const freeGb = (res.freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+      const totalGb = (res.totalBytes / (1024 * 1024 * 1024)).toFixed(1);
+      const textEl = document.getElementById('media-disk-space-text');
+      if (textEl) {
+        textEl.textContent = `${freeGb} GB libres de ${totalGb} GB`;
+      }
+    }
+  } catch (e) { console.warn('[PulseCore] error al cargar medios:', e); }
+}
+
+function renderMediaCards() {
+  const container = document.getElementById('media-grid-container');
+  const emptyMsg = document.getElementById('media-empty-msg');
+  if (!container) return;
+
+  const textFilter = (document.getElementById('media-search-filter')?.value || '').toLowerCase().trim();
+
+  const filtered = mediaLibraryItems.filter(item => {
+    if (currentMediaTypeFilter !== 'all' && item.mediaType !== currentMediaTypeFilter) return false;
+    if (currentMediaStatusFilter !== 'all' && item.status !== currentMediaStatusFilter) return false;
+    if (textFilter) {
+      const title = (item.title || '').toLowerCase();
+      const orig = (item.originalTitle || '').toLowerCase();
+      if (!title.includes(textFilter) && !orig.includes(textFilter)) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    if (emptyMsg) emptyMsg.style.display = 'block';
+    return;
+  }
+  if (emptyMsg) emptyMsg.style.display = 'none';
+
+  container.innerHTML = filtered.map(item => {
+    const isMovie = item.mediaType === 'movie';
+    const yearStr = item.year ? item.year : '';
+    const qualityStr = item.qualityProfile || '1080p';
+    const isCompleted = item.status === 'completed';
+
+    // 1. Estado en carátula:
+    // - En biblioteca (estado natural): sutil indicador verde de 8px en esquina para no tapar el arte
+    // - Descargando / Buscada: insignias de excepción compactas
+    let statusBadge = '';
+    if (isCompleted) {
+      statusBadge = `<div class="media-status-dot" title="En biblioteca"></div>`;
+    } else if (item.status === 'downloading') {
+      statusBadge = `<span class="badge badge-dl media-exception-badge">⬇ Descargando</span>`;
+    } else if (item.status === 'wanted') {
+      statusBadge = `<span class="badge badge-wait media-exception-badge">🟡 Buscada</span>`;
+    }
+
+    // 2. Botón central del hover overlay
+    const centerBtn = `
+      <button class="media-overlay-info-btn" onclick="event.stopPropagation(); openMediaDetail('${item.id}')" title="${isMovie ? 'Ver ficha técnica' : 'Ver temporadas y episodios'}">
+        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </button>
+      <span style="font-size: 0.75rem; font-weight: 600; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">${isMovie ? 'Ficha Técnica' : 'Ver Episodios'}</span>
+    `;
+
+    // 3. Botones de acción directos en el hover overlay (Ficha, Fuentes, Eliminar)
+    const quickActions = `
+      <div class="media-overlay-quick-actions" onclick="event.stopPropagation()">
+        <button class="btn-icon-overlay" onclick="openMediaDetail('${item.id}')" title="Ver ficha técnica">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>Ficha</span>
+        </button>
+        <button class="btn-icon-overlay" onclick="openReleasesModal('${item.id}', '${escapeHtml(item.title)}', ${isMovie})" title="Buscar fuentes en Kad y trackers">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Fuentes</span>
+        </button>
+        <button class="btn-icon-overlay btn-danger-overlay" onclick="deleteMediaItem('${item.id}')" title="Eliminar de biblioteca">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <span>Eliminar</span>
+        </button>
+      </div>
+    `;
+
+    // 4. Icono diminuto vectorial según tipo junto al año
+    const typeIcon = isMovie
+      ? `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`
+      : `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>`;
+
+    const posterHtml = item.posterPath
+      ? `<img class="media-poster-img movie-poster-img" src="${escapeHtml(item.posterPath)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='flex';">
+         <div class="media-poster-fallback" style="display: none;">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`
+      : `<div class="media-poster-fallback">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`;
+
+    return `
+      <div class="media-card movie-card" id="media-card-${item.id}" onclick="openMediaDetail('${item.id}')" title="Ver ficha de ${escapeHtml(item.title)}">
+        <div class="media-poster-box movie-poster-box">
+          ${statusBadge}
+          ${posterHtml}
+          <div class="media-card-overlay">
+            ${centerBtn}
+            ${quickActions}
+          </div>
+        </div>
+        <div class="media-card-body movie-info">
+          <div class="media-card-title movie-title">${escapeHtml(item.title)}</div>
+          <div class="media-card-meta movie-meta">
+            <span class="media-meta-left" title="${isMovie ? 'Película' : 'Serie TV'}">
+              ${typeIcon}
+              <span>${yearStr}</span>
+            </span>
+            <span class="badge-quality-outline badge-1080p-es">${escapeHtml(qualityStr)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+

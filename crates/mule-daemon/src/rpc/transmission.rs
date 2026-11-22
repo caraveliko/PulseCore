@@ -228,11 +228,25 @@ async fn handle_session_get(state: &AppState, tag: Option<Value>) -> Transmissio
     TransmissionResponse::success(args, tag)
 }
 
+/// Manejador de `session-set` de Transmission RPC.
+///
+/// Es intencionadamente un *no-op* de compatibilidad para clientes externos
+/// (Radarr/Sonarr), ya que la configuración del daemon se gestiona únicamente
+/// a través del JSON-RPC interno.
 async fn handle_session_set(
     _state: &AppState,
-    _args: Value,
+    args: Value,
     tag: Option<Value>,
 ) -> TransmissionResponse {
+    if let Some(obj) = args.as_object() {
+        if !obj.is_empty() {
+            let keys: Vec<&str> = obj.keys().map(String::as_str).collect();
+            tracing::debug!(
+                ?keys,
+                "Transmission RPC session-set ignorado intencionadamente (ajustes gestionados vía JSON-RPC interno)"
+            );
+        }
+    }
     TransmissionResponse::success(json!({}), tag)
 }
 

@@ -162,14 +162,14 @@ impl NetworkPolicyManager {
 
     /// Devuelve el perfil de red actualmente activo.
     pub fn profile(&self) -> NetworkProfile {
-        self.inner.read().unwrap().profile
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).profile
     }
 
     /// Actualiza el perfil de red, registrando la transición en el registro de auditoría.
     /// Invariante: si se regresa a `local-lab` con sockets externos activos,
     /// dichos sockets se cancelan atómicamente a través del token de cancelación.
     pub fn set_profile(&self, new_profile: NetworkProfile) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let old = inner.profile;
         if old != new_profile {
             inner.profile = new_profile;
@@ -193,7 +193,7 @@ impl NetworkPolicyManager {
 
     /// Devuelve el estado de red dinámico actual.
     pub fn state(&self) -> NetworkState {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
         match inner.state {
             NetworkState::Disabled => NetworkState::Disabled,
             NetworkState::ShuttingDown => NetworkState::ShuttingDown,
@@ -212,13 +212,13 @@ impl NetworkPolicyManager {
 
     /// Devuelve los presupuestos de recursos configurados.
     pub fn budgets(&self) -> ResourceBudgets {
-        self.inner.read().unwrap().budgets.clone()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).budgets.clone()
     }
 
     /// Actualiza los presupuestos de recursos tras validar los límites de los parámetros.
     pub fn set_budgets(&self, budgets: ResourceBudgets) -> Result<(), PolicyError> {
         budgets.validate().map_err(PolicyError::InvalidBudgets)?;
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.budgets = budgets;
         Ok(())
     }
@@ -232,7 +232,7 @@ impl NetworkPolicyManager {
         addr: SocketAddr,
         purpose: ConnectionPurpose,
     ) -> Result<SocketPermit, PolicyError> {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let profile = inner.profile;
 
         let pseudo = match purpose {
@@ -411,7 +411,7 @@ impl NetworkPolicyManager {
         addr: SocketAddr,
         purpose: ConnectionPurpose,
     ) -> Result<ListenPermit, PolicyError> {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let profile = inner.profile;
 
         let pseudo = format!("listener:{}", addr.port());
@@ -466,7 +466,7 @@ impl NetworkPolicyManager {
     /// tareas de socket pendientes y escribe un evento de auditoría.
     pub fn disconnect_all(&self) {
         let (profile, token_to_cancel) = {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             inner.state = NetworkState::ShuttingDown;
             let profile = inner.profile;
             inner.audit_log.record(
@@ -485,14 +485,14 @@ impl NetworkPolicyManager {
         token_to_cancel.cancel();
 
         // Finalizar el estado a Disabled
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.state = NetworkState::Disabled;
         let _ = profile;
     }
 
     /// Vuelve a habilitar la red desde el estado Deshabilitada (Disabled).
     pub fn enable(&self) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         if inner.state == NetworkState::Disabled || inner.state == NetworkState::ShuttingDown {
             inner.cancel_token = CancellationToken::new();
             inner.state = NetworkState::PreviewActive;
@@ -511,13 +511,13 @@ impl NetworkPolicyManager {
 
     /// Recupera las entradas más recientes del registro de auditoría de red.
     pub fn audit_entries(&self, limit: usize) -> Vec<NetworkAuditEntry> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
         inner.audit_log.recent(limit)
     }
 
     /// Devuelve el token de cancelación asociado con el administrador de red.
     pub fn cancellation_token(&self) -> CancellationToken {
-        self.inner.read().unwrap().cancel_token.clone()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).cancel_token.clone()
     }
 
     /// Devuelve el número de conexiones de pares actualmente activas.

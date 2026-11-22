@@ -107,17 +107,17 @@ impl InboundListenerService {
     /// Inyecta el entorno de intercambio de fuentes compartido (política de red +
     /// diarios de limitación) creado por `AppState`.
     pub fn set_sx_env(&mut self, env: crate::services::peer_session::source_exchange::SxEnv) {
-        *self.sx_env.write().unwrap() = Some(env);
+        *self.sx_env.write().unwrap_or_else(|e| e.into_inner()) = Some(env);
     }
 
     /// `SxEnv` compartido para este listener; construye un respaldo a partir de la
     /// propia política de red del listener + hash de usuario cuando `AppState` no
     /// inyectó uno (pruebas, construcción manual).
     pub(crate) fn sx_env(&self) -> crate::services::peer_session::source_exchange::SxEnv {
-        self.sx_env.read().unwrap().clone().unwrap_or_else(|| {
+        self.sx_env.read().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_else(|| {
             crate::services::peer_session::source_exchange::SxEnv::new(
                 (*self.network_policy).clone(),
-                *self.user_hash.read().unwrap(),
+                *self.user_hash.read().unwrap_or_else(|e| e.into_inner()),
             )
         })
     }
@@ -132,7 +132,7 @@ impl InboundListenerService {
         use crate::services::peer_session::source_exchange::SxLocalIds;
         // `CKademlia::IsConnected() && !IsFirewalled()` — socket UDP
         // activo + prueba de cortafuegos positiva.
-        let kad_udp_svc = { self.kad_udp.read().unwrap().clone() };
+        let kad_udp_svc = { self.kad_udp.read().unwrap_or_else(|e| e.into_inner()).clone() };
         let kad_open = match kad_udp_svc {
             Some(svc) => {
                 let snap = svc.get_snapshot().await;
@@ -147,7 +147,7 @@ impl InboundListenerService {
             }
             None => false,
         };
-        let session = self.server_session.read().unwrap().clone();
+        let session = self.server_session.read().unwrap_or_else(|e| e.into_inner()).clone();
         match session {
             Some(sm) => {
                 let snap = sm.snapshot().await;
@@ -194,17 +194,17 @@ impl InboundListenerService {
 
     /// Inyecta el servicio UDP de cliente (contabilidad de versión UDP entrante).
     pub fn set_client_udp(&mut self, svc: crate::services::client_udp::ClientUdpService) {
-        *self.client_udp.write().unwrap() = Some(svc);
+        *self.client_udp.write().unwrap_or_else(|e| e.into_inner()) = Some(svc);
     }
 
     /// Inyecta el servicio UDP Kad (lado servidor de la comprobación de cortafuegos UDP).
     pub fn set_kad_udp(&mut self, svc: Arc<crate::services::kad_udp::KadUdpService>) {
-        *self.kad_udp.write().unwrap() = Some(svc);
+        *self.kad_udp.write().unwrap_or_else(|e| e.into_inner()) = Some(svc);
     }
 
     /// Inyecta el servicio Kad (bootstrap desde cliente en hellos entrantes).
     pub fn set_kad(&mut self, svc: Arc<crate::services::kad::KadService>) {
-        *self.kad.write().unwrap() = Some(svc);
+        *self.kad.write().unwrap_or_else(|e| e.into_inner()) = Some(svc);
     }
 
     /// Inyecta el gestor de sesiones de pares (adopción de devolución de llamada LowID).
@@ -212,7 +212,7 @@ impl InboundListenerService {
         &mut self,
         peer_session: crate::services::peer_session::PeerSessionManager,
     ) {
-        *self.peer_session.write().unwrap() = Some(peer_session);
+        *self.peer_session.write().unwrap_or_else(|e| e.into_inner()) = Some(peer_session);
     }
 
     /// Inyecta el gestor de sesiones de servidor (nuestro ID de cliente HighID para sesiones de devolución).
@@ -220,7 +220,7 @@ impl InboundListenerService {
         &mut self,
         server_session: crate::services::server_session::ServerSessionManager,
     ) {
-        *self.server_session.write().unwrap() = Some(server_session);
+        *self.server_session.write().unwrap_or_else(|e| e.into_inner()) = Some(server_session);
     }
 
     /// Inyecta el servicio de identidad local para poder firmar desafíos entrantes.
@@ -231,8 +231,8 @@ impl InboundListenerService {
     /// Actualiza el material de identidad anunciado a pares entrantes tras una
     /// rotación de clave (`identity.rotate` / `identityRotationHours`).
     pub fn set_identity_material(&self, user_hash: [u8; 16], sui_pubkey_der: Option<Vec<u8>>) {
-        *self.user_hash.write().unwrap() = user_hash;
-        *self.sui_pubkey_der.write().unwrap() = sui_pubkey_der;
+        *self.user_hash.write().unwrap_or_else(|e| e.into_inner()) = user_hash;
+        *self.sui_pubkey_der.write().unwrap_or_else(|e| e.into_inner()) = sui_pubkey_der;
     }
 
     /// Activa/desactiva el modo paranoide (pares ofuscados + SUI verificados

@@ -148,22 +148,22 @@ impl ClientUdpService {
 
     /// Inyecta el servicio de descargas (búsqueda de archivos compartidos).
     pub fn set_downloads(&self, downloads: Arc<Mutex<DownloadService>>) {
-        *self.downloads.write().unwrap() = Some(downloads);
+        *self.downloads.write().unwrap_or_else(|e| e.into_inner()) = Some(downloads);
     }
 
     /// Inyecta el gestor de cola de subidas (búsqueda de rango para pings entrantes).
     pub fn set_upload_manager(&self, mgr: UploadManager) {
-        *self.upload_manager.write().unwrap() = Some(mgr);
+        *self.upload_manager.write().unwrap_or_else(|e| e.into_inner()) = Some(mgr);
     }
 
     /// Inyecta el gestor de sesiones de pares (aplicación de rango + contabilidad de reconsultas).
     pub fn set_peer_session(&self, mgr: crate::services::peer_session::PeerSessionManager) {
-        *self.peer_session.write().unwrap() = Some(mgr);
+        *self.peer_session.write().unwrap_or_else(|e| e.into_inner()) = Some(mgr);
     }
 
     /// Inyecta el registro de retransmisión buddy compartido con `KadUdpService`.
     pub fn set_buddy_registry(&self, reg: Arc<Mutex<crate::services::kad_udp::BuddyRegistry>>) {
-        *self.buddy.write().unwrap() = Some(reg);
+        *self.buddy.write().unwrap_or_else(|e| e.into_inner()) = Some(reg);
     }
 
     /// Inyecta el listener entrante utilizado para la devolución de conexión directa.
@@ -171,12 +171,12 @@ impl ClientUdpService {
         &self,
         svc: crate::services::inbound_listener::InboundListenerService,
     ) {
-        *self.inbound.write().unwrap() = Some(svc);
+        *self.inbound.write().unwrap_or_else(|e| e.into_inner()) = Some(svc);
     }
 
     /// Inyecta la sesión de servidor (`client_id` eD2K para devolución de conexión).
     pub fn set_server_session(&self, svc: crate::services::ServerSessionManager) {
-        *self.server_session.write().unwrap() = Some(svc);
+        *self.server_session.write().unwrap_or_else(|e| e.into_inner()) = Some(svc);
     }
 
     /// Registra la versión UDP que un cliente entrante anunció en su hello,
@@ -342,7 +342,7 @@ impl ClientUdpService {
     /// función: una fuente baneada tampoco puede enviarnos pings de reconsulta.
     pub async fn handle_datagram(&self, peer_addr: SocketAddr, data: &[u8]) {
         let banned = {
-            let downloads = self.downloads.read().unwrap().clone();
+            let downloads = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
             match downloads.as_ref() {
                 Some(d) => d.lock().await.is_source_banned(&peer_addr.to_string()),
                 None => false,
@@ -423,7 +423,7 @@ impl ClientUdpService {
         let hash_hex = hex::encode(file_hash);
 
         let shared = {
-            let downloads = self.downloads.read().unwrap().clone();
+            let downloads = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
             match downloads.as_ref() {
                 Some(d) => {
                     let d = d.lock().await;
@@ -433,7 +433,7 @@ impl ClientUdpService {
             }
         };
 
-        let mgr = self.upload_manager.read().unwrap().clone();
+        let mgr = self.upload_manager.read().unwrap_or_else(|e| e.into_inner()).clone();
         // `GetWaitingClientByIP_UDP` + `md4equ(reqfilehash,
         // sender->GetUploadFileID())` de eMule: el rango solo se revela al cliente
         // efectivamente en cola **para este archivo** — un par en cola para
@@ -520,7 +520,7 @@ impl ClientUdpService {
         buddy_id: [u8; 16],
         rest: Vec<u8>,
     ) {
-        let reg = self.buddy.read().unwrap().clone();
+        let reg = self.buddy.read().unwrap_or_else(|e| e.into_inner()).clone();
         let Some(reg) = reg else { return };
         let ip4 = match peer_addr.ip() {
             IpAddr::V4(v4) => v4.octets(),
@@ -603,7 +603,7 @@ impl ClientUdpService {
         // la comprobación saliente Kad-TCP, por lo que `!is_high_id` (LowID asignado por el servidor)
         // es nuestro sustituto del lado TCP.
         let kad_running = { self.inner.lock().await.socket.is_some() };
-        let server_session = { self.server_session.read().unwrap().clone() };
+        let server_session = { self.server_session.read().unwrap_or_else(|e| e.into_inner()).clone() };
         let (our_id, is_high_id) = match server_session {
             Some(s) => {
                 let snap = s.snapshot().await;
@@ -619,7 +619,7 @@ impl ClientUdpService {
             return;
         }
 
-        let Some(inbound) = self.inbound.read().unwrap().clone() else {
+        let Some(inbound) = self.inbound.read().unwrap_or_else(|e| e.into_inner()).clone() else {
             return;
         };
 
@@ -704,7 +704,7 @@ impl ClientUdpService {
             peer = log_peer_addr(peer_addr)
         );
 
-        let ps = self.peer_session.read().unwrap().clone();
+        let ps = self.peer_session.read().unwrap_or_else(|e| e.into_inner()).clone();
         match result {
             UdpReaskResult::Rank(rank) => {
                 // `SetRemoteQueueFull(false)` + `UDPReaskACK(nRank)` de eMule.
@@ -746,7 +746,7 @@ impl ClientUdpService {
         file_hash: [u8; 16],
         status: client_udp::UdpPartStatus,
     ) {
-        let Some(dl_arc) = self.downloads.read().unwrap().clone() else {
+        let Some(dl_arc) = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone() else {
             return;
         };
         let mask = match mule_protocol::ed2k::PartAvailabilityMask::from_bytes(
@@ -799,7 +799,7 @@ impl ClientUdpService {
     /// respondido `OP_FILENOTFOUND` para el archivo solicitado; la fuente queda
     /// marcada como muerta (estado `Failed`, fuera de la lista de fuentes — lista muerta de eMule).
     async fn mark_source_file_not_found(&self, peer_addr: SocketAddr, file_hash: [u8; 16]) {
-        let Some(dl_arc) = self.downloads.read().unwrap().clone() else {
+        let Some(dl_arc) = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone() else {
             return;
         };
         let hash_hex = hex::encode(file_hash);

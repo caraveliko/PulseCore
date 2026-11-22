@@ -25,3 +25,9 @@ test_compute_completed_ranges_nominal/test_compute_completed_ranges_overlapping_
 #   Cuerpos de pruebas parametrizados mediante decode_malformed() — esqueleto idéntico,
 #   contexto/desplazamiento esperados distintos.
 test_malformed_truncated_header/test_malformed_truncated_tag
+#
+# set_upload_manager
+#   ClientUdpService::set_upload_manager / UssController::set_upload_manager —
+#   setter inherente trivial de una línea en dos servicios distintos que solo
+#   supera el umbral B1 tras sustituir `.unwrap()` por `.unwrap_or_else(|e| e.into_inner())`.
+set_upload_manager
