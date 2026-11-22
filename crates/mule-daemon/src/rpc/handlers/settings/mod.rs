@@ -97,6 +97,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "mcpToolProfile",
     "ramProfile",
     "logLevel",
+    "updateChannel",
     "webuiPassword",
     "legalDisclaimerAccepted",
 ];
@@ -392,7 +393,9 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
     let portable_default =
         crate::workdir::WorkDirectoryResolver::resolve(None, None).default_download_dir;
     let hardlink_capable = are_paths_on_same_device(&current_dir, &fallback_nas_root);
+    let active_update_channel = state.updater.get_channel().await;
     let mut result = json!({
+        "updateChannel": active_update_channel,
         "defaultDownloadDir": current_dir.to_string_lossy(),
         "portableDownloadDir": portable_default.to_string_lossy(),
         "workdirPath": state.config.data_dir.to_string_lossy(),
@@ -1270,6 +1273,26 @@ pub async fn handle_settings_set(
             .await
             .set_setting("opensubtitles_api_key", key)?;
         keys.push("opensubtitlesApiKey");
+    }
+    if let Some(val) = params.get("updateChannel") {
+        let raw_channel = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'updateChannel'"))?;
+        let normalized = crate::services::updater::service::normalize_update_channel(raw_channel)
+            .ok_or_else(|| {
+                JsonRpcError::invalid_params("'updateChannel' must be 'stable' or 'beta'")
+            })?;
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("update_channel", normalized)?;
+        state
+            .updater
+            .set_channel(normalized)
+            .await
+            .map_err(|e| JsonRpcError::business(e.to_string()))?;
+        keys.push("updateChannel");
     }
     if let Some(val) = params.get("mcpEnabled") {
         let en = val

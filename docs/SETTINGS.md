@@ -36,6 +36,7 @@ selector de archivos/carpetas — ya no hace falta introducir la ruta a mano.
 | `ichEnabled` | `ich_enabled` | bool | `true` | Verificación MD4 de cada parte completada (desactivarlo omite la verificación intermedia) | `ICH` |
 | `rememberCancelled` | `remember_cancelled` | bool | `true` | Entrada en el historial al cancelar | `RememberCancelledFiles` |
 | `rememberDownloaded` | `remember_downloaded` | bool | `true` | Entrada en el historial al completar | `RememberDownloadedFiles` |
+| `updateChannel` | `update_channel` | `"stable"` \| `"beta"` | `"stable"` | Canal de actualizaciones en GitHub Releases (`stable` = solo estables; `beta` = incluye prelanzamientos) | — |
 
 ### Subtítulos y automatización multimedia
 

@@ -406,6 +406,15 @@ impl AppState {
                 }
                 id
             });
+        let persisted_update_channel = downloads
+            .get_setting("update_channel")
+            .ok()
+            .flatten()
+            .and_then(|s| {
+                crate::services::updater::service::normalize_update_channel(&s)
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| config.update_channel.clone());
         downloads.set_event_channel(event_tx.clone(), Arc::clone(&sequence));
         let dl_arc = Arc::new(Mutex::new(downloads));
         server_session.set_downloads(Arc::clone(&dl_arc));
@@ -697,7 +706,7 @@ impl AppState {
             crate::services::updater::UpdaterService::with_channel_config(
                 config.update_manifest_url.clone(),
                 crate::rpc::methods::DAEMON_VERSION.to_string(),
-                config.update_channel.clone(),
+                persisted_update_channel,
                 config.update_check_enabled,
             ),
         );

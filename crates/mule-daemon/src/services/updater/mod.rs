@@ -321,4 +321,46 @@ mod tests {
             .await;
         assert!(matches!(second, Err(UpdaterError::NoRollbackAvailable)));
     }
+
+    #[test]
+    fn test_resolve_beta_manifest_url_from_github_releases_json() {
+        let payload = r#"[
+            {
+                "tag_name": "v0.4.8-beta.1",
+                "draft": true,
+                "prerelease": true,
+                "assets": [
+                    { "name": "manifest.json", "browser_download_url": "https://example.invalid/draft/manifest.json" }
+                ]
+            },
+            {
+                "tag_name": "v0.4.7-beta.1",
+                "draft": false,
+                "prerelease": true,
+                "assets": [
+                    { "name": "PulseCore-v0.4.7-beta.1-linux-x64.tar.gz", "browser_download_url": "https://example.invalid/tar" },
+                    { "name": "manifest.json", "browser_download_url": "https://github.com/caraveliko/PulseCore/releases/download/v0.4.7-beta.1/manifest.json" }
+                ]
+            }
+        ]"#;
+        let resolved = super::service::resolve_beta_manifest_url_from_releases_json(payload);
+        assert_eq!(
+            resolved.as_deref(),
+            Some("https://github.com/caraveliko/PulseCore/releases/download/v0.4.7-beta.1/manifest.json")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_updater_channel_switch_and_validation() {
+        let svc = UpdaterService::new("http://127.0.0.1/manifest.json".to_string(), "0.4.7-beta.1".to_string());
+        assert_eq!(svc.get_channel().await, "stable");
+
+        let ch = svc.set_channel("beta").await.expect("cambio a beta");
+        assert_eq!(ch, "beta");
+        assert_eq!(svc.get_channel().await, "beta");
+
+        let err = svc.set_channel("nightly").await.unwrap_err();
+        assert!(matches!(err, UpdaterError::InvalidChannel(_)));
+        assert_eq!(svc.get_channel().await, "beta");
+    }
 }

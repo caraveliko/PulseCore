@@ -12,8 +12,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::constants::{
-    DEFAULT_RELEASE_PUBKEY_HEX, DOWNLOAD_PAYLOAD_TIMEOUT, MANIFEST_FETCH_TIMEOUT,
-    MAX_UPDATE_PAYLOAD_BYTES, PROGRESS_UPDATE_MIN_BYTES,
+    DEFAULT_GITHUB_RELEASES_API_URL, DEFAULT_RELEASE_PUBKEY_HEX, DOWNLOAD_PAYLOAD_TIMEOUT,
+    MANIFEST_ASSET_NAME, MANIFEST_FETCH_TIMEOUT, MAX_UPDATE_PAYLOAD_BYTES,
+    PROGRESS_UPDATE_MIN_BYTES, UPDATE_CHANNEL_BETA, UPDATE_CHANNEL_STABLE,
 };
 use super::error::UpdaterError;
 use super::http_fetch::fetch_validated_response;
@@ -144,9 +145,10 @@ impl Drop for BusyGuard<'_> {
 /// Servicio que orquesta la verificación, descarga y aplicación de versiones.
 pub struct UpdaterService {
     manifest_url: RwLock<String>,
+    github_releases_api_url: RwLock<String>,
     public_key_hex: RwLock<String>,
     current_version: String,
-    channel: String,
+    channel: RwLock<String>,
     auto_check_enabled: bool,
     status: RwLock<UpdateStatusSnapshot>,
     cached_asset: RwLock<Option<(String, TargetAsset)>>,
@@ -154,10 +156,56 @@ pub struct UpdaterService {
     restart_pending: AtomicBool,
 }
 
+#[derive(Deserialize)]
+struct GithubReleaseEntry {
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// Normaliza un nombre de canal de actualización (`"stable"` o `"beta"`).
+pub fn normalize_update_channel(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_lowercase().as_str() {
+        "stable" | "estable" => Some(UPDATE_CHANNEL_STABLE),
+        "beta" | "prerelease" | "pre-release" => Some(UPDATE_CHANNEL_BETA),
+        _ => None,
+    }
+}
+
+/// Resuelve la URL de descarga de `manifest.json` de la primera release no-borrador de GitHub.
+pub fn resolve_beta_manifest_url_from_releases_json(body: &str) -> Option<String> {
+    let releases: Vec<GithubReleaseEntry> = serde_json::from_str(body).ok()?;
+    for release in releases {
+        if release.draft {
+            continue;
+        }
+        if let Some(asset) = release
+            .assets
+            .into_iter()
+            .find(|a| a.name == MANIFEST_ASSET_NAME && !a.browser_download_url.trim().is_empty())
+        {
+            return Some(asset.browser_download_url);
+        }
+    }
+    None
+}
+
 impl UpdaterService {
     /// Crea una nueva instancia del servicio de actualización con valores de canal predeterminados.
     pub fn new(manifest_url: String, current_version: String) -> Self {
-        Self::with_channel_config(manifest_url, current_version, "stable".to_string(), true)
+        Self::with_channel_config(
+            manifest_url,
+            current_version,
+            UPDATE_CHANNEL_STABLE.to_string(),
+            true,
+        )
     }
 
     /// Crea una instancia del servicio con canal y configuración automática explícitos.
@@ -167,17 +215,54 @@ impl UpdaterService {
         channel: String,
         auto_check_enabled: bool,
     ) -> Self {
+        let normalized_channel = normalize_update_channel(&channel)
+            .unwrap_or(UPDATE_CHANNEL_STABLE)
+            .to_string();
         Self {
             manifest_url: RwLock::new(manifest_url),
+            github_releases_api_url: RwLock::new(DEFAULT_GITHUB_RELEASES_API_URL.to_string()),
             public_key_hex: RwLock::new(DEFAULT_RELEASE_PUBKEY_HEX.to_string()),
             current_version,
-            channel,
+            channel: RwLock::new(normalized_channel),
             auto_check_enabled,
             status: RwLock::new(UpdateStatusSnapshot::Idle),
             cached_asset: RwLock::new(None),
             is_busy: AtomicBool::new(false),
             restart_pending: AtomicBool::new(false),
         }
+    }
+
+    /// Devuelve el canal de actualización activo (`"stable"` o `"beta"`).
+    pub async fn get_channel(&self) -> String {
+        self.channel.read().await.clone()
+    }
+
+    /// Cambia en caliente el canal de actualización y reinicia la caché de estado.
+    pub async fn set_channel(&self, raw_channel: &str) -> Result<String, UpdaterError> {
+        let normalized = normalize_update_channel(raw_channel).ok_or_else(|| {
+            UpdaterError::InvalidChannel(format!(
+                "Canal de actualización no válido '{raw_channel}' (esperado: stable o beta)"
+            ))
+        })?;
+        {
+            let mut ch = self.channel.write().await;
+            *ch = normalized.to_string();
+        }
+        {
+            let mut cached = self.cached_asset.write().await;
+            *cached = None;
+        }
+        {
+            let mut st = self.status.write().await;
+            *st = UpdateStatusSnapshot::Idle;
+        }
+        Ok(normalized.to_string())
+    }
+
+    /// Sobrescribe la URL de la API de GitHub Releases (útil en pruebas locales sin conexión).
+    pub async fn set_github_releases_api_url(&self, api_url: String) {
+        let mut url = self.github_releases_api_url.write().await;
+        *url = api_url;
     }
 
     /// Marca que el proceso debe ser relanzado tras completarse el apagado ordenado.
@@ -238,7 +323,7 @@ impl UpdaterService {
             managed_by_systemd: is_managed_by_systemd(),
             running_in_docker,
             manifest_url: self.manifest_url.read().await.clone(),
-            channel: self.channel.clone(),
+            channel: self.channel.read().await.clone(),
             auto_check_enabled: self.auto_check_enabled,
             max_upload_bytes: MAX_UPDATE_PAYLOAD_BYTES,
         }
@@ -264,11 +349,53 @@ impl UpdaterService {
             *st = UpdateStatusSnapshot::Checking;
         }
 
-        let url = self.manifest_url.read().await.clone();
+        let base_manifest_url = self.manifest_url.read().await.clone();
+        let active_channel = self.channel.read().await.clone();
         let current_ver = self.current_version.clone();
+
+        let url = if active_channel == UPDATE_CHANNEL_BETA
+            && base_manifest_url == crate::config::DEFAULT_UPDATE_MANIFEST_URL
+        {
+            let api_url = self.github_releases_api_url.read().await.clone();
+            tracing::info!(
+                releases_api_url = %api_url,
+                current_version = %current_ver,
+                "Resolviendo manifiesto del canal Beta desde GitHub Releases"
+            );
+            let api_resp =
+                match fetch_validated_response(&api_url, MANIFEST_FETCH_TIMEOUT, network_policy).await {
+                    Ok(resp) => resp,
+                    Err(err) => {
+                        let msg = err.to_string();
+                        tracing::warn!("{msg}");
+                        self.set_error_status(msg).await;
+                        return Err(err);
+                    }
+                };
+            let api_bytes = match api_resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    let msg = format!("Error leyendo la lista de releases Beta de GitHub: {e}");
+                    self.set_error_status(msg).await;
+                    return Err(UpdaterError::Network(e));
+                }
+            };
+            let api_text = String::from_utf8_lossy(&api_bytes);
+            match resolve_beta_manifest_url_from_releases_json(&api_text) {
+                Some(resolved) => resolved,
+                None => {
+                    let msg = "No se encontró ninguna release Beta con manifest.json publicado en GitHub.".to_string();
+                    self.set_error_status(msg.clone()).await;
+                    return Err(UpdaterError::InvalidChannel(msg));
+                }
+            }
+        } else {
+            base_manifest_url
+        };
 
         tracing::info!(
             manifest_url = %url,
+            channel = %active_channel,
             current_version = %current_ver,
             "Comprobando actualizaciones de Pulse Core"
         );

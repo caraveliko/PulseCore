@@ -122,8 +122,11 @@ function renderUpdateEnvironment() {
   const archEl = document.getElementById('update-arch-val');
   if (archEl) archEl.textContent = triple;
 
-  const chanEl = document.getElementById('update-channel-val');
-  if (chanEl && env.channel) chanEl.textContent = env.channel;
+  const chanVal = (env.channel === 'beta') ? 'beta' : 'stable';
+  const chanSelect = document.getElementById('update-channel-select');
+  if (chanSelect) chanSelect.value = chanVal;
+  const modalChanSelect = document.getElementById('modal-update-channel-select');
+  if (modalChanSelect) modalChanSelect.value = chanVal;
 
   const modeEl = document.getElementById('update-runtime-mode-val');
   if (modeEl) modeEl.textContent = runtimeText;
@@ -173,6 +176,28 @@ function renderUpdateEnvironment() {
     rbSection.style.display = env.hasRollbackBackup === true ? 'block' : 'none';
   }
 }
+
+async function changeUpdateChannel(channel) {
+  const normalized = (channel === 'beta') ? 'beta' : 'stable';
+  const chanSelect = document.getElementById('update-channel-select');
+  if (chanSelect) chanSelect.value = normalized;
+  const modalChanSelect = document.getElementById('modal-update-channel-select');
+  if (modalChanSelect) modalChanSelect.value = normalized;
+
+  try {
+    await client.call('settings.set', { updateChannel: normalized });
+    if (updateUiState.environment) {
+      updateUiState.environment.channel = normalized;
+    }
+    const label = normalized === 'beta' ? 'Beta (prelanzamientos)' : 'Estable';
+    addLog('info', `Canal de actualizaciones cambiado a: ${label}`);
+    showUpdateModalFeedback('info', `Canal cambiado a ${label}. Comprobando versiones en GitHub...`);
+    await checkSystemUpdate(true, false);
+  } catch (err) {
+    showUpdateModalFeedback('error', 'Error cambiando canal de actualización: ' + (err.message || err));
+  }
+}
+window.changeUpdateChannel = changeUpdateChannel;
 
 function requestRollbackConfirm() {
   const box = document.getElementById('modal-upd-rollback-confirm');

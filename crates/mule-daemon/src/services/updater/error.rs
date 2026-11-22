@@ -89,6 +89,10 @@ pub enum UpdaterError {
     #[error("Se superó el límite de {max} redirecciones HTTP al descargar la actualización")]
     TooManyRedirects { max: usize },
 
+    /// Canal de actualización desconocido o sin lanzamientos disponibles.
+    #[error("Canal o lanzamiento de actualización no válido: {0}")]
+    InvalidChannel(String),
+
     /// No existe ninguna copia de respaldo previa disponible para revertir la actualización.
     #[error("No existe copia de respaldo (.old) disponible para revertir la actualización")]
     NoRollbackAvailable,

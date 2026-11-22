@@ -83,6 +83,7 @@ pub async fn handle_check_update(
             | UpdaterError::Network(_)
             | UpdaterError::TooManyRedirects { .. }
             | UpdaterError::InvalidManifest(_)
+            | UpdaterError::InvalidChannel(_)
             | UpdaterError::UnsupportedPlatform(_)
             | UpdaterError::PayloadTooLarge { .. }
             | UpdaterError::InvalidExecutableFormat(_),

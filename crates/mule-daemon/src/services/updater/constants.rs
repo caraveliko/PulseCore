@@ -73,3 +73,16 @@ pub const HEADER_UPDATE_FILENAME: &str = "x-update-filename";
 
 /// Cabecera HTTP opcional que controla si el demonio debe reiniciarse tras aplicar la subida.
 pub const HEADER_UPDATE_AUTO_RESTART: &str = "x-auto-restart";
+
+/// Endpoint oficial de la API de GitHub Releases para resolver lanzamientos Beta/prelanzamiento.
+pub const DEFAULT_GITHUB_RELEASES_API_URL: &str =
+    "https://api.github.com/repos/caraveliko/PulseCore/releases?per_page=15";
+
+/// Nombre del archivo de manifiesto firmado adjunto a cada Release.
+pub const MANIFEST_ASSET_NAME: &str = "manifest.json";
+
+/// Identificador del canal estable de actualizaciones.
+pub const UPDATE_CHANNEL_STABLE: &str = "stable";
+
+/// Identificador del canal beta (incluye prelanzamientos) de actualizaciones.
+pub const UPDATE_CHANNEL_BETA: &str = "beta";
