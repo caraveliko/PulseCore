@@ -345,6 +345,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // y cuota diaria de subida (`dailyUploadQuotaGb`).
     state.spawn_identity_rotator();
     state.spawn_quota_watcher();
+    state.spawn_streaming_watcher();
 
     // Compartición de la carpeta "Incoming" de eMule: calcula el hash de cada archivo en el
     // directorio de descargas y lo registra como compartido (tarea en segundo plano —

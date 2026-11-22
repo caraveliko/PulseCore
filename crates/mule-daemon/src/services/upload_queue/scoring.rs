@@ -146,6 +146,25 @@ impl UploadManager {
         }
     }
 
+    /// Tasa objetivo efectiva por ranura: si *Smart Slot Focus* (`target_slot_speed_bps > 0`)
+    /// está configurado, concentra el caudal en menos ranuras rápidas; en caso contrario,
+    /// aplica la fórmula clásica de eMule 0.72a.
+    pub(super) fn effective_target_slot_rate_bps(
+        &self,
+        open_slots: usize,
+        min_datarate: bool,
+    ) -> u64 {
+        let custom = self.target_slot_speed_bps.load(Ordering::Relaxed);
+        if custom == 0 {
+            return Self::target_client_data_rate_bps(open_slots, min_datarate);
+        }
+        if min_datarate {
+            (custom * 3 / 4).max(1)
+        } else {
+            custom
+        }
+    }
+
     /// eMule `CUploadQueue::AcceptNewClient`: abre una ranura si
     /// - no hay veto de USS (`lastCommonRouteFinder->AcceptNewClient`),
     /// - `uploading < max(MIN_UP_CLIENTS_ALLOWED, 4)` → siempre,
@@ -175,8 +194,8 @@ impl UploadManager {
         if uploading < GUARANTEED_UPLOAD_SLOTS {
             return true;
         }
-        let target = Self::target_client_data_rate_bps(uploading, false).max(1);
-        let min_target = Self::target_client_data_rate_bps(uploading, true).max(1);
+        let target = self.effective_target_slot_rate_bps(uploading, false).max(1);
+        let min_target = self.effective_target_slot_rate_bps(uploading, true).max(1);
         let total_bps: u64 = active
             .values()
             .filter(|s| s.state == UploadSlotState::Uploading)

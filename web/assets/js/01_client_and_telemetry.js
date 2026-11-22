@@ -296,7 +296,7 @@ async function toggleTurtleMode() {
   updateTurtleModeUI();
   try {
     if (turtleModeActive) {
-      await client.call('limits.set', { downloadLimit: 500, uploadLimit: 100 });
+      await client.call('limits.set', { downloadLimit: 500, uploadLimit: 100, uss: { enabled: false } });
       addLog('warn', '🐢 Modo Tortuga activado: Ancho de banda limitado a 500 kB/s bajada y 100 kB/s subida.');
     } else {
       await client.call('limits.set', { downloadLimit: 0, uploadLimit: 0 });

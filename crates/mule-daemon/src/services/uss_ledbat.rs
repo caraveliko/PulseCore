@@ -17,8 +17,12 @@ pub const BASE_DELAY_BUCKET_MS: i64 = 60_000;
 pub const CURRENT_DELAY_WINDOW: usize = 4;
 /// Retardo de cola objetivo en milisegundos (LEDBAT / LEDBAT++: 60 ms).
 pub const TARGET_QUEUING_DELAY_MS: i64 = 60;
-/// Escalado de ajuste proporcional de tasa por ciclo (bytes/s).
-pub const LEDBAT_GAIN_BPS: f64 = 16_384.0;
+/// Paso aditivo mínimo por ciclo (bytes/s) para enlaces lentos o arranque.
+pub const LEDBAT_MIN_GAIN_BPS: f64 = 16_384.0;
+/// Incremento aditivo proporcional al límite actual por ciclo (+5 % con cola vacía).
+pub const LEDBAT_ADDITIVE_RATIO: f64 = 0.05;
+/// Recorte multiplicativo máximo por ciclo ante congestión severa (-25 %).
+pub const LEDBAT_MULTIPLICATIVE_MAX_DROP: f64 = 0.25;
 
 #[derive(Debug, Clone, Copy)]
 struct DelayBucket {
@@ -103,7 +107,8 @@ impl LedbatEstimator {
         Some(cur.saturating_sub(base))
     }
 
-    /// Calcula el nuevo límite de subida (bytes/s) aplicando la ley proporcional LEDBAT++.
+    /// Calcula el nuevo límite de subida (bytes/s) aplicando una ley AIMD
+    /// proporcional al ancho de banda (subida aditiva escalada, bajada multiplicativa).
     pub fn compute_rate_adjustment(
         &self,
         current_limit_bps: u64,
@@ -111,9 +116,21 @@ impl LedbatEstimator {
         max_bps: u64,
     ) -> Option<u64> {
         let qdelay = self.queuing_delay_ms()?;
-        let off_target = (TARGET_QUEUING_DELAY_MS - qdelay) as f64 / (TARGET_QUEUING_DELAY_MS as f64);
-        let delta = (off_target * LEDBAT_GAIN_BPS).round() as i64;
-        let next = (current_limit_bps as i64).saturating_add(delta).max(min_bps as i64) as u64;
+        let off_target = ((TARGET_QUEUING_DELAY_MS - qdelay) as f64
+            / TARGET_QUEUING_DELAY_MS as f64)
+            .clamp(-1.0, 1.0);
+        let next = if off_target >= 0.0 {
+            let step = (current_limit_bps as f64 * LEDBAT_ADDITIVE_RATIO)
+                .max(LEDBAT_MIN_GAIN_BPS)
+                * off_target;
+            current_limit_bps.saturating_add(step.round() as u64)
+        } else {
+            let drop = (current_limit_bps as f64 * LEDBAT_MULTIPLICATIVE_MAX_DROP)
+                .max(LEDBAT_MIN_GAIN_BPS)
+                * (-off_target);
+            current_limit_bps.saturating_sub(drop.round() as u64)
+        }
+        .max(min_bps);
         Some(if max_bps > 0 { next.min(max_bps) } else { next })
     }
 }
@@ -143,5 +160,27 @@ mod tests {
         assert_eq!(est.queuing_delay_ms(), Some(120));
         let down = est.compute_rate_adjustment(200_000, 10_240, 1_000_000).unwrap();
         assert!(down < 200_000);
+    }
+
+    #[test]
+    fn ledbat_scales_aimd_for_fiber_rates() {
+        let mut est = LedbatEstimator::new();
+        for i in 0..4 {
+            est.record_rtt_sample(1_000 + i * 100, 10);
+        }
+        // Sin congestión en fibra (8 MB/s): debe escalar proporcionalmente (+5 %).
+        let up = est
+            .compute_rate_adjustment(8_000_000, 10_240, 10_000_000)
+            .unwrap();
+        assert_eq!(up, 8_400_000);
+
+        // Congestión severa (+120 ms): recorte multiplicativo del 25 % (6 MB/s).
+        for i in 0..CURRENT_DELAY_WINDOW {
+            est.record_rtt_sample(70_000 + (i as i64) * 100, 130);
+        }
+        let down = est
+            .compute_rate_adjustment(8_000_000, 10_240, 10_000_000)
+            .unwrap();
+        assert_eq!(down, 6_000_000);
     }
 }

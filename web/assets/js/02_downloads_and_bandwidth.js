@@ -66,6 +66,7 @@ let bwWindowSamples = BW_DEFAULT_WINDOW;
 let bwSeriesMode = 'both';
 let bwHoverIndex = null;
 let bwLastChartState = null;
+let bwLimitsPollTimer = null;
 
 function formatDurationShort(totalSec) {
   const s = Math.max(0, Math.round(totalSec));
@@ -103,12 +104,103 @@ function openBandwidthModal() {
   renderBandwidthModal();
   refreshBandwidthLimits();
   refreshDownloads().catch(() => {});
+  if (bwLimitsPollTimer) clearInterval(bwLimitsPollTimer);
+  bwLimitsPollTimer = setInterval(() => {
+    refreshBandwidthLimits();
+  }, 4000);
 }
 
 function closeBandwidthModal() {
   const modal = document.getElementById('bandwidth-details-modal');
   if (modal) modal.classList.remove('active');
+  if (bwLimitsPollTimer) {
+    clearInterval(bwLimitsPollTimer);
+    bwLimitsPollTimer = null;
+  }
   clearBwChartHover();
+}
+
+function formatSmartReasonLabel(uss) {
+  if (!uss) return 'Desactivado';
+  if (uss.reason === 'streaming' || uss.streamingCapActive) {
+    return `🎬 Recortando por streaming (${uss.activeStreams || 1} activo/s)`;
+  }
+  if (uss.reason === 'quota_eco' || uss.quotaEcoActive) {
+    return '🌿 Modo eco por cuota diaria';
+  }
+  if (!uss.enabled) return 'Desactivado';
+  switch (uss.reason) {
+    case 'latency':
+      return 'Recortando por latencia (USS/LEDBAT)';
+    case 'idle_cap':
+      return 'Modo reposo (sin descargas activas)';
+    case 'baseline':
+    case 'waiting':
+      return uss.state === 'waiting' ? 'Esperando muestras RTT' : 'Calibrando línea base';
+    case 'normal':
+    default:
+      return 'Activo (USS/LEDBAT++)';
+  }
+}
+
+async function toggleSmartUploadMode() {
+  const currentlyEnabled = Boolean(cachedLimitsInfo && cachedLimitsInfo.uss && cachedLimitsInfo.uss.enabled);
+  const nextEnabled = !currentlyEnabled;
+  try {
+    if (nextEnabled && turtleModeActive) {
+      turtleModeActive = false;
+      localStorage.setItem('mule_turtle_mode', 'false');
+      updateTurtleModeUI();
+      await client.call('limits.set', { downloadLimit: 0, uploadLimit: 0, uss: { enabled: true } });
+    } else {
+      await client.call('limits.set', { uss: { enabled: nextEnabled } });
+    }
+    addLog(
+      'info',
+      nextEnabled
+        ? '⚡ Control inteligente de subida activado (USS / LEDBAT++).'
+        : '⚡ Control inteligente de subida desactivado.'
+    );
+    await refreshBandwidthLimits();
+  } catch (e) {
+    addLog('error', 'Error al conmutar el control inteligente de subida: ' + (e.message || JSON.stringify(e)));
+  }
+}
+
+async function applySmartUploadControls() {
+  const readKbs = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const raw = el.value.trim();
+    if (raw === '') return 0;
+    const n = parseInt(raw, 10);
+    return Number.isNaN(n) || n < 0 ? 0 : n;
+  };
+  const maxUpKbs = readKbs('bw-smart-max-up');
+  const idleCapKbs = readKbs('bw-smart-idle-cap');
+  const streamingCapKbs = readKbs('bw-smart-streaming-cap');
+  const slotTargetKbs = readKbs('bw-smart-slot-target');
+  try {
+    const payload = {
+      uss: {
+        maxUploadBytesPerSec: (maxUpKbs || 0) * 1024,
+        idleUploadCapBytesPerSec: (idleCapKbs || 0) * 1024,
+        streamingUploadCapBytesPerSec: (streamingCapKbs || 0) * 1024,
+      },
+      smartSlotTargetKbs: slotTargetKbs || 0,
+    };
+    if (!cachedLimitsInfo?.uss?.enabled) {
+      payload.uploadLimit = maxUpKbs || 0;
+    }
+    await client.call('limits.set', payload);
+    addLog(
+      'info',
+      `🧠 Ajustes inteligentes aplicados: techo ${maxUpKbs || 'ilimitado'} KB/s, reposo ${idleCapKbs || 'off'} KB/s, ranura ${slotTargetKbs || 'clásico'} KB/s.`
+    );
+    await refreshBandwidthLimits();
+  } catch (e) {
+    addLog('error', 'Error aplicando ajustes inteligentes de subida: ' + (e.message || JSON.stringify(e)));
+  }
 }
 
 function setBandwidthWindow(samples) {
@@ -243,12 +335,13 @@ function renderBandwidthModal() {
   const uss = cachedLimitsInfo && cachedLimitsInfo.uss ? cachedLimitsInfo.uss : null;
 
   setText('bw-limit-down', dlLimit > 0 ? `${formatSpeed(dlLimit)}${cachedLimitsInfo?.downloadRatioApplied ? ' (Ratio eD2K)' : ''}` : 'Sin límite');
-  setText(
-    'bw-limit-up',
-    (uss && uss.enabled && uss.currentLimitBytesPerSec > 0)
-      ? `${formatSpeed(uss.currentLimitBytesPerSec)} (USS)`
-      : (ulLimit > 0 ? formatSpeed(ulLimit) : 'Sin límite')
-  );
+  const upLimitText = (uss && uss.enabled && uss.currentLimitBytesPerSec > 0)
+    ? `${formatSpeed(uss.currentLimitBytesPerSec)} (USS)`
+    : (ulLimit > 0 ? formatSpeed(ulLimit) : 'Sin límite');
+  const splitHint = (uss && uss.torrentLimitBytesPerSec > 0 && uss.ed2kLimitBytesPerSec > 0 && uss.ed2kLimitBytesPerSec !== uss.torrentLimitBytesPerSec)
+    ? ` · eD2K ${formatSpeed(uss.ed2kLimitBytesPerSec)} / BT ${formatSpeed(uss.torrentLimitBytesPerSec)}`
+    : '';
+  setText('bw-limit-up', `${upLimitText}${splitHint}`);
 
   const modalBadge = document.getElementById('bw-modal-badge');
   if (modalBadge) {
@@ -256,8 +349,8 @@ function renderBandwidthModal() {
       modalBadge.className = 'badge badge-completing';
       modalBadge.textContent = '🐢 Modo Tortuga (500/100 kB/s)';
     } else if (uss && uss.enabled) {
-      modalBadge.className = 'badge badge-dl';
-      modalBadge.textContent = '⚡ USS Dinámico Activo';
+      modalBadge.className = uss.reason === 'latency' ? 'badge badge-completing' : 'badge badge-dl';
+      modalBadge.textContent = `⚡ ${formatSmartReasonLabel(uss)}`;
     } else if (dlLimit > 0 || ulLimit > 0) {
       modalBadge.className = 'badge badge-completing';
       modalBadge.textContent = '⚡ Límite Activo';
@@ -265,6 +358,46 @@ function renderBandwidthModal() {
       modalBadge.className = 'badge badge-completed';
       modalBadge.textContent = '🟢 Sin límites';
     }
+  }
+
+  const smartToggleBtn = document.getElementById('btn-bw-smart-toggle');
+  if (smartToggleBtn) {
+    const isSmartOn = Boolean(uss && uss.enabled);
+    smartToggleBtn.classList.toggle('btn-primary', isSmartOn);
+    smartToggleBtn.textContent = isSmartOn ? '⚡ Control Inteligente: ON' : '⚡ Control Inteligente: OFF';
+  }
+
+  const smartStatusEl = document.getElementById('bw-smart-status-text');
+  if (smartStatusEl) {
+    smartStatusEl.textContent = formatSmartReasonLabel(uss);
+    smartStatusEl.style.color = (uss && uss.enabled)
+      ? (uss.reason === 'latency' ? '#fbbf24' : '#34d399')
+      : 'var(--text-muted)';
+  }
+  const smartRttEl = document.getElementById('bw-smart-rtt-text');
+  if (smartRttEl) {
+    if (uss && uss.enabled && uss.latencyMs > 0) {
+      const qDelay = Number(uss.queuingDelayMs || 0);
+      const targetStr = uss.pingTarget ? ` · ${uss.pingTarget}` : '';
+      smartRttEl.textContent = `RTT ${uss.latencyMs} ms (base ${uss.lowestPingMs || uss.latencyMs} ms, +${qDelay} ms cola)${targetStr}`;
+    } else {
+      smartRttEl.textContent = '';
+    }
+  }
+  const syncSmartInput = (id, kbsVal) => {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) {
+      el.value = kbsVal > 0 ? String(Math.round(kbsVal)) : '';
+    }
+  };
+  if (cachedLimitsInfo) {
+    const cfgMaxUpBps = uss && uss.config ? (uss.config.maxUploadBps || 0) : (cachedLimitsInfo.uploadConfiguredBytesPerSec || 0);
+    const cfgIdleBps = uss && uss.config ? (uss.config.idleUploadCapBps || 0) : 0;
+    const cfgStreamingBps = uss && uss.config ? (uss.config.streamingUploadCapBps || 0) : 0;
+    syncSmartInput('bw-smart-max-up', cfgMaxUpBps / 1024);
+    syncSmartInput('bw-smart-idle-cap', cfgIdleBps / 1024);
+    syncSmartInput('bw-smart-streaming-cap', cfgStreamingBps / 1024);
+    syncSmartInput('bw-smart-slot-target', cachedLimitsInfo.smartSlotTargetKbs || 0);
   }
 
   // Tarjeta KPI 3: Volumen de sesión
@@ -297,7 +430,13 @@ function renderBandwidthModal() {
   // Gráfica SVG detallada
   const showDown = bwSeriesMode === 'both' || bwSeriesMode === 'down';
   const showUp = bwSeriesMode === 'both' || bwSeriesMode === 'up';
-  const maxScale = Math.max(showDown ? winPeakDown : 0, showUp ? winPeakUp : 0, BW_MIN_SCALE_BPS);
+  const effUpLimitBps = (uss && uss.enabled && uss.currentLimitBytesPerSec > 0)
+    ? uss.currentLimitBytesPerSec
+    : ulLimit;
+  const scaleCandidateLimit = (showUp && effUpLimitBps > 0 && effUpLimitBps <= Math.max(winPeakUp * 2, BW_MIN_SCALE_BPS))
+    ? effUpLimitBps
+    : 0;
+  const maxScale = Math.max(showDown ? winPeakDown : 0, showUp ? winPeakUp : 0, scaleCandidateLimit, BW_MIN_SCALE_BPS);
 
   setText('bw-y-100', formatSpeed(maxScale));
   setText('bw-y-75', formatSpeed(maxScale * 0.75));
@@ -374,6 +513,18 @@ function renderBandwidthModal() {
       peakLineUp.style.display = '';
     } else {
       peakLineUp.style.display = 'none';
+    }
+  }
+
+  const limitLineUp = document.getElementById('bw-limit-line-up');
+  if (limitLineUp) {
+    if (showUp && effUpLimitBps > 0 && effUpLimitBps <= maxScale) {
+      const yLimU = +(padTop + plotH - (effUpLimitBps / maxScale) * plotH).toFixed(1);
+      limitLineUp.setAttribute('y1', yLimU);
+      limitLineUp.setAttribute('y2', yLimU);
+      limitLineUp.style.display = '';
+    } else {
+      limitLineUp.style.display = 'none';
     }
   }
 

@@ -1209,11 +1209,38 @@
               </div>
               <div class="opt-row">
                 <div class="opt-row-info">
-                  <div class="opt-row-title">Regulación automática de subida (USS)</div>
-                  <div class="opt-row-desc">Mide la latencia al router y ajusta la subida en tiempo real para evitar lag en juegos o videollamadas.</div>
+                  <div class="opt-row-title">Regulación automática de subida (USS / LEDBAT++)</div>
+                  <div class="opt-row-desc">Mide la latencia y el retardo en cola para ajustar la subida en tiempo real sin saturar tu conexión.</div>
                 </div>
                 <div class="opt-row-ctrl">
                   <input type="checkbox" class="opt-switch" id="pref-uss-enabled">
+                </div>
+              </div>
+              <div class="opt-row opt-advanced-only">
+                <div class="opt-row-info">
+                  <div class="opt-row-title">Techo de subida en reposo sin descargas (KB/s)</div>
+                  <div class="opt-row-desc">Cuando el control inteligente está activo y no hay descargas en curso, limita la subida a este techo (<code>0</code> = desactivado).</div>
+                </div>
+                <div class="opt-row-ctrl">
+                  <input type="number" class="form-control opt-input-num" id="pref-idle-upload-cap" min="0" placeholder="0 = Desactivado">
+                </div>
+              </div>
+              <div class="opt-row opt-advanced-only">
+                <div class="opt-row-info">
+                  <div class="opt-row-title">Techo durante streaming Jellyfin / Plex (KB/s)</div>
+                  <div class="opt-row-desc">Recorta temporalmente la subida cuando hay una reproducción activa en tu servidor multimedia (<code>0</code> = desactivado).</div>
+                </div>
+                <div class="opt-row-ctrl">
+                  <input type="number" class="form-control opt-input-num" id="pref-streaming-upload-cap" min="0" placeholder="0 = Desactivado">
+                </div>
+              </div>
+              <div class="opt-row opt-advanced-only">
+                <div class="opt-row-info">
+                  <div class="opt-row-title">Objetivo por ranura — Smart Slot Focus (KB/s)</div>
+                  <div class="opt-row-desc">Concentra la subida en menos ranuras más rápidas para entregar piezas antes (<code>0</code> = clásico eMule, ej. <code>512</code> para fibra).</div>
+                </div>
+                <div class="opt-row-ctrl">
+                  <input type="number" class="form-control opt-input-num" id="pref-smart-slot-target" min="0" max="100000" placeholder="0 = Clásico">
                 </div>
               </div>
               <div class="opt-row opt-advanced-only">
@@ -1232,6 +1259,15 @@
                 </div>
                 <div class="opt-row-ctrl">
                   <input type="number" class="form-control opt-input-num" id="pref-daily-quota" min="0" placeholder="0">
+                </div>
+              </div>
+              <div class="opt-row opt-advanced-only">
+                <div class="opt-row-info">
+                  <div class="opt-row-title">Velocidad eco al agotar cuota diaria (KB/s)</div>
+                  <div class="opt-row-desc">En lugar de cortar la cola por completo, reduce la subida a este caudal para mantener créditos eD2K (<code>0</code> = pausa clásica).</div>
+                </div>
+                <div class="opt-row-ctrl">
+                  <input type="number" class="form-control opt-input-num" id="pref-quota-eco-upload" min="0" placeholder="0 = Pausa">
                 </div>
               </div>
             </div>
@@ -2411,7 +2447,8 @@
           </h3>
           <span class="badge badge-completed" id="bw-modal-badge">🟢 Sin límites</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-sm" id="btn-bw-smart-toggle" onclick="toggleSmartUploadMode()" title="Activar o desactivar la regulación inteligente de subida (USS / LEDBAT++)">⚡ Control Inteligente: OFF</button>
           <button class="btn btn-sm" id="btn-bw-turtle-toggle" onclick="toggleTurtleMode()" title="Conmutar Modo Tortuga (500 kB/s bajada / 100 kB/s subida)">🐢 Modo Tortuga: OFF</button>
           <button class="btn btn-sm" id="btn-close-bw-modal" onclick="closeBandwidthModal()" style="padding: 4px 10px; font-size: 1rem; line-height: 1;" title="Cerrar monitor">✕</button>
         </div>
@@ -2476,12 +2513,41 @@
           </div>
         </div>
 
+        <!-- Barra de Control Inteligente de Subida -->
+        <div class="bw-smart-bar" id="bw-smart-control-bar">
+          <div class="bw-smart-telemetry">
+            <span style="font-weight: 600; color: #f8fafc;">🧠 Control Inteligente:</span>
+            <span id="bw-smart-status-text">Desactivado</span>
+            <span id="bw-smart-rtt-text" style="font-family: var(--font-mono); color: var(--text-dim);"></span>
+          </div>
+          <div class="bw-smart-controls">
+            <label class="bw-smart-field" title="Techo máximo de subida en KB/s (0 = ilimitado)">
+              <span>Techo ↑ (KB/s)</span>
+              <input type="number" class="form-control" id="bw-smart-max-up" min="0" placeholder="0">
+            </label>
+            <label class="bw-smart-field" title="Techo de subida cuando no hay descargas activas (KB/s; 0 = desactivado)">
+              <span>Reposo ↑ (KB/s)</span>
+              <input type="number" class="form-control" id="bw-smart-idle-cap" min="0" placeholder="0">
+            </label>
+            <label class="bw-smart-field" title="Techo de subida durante streaming activo en Jellyfin/Plex (KB/s; 0 = desactivado)">
+              <span>Streaming ↑ (KB/s)</span>
+              <input type="number" class="form-control" id="bw-smart-streaming-cap" min="0" placeholder="0">
+            </label>
+            <label class="bw-smart-field" title="Velocidad objetivo por ranura (KB/s; 0 = clásico eMule)">
+              <span>Objetivo/ranura (KB/s)</span>
+              <input type="number" class="form-control" id="bw-smart-slot-target" min="0" max="100000" placeholder="0">
+            </label>
+            <button class="btn btn-sm btn-primary" id="btn-bw-smart-apply" onclick="applySmartUploadControls()">Aplicar</button>
+          </div>
+        </div>
+
         <!-- Gráfica SVG Detallada e Interactiva -->
         <div class="bw-chart-card">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <span style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">● Bajada</span>
               <span style="font-size: 0.78rem; color: #34d399; font-weight: 600;">● Subida</span>
+              <span style="font-size: 0.78rem; color: #fbbf24; font-weight: 600;">━ Límite ↑</span>
               <span id="bw-chart-hover-info" style="font-size: 0.76rem; color: var(--text-muted); font-family: var(--font-mono);">Pasa el cursor sobre la gráfica para inspeccionar un instante</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -2532,6 +2598,7 @@
                 <!-- Líneas de referencia de pico en ventana -->
                 <line id="bw-peak-line-down" x1="0" y1="210" x2="720" y2="210" stroke="rgba(56,189,248,0.45)" stroke-width="1" stroke-dasharray="6 4" style="display: none;" />
                 <line id="bw-peak-line-up" x1="0" y1="210" x2="720" y2="210" stroke="rgba(52,211,153,0.45)" stroke-width="1" stroke-dasharray="6 4" style="display: none;" />
+                <line id="bw-limit-line-up" x1="0" y1="210" x2="720" y2="210" stroke="rgba(251,191,36,0.85)" stroke-width="1.5" stroke-dasharray="5 3" style="display: none;" />
                 <!-- Series de bajada y subida -->
                 <path id="bw-down-fill" fill="url(#bw-grad-down)" d="" />
                 <polyline id="bw-down-line" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="" />

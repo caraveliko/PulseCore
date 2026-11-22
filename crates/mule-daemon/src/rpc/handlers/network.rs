@@ -268,6 +268,19 @@ pub async fn handle_limits_get(state: &AppState) -> Result<Value, JsonRpcError> 
     let uss = state.uss.snapshot();
     let uss_cfg = state.uss.config();
     let (persisted_dl, persisted_ul) = read_persisted_limits(state).await;
+    let smart_slot_target_kbs = state
+        .inbound_listener
+        .upload_manager()
+        .target_slot_speed_bps()
+        / 1024;
+    let quota_eco_upload_kbs = {
+        let dls = state.downloads.lock().await;
+        dls.get_setting("quota_eco_upload_kbs")
+            .ok()
+            .flatten()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    };
 
     Ok(json!({
         "downloadBytesPerSec": download,
@@ -280,12 +293,22 @@ pub async fn handle_limits_get(state: &AppState) -> Result<Value, JsonRpcError> 
         "connectionsPerMinute": conn_per_sec * 60,
         "serverRequestsPerSec": server_req_per_sec,
         "kadPacketsPerSec": kad_pkt_per_sec,
+        "smartSlotTargetKbs": smart_slot_target_kbs,
+        "quotaEcoUploadKbs": quota_eco_upload_kbs,
         "uss": {
             "enabled": uss.enabled,
             "state": uss.state,
             "currentLimitBytesPerSec": uss.current_limit_bps,
             "latencyMs": uss.latency_ms,
             "lowestPingMs": uss.lowest_ping_ms,
+            "queuingDelayMs": uss.queuing_delay_ms,
+            "reason": uss.reason,
+            "idleCapActive": uss.idle_cap_active,
+            "streamingCapActive": uss.streaming_cap_active,
+            "activeStreams": uss.active_streams,
+            "quotaEcoActive": uss.quota_eco_active,
+            "ed2kLimitBytesPerSec": uss.ed2k_upload_limit_bps,
+            "torrentLimitBytesPerSec": uss.torrent_upload_limit_bps,
             "acceptNewClient": uss.accept_new_client,
             "pingTarget": uss.ping_target,
             "config": uss_cfg,
@@ -362,6 +385,15 @@ pub async fn handle_limits_set(
     }
 
     state.network_policy.rate_limiters().apply_config(&cfg);
+    if !state.uss.snapshot().enabled {
+        state
+            .uss
+            .apply_split_upload_limit(ul_cfg, &state.network_policy.rate_limiters())
+            .await;
+    }
+    if let Some(engine) = state.torrent.get() {
+        engine.set_download_limit_bps(cfg.download_bytes_per_sec);
+    }
 
     // Persistir los campos proporcionados (eMule guarda MaxUpload/MaxDownload en
     // preferences.ini) para que los limitadores sobrevivan a los reinicios del daemon. Se persisten
@@ -392,6 +424,8 @@ pub async fn handle_limits_set(
         let ping_host = uss_params["pingHost"].as_str().map(|s| s.to_string());
         let min_up = uss_params["minUploadBytesPerSec"].as_u64();
         let max_up = uss_params["maxUploadBytesPerSec"].as_u64();
+        let idle_cap = uss_params["idleUploadCapBytesPerSec"].as_u64();
+        let streaming_cap = uss_params["streamingUploadCapBytesPerSec"].as_u64();
         let use_ms = uss_params["useMillisecondTolerance"].as_bool();
         let tol_pct = uss_params["pingTolerancePercent"].as_u64();
         let tol_ms = uss_params["pingToleranceMs"].as_u64();
@@ -413,6 +447,12 @@ pub async fn handle_limits_set(
                 if let Some(v) = max_up {
                     cfg.max_upload_bps = v;
                 }
+                if let Some(v) = idle_cap {
+                    cfg.idle_upload_cap_bps = v;
+                }
+                if let Some(v) = streaming_cap {
+                    cfg.streaming_upload_cap_bps = v;
+                }
                 if let Some(v) = use_ms {
                     cfg.use_ms_tolerance = v;
                 }
@@ -433,6 +473,42 @@ pub async fn handle_limits_set(
                 }
             })
             .await;
+    }
+
+    if let Some(slot_val) = params.get("smartSlotTargetKbs") {
+        let slot_kbs = slot_val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'smartSlotTargetKbs'"))?;
+        if slot_kbs > 100_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'smartSlotTargetKbs' must be 0..100000",
+            ));
+        }
+        state
+            .inbound_listener
+            .upload_manager()
+            .set_target_slot_speed(slot_kbs.saturating_mul(1024));
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("smart_slot_target_kbs", &slot_kbs.to_string())?;
+    }
+
+    if let Some(eco_val) = params.get("quotaEcoUploadKbs") {
+        let eco_kbs = eco_val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'quotaEcoUploadKbs'"))?;
+        if eco_kbs > 1_000_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'quotaEcoUploadKbs' must be 0..1000000",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("quota_eco_upload_kbs", &eco_kbs.to_string())?;
     }
 
     handle_limits_get(state).await
@@ -547,5 +623,14 @@ pub async fn apply_capacity_clamp(state: &AppState) -> Result<(), JsonRpcError> 
         kad_packets_per_sec: live.kad_bucket.rate_per_sec() as u32,
     };
     state.network_policy.rate_limiters().apply_config(&cfg);
+    if !state.uss.snapshot().enabled {
+        state
+            .uss
+            .apply_split_upload_limit(ul_cfg, &state.network_policy.rate_limiters())
+            .await;
+    }
+    if let Some(engine) = state.torrent.get() {
+        engine.set_download_limit_bps(cfg.download_bytes_per_sec);
+    }
     Ok(())
 }

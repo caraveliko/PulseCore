@@ -1071,3 +1071,45 @@ async fn friend_is_exempt_from_bad_request_count() {
     assert!(mgr.drain_pending_bans().await.is_empty());
 }
 
+#[tokio::test]
+async fn smart_slot_focus_limits_slot_count_at_high_bandwidth() {
+    let mgr = UploadManager::new();
+    // Con objetivo de 512 KiB/s por ranura (min_target = 384 KiB/s) y 4 MiB/s totales,
+    // 4 MiB / 384 KiB = 10 ranuras máximo (en vez de abrir decenas de ranuras).
+    mgr.set_target_slot_speed(512 * 1024);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    {
+        let mut active = mgr.active_uploads.lock().await;
+        for i in 0..10 {
+            active.insert(
+                format!("c{i}"),
+                UploadSessionSnapshot {
+                    client_key: format!("c{i}"),
+                    client_address: format!("1.2.3.{i}:4662"),
+                    file_hash: "h".to_string(),
+                    file_name: "f".to_string(),
+                    transferred_bytes: 0,
+                    upload_rate_bps: 400 * 1024,
+                    state: UploadSlotState::Uploading,
+                    queue_rank: None,
+                    started_at_unix_ms: now,
+                    rate_window_start_ms: now,
+                    rate_window_bytes: 0,
+                    rate_sampled: true,
+                    credit_multiplier_bps: 100,
+                    file_prio_num: 7,
+                    queued_since_ms: now,
+                    auto_prio: false,
+                },
+            );
+        }
+        assert!(!mgr.can_open_slot(&active, now));
+        // En modo clásico (0), con 4 MiB/s y 10 ranuras (min_target 7.5 KiB/s) sí abriría más.
+        mgr.set_target_slot_speed(0);
+        assert!(mgr.can_open_slot(&active, now));
+    }
+}
+

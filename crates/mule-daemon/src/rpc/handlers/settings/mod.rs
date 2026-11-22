@@ -45,6 +45,10 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "capacityDownloadKbs",
     "capacityUploadKbs",
     "minUploadKbs",
+    "idleUploadCapKbs",
+    "streamingUploadCapKbs",
+    "smartSlotTargetKbs",
+    "quotaEcoUploadKbs",
     "ichEnabled",
     "rememberCancelled",
     "rememberDownloaded",
@@ -265,6 +269,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
 
     let mut base_settings = json!({
             "minUploadKbs": min_up,
+            "smartSlotTargetKbs": u64_setting("smart_slot_target_kbs"),
             "ichEnabled": read("ich_enabled", true),
             "rememberCancelled": read("remember_cancelled", true),
             "rememberDownloaded": read("remember_downloaded", true),
@@ -279,6 +284,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             // Opciones propias de eMuleRust (sin equivalente en eMule).
             "identityRotationHours": u64_setting("identity_rotation_hours"),
             "dailyUploadQuotaGb": u64_setting("daily_upload_quota_gb"),
+            "quotaEcoUploadKbs": u64_setting("quota_eco_upload_kbs"),
             "uploadQuotaUsedBytes": u64_setting("upload_quota_used_bytes"),
             "paranoidMode": read("paranoid_mode", false),
             "swarmHealing": read("swarm_healing", true),
@@ -394,6 +400,8 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         "maxConnPerMin": conn_per_min,
         "maxUploadQueue": max_queue,
         "ussEnabled": uss_enabled,
+        "idleUploadCapKbs": state.uss.config().idle_upload_cap_bps / 1024,
+        "streamingUploadCapKbs": state.uss.config().streaming_upload_cap_bps / 1024,
         "ed2kPort": state.ed2k_port(),
         "kadPort": state.kad_port(),
         "udpEnabled": state.udp_enabled(),
@@ -746,6 +754,72 @@ pub async fn handle_settings_set(
             .upload_manager()
             .set_min_upload_rate(v.saturating_mul(1024));
         keys.push("minUploadKbs");
+    }
+    if let Some(val) = params.get("idleUploadCapKbs") {
+        let v = val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'idleUploadCapKbs'"))?;
+        if v > 1_000_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'idleUploadCapKbs' must be 0..1000000",
+            ));
+        }
+        state
+            .uss
+            .update_config(|c| c.idle_upload_cap_bps = v.saturating_mul(1024))
+            .await;
+        keys.push("idleUploadCapKbs");
+    }
+    if let Some(val) = params.get("streamingUploadCapKbs") {
+        let v = val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'streamingUploadCapKbs'"))?;
+        if v > 1_000_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'streamingUploadCapKbs' must be 0..1000000",
+            ));
+        }
+        state
+            .uss
+            .update_config(|c| c.streaming_upload_cap_bps = v.saturating_mul(1024))
+            .await;
+        keys.push("streamingUploadCapKbs");
+    }
+    if let Some(val) = params.get("quotaEcoUploadKbs") {
+        let v = val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'quotaEcoUploadKbs'"))?;
+        if v > 1_000_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'quotaEcoUploadKbs' must be 0..1000000",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("quota_eco_upload_kbs", &v.to_string())?;
+        keys.push("quotaEcoUploadKbs");
+    }
+    if let Some(val) = params.get("smartSlotTargetKbs") {
+        let v = val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'smartSlotTargetKbs'"))?;
+        if v > 100_000 {
+            return Err(JsonRpcError::invalid_params(
+                "'smartSlotTargetKbs' must be 0..100000",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("smart_slot_target_kbs", &v.to_string())?;
+        state
+            .inbound_listener
+            .upload_manager()
+            .set_target_slot_speed(v.saturating_mul(1024));
+        keys.push("smartSlotTargetKbs");
     }
     for (camel, snake) in [
         ("ichEnabled", "ich_enabled"),

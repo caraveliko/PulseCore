@@ -2147,6 +2147,44 @@ main {
   flex-direction: column;
   gap: 10px;
 }
+.bw-smart-bar {
+  background: var(--card-sub);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bw-smart-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.bw-smart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bw-smart-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.bw-smart-field input {
+  width: 82px;
+  padding: 4px 7px;
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+}
 .bw-chart-wrap {
   display: flex;
   align-items: stretch;

@@ -759,6 +759,10 @@ async function loadPreferences() {
     setVal('pref-cap-up', s.capacityUploadKbs || '');
     setVal('pref-min-upload', s.minUploadKbs || 10);
     setChk('pref-uss-enabled', s.ussEnabled);
+    setVal('pref-idle-upload-cap', s.idleUploadCapKbs || '');
+    setVal('pref-streaming-upload-cap', s.streamingUploadCapKbs || '');
+    setVal('pref-smart-slot-target', s.smartSlotTargetKbs || '');
+    setVal('pref-quota-eco-upload', s.quotaEcoUploadKbs || '');
     setVal('pref-max-global', s.maxGlobalDownloadPeers || s.maxConnections || 500);
     setVal('pref-max-conn-min', s.maxConnPerMin || 60);
     setVal('pref-max-per-file', s.maxPeersPerDownload || 300);
@@ -897,6 +901,14 @@ async function savePreferences() {
     if (minUp !== null) payload.minUploadKbs = minUp;
     const uss = getBool('pref-uss-enabled');
     if (uss !== null) payload.ussEnabled = uss;
+    const idleCap = getInt('pref-idle-upload-cap');
+    payload.idleUploadCapKbs = idleCap !== null ? idleCap : 0;
+    const streamCap = getInt('pref-streaming-upload-cap');
+    payload.streamingUploadCapKbs = streamCap !== null ? streamCap : 0;
+    const slotTarget = getInt('pref-smart-slot-target');
+    payload.smartSlotTargetKbs = slotTarget !== null ? slotTarget : 0;
+    const quotaEco = getInt('pref-quota-eco-upload');
+    payload.quotaEcoUploadKbs = quotaEco !== null ? quotaEco : 0;
     const maxG = getInt('pref-max-global');
     if (maxG !== null) { payload.maxGlobalDownloadPeers = maxG; payload.maxConnections = maxG; }
     const maxCMin = getInt('pref-max-conn-min');

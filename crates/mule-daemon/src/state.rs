@@ -247,6 +247,7 @@ impl AppState {
         let paranoid_mode = bool_setting("paranoid_mode").unwrap_or(false);
         let max_upload_queue = get_usize("max_upload_queue");
         let min_upload_kbs = get_usize("min_upload_kbs");
+        let smart_slot_target_kbs = get_usize("smart_slot_target_kbs");
         let upnp_enabled_boot = bool_setting("upnp_enabled").unwrap_or(config.upnp_enabled);
 
         let network_policy = NetworkPolicyManager::new(config.network_profile, budgets);
@@ -493,10 +494,12 @@ impl AppState {
         let server_udp = crate::services::server_udp::ServerUdpService::new(network_policy.clone());
         server_udp.set_downloads(Arc::clone(&dl_arc));
         server_udp.set_event_channel(event_tx.clone(), sequence.clone());
+        let torrent = Arc::new(tokio::sync::OnceCell::new());
         let uss = crate::services::UssService::new();
         uss.set_server_session(server_session.clone());
         uss.set_upload_manager(inbound_listener.upload_manager().clone());
         uss.set_downloads(Arc::clone(&dl_arc));
+        uss.set_torrent_cell(Arc::clone(&torrent));
         peer_session.set_uss(uss.clone());
         inbound_listener
             .upload_manager()
@@ -508,6 +511,11 @@ impl AppState {
             inbound_listener
                 .upload_manager()
                 .set_min_upload_rate((min_kbs as u64).saturating_mul(1024));
+        }
+        if let Some(slot_kbs) = smart_slot_target_kbs {
+            inbound_listener
+                .upload_manager()
+                .set_target_slot_speed((slot_kbs as u64).saturating_mul(1024));
         }
         inbound_listener
             .upload_manager()
@@ -723,7 +731,7 @@ impl AppState {
             #[cfg(feature = "lab-tools")]
             active_lab_peer: Arc::new(Mutex::new(None)),
             log_control: None,
-            torrent: Arc::new(tokio::sync::OnceCell::new()),
+            torrent,
             pseudonymizer: Arc::new(mule_filter::SessionPseudonymizer::new()),
             nas_transfer_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             active_nas_transfer_id: Arc::new(Mutex::new(None)),
@@ -988,7 +996,8 @@ impl AppState {
         let data_dir = self.config.data_dir.clone();
         let enable_upnp = self.upnp.snapshot().await.enabled;
         let policy = Arc::new(self.network_policy.clone());
-        self.torrent
+        let engine = self
+            .torrent
             .get_or_try_init(|| async move {
                 let mut cfg = mule_torrent::TorrentPolicyConfig::new(default_dir, data_dir);
                 cfg.enable_upnp = enable_upnp;
@@ -998,7 +1007,22 @@ impl AppState {
                     .map_err(|e| e.to_string())
             })
             .await
-            .cloned()
+            .cloned()?;
+        let rl = self.network_policy.rate_limiters();
+        let snap = self.uss.snapshot();
+        if snap.torrent_upload_limit_bps > 0 || rl.upload_bucket.rate_per_sec() > 0 {
+            let ul = if snap.torrent_upload_limit_bps > 0 {
+                snap.torrent_upload_limit_bps
+            } else {
+                rl.upload_bucket.rate_per_sec()
+            };
+            engine.set_upload_limit_bps(ul);
+        }
+        let dl_limit = rl.download_bucket.rate_per_sec();
+        if dl_limit > 0 {
+            engine.set_download_limit_bps(dl_limit);
+        }
+        Ok(engine)
     }
 
     /// Indica si los servicios UDP (Kad UDP, UDP de servidor, UDP de cliente) están habilitados.
@@ -1445,6 +1469,7 @@ impl AppState {
                         .and_then(|s| s.trim().parse::<u64>().ok())
                 };
                 let quota_gb = get_u64("daily_upload_quota_gb").unwrap_or(0);
+                let quota_eco_kbs = get_u64("quota_eco_upload_kbs").unwrap_or(0);
                 let stored_day = get_u64("upload_quota_day").unwrap_or(0) as i64;
                 let mut used = if stored_day == today {
                     get_u64("upload_quota_used_bytes").unwrap_or(0)
@@ -1461,16 +1486,24 @@ impl AppState {
                     }
                 }
                 let exhausted = quota_gb > 0 && used >= quota_gb.saturating_mul(1 << 30);
-                let prev = gate.swap(!exhausted, Ordering::SeqCst);
-                if prev && exhausted {
-                    tracing::warn!(
-                        "[QUOTA] Quota journalier d'upload atteint ({} Gio) — nouveaux slots refusés",
-                        quota_gb
-                    );
-                } else if !prev && !exhausted {
-                    tracing::info!(
-                        "[QUOTA] Quota d'upload réouvert (compteur remis à zéro ou quota relevé)"
-                    );
+                if exhausted && quota_eco_kbs > 0 {
+                    gate.store(true, Ordering::SeqCst);
+                    state
+                        .uss
+                        .set_quota_eco_cap_bps(Some(quota_eco_kbs.saturating_mul(1024)));
+                } else {
+                    state.uss.set_quota_eco_cap_bps(None);
+                    let prev = gate.swap(!exhausted, Ordering::SeqCst);
+                    if prev && exhausted {
+                        tracing::warn!(
+                            "[QUOTA] Quota journalier d'upload atteint ({} Gio) — nouveaux slots refusés",
+                            quota_gb
+                        );
+                    } else if !prev && !exhausted {
+                        tracing::info!(
+                            "[QUOTA] Quota d'upload réouvert (compteur remis à zéro ou quota relevé)"
+                        );
+                    }
                 }
             }
         });
@@ -1479,5 +1512,10 @@ impl AppState {
             .try_lock()
             .map(|mut h| h.push(abort))
             .ok();
+    }
+
+    /// Inicia el vigilante periódico de reproducciones activas en Jellyfin/Plex.
+    pub fn spawn_streaming_watcher(&self) {
+        crate::services::streaming_watcher::spawn_streaming_watcher(Arc::new(self.clone()));
     }
 }

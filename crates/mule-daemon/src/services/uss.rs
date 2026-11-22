@@ -42,6 +42,7 @@ use mule_network_policy::PolicyRateLimiters;
 
 use crate::services::downloads::DownloadService;
 use crate::services::server_session::{ServerConnectionStatus, ServerSessionManager};
+use crate::services::upload_budget::{compute_effective_ceiling, split_upload_budget, CeilingInputs};
 use crate::services::upload_queue::UploadManager;
 use crate::services::uss_icmp;
 
@@ -56,6 +57,10 @@ const DEFAULT_TOLERANCE_MS: u32 = 200;
 const DEFAULT_DIVIDER: u32 = 1000;
 /// Valor predeterminado de `USSNumberOfPings` en eMule: 1.
 const DEFAULT_NUM_PINGS: usize = 1;
+/// Techo de subida predeterminado en reposo cuando no hay descargas activas (0 = desactivado).
+const DEFAULT_IDLE_UPLOAD_CAP_BPS: u64 = 0;
+/// Umbral de bajada agregada por debajo del cual se considera la línea en reposo (1 KiB/s).
+const IDLE_DOWNLOAD_THRESHOLD_BPS: u64 = 1024;
 /// `uLowestInitialPingAllowed` codificado en `UploadQueue.cpp` de eMule (20 ms).
 const LOWEST_INITIAL_PING_MS: u32 = 20;
 /// Sondeos utilizados para establecer el RTT de línea base (`initialPingCounter = 10` de eMule).
@@ -116,6 +121,12 @@ pub struct UssConfig {
     pub going_down_divider: u32,
     /// Tamaño de ventana de la mediana (`USSNumberOfPings`).
     pub number_of_pings: usize,
+    /// Techo de subida en reposo cuando no hay descargas activas (bytes/s; 0 = desactivado).
+    #[serde(default)]
+    pub idle_upload_cap_bps: u64,
+    /// Techo de subida durante reproducciones activas en Jellyfin/Plex (bytes/s; 0 = desactivado).
+    #[serde(default)]
+    pub streaming_upload_cap_bps: u64,
 }
 
 impl Default for UssConfig {
@@ -131,6 +142,8 @@ impl Default for UssConfig {
             going_up_divider: DEFAULT_DIVIDER,
             going_down_divider: DEFAULT_DIVIDER,
             number_of_pings: DEFAULT_NUM_PINGS,
+            idle_upload_cap_bps: DEFAULT_IDLE_UPLOAD_CAP_BPS,
+            streaming_upload_cap_bps: 0,
         }
     }
 }
@@ -149,6 +162,22 @@ pub struct UssSnapshot {
     pub latency_ms: u32,
     /// Latencia de línea base (más baja observada) (ms).
     pub lowest_ping_ms: u32,
+    /// Retardo de cola estimado respecto a la línea base (ms).
+    pub queuing_delay_ms: i64,
+    /// Motivo actual de regulación (`disabled`, `waiting`, `baseline`, `normal`, `latency`, `idle_cap`, `streaming`, `quota_eco`).
+    pub reason: &'static str,
+    /// `true` cuando está aplicado el techo en reposo por ausencia de descargas activas.
+    pub idle_cap_active: bool,
+    /// `true` cuando el techo temporal por streaming (Jellyfin/Plex) está activo.
+    pub streaming_cap_active: bool,
+    /// Número de reproducciones activas detectadas en Jellyfin/Plex.
+    pub active_streams: usize,
+    /// `true` cuando está activo el modo eco por cuota diaria agotada.
+    pub quota_eco_active: bool,
+    /// Presupuesto efectivo asignado a eD2K (bytes/s; 0 = ilimitado).
+    pub ed2k_upload_limit_bps: u64,
+    /// Presupuesto efectivo asignado a BitTorrent (bytes/s; 0 = ilimitado).
+    pub torrent_upload_limit_bps: u64,
     /// Si actualmente se aceptan nuevos clientes de subida.
     pub accept_new_client: bool,
     /// Destino de sondeo efectivamente en uso.
@@ -164,6 +193,16 @@ struct UssInner {
     current_limit_bps: u64,
     latency_ms: u32,
     lowest_ping_ms: u32,
+    queuing_delay_ms: i64,
+    reason: &'static str,
+    idle_cap_active: bool,
+    streaming_active: bool,
+    active_streams: usize,
+    streaming_cap_active: bool,
+    quota_eco_cap_bps: u64,
+    quota_eco_active: bool,
+    ed2k_upload_limit_bps: u64,
+    torrent_upload_limit_bps: u64,
     ping_target: Option<String>,
     /// Límite de subida configurado manualmente mediante `limits.set` — restaurado cuando
     /// USS está deshabilitado.
@@ -176,6 +215,9 @@ struct UssInner {
     ledbat: crate::services::uss_ledbat::LedbatEstimator,
 }
 
+/// Referencia diferida al motor BitTorrent compartido con `AppState`.
+type TorrentCell = Arc<tokio::sync::OnceCell<Arc<mule_torrent::TorrentEngine>>>;
+
 /// Controlador USS. Controla `upload_bucket` cuando está habilitado.
 #[derive(Clone)]
 pub struct UssService {
@@ -186,6 +228,7 @@ pub struct UssService {
     server_session: Arc<RwLock<Option<ServerSessionManager>>>,
     upload_manager: Arc<RwLock<Option<UploadManager>>>,
     downloads: Arc<RwLock<Option<Arc<tokio::sync::Mutex<DownloadService>>>>>,
+    torrent: Arc<RwLock<Option<TorrentCell>>>,
 }
 
 impl Default for UssService {
@@ -203,6 +246,16 @@ impl UssService {
                 current_limit_bps: 0,
                 latency_ms: 0,
                 lowest_ping_ms: 0,
+                queuing_delay_ms: 0,
+                reason: "disabled",
+                idle_cap_active: false,
+                streaming_active: false,
+                active_streams: 0,
+                streaming_cap_active: false,
+                quota_eco_cap_bps: 0,
+                quota_eco_active: false,
+                ed2k_upload_limit_bps: 0,
+                torrent_upload_limit_bps: 0,
                 ping_target: None,
                 manual_limit_bps: 0,
                 download_limit_bps: 0,
@@ -214,7 +267,57 @@ impl UssService {
             server_session: Arc::new(RwLock::new(None)),
             upload_manager: Arc::new(RwLock::new(None)),
             downloads: Arc::new(RwLock::new(None)),
+            torrent: Arc::new(RwLock::new(None)),
         }
+    }
+
+    pub fn set_torrent_cell(
+        &self,
+        cell: Arc<tokio::sync::OnceCell<Arc<mule_torrent::TorrentEngine>>>,
+    ) {
+        *self.torrent.write().unwrap_or_else(|e| e.into_inner()) = Some(cell);
+    }
+
+    /// Actualiza el estado de reproducciones activas detectadas en Jellyfin/Plex.
+    pub fn set_streaming_active(&self, active: bool, streams: usize) {
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        inner.streaming_active = active;
+        inner.active_streams = streams;
+    }
+
+    /// Establece o limpia el techo de subida en modo eco al alcanzar la cuota diaria.
+    pub fn set_quota_eco_cap_bps(&self, cap_bps: Option<u64>) {
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        inner.quota_eco_cap_bps = cap_bps.unwrap_or(0);
+    }
+
+    fn current_torrent_rates(&self) -> (u64, u64) {
+        let cell_opt = self.torrent.read().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(cell) = cell_opt {
+            if let Some(engine) = cell.get() {
+                return engine.total_rates_bps();
+            }
+        }
+        (0, 0)
+    }
+
+    /// Reparte un presupuesto global de subida entre eD2K y BitTorrent según demanda real.
+    pub async fn apply_split_upload_limit(&self, total_bps: u64, limiters: &PolicyRateLimiters) {
+        let ed2k_active = self.current_upload_rate().await;
+        let (_, bt_active) = self.current_torrent_rates();
+        let split = split_upload_budget(total_bps, ed2k_active, bt_active);
+        limiters
+            .upload_bucket
+            .set_rate(split.ed2k_bps, split.ed2k_bps.max(65536));
+        let cell_opt = self.torrent.read().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(cell) = cell_opt {
+            if let Some(engine) = cell.get() {
+                engine.set_upload_limit_bps(split.torrent_bps);
+            }
+        }
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        inner.ed2k_upload_limit_bps = split.ed2k_bps;
+        inner.torrent_upload_limit_bps = split.torrent_bps;
     }
 
     pub fn set_server_session(&self, mgr: ServerSessionManager) {
@@ -237,21 +340,35 @@ impl UssService {
         if rtt_ms > 0 {
             self.inner
                 .write()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .ledbat
                 .record_rtt_sample(crate::services::downloads::types::now_ms(), rtt_ms);
         }
     }
 
-    fn apply_ledbat_step(
+    async fn apply_ledbat_step(
         &self,
         upload_bps: &mut u64,
         cfg: &UssConfig,
+        download_bps: u64,
         limiters: &PolicyRateLimiters,
         activate_state: bool,
     ) -> bool {
         let now_ms = crate::services::downloads::types::now_ms();
-        let (next_bps, cur_rtt, congested) = {
+        let is_idle = download_bps < IDLE_DOWNLOAD_THRESHOLD_BPS;
+        let (streaming_active, quota_eco_cap_bps) = {
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
+            (inner.streaming_active, inner.quota_eco_cap_bps)
+        };
+        let decision = compute_effective_ceiling(CeilingInputs {
+            max_upload_bps: cfg.max_upload_bps,
+            idle_upload_cap_bps: cfg.idle_upload_cap_bps,
+            is_idle,
+            streaming_upload_cap_bps: cfg.streaming_upload_cap_bps,
+            streaming_active,
+            quota_eco_cap_bps,
+        });
+        let (next_bps, cur_rtt, base_rtt, qdelay, congested) = {
             let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             if !inner.ledbat.has_fresh_samples(now_ms, LEDBAT_FRESH_WINDOW_MS) {
                 return false;
@@ -260,22 +377,19 @@ impl UssService {
             let seed_bps = (*upload_bps).max(min_bps);
             let Some(next) = inner
                 .ledbat
-                .compute_rate_adjustment(seed_bps, min_bps, cfg.max_upload_bps)
+                .compute_rate_adjustment(seed_bps, min_bps, decision.cap_bps)
             else {
                 return false;
             };
             let rtt = inner.ledbat.current_delay_ms().unwrap_or(0);
-            let cong = inner
-                .ledbat
-                .queuing_delay_ms()
-                .is_some_and(|q| q > crate::services::uss_ledbat::TARGET_QUEUING_DELAY_MS);
-            (next, rtt, cong)
+            let base = inner.ledbat.base_delay_ms().unwrap_or(0);
+            let qd = inner.ledbat.queuing_delay_ms().unwrap_or(0);
+            let cong = qd > crate::services::uss_ledbat::TARGET_QUEUING_DELAY_MS;
+            (next, rtt, base, qd, cong)
         };
         *upload_bps = next_bps;
         self.accept_new_client.store(!congested, Ordering::Relaxed);
-        limiters
-            .upload_bucket
-            .set_rate(next_bps, next_bps.max(65536));
+        self.apply_split_upload_limit(next_bps, limiters).await;
         let eff_dl = mule_network_policy::emule_ud_ratio(
             self.inner.read().unwrap_or_else(|e| e.into_inner()).download_limit_bps,
             next_bps,
@@ -287,6 +401,20 @@ impl UssService {
         let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.current_limit_bps = next_bps;
         inner.latency_ms = cur_rtt;
+        if base_rtt > 0 {
+            inner.lowest_ping_ms = base_rtt;
+        }
+        inner.queuing_delay_ms = qdelay.max(0);
+        inner.idle_cap_active = decision.idle_cap_active;
+        inner.streaming_cap_active = decision.streaming_cap_active;
+        inner.quota_eco_active = decision.quota_eco_active;
+        inner.reason = if congested {
+            "latency"
+        } else if decision.cap_bps > 0 && next_bps >= decision.cap_bps {
+            decision.reason
+        } else {
+            "normal"
+        };
         true
     }
 
@@ -308,6 +436,14 @@ impl UssService {
             current_limit_bps: inner.current_limit_bps,
             latency_ms: inner.latency_ms,
             lowest_ping_ms: inner.lowest_ping_ms,
+            queuing_delay_ms: inner.queuing_delay_ms,
+            reason: inner.reason,
+            idle_cap_active: inner.idle_cap_active,
+            streaming_cap_active: inner.streaming_cap_active,
+            active_streams: inner.active_streams,
+            quota_eco_active: inner.quota_eco_active,
+            ed2k_upload_limit_bps: inner.ed2k_upload_limit_bps,
+            torrent_upload_limit_bps: inner.torrent_upload_limit_bps,
             accept_new_client: self.accept_new_client.load(Ordering::Relaxed),
             ping_target: inner.ping_target.clone(),
         }
@@ -322,6 +458,9 @@ impl UssService {
             if !inner.config.enabled {
                 inner.state = "disabled";
                 inner.current_limit_bps = 0;
+                inner.queuing_delay_ms = 0;
+                inner.reason = "disabled";
+                inner.idle_cap_active = false;
                 self.accept_new_client.store(true, Ordering::Relaxed);
             }
             let dl = self.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
@@ -409,15 +548,54 @@ impl UssService {
             }
             let cfg = self.config();
             if !cfg.enabled {
-                // Restaurar límite manual una vez por transición.
-                {
+                let (manual, streaming_active, quota_eco_cap_bps) = {
+                    let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
+                    (
+                        inner.manual_limit_bps,
+                        inner.streaming_active,
+                        inner.quota_eco_cap_bps,
+                    )
+                };
+                let ctx_decision = compute_effective_ceiling(CeilingInputs {
+                    max_upload_bps: manual,
+                    idle_upload_cap_bps: 0,
+                    is_idle: false,
+                    streaming_upload_cap_bps: cfg.streaming_upload_cap_bps,
+                    streaming_active,
+                    quota_eco_cap_bps,
+                });
+                if ctx_decision.streaming_cap_active || ctx_decision.quota_eco_active {
+                    let eff = ctx_decision.cap_bps;
+                    self.apply_split_upload_limit(eff, &limiters).await;
+                    apply_ud_ratio!(eff);
                     let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
-                    if inner.state != "disabled" || inner.current_limit_bps != 0 {
-                        let manual = inner.manual_limit_bps;
+                    inner.state = "disabled";
+                    inner.current_limit_bps = eff;
+                    inner.queuing_delay_ms = 0;
+                    inner.reason = ctx_decision.reason;
+                    inner.idle_cap_active = false;
+                    inner.streaming_cap_active = ctx_decision.streaming_cap_active;
+                    inner.quota_eco_active = ctx_decision.quota_eco_active;
+                } else {
+                    // Restaurar límite manual una vez por transición.
+                    let needs_restore = {
+                        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
+                        inner.state != "disabled"
+                            || inner.current_limit_bps != 0
+                            || inner.streaming_cap_active
+                            || inner.quota_eco_active
+                    };
+                    if needs_restore {
+                        self.apply_split_upload_limit(manual, &limiters).await;
+                        apply_ud_ratio!(manual);
+                        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
                         inner.state = "disabled";
                         inner.current_limit_bps = 0;
-                        upload_bucket.set_rate(manual, manual.max(65536));
-                        apply_ud_ratio!(manual);
+                        inner.queuing_delay_ms = 0;
+                        inner.reason = "disabled";
+                        inner.idle_cap_active = false;
+                        inner.streaming_cap_active = false;
+                        inner.quota_eco_active = false;
                     }
                 }
                 baseline_done = false;
@@ -439,14 +617,18 @@ impl UssService {
                 cached_target = self.resolve_target(&cfg).await.map(|t| (t, Instant::now()));
             }
             let Some((target, _)) = cached_target.clone() else {
-                if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, true) {
+                let cur_download = self.current_download_rate().await;
+                if self
+                    .apply_ledbat_step(&mut upload_bps, &cfg, cur_download, &limiters, true)
+                    .await
+                {
                     tokio::select! {
                         _ = cancel.cancelled() => return,
                         _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
                     }
                     continue;
                 }
-                self.set_state("waiting");
+                self.set_state_and_reason("waiting", "waiting");
                 baseline_done = false;
                 tokio::select! {
                     _ = cancel.cancelled() => return,
@@ -458,7 +640,7 @@ impl UssService {
 
             // --- Línea base: el menor de hasta BASELINE_PROBES sondeos ---
             if !baseline_done {
-                self.set_state("preparing");
+                self.set_state_and_reason("preparing", "baseline");
                 let mut best = u32::MAX;
                 let mut successes = 0usize;
                 for _ in 0..BASELINE_PROBES {
@@ -480,7 +662,11 @@ impl UssService {
                     continue;
                 }
                 if successes == 0 {
-                    if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, true) {
+                    let cur_download = self.current_download_rate().await;
+                    if self
+                        .apply_ledbat_step(&mut upload_bps, &cfg, cur_download, &limiters, true)
+                        .await
+                    {
                         tokio::select! {
                             _ = cancel.cancelled() => return,
                             _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
@@ -488,7 +674,7 @@ impl UssService {
                         continue;
                     }
                     // Destino inalcanzable — esperar antes de reintentar.
-                    self.set_state("waiting");
+                    self.set_state_and_reason("waiting", "waiting");
                     tokio::select! {
                         _ = cancel.cancelled() => return,
                         _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
@@ -555,7 +741,11 @@ impl UssService {
                     ms as i64
                 }
                 None => {
-                    if self.apply_ledbat_step(&mut upload_bps, &cfg, &limiters, false) {
+                    let cur_download = self.current_download_rate().await;
+                    if self
+                        .apply_ledbat_step(&mut upload_bps, &cfg, cur_download, &limiters, false)
+                        .await
+                    {
                         consecutive_failures = 0;
                         continue;
                     }
@@ -625,19 +815,67 @@ impl UssService {
                 }
             }
 
+            let cur_download = self.current_download_rate().await;
+            let is_idle = cur_download < IDLE_DOWNLOAD_THRESHOLD_BPS;
+            let (streaming_active, quota_eco_cap_bps) = {
+                let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
+                (inner.streaming_active, inner.quota_eco_cap_bps)
+            };
+            let decision = compute_effective_ceiling(CeilingInputs {
+                max_upload_bps: cfg.max_upload_bps,
+                idle_upload_cap_bps: cfg.idle_upload_cap_bps,
+                is_idle,
+                streaming_upload_cap_bps: cfg.streaming_upload_cap_bps,
+                streaming_active,
+                quota_eco_cap_bps,
+            });
             upload_bps = upload_bps.max(cfg.min_upload_bps.max(MIN_UPLOAD_BPS));
-            if cfg.max_upload_bps > 0 {
-                upload_bps = upload_bps.min(cfg.max_upload_bps);
+            if decision.cap_bps > 0 {
+                upload_bps = upload_bps.min(decision.cap_bps);
             }
-            upload_bucket.set_rate(upload_bps, upload_bps.max(65536));
+            self.apply_split_upload_limit(upload_bps, &limiters).await;
             apply_ud_ratio!(upload_bps);
 
             {
                 let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
                 inner.current_limit_bps = upload_bps;
                 inner.latency_ms = ping_average;
+                inner.queuing_delay_ms = normalized_ping.max(0);
+                inner.idle_cap_active = decision.idle_cap_active;
+                inner.streaming_cap_active = decision.streaming_cap_active;
+                inner.quota_eco_active = decision.quota_eco_active;
+                inner.reason = if hping < 0 {
+                    "latency"
+                } else if decision.cap_bps > 0 && upload_bps >= decision.cap_bps {
+                    decision.reason
+                } else {
+                    "normal"
+                };
             }
         }
+    }
+
+    /// Caudal agregado de descarga actual (eD2K + BitTorrent en bytes/s) para detectar modo reposo.
+    async fn current_download_rate(&self) -> u64 {
+        let ed2k_dl: u64 = {
+            let dl_opt = self
+                .downloads
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            match dl_opt {
+                Some(dl) => dl
+                    .lock()
+                    .await
+                    .list_downloads()
+                    .iter()
+                    .map(|d| d.download_rate_bps)
+                    .sum(),
+                None => 0,
+            }
+        };
+        let (bt_dl, _) = self.current_torrent_rates();
+        ed2k_dl.saturating_add(bt_dl)
     }
 
     /// Rendimiento de subida alcanzado actual (suma de tasas de ranuras activas) —
@@ -763,6 +1001,12 @@ impl UssService {
     fn set_state(&self, state: &'static str) {
         self.inner.write().unwrap_or_else(|e| e.into_inner()).state = state;
     }
+
+    fn set_state_and_reason(&self, state: &'static str, reason: &'static str) {
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        inner.state = state;
+        inner.reason = reason;
+    }
 }
 
 /// Mide el RTT hacia `target` en milisegundos — eco ICMP para el
@@ -824,7 +1068,29 @@ mod tests {
         let svc = UssService::new();
         let snap = svc.snapshot();
         assert_eq!(snap.state, "disabled");
+        assert_eq!(snap.reason, "disabled");
+        assert!(!snap.idle_cap_active);
         assert!(snap.accept_new_client);
         assert!(svc.accept_flag().load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn legacy_uss_config_deserializes_without_idle_or_streaming_cap() {
+        let legacy = r#"{"enabled":true,"pingHost":null,"minUploadBps":10240,"maxUploadBps":0,"useMsTolerance":false,"pingTolerancePercent":500,"pingToleranceMs":200,"goingUpDivider":1000,"goingDownDivider":1000,"numberOfPings":1}"#;
+        let parsed: UssConfig = serde_json::from_str(legacy).unwrap();
+        assert!(parsed.enabled);
+        assert_eq!(parsed.idle_upload_cap_bps, 0);
+        assert_eq!(parsed.streaming_upload_cap_bps, 0);
+    }
+
+    #[test]
+    fn streaming_and_quota_eco_flags_update_inner_state() {
+        let svc = UssService::new();
+        svc.set_streaming_active(true, 2);
+        svc.set_quota_eco_cap_bps(Some(128 * 1024));
+        assert_eq!(svc.snapshot().active_streams, 2);
+        svc.set_streaming_active(false, 0);
+        svc.set_quota_eco_cap_bps(None);
+        assert_eq!(svc.snapshot().active_streams, 0);
     }
 }

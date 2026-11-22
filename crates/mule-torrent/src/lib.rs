@@ -748,6 +748,46 @@ impl TorrentEngine {
             .await?;
         Ok(())
     }
+
+    /// Ajusta en caliente el límite global de subida BitTorrent (bytes/s; 0 = sin límite).
+    pub fn set_upload_limit_bps(&self, bps: u64) {
+        let limit = if bps == 0 {
+            None
+        } else {
+            let clamped = bps.min(u64::from(u32::MAX)) as u32;
+            std::num::NonZeroU32::new(clamped.max(1))
+        };
+        self.session.ratelimits.set_upload_bps(limit);
+    }
+
+    /// Ajusta en caliente el límite global de bajada BitTorrent (bytes/s; 0 = sin límite).
+    pub fn set_download_limit_bps(&self, bps: u64) {
+        let limit = if bps == 0 {
+            None
+        } else {
+            let clamped = bps.min(u64::from(u32::MAX)) as u32;
+            std::num::NonZeroU32::new(clamped.max(1))
+        };
+        self.session.ratelimits.set_download_bps(limit);
+    }
+
+    /// Devuelve el límite global de subida BitTorrent activo (bytes/s; 0 = sin límite).
+    pub fn upload_limit_bps(&self) -> u64 {
+        self.session
+            .ratelimits
+            .get_upload_bps()
+            .map_or(0, |v| u64::from(v.get()))
+    }
+
+    /// Devuelve las tasas agregadas actuales `(descarga_bps, subida_bps)` de los torrents activos.
+    pub fn total_rates_bps(&self) -> (u64, u64) {
+        self.list().iter().fold((0u64, 0u64), |(dl, ul), snap| {
+            (
+                dl.saturating_add(snap.download_rate_bps),
+                ul.saturating_add(snap.upload_rate_bps),
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1030,5 +1070,19 @@ mod tests {
                 .await
                 .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn test_hot_rate_limit_update_and_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_offline(dir.path().to_path_buf())
+            .await
+            .unwrap();
+        assert_eq!(engine.upload_limit_bps(), 0);
+        engine.set_upload_limit_bps(512 * 1024);
+        assert_eq!(engine.upload_limit_bps(), 512 * 1024);
+        engine.set_upload_limit_bps(0);
+        assert_eq!(engine.upload_limit_bps(), 0);
+        assert_eq!(engine.total_rates_bps(), (0, 0));
     }
 }

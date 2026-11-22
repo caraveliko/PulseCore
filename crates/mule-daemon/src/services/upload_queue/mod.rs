@@ -120,6 +120,8 @@ pub struct UploadManager {
     /// Ancho de banda de subida mínimo por ranura en bytes/s (eMule `MinUpload`):
     /// solo se abre una nueva ranura si las ranuras existentes continúan alcanzándolo.
     min_upload_rate_bps: Arc<std::sync::atomic::AtomicU64>,
+    /// Velocidad objetivo por ranura para *Smart Slot Focus* (bytes/s; 0 = modo clásico eMule).
+    target_slot_speed_bps: Arc<AtomicU64>,
     /// Sonda de velocidad de subida configurada/efectiva (`MaxSpeed` de eMule) — lee
     /// `upload_bucket.rate_per_sec()` directamente: refleja tanto el límite manual
     /// (`rate_limit_upload_bps`) como el valor dinámico guiado por USS
@@ -185,6 +187,7 @@ impl UploadManager {
             friends: Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
             max_queue: Arc::new(AtomicUsize::new(MAX_UPLOAD_QUEUE)),
             min_upload_rate_bps: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            target_slot_speed_bps: Arc::new(AtomicU64::new(0)),
             upload_speed_probe: Arc::new(std::sync::RwLock::new(None)),
             quota_gate: Arc::new(std::sync::RwLock::new(Arc::new(AtomicBool::new(true)))),
             total_uploaded_bytes: Arc::new(AtomicU64::new(0)),
@@ -250,6 +253,19 @@ impl UploadManager {
     pub fn set_min_upload_rate(&self, bps: u64) {
         self.min_upload_rate_bps
             .store(bps, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Establece la velocidad objetivo por ranura para *Smart Slot Focus* (B/s).
+    /// `0` restaura el cálculo clásico de eMule 0.72a (`target_client_data_rate_bps`).
+    pub fn set_target_slot_speed(&self, bps: u64) {
+        self.target_slot_speed_bps
+            .store(bps, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Devuelve la velocidad objetivo por ranura configurada para *Smart Slot Focus* (B/s).
+    pub fn target_slot_speed_bps(&self) -> u64 {
+        self.target_slot_speed_bps
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Instala la sonda de velocidad de subida efectiva (`MaxSpeed` de eMule) — invocada
