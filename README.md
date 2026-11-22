@@ -179,7 +179,7 @@ El proyecto está organizado en un workspace de Cargo modular de 12 crates, dond
 ## 🚀 Inicio Rápido
 
 <a id="docker"></a>
-### Despliegue con Docker (NAS, servidores y Raspberry Pi)
+### 🐳 Despliegue con Docker (NAS, servidores y Raspberry Pi)
 
 Pulse Core incluye soporte oficial para Docker (`linux/amd64` y `linux/arm64`) basado en `debian:bookworm-slim` con `tikv-jemallocator`, `HEALTHCHECK` integrado en `/health`, apagado ordenado por `SIGTERM` y ejecución no-root configurable mediante `PUID`/`PGID`.
 
