@@ -9,13 +9,14 @@
 [![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/Licencia-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![Versión: v0.4.5](https://img.shields.io/badge/Versi%C3%B3n-v0.4.5-success.svg)](docs/CHANGELOG.md)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux%20%7C%20aarch64-lightgrey)](README.md)
+[![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED.svg)](docs/docker.md)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](Cargo.toml)
 [![Wiki](https://img.shields.io/badge/Documentaci%C3%B3n-Wiki-blueviolet.svg)](wiki/Home.md)
 [![Idioma](https://img.shields.io/badge/Idioma-Espa%C3%B1ol%20(ES--ES)-red)](README.md)
 
 <br/>
 
-[📖 Wiki Oficial](wiki/Home.md) • [Características](#-qué-hace-diferente-a-pulse-core) • [Interfaz Web](#-interfaz-web-integrada) • [Puertos y Red](#-configuración-de-red-y-puertos) • [Arquitectura](#-arquitectura-del-workspace) • [Inicio Rápido](#-inicio-rápido) • [Reportar un error](#-antes-de-reportar-un-error)
+[📖 Wiki Oficial](wiki/Home.md) • [Características](#-qué-hace-diferente-a-pulse-core) • [Interfaz Web](#-interfaz-web-integrada) • [Puertos y Red](#-configuración-de-red-y-puertos) • [Arquitectura](#-arquitectura-del-workspace) • [Docker](#-despliegue-con-docker-nas-servidores-y-raspberry-pi) • [Inicio Rápido](#-inicio-rápido) • [Reportar un error](#-antes-de-reportar-un-error)
 
 </div>
 
@@ -37,7 +38,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 
 > [![Consejo](https://img.shields.io/badge/CONSEJO-ACCESO%20R%C3%81PIDO-brightgreen.svg)](README.md)
 >
-> **Panel Web instantáneo sin dependencias:** No necesitas Node.js, Docker ni servidores HTTP externos para controlar Pulse Core. Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar transferencias y gráficas de tráfico mediante WebSockets, añadir enlaces `ed2k://` o `magnet:?` al vuelo, recibir alertas y gestionar el catálogo multimedia sin latencia.
+> **Panel Web instantáneo sin dependencias:** No necesitas Node.js ni servidores HTTP externos para controlar Pulse Core de forma nativa (y si prefieres contenedores, también cuentas con soporte oficial para Docker). Inicia el daemon y abre de inmediato en tu navegador **`http://127.0.0.1:4660`** para supervisar transferencias y gráficas de tráfico mediante WebSockets, añadir enlaces `ed2k://` o `magnet:?` al vuelo, recibir alertas y gestionar el catálogo multimedia sin latencia.
 >
 > Para colaborar o inspeccionar las decisiones de diseño, consulta [`docs/INDEX.md`](docs/INDEX.md) y [`AGENTS.md`](AGENTS.md). Recuerda que cualquier aportación debe superar la validación inteligente (`python3 scripts/smart_test.py --mode smart`), la suite completa (`cargo test --workspace --all-features --lib --tests`) y `clippy` sin advertencias.
 
@@ -53,35 +54,35 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
 
 <div align="center">
   <img src="docs/screenshots/filmoteca-cartelera.png" alt="Filmoteca y cartelera multimedia de Pulse Core" width="92%"/>
-  <p><em><strong>Filmoteca integrada:</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
+  <p><em><strong>Filmoteca integrada (tema Pulse Aurora):</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
 </div>
 
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/screenshots/descargas.png" alt="Cola de descargas eD2K y Torrent" width="100%"/>
+      <img src="docs/screenshots/descargas-cinema.png" alt="Cola de descargas eD2K y Torrent" width="100%"/>
       <br/>
-      <strong>Cola de descargas híbrida (eD2K + Torrent)</strong><br/>
+      <strong>Cola de descargas híbrida (tema Cine Ámbar)</strong><br/>
       <sub>Mapa continuo de partes, prioridades, fuentes y telemetría de ancho de banda en tiempo real.</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/screenshots/red-p2p.png" alt="Red P2P: Servidores eD2K y Kademlia DHT" width="100%"/>
+      <img src="docs/screenshots/red-p2p-silk.png" alt="Red P2P: Servidores eD2K y Kademlia DHT" width="100%"/>
       <br/>
-      <strong>Red P2P unificada (eD2K + Kad DHT)</strong><br/>
+      <strong>Red P2P unificada (tema Seda Nocturna)</strong><br/>
       <sub>Conexión HighID con soporte PC26-AEAD, estado de servidores y tabla de enrutamiento Kademlia.</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/screenshots/compartidos.png" alt="Biblioteca compartida y subidas activas" width="100%"/>
+      <img src="docs/screenshots/compartidos-emerald.png" alt="Biblioteca compartida y subidas activas" width="100%"/>
       <br/>
-      <strong>Compartidos y control de subida (USS)</strong><br/>
+      <strong>Compartidos y control de subida (tema Esmeralda Oscuro)</strong><br/>
       <sub>KPIs de ratio global, tráfico histórico, prioridad por archivo y envíos activos en vivo.</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/screenshots/opciones.png" alt="Opciones, almacenamiento y guardián NFS/NAS" width="100%"/>
+      <img src="docs/screenshots/opciones-midnight.png" alt="Opciones, almacenamiento y guardián NFS/NAS" width="100%"/>
       <br/>
-      <strong>Opciones y guardián NFS / NAS</strong><br/>
+      <strong>Opciones y guardián NFS / NAS (tema Azul Noche)</strong><br/>
       <sub>Configuración de almacenamiento, detección de montajes de red, límites USS y automatización.</sub>
     </td>
   </tr>
@@ -172,7 +173,25 @@ El proyecto está organizado en un workspace de Cargo modular de 12 crates, dond
 
 ## 🚀 Inicio Rápido
 
-### Requisitos previos
+### Despliegue con Docker (NAS, servidores y Raspberry Pi)
+
+Pulse Core incluye soporte oficial para Docker (`linux/amd64` y `linux/arm64`) basado en `debian:bookworm-slim` con `tikv-jemallocator`, `HEALTHCHECK` integrado en `/health`, apagado ordenado por `SIGTERM` y ejecución no-root configurable mediante `PUID`/`PGID`.
+
+```bash
+# Clonar el repositorio y levantar el contenedor (compilación local multi-etapa)
+git clone https://github.com/caraveliko/PulseCore.git
+cd PulseCore
+docker compose up -d --build
+```
+
+También puedes usar directamente la imagen multi-arquitectura publicada en GitHub Container Registry (`ghcr.io/caraveliko/pulsecore:latest`) descomentando `image:` en [`docker-compose.yml`](docker-compose.yml).
+
+- **Volúmenes pensados para *hardlinks***: monta `/config` para persistencia (`mule.db`, `logs/`, `auth.token`) y un único volumen `/data` (`/data/downloads` y `/data/media/{Movies,Series}`) para que el organizador cree enlaces duros instantáneos sin duplicar espacio.
+- **Guía completa**: consulta [`docs/docker.md`](docs/docker.md) para configurar `PUID`/`PGID`, modo `network_mode: host` (UPnP), enrutamiento VPN con Gluetun y uso de `mule-cli` dentro del contenedor.
+
+---
+
+### Requisitos previos (compilación nativa)
 - **Rust** (`stable`, 1.80 o superior con `cargo`).
 - Compilador C/C++ del sistema (MSVC en Windows, GCC o Clang en Linux).
 
