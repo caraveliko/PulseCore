@@ -17,7 +17,7 @@
 
   <script src="/session-config.js"></script>
   <link rel="stylesheet" href="/assets/base.css?v=1">
-  <link rel="stylesheet" href="/assets/theme.css?v=11">
+  <link rel="stylesheet" href="/assets/theme.css?v=12">
 </head>
 <body>
   <!-- Escena atmosférica fija detrás de las superficies translúcidas -->
@@ -169,6 +169,13 @@
               <div class="atmosphere-swatch swatch-emerald"></div>
               <div class="atmosphere-card-label">
                 <span>Esmeralda Oscuro</span>
+                <span class="atmosphere-check">✓</span>
+              </div>
+            </button>
+            <button type="button" class="atmosphere-card atmosphere-card--wide" data-atmosphere-choice="violet" onclick="setAtmosphere('violet')">
+              <div class="atmosphere-swatch swatch-violet"></div>
+              <div class="atmosphere-card-label">
+                <span>Violeta Obsidiana</span>
                 <span class="atmosphere-check">✓</span>
               </div>
             </button>
@@ -361,7 +368,7 @@
           </div>
 
           <!-- Selector de Sub-Vista integrado en la misma línea -->
-          <div class="filter-group" id="media-subview-group" style="margin-left: 4px;">
+          <div class="filter-group pill-dock pill-dock--labeled" id="media-subview-group" style="margin-left: 4px;">
             <button class="filter-btn active" id="btn-subview-library" onclick="switchMediaSubView('library')" style="display: inline-flex; align-items: center; gap: 6px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
               <span>Cartelera</span>
@@ -481,11 +488,39 @@
         <!-- FILA 2: BARRA UNIFICADA DE FILTROS Y BÚSQUEDA -->
         <div id="media-filter-bar-wrap" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
           <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <!-- Tipo: Filter Pills -->
-            <div class="filter-group" id="media-type-filters">
-              <button class="filter-btn active" data-mtype="all" onclick="filterMediaByType('all')">Todos <span id="count-media-all">(0)</span></button>
-              <button class="filter-btn" data-mtype="movie" onclick="filterMediaByType('movie')">Películas <span id="count-media-movie">(0)</span></button>
-              <button class="filter-btn" data-mtype="tv" onclick="filterMediaByType('tv')">Series <span id="count-media-tv">(0)</span></button>
+            <!-- Tipo: Cápsula iconográfica -->
+            <div class="filter-group pill-dock pill-dock--icons" id="media-type-filters" role="group" aria-label="Filtrar por tipo de contenido">
+              <button type="button" class="filter-btn active" data-mtype="all" onclick="filterMediaByType('all')" aria-label="Todos los títulos" aria-pressed="true" title="Todos los títulos">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M8 5l2.5 2L13 5" />
+                  <rect x="3" y="7" width="13" height="9" rx="2" />
+                  <circle cx="16.5" cy="15.5" r="4.5" fill="var(--bg-surface-2)" />
+                  <circle cx="16.5" cy="13.7" r=".8" fill="currentColor" stroke="none" />
+                  <circle cx="16.5" cy="17.3" r=".8" fill="currentColor" stroke="none" />
+                  <circle cx="14.7" cy="15.5" r=".8" fill="currentColor" stroke="none" />
+                  <circle cx="18.3" cy="15.5" r=".8" fill="currentColor" stroke="none" />
+                </svg>
+                <span id="count-media-all" class="pill-dock-count">0</span>
+              </button>
+              <button type="button" class="filter-btn" data-mtype="movie" onclick="filterMediaByType('movie')" aria-label="Películas" aria-pressed="false" title="Películas">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
+                  <path d="m6.2 5.3 3.1 3.9" />
+                  <path d="m12.4 3.4 3.1 4" />
+                  <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                </svg>
+                <span id="count-media-movie" class="pill-dock-count">0</span>
+              </button>
+              <button type="button" class="filter-btn" data-mtype="tv" onclick="filterMediaByType('tv')" aria-label="Series" aria-pressed="false" title="Series">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="7" width="20" height="14" rx="2.5" />
+                  <path d="m17 2-5 5-5-5" />
+                  <path d="M7 12h6" />
+                  <path d="M7 16h4" />
+                  <circle cx="17.5" cy="14" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+                <span id="count-media-tv" class="pill-dock-count">0</span>
+              </button>
             </div>
 
             <!-- Divisor sutil -->
@@ -603,7 +638,7 @@
           <button class="filter-btn" data-filter="paused">En pausa <span id="cnt-paused">(0)</span></button>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <div class="filter-group" id="filter-proto-group">
+          <div class="filter-group pill-dock pill-dock--labeled" id="filter-proto-group">
             <button class="filter-btn active" data-proto="all">Todos los protocolos</button>
             <button class="filter-btn" data-proto="ed2k">eD2k</button>
             <button class="filter-btn" data-proto="torrent">Torrent</button>
@@ -3530,9 +3565,9 @@
   <script src="/assets/js/04_actions_and_onboarding.js?v=1"></script>
   <script src="/assets/js/05_local_guide_and_settings.js?v=1"></script>
   <script src="/assets/js/06_updates_notifications_scheduler.js?v=1"></script>
-  <script src="/assets/js/07_media_core.js?v=1"></script>
+  <script src="/assets/js/07_media_core.js?v=2"></script>
   <script src="/assets/js/08_media_servarr_and_subtitles.js?v=1"></script>
   <script src="/assets/js/09_spotlight_and_mcp.js?v=1"></script>
-  <script src="/assets/atmosphere.js?v=2"></script>
+  <script src="/assets/atmosphere.js?v=3"></script>
 </body>
 </html>

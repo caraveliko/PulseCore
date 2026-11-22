@@ -55,9 +55,10 @@ function updateMediaCounters() {
   const wanted = mediaLibraryItems.filter(i => i.status === 'wanted').length;
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = `(${val})`; };
-  setEl('count-media-all', total);
-  setEl('count-media-movie', movies);
-  setEl('count-media-tv', tv);
+  const setBadge = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
+  setBadge('count-media-all', total);
+  setBadge('count-media-movie', movies);
+  setBadge('count-media-tv', tv);
   setEl('count-media-completed', completed);
   setEl('count-media-downloading', downloading);
   setEl('count-media-wanted', wanted);
@@ -66,7 +67,9 @@ function updateMediaCounters() {
 function filterMediaByType(type) {
   currentMediaTypeFilter = type;
   document.querySelectorAll('#media-type-filters button').forEach(b => {
-    b.classList.toggle('active', b.dataset.mtype === type);
+    const active = b.dataset.mtype === type;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   renderMediaCards();
 }

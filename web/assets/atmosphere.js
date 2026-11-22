@@ -17,6 +17,7 @@
     'graphite',
     'midnight',
     'emerald',
+    'violet',
   ]);
 
   const THEME_COLORS = {
@@ -28,6 +29,7 @@
     graphite: '#111318',
     midnight: '#0a1020',
     emerald: '#071412',
+    violet: '#0f0d17',
   };
 
   let mediaBackdropTimer = null;

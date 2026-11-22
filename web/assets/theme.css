@@ -220,6 +220,32 @@
   --ambient-glow-b: transparent;
 }
 
+:root[data-atmosphere="violet"] {
+  --bg: #0f0d17;
+  --bg-base: #0f0d17;
+  --bg-surface-1: #151320;
+  --bg-surface-2: #1c192a;
+  --bg-surface-3: #252138;
+  --bg-input: #13111d;
+  --card-bg: #161422;
+  --card-sub: #1d1a2c;
+  --glass-elevated: #171524;
+  --border: rgba(232, 224, 255, 0.10);
+  --border-subtle: rgba(232, 224, 255, 0.075);
+  --border-specular: rgba(232, 224, 255, 0.16);
+  --border-active: rgba(139, 92, 246, 0.58);
+  --primary: #8b5cf6;
+  --primary-hover: #a78bfa;
+  --primary-rgb: 139, 92, 246;
+  --primary-fg: #ffffff;
+  --accent: #7c3aed;
+  --accent-hover: #9f67ff;
+  --chunk-done: #8b5cf6;
+  --ambient-image: none;
+  --ambient-glow-a: rgba(124, 58, 237, 0.12);
+  --ambient-glow-b: rgba(99, 102, 241, 0.08);
+}
+
 /* ==========================================================================
    Base y escena atmosférica fija (detrás del cristal ahumado)
    ========================================================================== */
@@ -262,7 +288,8 @@ body {
 :root[data-atmosphere="black"] .ambient-bg-layer,
 :root[data-atmosphere="graphite"] .ambient-bg-layer,
 :root[data-atmosphere="midnight"] .ambient-bg-layer,
-:root[data-atmosphere="emerald"] .ambient-bg-layer {
+:root[data-atmosphere="emerald"] .ambient-bg-layer,
+:root[data-atmosphere="violet"] .ambient-bg-layer {
   opacity: 0 !important;
 }
 
@@ -824,6 +851,15 @@ header {
   box-shadow: inset 0 -3px 0 #34d399;
 }
 
+.atmosphere-swatch.swatch-violet {
+  background: radial-gradient(circle at 30% 30%, #1f1936 0%, #0f0d17 85%);
+  box-shadow: inset 0 -3px 0 #8b5cf6;
+}
+
+.atmosphere-card--wide {
+  grid-column: 1 / -1;
+}
+
 .atmosphere-card-label {
   display: flex;
   align-items: center;
@@ -1037,31 +1073,111 @@ tr.selected-row td:first-child {
   opacity: 1;
 }
 
-/* Controles segmentados compactos para selectores de modo y protocolo */
-#filter-proto-group,
-#media-type-filters,
-#media-subview-group {
-  background: rgba(255, 255, 255, 0.035);
+/* Cápsulas segmentadas flotantes (floating pill dock) con anillo luminoso activo */
+.pill-dock.filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px !important;
+  width: auto !important;
   border-bottom: none;
-  border-radius: 6px;
-  padding: 2px;
-  gap: 2px;
+  border-radius: 9999px !important;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 18px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
 }
 
-#filter-proto-group .filter-btn,
-#media-type-filters .filter-btn,
-#media-subview-group .filter-btn {
-  border: none !important;
-  border-bottom: none !important;
-  border-radius: 4px !important;
-  padding: 4px 10px !important;
+/* Variante iconográfica circular (p. ej. filtro Todos / Películas / Series) */
+.pill-dock--icons .filter-btn {
+  position: relative;
+  width: 42px !important;
+  height: 42px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid transparent !important;
+  background: transparent !important;
+  color: var(--text-muted);
+  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, color 0.2s ease, box-shadow 0.25s ease, transform 0.15s ease;
 }
 
-#filter-proto-group .filter-btn.active,
-#media-type-filters .filter-btn.active,
-#media-subview-group .filter-btn.active {
-  background: rgba(255, 255, 255, 0.10) !important;
+.pill-dock--icons .filter-btn:hover {
   color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.pill-dock--icons .filter-btn.active {
+  background: rgba(var(--primary-rgb), 0.22) !important;
+  border-color: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.35), inset 0 0 8px rgba(var(--primary-rgb), 0.16) !important;
+}
+
+.pill-dock--icons .filter-btn .pill-dock-count {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 0;
+  background: var(--bg-surface-1);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  opacity: 1;
+}
+
+.pill-dock--icons .filter-btn.active .pill-dock-count {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: transparent;
+}
+
+/* Variante píldora con etiqueta (sub-vistas de Filmoteca y selector de protocolo) */
+.pill-dock--labeled .filter-btn {
+  border-radius: 9999px !important;
+  padding: 6px 13px !important;
+  border: 1.5px solid transparent !important;
+  background: transparent !important;
+  color: var(--text-muted);
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pill-dock--labeled .filter-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.pill-dock--labeled .filter-btn.active {
+  background: rgba(var(--primary-rgb), 0.20) !important;
+  border-color: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.28), inset 0 0 6px rgba(var(--primary-rgb), 0.14) !important;
+}
+
+/* Colores semánticos por protocolo dentro de la cápsula de Cola */
+#filter-proto-group.pill-dock--labeled .filter-btn[data-proto="ed2k"].active {
+  background: rgba(245, 158, 11, 0.20) !important;
+  border-color: var(--color-ed2k) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.30) !important;
+}
+
+#filter-proto-group.pill-dock--labeled .filter-btn[data-proto="torrent"].active {
+  background: rgba(56, 189, 248, 0.20) !important;
+  border-color: var(--color-torrent) !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.30) !important;
 }
 
 /* Botones planos de utilidad en la barra de herramientas */
