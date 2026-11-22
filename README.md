@@ -16,7 +16,7 @@
 
 <br/>
 
-[📖 Wiki Oficial](wiki/Home.md) • [Características](#-qué-hace-diferente-a-pulse-core) • [Interfaz Web](#-interfaz-web-integrada) • [Puertos y Red](#-configuración-de-red-y-puertos) • [Arquitectura](#-arquitectura-del-workspace) • [Docker](#-despliegue-con-docker-nas-servidores-y-raspberry-pi) • [Inicio Rápido](#-inicio-rápido) • [Reportar un error](#-antes-de-reportar-un-error)
+[📖 Wiki Oficial](wiki/Home.md) • [Características](#caracteristicas) • [Interfaz Web](#interfaz-web) • [Puertos y Red](#puertos-y-red) • [Arquitectura](#arquitectura) • [Docker](#docker) • [Inicio Rápido](#inicio-rapido) • [Reportar un error](#reportar-un-error)
 
 </div>
 
@@ -48,6 +48,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 
 ---
 
+<a id="interfaz-web"></a>
 ## 🖥️ Interfaz Web integrada
 
 El servicio incorpora un panel de control web reactivo y moderno servido directamente en el puerto `4660`, sin dependencias externas:
@@ -95,6 +96,7 @@ Además de la gestión de descargas, búsquedas, servidores eD2K, red Kad y bibl
 
 ---
 
+<a id="caracteristicas"></a>
 ## ⚡ Qué hace diferente a Pulse Core
 
 ### 1. Dos redes en un solo motor asíncrono y estándar Pulse Core 2026 (`PC26`)
@@ -135,6 +137,7 @@ Diseñado para mantenerse al día en servidores domésticos sin fricción:
 
 ---
 
+<a id="puertos-y-red"></a>
 ## 🌐 Configuración de red y puertos
 
 Para despliegues domésticos, servidores dedicados o contenedores NAS, estos son los puertos estándar utilizados por el motor:
@@ -150,6 +153,7 @@ Para despliegues domésticos, servidores dedicados o contenedores NAS, estos son
 
 ---
 
+<a id="arquitectura"></a>
 ## 🏗️ Arquitectura del Workspace
 
 El proyecto está organizado en un workspace de Cargo modular de 12 crates, donde cada componente tiene una única responsabilidad bien definida:
@@ -171,8 +175,10 @@ El proyecto está organizado en un workspace de Cargo modular de 12 crates, dond
 
 ---
 
+<a id="inicio-rapido"></a>
 ## 🚀 Inicio Rápido
 
+<a id="docker"></a>
 ### Despliegue con Docker (NAS, servidores y Raspberry Pi)
 
 Pulse Core incluye soporte oficial para Docker (`linux/amd64` y `linux/arm64`) basado en `debian:bookworm-slim` con `tikv-jemallocator`, `HEALTHCHECK` integrado en `/health`, apagado ordenado por `SIGTERM` y ejecución no-root configurable mediante `PUID`/`PGID`.
@@ -256,6 +262,7 @@ powershell -NoProfile -ExecutionPolicy RemoteSigned -File scripts\build_windows_
 
 ---
 
+<a id="reportar-un-error"></a>
 ## 🛠️ Antes de reportar un error
 
 Para resolver cualquier problema con la mayor rapidez posible, comprueba lo siguiente antes de abrir una incidencia (*issue*):
