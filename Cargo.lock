@@ -2396,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "mule-assistant"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "axum",
  "clap",
@@ -2418,7 +2418,7 @@ dependencies = [
 
 [[package]]
 name = "mule-cli"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "clap",
  "data-encoding",
@@ -2436,7 +2436,7 @@ dependencies = [
 
 [[package]]
 name = "mule-core"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "hex 0.4.3",
  "md4",
@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "mule-crypto"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "blake3",
  "data-encoding",
@@ -2469,7 +2469,7 @@ dependencies = [
 
 [[package]]
 name = "mule-daemon"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "axum",
  "blake3",
@@ -2524,7 +2524,7 @@ dependencies = [
 
 [[package]]
 name = "mule-filter"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "serde",
  "tempfile",
@@ -2534,7 +2534,7 @@ dependencies = [
 
 [[package]]
 name = "mule-format"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "data-encoding",
  "hex 0.4.3",
@@ -2550,7 +2550,7 @@ dependencies = [
 
 [[package]]
 name = "mule-mcp"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "axum",
  "clap",
@@ -2572,7 +2572,7 @@ dependencies = [
 
 [[package]]
 name = "mule-network-policy"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "mule-filter",
  "serde",
@@ -2584,7 +2584,7 @@ dependencies = [
 
 [[package]]
 name = "mule-protocol"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "bytes",
  "flate2",
@@ -2607,7 +2607,7 @@ dependencies = [
 
 [[package]]
 name = "mule-test-support"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "axum",
  "futures-util",
@@ -2623,7 +2623,7 @@ dependencies = [
 
 [[package]]
 name = "mule-torrent"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "hex 0.4.3",
  "librqbit",

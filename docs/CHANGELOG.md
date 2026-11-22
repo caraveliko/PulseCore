@@ -5,6 +5,15 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-22
+
+- **Control Inteligente de Subida (Fases 1 y 2) (`mule-daemon`, `mule-torrent`, `web`)**:
+  - **LEDBAT++ AIMD y techo en reposo (`uss_ledbat.rs`, `uss.rs`)**: escalado proporcional al ancho de banda para fibra, techo `idleUploadCapKbs` cuando no hay descargas activas y telemetría de retardo de cola/motivo en `limits.get`.
+  - ***Smart Slot Focus* (`upload_queue/scoring.rs`)**: objetivo de velocidad por ranura configurable (`smartSlotTargetKbs`) para evitar la fragmentación en decenas de ranuras lentas.
+  - **Presupuesto unificado eD2K + BitTorrent (`upload_budget.rs`, `mule-torrent`)**: ajuste en caliente de `librqbit::Limits` y reparto dinámico por demanda real entre ambos protocolos.
+  - **Modo eco por cuota y conciencia de streaming (`state.rs`, `streaming_watcher.rs`)**: degradación suave `quotaEcoUploadKbs` al agotar `dailyUploadQuotaGb` y recorte temporal `streamingUploadCapKbs` al detectar reproducción activa en Jellyfin o Plex.
+  - **Monitor de Ancho de Banda (`web/index.html`, `02_downloads_and_bandwidth.js`)**: conmutador rápido **⚡ Control Inteligente**, telemetría RTT/motivo en vivo, controles en línea y línea `━ Límite ↑` en la gráfica SVG.
+
 ## [0.4.5] - 2026-11-21
 
 - **Fusión de Filmoteca y Descargas, compatibilidad Media Center y mejoras integrales de WebUI (`web`, `mule-daemon`)**:
