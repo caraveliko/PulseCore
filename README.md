@@ -52,7 +52,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 El servicio incorpora un panel de control web reactivo y moderno servido directamente en el puerto `4660`, sin dependencias externas:
 
 <div align="center">
-  <img src="docs/screenshots/filmoteca.png" alt="Filmoteca y cartelera multimedia de Pulse Core" width="92%"/>
+  <img src="docs/screenshots/filmoteca-cartelera.png" alt="Filmoteca y cartelera multimedia de Pulse Core" width="92%"/>
   <p><em><strong>Filmoteca integrada:</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
 </div>
 
