@@ -126,6 +126,7 @@ Espacios de nombres estables (véase `methods.rs` para la lista exhaustiva mante
 | `upnp.*` | `status`, `mapPorts`, `unmapPorts`, `setEnabled` |
 | `filter.*` | `getStatus`, `importFile`, `setEnabled`, `clear` — `enabled`/`filePath` persistidos (`ipfilter_*`) y recargados al arrancar |
 | `history.*` / `categories.*` | `list`, `stats`, `clear`, `export`; CRUD + `reorder` |
+| `subtitles.*` | `search` (devuelve `score`, `scoreReasons`, `fpsMilli`, `variant`, `releaseName`, `isAutoTranslated`, `isTrusted`), `download`, `check`, `autoFetch`, `sync` (`{mediaId, season?, episode?, lang?, mode?, offsetMs?, fromFps?, toFps?}`), `blacklistAndRetry` (`{mediaId, season?, episode?, provider, providerSubId, reason?, lang?}`) |
 | `events.*` | `subscribe` (filtrado por tópicos, véase §6) |
 | `lab.*` / `ed2k.*` / `debug.*` | condicionados por feature (`lab-loopback`, `ed2k-loopback`, `debug-rpc`) — **no documentar como API pública** |
 

@@ -1030,6 +1030,7 @@ mod tests {
             status: "completed".to_string(),
             root_folder: "/movies".to_string(),
             file_path: None,
+            original_release_name: None,
             download_id: None,
             created_at: 0,
             updated_at: 0,

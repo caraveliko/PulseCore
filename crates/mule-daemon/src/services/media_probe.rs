@@ -22,6 +22,12 @@ const FHD_MIN_HEIGHT: u32 = 900;
 const HD_MIN_WIDTH: u32 = 1150;
 const HD_MIN_HEIGHT: u32 = 640;
 
+/// Multiplicador para convertir FPS a milésimas enteras (p. ej., 23.976 -> 23976).
+const FPS_MILLI_SCALE: f64 = 1000.0;
+/// Rango razonable de FPS válidos en milésimas (de 10 fps a 240 fps).
+const MIN_VALID_FPS_MILLI: u32 = 10_000;
+const MAX_VALID_FPS_MILLI: u32 = 240_000;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaProbeInfo {
@@ -34,6 +40,12 @@ pub struct MediaProbeInfo {
     pub detected_language_profile: String,
     pub has_spanish_audio: bool,
     pub has_spanish_subtitles: bool,
+    #[serde(default)]
+    pub fps_milli: Option<u32>,
+    #[serde(default)]
+    pub duration_secs: Option<u64>,
+    #[serde(default)]
+    pub embedded_text_sub_stream: Option<usize>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone)]
@@ -53,6 +65,13 @@ fn probe_cache() -> &'static Mutex<HashMap<ProbeCacheKey, MediaProbeInfo>> {
 struct FfprobeOutput {
     #[serde(default)]
     streams: Vec<FfprobeStream>,
+    #[serde(default)]
+    format: Option<FfprobeFormat>,
+}
+
+#[derive(Deserialize)]
+struct FfprobeFormat {
+    duration: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -61,7 +80,17 @@ struct FfprobeStream {
     codec_name: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
+    r_frame_rate: Option<String>,
+    avg_frame_rate: Option<String>,
+    duration: Option<String>,
     tags: Option<FfprobeTags>,
+    disposition: Option<FfprobeDisposition>,
+}
+
+#[derive(Deserialize)]
+struct FfprobeDisposition {
+    forced: Option<i32>,
+    hearing_impaired: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -156,6 +185,47 @@ fn is_english_tag(lang: &str, title: &str) -> bool {
         || t.contains("ingles")
 }
 
+/// Convierte una fracción de `ffprobe` (p. ej. `"24000/1001"` o `"25/1"`) a milésimas de FPS.
+pub fn parse_fps_milli(raw: &str) -> Option<u32> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let val = if let Some((num_s, den_s)) = trimmed.split_once('/') {
+        let num: f64 = num_s.trim().parse().ok()?;
+        let den: f64 = den_s.trim().parse().ok()?;
+        if den <= 0.0 || num <= 0.0 {
+            return None;
+        }
+        num / den
+    } else {
+        let f: f64 = trimmed.parse().ok()?;
+        if f <= 0.0 {
+            return None;
+        }
+        f
+    };
+
+    let milli = (val * FPS_MILLI_SCALE).round();
+    if !milli.is_finite() || milli < 0.0 {
+        return None;
+    }
+    let milli_u32 = milli as u32;
+    if (MIN_VALID_FPS_MILLI..=MAX_VALID_FPS_MILLI).contains(&milli_u32) {
+        Some(milli_u32)
+    } else {
+        None
+    }
+}
+
+fn is_extractable_text_sub_codec(codec: &str) -> bool {
+    matches!(
+        codec.trim().to_lowercase().as_str(),
+        "subrip" | "srt" | "ass" | "ssa" | "mov_text" | "webvtt" | "text"
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn build_probe_info(
     width: Option<u32>,
     height: Option<u32>,
@@ -165,6 +235,9 @@ fn build_probe_info(
     has_es_audio: bool,
     has_en_audio: bool,
     has_es_subs: bool,
+    fps_milli: Option<u32>,
+    duration_secs: Option<u64>,
+    embedded_text_sub_stream: Option<usize>,
     filename_str: &str,
 ) -> MediaProbeInfo {
     let quality_tag = classify_resolution(width, height, filename_str);
@@ -210,6 +283,9 @@ fn build_probe_info(
         detected_language_profile,
         has_spanish_audio: final_es_audio,
         has_spanish_subtitles: final_es_subs,
+        fps_milli,
+        duration_secs,
+        embedded_text_sub_stream,
     }
 }
 
@@ -220,6 +296,7 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
             "quiet",
             "-print_format",
             "json",
+            "-show_format",
             "-show_streams",
         ])
         .arg(path)
@@ -238,11 +315,21 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
     let mut width = None;
     let mut height = None;
     let mut video_codec = None;
+    let mut fps_milli = None;
+    let mut duration_secs = parsed
+        .format
+        .as_ref()
+        .and_then(|f| f.duration.as_deref())
+        .and_then(|d| d.trim().parse::<f64>().ok())
+        .filter(|&d| d.is_finite() && d > 0.0)
+        .map(|d| d.round() as u64);
     let mut audio_languages = Vec::new();
     let mut subtitle_languages = Vec::new();
     let mut has_es_audio = false;
     let mut has_en_audio = false;
     let mut has_es_subs = false;
+    let mut sub_stream_rel_idx: usize = 0;
+    let mut best_embedded_sub: Option<(u8, usize)> = None;
 
     for stream in parsed.streams {
         let ctype = stream.codec_type.as_deref().unwrap_or("");
@@ -262,6 +349,21 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
                 if width.is_none() && stream.width.unwrap_or(0) > 0 {
                     width = stream.width;
                     height = stream.height;
+                }
+                if fps_milli.is_none() {
+                    fps_milli = stream
+                        .avg_frame_rate
+                        .as_deref()
+                        .and_then(parse_fps_milli)
+                        .or_else(|| stream.r_frame_rate.as_deref().and_then(parse_fps_milli));
+                }
+                if duration_secs.is_none() {
+                    duration_secs = stream
+                        .duration
+                        .as_deref()
+                        .and_then(|d| d.trim().parse::<f64>().ok())
+                        .filter(|&d| d.is_finite() && d > 0.0)
+                        .map(|d| d.round() as u64);
                 }
                 if video_codec.is_none() {
                     video_codec = stream.codec_name;
@@ -287,6 +389,38 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
                 if is_spanish_tag(lang, title) {
                     has_es_subs = true;
                 }
+                let codec = stream.codec_name.as_deref().unwrap_or("");
+                if is_extractable_text_sub_codec(codec) {
+                    let is_forced = stream
+                        .disposition
+                        .as_ref()
+                        .and_then(|d| d.forced)
+                        .unwrap_or(0)
+                        != 0
+                        || title.to_lowercase().contains("forced")
+                        || title.to_lowercase().contains("forzados");
+                    let is_hi = stream
+                        .disposition
+                        .as_ref()
+                        .and_then(|d| d.hearing_impaired)
+                        .unwrap_or(0)
+                        != 0;
+                    if !is_forced {
+                        let priority = if is_english_tag(lang, title) && !is_hi {
+                            4
+                        } else if is_spanish_tag(lang, title) && !is_hi {
+                            3
+                        } else if is_english_tag(lang, title) {
+                            2
+                        } else {
+                            1
+                        };
+                        if best_embedded_sub.is_none_or(|(p, _)| priority > p) {
+                            best_embedded_sub = Some((priority, sub_stream_rel_idx));
+                        }
+                    }
+                }
+                sub_stream_rel_idx += 1;
             }
             _ => {}
         }
@@ -302,6 +436,9 @@ fn probe_via_ffprobe(path: &Path) -> Option<MediaProbeInfo> {
         has_es_audio,
         has_en_audio,
         has_es_subs,
+        fps_milli,
+        duration_secs,
+        best_embedded_sub.map(|(_, idx)| idx),
         &filename_str,
     ))
 }
@@ -380,6 +517,9 @@ fn probe_via_binary_header(path: &Path) -> Option<MediaProbeInfo> {
         has_es,
         has_en,
         has_es_sub_codec && has_es,
+        None,
+        None,
+        None,
         &filename_str,
     ))
 }
@@ -395,6 +535,9 @@ fn fallback_from_filename(path: &Path) -> MediaProbeInfo {
         false,
         false,
         false,
+        None,
+        None,
+        None,
         &filename_str,
     )
 }
@@ -439,6 +582,15 @@ mod tests {
         assert_eq!(probed.detected_language_profile, "Dual");
         assert!(probed.has_spanish_audio);
         assert!(probed.has_spanish_subtitles);
+    }
+
+    #[test]
+    fn test_parse_fps_milli() {
+        assert_eq!(parse_fps_milli("24000/1001"), Some(23_976));
+        assert_eq!(parse_fps_milli("25/1"), Some(25_000));
+        assert_eq!(parse_fps_milli("23.976"), Some(23_976));
+        assert_eq!(parse_fps_milli("0/0"), None);
+        assert_eq!(parse_fps_milli(""), None);
     }
 }
 

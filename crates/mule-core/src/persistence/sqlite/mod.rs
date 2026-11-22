@@ -1066,6 +1066,51 @@ impl Database {
         media::find_episode_by_download_id(&self.conn, download_id)
     }
 
+    pub fn set_media_original_release_name(
+        &self,
+        id: &str,
+        release_name: &str,
+        now_ms: i64,
+    ) -> Result<(), CoreError> {
+        media::set_media_original_release_name(&self.conn, id, release_name, now_ms)
+    }
+
+    pub fn set_episode_original_release_name(
+        &self,
+        id: &str,
+        release_name: &str,
+        now_ms: i64,
+    ) -> Result<(), CoreError> {
+        media::set_episode_original_release_name(&self.conn, id, release_name, now_ms)
+    }
+
+    pub fn add_subtitle_blacklist(
+        &self,
+        media_key: &str,
+        provider: &str,
+        provider_sub_id: &str,
+        reason: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), CoreError> {
+        media::add_subtitle_blacklist(&self.conn, media_key, provider, provider_sub_id, reason, now_ms)
+    }
+
+    pub fn is_subtitle_blacklisted(
+        &self,
+        media_key: &str,
+        provider: &str,
+        provider_sub_id: &str,
+    ) -> Result<bool, CoreError> {
+        media::is_subtitle_blacklisted(&self.conn, media_key, provider, provider_sub_id)
+    }
+
+    pub fn list_subtitle_blacklist(
+        &self,
+        media_key: &str,
+    ) -> Result<Vec<(String, String)>, CoreError> {
+        media::list_subtitle_blacklist(&self.conn, media_key)
+    }
+
     // ── Notificaciones ──────────────────────────────────────────────────────
 
     /// Inserta una notificación en el historial persistente.

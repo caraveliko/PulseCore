@@ -286,7 +286,7 @@
 | `src/services/server_session/connection.rs` | Conexión al servidor |
 | `src/services/server_session/events.rs` | Eventos de sesión de servidor |
 | `src/services/server_session/types.rs` | Tipos de sesión de servidor |
-| `src/services/subtitles.rs` | Descarga automática de subtítulos OpenSubtitles (VLSub) |
+| `src/services/subtitles/` | Motor modular de subtítulos: búsqueda OpenSubtitles (`opensubtitles.rs`), puntuación (`scorer.rs`), validación SRT (`srt.rs`), sincronización (`sync.rs`) y fachada (`mod.rs`) |
 | `src/services/swarm_coordinator.rs` | Coordinación del enjambre de pares |
 | `src/services/swarm_coordinator/lowid_callback.rs` | Coordinación de *callbacks* LowID vía servidor y buddy |
 | `src/services/swarm_coordinator/strategy.rs` | Estrategia de coordinación (rebalanceo A4AF incluido) |
@@ -556,6 +556,7 @@
 | `docs/architecture/rpc_protocol.md` | Contrato JSON-RPC 2.0/WebSocket demonio↔clientes: transporte, auth, métodos, eventos, códigos de error, versionado |
 | `docs/architecture/plan_daemon_events.md` | Plan de eventos del demonio: subidas en tiempo real, `statsTick`, ciclo de vida de descargas, fin del polling (fases E1–E6) |
 | `docs/architecture/adr_auto_update.md` | ADR: Sistema de actualización automática integrado (In-App Staging + Atomic Self-Replace, Ed25519, graceful shutdown) |
+| `docs/architecture/adr_subtitulos_sincronizacion.md` | ADR: Motor de subtítulos precisos, validados, con puntuación de *releases* y sincronización post-descarga |
 | `docs/architecture/conectividad_nat_quic_2026.md` | Especificación de conectividad 2026: cascada UPnP/PCP/NAT-PMP, IPv6 Pinhole, Happy Eyeballs v2, QUIC RFC 9000 y UDP Hole Punching |
 | `docs/architecture/bittorrent_negociacion_2026.md` | Especificación de seguridad, IP filter, uTP, Dual-Stack IPv6 y capacidades en `mule-torrent` |
 

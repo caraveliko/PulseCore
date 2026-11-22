@@ -22,6 +22,7 @@ fn test_insert_episodes_batch_and_indexes() {
             status: "wanted".to_string(),
             monitored: true,
             file_path: None,
+            original_release_name: None,
             download_id: Some(format!("dl-{i}")),
             created_at: 1000,
             updated_at: 1000,
@@ -70,4 +71,49 @@ fn test_upsert_shared_files_batch() {
 
     let loaded = db.list_shared_files().expect("list shares");
     assert_eq!(loaded.len(), 10);
+}
+
+#[test]
+fn test_media_release_name_and_subtitle_blacklist() {
+    let db = Database::open_in_memory().expect("open in-memory db");
+    let media_id = Uuid::new_v4().to_string();
+
+    let item = mule_core::model::MediaItem {
+        id: media_id.clone(),
+        tmdb_id: Some(603),
+        imdb_id: Some("tt0133093".to_string()),
+        tvdb_id: None,
+        media_type: "movie".to_string(),
+        title: "The Matrix".to_string(),
+        original_title: None,
+        year: Some(1999),
+        overview: None,
+        poster_path: None,
+        backdrop_path: None,
+        status: "completed".to_string(),
+        monitored: true,
+        quality_profile: "1080p-es".to_string(),
+        root_folder: "/movies".to_string(),
+        file_path: Some("/movies/The Matrix (1999)/The Matrix (1999) [1080p].mkv".to_string()),
+        original_release_name: None,
+        download_id: None,
+        created_at: 1000,
+        updated_at: 1000,
+    };
+    db.insert_media_item(&item).expect("insert media");
+    db.set_media_original_release_name(&media_id, "The.Matrix.1999.1080p.BluRay.x264-SPARKS.mkv", 2000)
+        .expect("set release name");
+
+    let fetched = db.get_media_item(&media_id).expect("get media").expect("exists");
+    assert_eq!(
+        fetched.original_release_name.as_deref(),
+        Some("The.Matrix.1999.1080p.BluRay.x264-SPARKS.mkv")
+    );
+
+    assert!(!db.is_subtitle_blacklisted(&media_id, "opensubtitles", "sub-123").unwrap());
+    db.add_subtitle_blacklist(&media_id, "opensubtitles", "sub-123", Some("out_of_sync"), 3000)
+        .expect("add blacklist");
+    assert!(db.is_subtitle_blacklisted(&media_id, "opensubtitles", "sub-123").unwrap());
+    let list = db.list_subtitle_blacklist(&media_id).expect("list blacklist");
+    assert_eq!(list, vec![("opensubtitles".to_string(), "sub-123".to_string())]);
 }

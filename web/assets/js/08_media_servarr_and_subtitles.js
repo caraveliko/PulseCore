@@ -1374,11 +1374,18 @@ async function openSubtitlesModal(mediaId, title, isMovie, season, episode, file
   }
   if (m) m.classList.add('active');
 
-  // Check existing companion subtitles
+  // Check existing companion subtitles and render quick sync controls
   try {
     const check = await client.call('subtitles.check', { mediaId });
+    const syncBar = `
+      <span style="display:inline-flex; gap:4px; margin-left:8px; vertical-align:middle;">
+        <button class="btn btn-sm btn-secondary" onclick="syncCurrentSubtitle('auto')" title="Alinear contra pista embebida">⚡ Auto-sync</button>
+        <button class="btn btn-sm btn-secondary" onclick="syncCurrentSubtitle('manual', -500)">-500ms</button>
+        <button class="btn btn-sm btn-secondary" onclick="syncCurrentSubtitle('manual', 500)">+500ms</button>
+      </span>
+    `;
     if (check && check.subtitles && check.subtitles.length > 0) {
-      badgesEl.innerHTML = check.subtitles.map(l => `<span class="badge badge-dl" style="font-size:0.75rem; margin-right:4px;">✓ ${l.toUpperCase()} detectado</span>`).join('');
+      badgesEl.innerHTML = check.subtitles.map(l => `<span class="badge badge-dl" style="font-size:0.75rem; margin-right:4px;">✓ ${l.toUpperCase()} detectado</span>`).join('') + syncBar;
     } else {
       badgesEl.innerHTML = '<span class="badge badge-wait" style="font-size:0.75rem;">⚠️ Sin subtítulos locales</span>';
     }
@@ -1427,24 +1434,31 @@ async function searchSubtitlesForCurrentMedia() {
     if (tbody) {
       tbody.innerHTML = candidates.map((c, idx) => {
         const isHash = c.matchedBy === 'moviehash';
-        const matchBadge = isHash 
-          ? '<span class="badge badge-dl" style="font-weight:700;">⚡ Hash exacto (100% sync)</span>' 
+        const matchBadge = isHash
+          ? '<span class="badge badge-dl" style="font-weight:700;">⚡ Hash exacto (100% sync)</span>'
           : `<span class="badge" style="background:rgba(255,255,255,0.06); font-size:0.75rem;">${escapeHtml(c.matchedBy || 'título')}</span>`;
-        
+
+        const scoreBadge = `<span class="badge badge-dl" style="font-size:0.7rem; margin-left:4px;">${c.score ?? 0} pts</span>`;
+        const fpsBadge = c.fpsMilli ? `<span class="badge" style="background:rgba(56,189,248,0.12); color:#38bdf8; font-size:0.7rem; margin-left:4px;">${(c.fpsMilli / 1000).toFixed(3)} fps</span>` : '';
+        const variantBadge = c.variant ? `<span class="badge" style="background:rgba(34,197,94,0.12); color:#22c55e; font-size:0.7rem; margin-left:4px;">${escapeHtml(c.variant)}</span>` : '';
         const hiBadge = c.isHi ? '<span class="badge" style="background:rgba(234,179,8,0.15); color:#eab308; font-size:0.7rem; margin-left:4px;">HI</span>' : '';
+        const autoBadge = c.isAutoTranslated ? '<span class="badge" style="background:rgba(248,81,73,0.15); color:#f85149; font-size:0.7rem; margin-left:4px;">Auto-trad</span>' : '';
 
         return `
           <tr class="release-table-row">
             <td>
               <div style="font-weight:600; font-size:0.84rem; word-break:break-all;">${escapeHtml(c.title)}</div>
-              <div style="font-size:0.72rem; color:var(--text-muted);">Calificación: ${c.rating || '0.0'}★ ${hiBadge}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">Calificación: ${c.rating || '0.0'}★ ${scoreBadge}${variantBadge}${fpsBadge}${hiBadge}${autoBadge}</div>
             </td>
             <td><span class="badge" style="font-size:0.75rem;">${escapeHtml(c.language.toUpperCase())}</span></td>
             <td>${matchBadge}</td>
             <td style="font-family:var(--font-mono); font-size:0.8rem;">${c.downloads || 0}</td>
-            <td>
+            <td style="display:flex; gap:4px;">
               <button class="btn btn-sm btn-primary" onclick="downloadSubtitleCandidate(${idx})">
                 ⬇ Guardar
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="blacklistSubtitleCandidate(${idx})" title="Marcar como erróneo y ocultar">
+                ✕
               </button>
             </td>
           </tr>
@@ -1462,17 +1476,64 @@ async function downloadSubtitleCandidate(idx) {
   if (!candidate || !currentSubtitleMediaId) return;
 
   try {
-    const res = await client.call('subtitles.download', {
+    const payload = {
       mediaId: currentSubtitleMediaId,
       downloadLink: candidate.download_link || candidate.downloadLink,
-      lang: candidate.language || 'es'
-    });
+      lang: candidate.language || 'es',
+      fpsMilli: candidate.fpsMilli || null,
+      matchedBy: candidate.matchedBy || 'query'
+    };
+    if (currentSubtitleContext && currentSubtitleContext.season && currentSubtitleContext.episode) {
+      payload.season = currentSubtitleContext.season;
+      payload.episode = currentSubtitleContext.episode;
+    }
+    await client.call('subtitles.download', payload);
     showToastNotification(`Subtítulo guardado: ${candidate.title}`, 'success', '💬');
-    addLog('success', `Subtítulo descargado y asociado: ${candidate.title}`);
+    addLog('success', `Subtítulo descargado y sincronizado: ${candidate.title}`);
     closeModal('modal-subtitles');
     await loadMediaLibrary();
   } catch (e) {
     showToastNotification('Error descargando subtítulo: ' + e.message, 'error', '❌');
+  }
+}
+
+async function syncCurrentSubtitle(mode, offsetMs = 0) {
+  if (!currentSubtitleMediaId) return;
+  try {
+    const payload = { mediaId: currentSubtitleMediaId, mode, lang: 'es' };
+    if (mode === 'manual') payload.offsetMs = offsetMs;
+    if (currentSubtitleContext && currentSubtitleContext.season && currentSubtitleContext.episode) {
+      payload.season = currentSubtitleContext.season;
+      payload.episode = currentSubtitleContext.episode;
+    }
+    const res = await client.call('subtitles.sync', payload);
+    const delta = res.appliedOffsetMs || 0;
+    showToastNotification(`Sincronización aplicada (${delta >= 0 ? '+' : ''}${delta} ms)`, 'success', '⚡');
+  } catch (e) {
+    showToastNotification('Error sincronizando subtítulo: ' + e.message, 'error', '❌');
+  }
+}
+
+async function blacklistSubtitleCandidate(idx) {
+  const candidate = (window.__currentSubCandidates || [])[idx];
+  if (!candidate || !currentSubtitleMediaId) return;
+  try {
+    const payload = {
+      mediaId: currentSubtitleMediaId,
+      provider: candidate.provider || 'opensubtitles',
+      providerSubId: candidate.id,
+      reason: 'rejected_by_user',
+      lang: candidate.language || 'spa'
+    };
+    if (currentSubtitleContext && currentSubtitleContext.season && currentSubtitleContext.episode) {
+      payload.season = currentSubtitleContext.season;
+      payload.episode = currentSubtitleContext.episode;
+    }
+    await client.call('subtitles.blacklistAndRetry', payload);
+    showToastNotification('Subtítulo descartado; buscando alternativa...', 'info', '🔄');
+    await searchSubtitlesForCurrentMedia();
+  } catch (e) {
+    showToastNotification('Error descartando subtítulo: ' + e.message, 'error', '❌');
   }
 }
 

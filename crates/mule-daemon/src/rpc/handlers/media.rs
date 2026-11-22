@@ -238,6 +238,7 @@ pub async fn handle_media_add(
         quality_profile,
         root_folder,
         file_path: None,
+        original_release_name: None,
         download_id: None,
         created_at: now,
         updated_at: now,
@@ -262,6 +263,7 @@ pub async fn handle_media_add(
                 status: "wanted".to_string(),
                 monitored: true,
                 file_path: None,
+                original_release_name: None,
                 download_id: None,
                 created_at: now,
                 updated_at: now,
@@ -776,6 +778,52 @@ pub async fn handle_media_organize(
     Ok(result)
 }
 
+/// Resuelve la ruta del archivo de vídeo y el nombre de *release* original para una película o episodio.
+async fn resolve_media_video_target(
+    state: &AppState,
+    media_id: &str,
+    season_ep: Option<(u32, u32)>,
+) -> Result<(Option<std::path::PathBuf>, Option<String>, String, Option<u32>, Option<String>, bool), JsonRpcError> {
+    let dl_svc = state.downloads.lock().await;
+    let item = dl_svc
+        .db()
+        .get_media_item(media_id)
+        .map_err(|e| JsonRpcError::business(e.to_string()))?
+        .ok_or_else(|| JsonRpcError::invalid_params("Media item not found"))?;
+
+    let is_movie = item.media_type == "movie";
+    if !is_movie {
+        if let Some((s, e)) = season_ep {
+            let eps = dl_svc
+                .db()
+                .get_episodes_for_media(media_id)
+                .map_err(|err| JsonRpcError::business(err.to_string()))?;
+            if let Some(ep) = eps
+                .into_iter()
+                .find(|ep| ep.season_number == s && ep.episode_number == e)
+            {
+                return Ok((
+                    ep.file_path.map(std::path::PathBuf::from),
+                    ep.original_release_name,
+                    item.title,
+                    item.year,
+                    item.imdb_id,
+                    false,
+                ));
+            }
+        }
+    }
+
+    Ok((
+        item.file_path.map(std::path::PathBuf::from),
+        item.original_release_name,
+        item.title,
+        item.year,
+        item.imdb_id,
+        is_movie,
+    ))
+}
+
 /// Busca candidatos de subtítulos para un elemento multimedia (funcionalidad estilo Bazarr)
 pub async fn handle_subtitles_search(
     state: &AppState,
@@ -783,41 +831,54 @@ pub async fn handle_subtitles_search(
 ) -> Result<Value, JsonRpcError> {
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
     let lang = params["lang"].as_str().unwrap_or("spa");
-
-    let (video_path, title, year, imdb_id, is_movie, season_ep) = if let Some(media_id) = params["mediaId"].as_str() {
-        let dl_svc = state.downloads.lock().await;
-        let item = dl_svc
-            .db()
-            .get_media_item(media_id)
-            .map_err(|e| JsonRpcError::business(e.to_string()))?
-            .ok_or_else(|| JsonRpcError::invalid_params("Media item not found"))?;
-
-        let vp = item.file_path.map(std::path::PathBuf::from);
-        (vp, item.title, item.year, item.imdb_id, item.media_type == "movie", None)
-    } else {
-        let title = params["title"]
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' or 'title'"))?
-            .to_string();
-        let year = params["year"].as_u64().map(|y| y as u32);
-        let imdb = params["imdbId"].as_str().map(|s| s.to_string());
-        let is_movie = params["isMovie"].as_bool().unwrap_or(true);
-        let season_ep = match (params["season"].as_u64(), params["episode"].as_u64()) {
-            (Some(s), Some(e)) => Some((s as u32, e as u32)),
-            _ => None,
-        };
-        let vp = params["path"].as_str().map(std::path::PathBuf::from);
-        (vp, title, year, imdb, is_movie, season_ep)
+    let season_ep = match (params["season"].as_u64(), params["episode"].as_u64()) {
+        (Some(s), Some(e)) => Some((s as u32, e as u32)),
+        _ => None,
     };
 
-    let candidates = crate::services::SubtitleService::search_subtitles(
+    let (video_path, release_name, title, year, imdb_id, is_movie, blacklist_key) =
+        if let Some(media_id) = params["mediaId"].as_str() {
+            let (vp, rel, t, y, imdb, is_m) =
+                resolve_media_video_target(state, media_id, season_ep).await?;
+            let bl_key = crate::services::subtitles::build_media_blacklist_key(media_id, season_ep);
+            (vp, rel, t, y, imdb, is_m, Some(bl_key))
+        } else {
+            let title = params["title"]
+                .as_str()
+                .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' or 'title'"))?
+                .to_string();
+            let year = params["year"].as_u64().map(|y| y as u32);
+            let imdb = params["imdbId"].as_str().map(|s| s.to_string());
+            let is_movie = params["isMovie"].as_bool().unwrap_or(true);
+            let vp = params["path"].as_str().map(std::path::PathBuf::from);
+            (vp, None, title, year, imdb, is_movie, None)
+        };
+
+    let cfg = crate::services::SubtitleService::load_runtime_config(state).await;
+    let blacklisted: std::collections::HashSet<(String, String)> = if let Some(ref key) = blacklist_key {
+        let dl_svc = state.downloads.lock().await;
+        dl_svc
+            .db()
+            .list_subtitle_blacklist(key)
+            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    } else {
+        std::collections::HashSet::new()
+    };
+
+    let candidates = crate::services::SubtitleService::search_subtitles_scored(
         video_path.as_deref(),
+        release_name.as_deref(),
         &title,
         year,
         imdb_id.as_deref(),
         is_movie,
         season_ep,
         lang,
+        &cfg.prefs,
+        &blacklisted,
+        None,
     )
     .await
     .map_err(JsonRpcError::business)?;
@@ -835,36 +896,171 @@ pub async fn handle_subtitles_download(
     let download_link = params["downloadLink"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'downloadLink'"))?;
-    let lang = params["lang"].as_str().unwrap_or("es");
+    let raw_lang = params["lang"].as_str().unwrap_or("es");
+    let norm_lang = crate::services::subtitles::normalize_companion_lang(raw_lang);
+    let season_ep = match (params["season"].as_u64(), params["episode"].as_u64()) {
+        (Some(s), Some(e)) => Some((s as u32, e as u32)),
+        _ => None,
+    };
 
-    let target_path = if let Some(target) = params["targetPath"].as_str() {
-        std::path::PathBuf::from(target)
+    let (target_path, video_path) = if let Some(target) = params["targetPath"].as_str() {
+        (std::path::PathBuf::from(target), None)
     } else if let Some(media_id) = params["mediaId"].as_str() {
-        let dl_svc = state.downloads.lock().await;
-        let item = dl_svc
-            .db()
-            .get_media_item(media_id)
-            .map_err(|e| JsonRpcError::business(e.to_string()))?
-            .ok_or_else(|| JsonRpcError::invalid_params("Media item not found"))?;
-
-        let vp = item
-            .file_path
-            .ok_or_else(|| JsonRpcError::business("Media item has no local file path yet"))?;
-        let video_p = std::path::PathBuf::from(vp);
-        video_p.with_extension(format!("{lang}.srt"))
+        let (vp, _, _, _, _, _) = resolve_media_video_target(state, media_id, season_ep).await?;
+        let vp = vp.ok_or_else(|| {
+            JsonRpcError::business("Media item has no local file path yet")
+        })?;
+        (vp.with_extension(format!("{norm_lang}.srt")), Some(vp))
     } else {
         return Err(JsonRpcError::invalid_params("Missing 'targetPath' or 'mediaId'"));
     };
 
-    crate::services::SubtitleService::download_and_save_subtitle(download_link, &target_path)
-        .await
-        .map_err(JsonRpcError::business)?;
+    let cfg = crate::services::SubtitleService::load_runtime_config(state).await;
+    let cand_fps = params["fpsMilli"].as_u64().map(|v| v as u32);
+    let is_hash = params["matchedBy"].as_str() == Some("moviehash");
+
+    let sync_report = crate::services::SubtitleService::download_validate_and_sync(
+        download_link,
+        &target_path,
+        video_path.as_deref(),
+        raw_lang,
+        cand_fps,
+        is_hash,
+        !cfg.prefs.allow_hi,
+        cfg.auto_sync,
+        None,
+    )
+    .await
+    .map_err(JsonRpcError::business)?;
 
     crate::services::MediaOrganizer::notify_media_servers(state);
 
     Ok(json!({
         "success": true,
-        "savedPath": target_path.to_string_lossy()
+        "savedPath": target_path.to_string_lossy(),
+        "report": sync_report
+    }))
+}
+
+/// Sincroniza un archivo `.srt` existente de forma automática o manual.
+pub async fn handle_subtitles_sync(
+    state: &AppState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
+    let media_id = params["mediaId"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId'"))?;
+    let raw_lang = params["lang"].as_str().unwrap_or("es");
+    let norm_lang = crate::services::subtitles::normalize_companion_lang(raw_lang);
+    let season_ep = match (params["season"].as_u64(), params["episode"].as_u64()) {
+        (Some(s), Some(e)) => Some((s as u32, e as u32)),
+        _ => None,
+    };
+
+    let (vp, _, _, _, _, _) = resolve_media_video_target(state, media_id, season_ep).await?;
+    let video_path = vp.ok_or_else(|| {
+        JsonRpcError::business("Media item has no local file path yet")
+    })?;
+    let srt_path = video_path.with_extension(format!("{norm_lang}.srt"));
+    if !srt_path.is_file() {
+        return Err(JsonRpcError::business(format!(
+            "Subtitle file not found at '{}'",
+            srt_path.display()
+        )));
+    }
+
+    let mode = params["mode"].as_str().unwrap_or("auto");
+    let offset_ms = params["offsetMs"].as_i64();
+    let from_fps = params["fromFps"].as_u64().map(|v| v as u32);
+    let to_fps = params["toFps"].as_u64().map(|v| v as u32);
+
+    crate::services::SubtitleService::sync_existing_subtitle(
+        &srt_path,
+        Some(&video_path),
+        mode,
+        offset_ms,
+        from_fps,
+        to_fps,
+    )
+    .await
+    .map_err(JsonRpcError::business)
+}
+
+/// Añade un subtítulo a la lista negra persistente, elimina el actual e intenta descargar el siguiente mejor.
+pub async fn handle_subtitles_blacklist_and_retry(
+    state: &AppState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
+    let media_id = params["mediaId"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId'"))?;
+    let provider = params["provider"].as_str().unwrap_or("opensubtitles");
+    let provider_sub_id = params["providerSubId"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'providerSubId'"))?;
+    let reason = params["reason"].as_str();
+    let raw_lang = params["lang"].as_str().unwrap_or("spa");
+    let norm_lang = crate::services::subtitles::normalize_companion_lang(raw_lang);
+    let season_ep = match (params["season"].as_u64(), params["episode"].as_u64()) {
+        (Some(s), Some(e)) => Some((s as u32, e as u32)),
+        _ => None,
+    };
+
+    let bl_key = crate::services::subtitles::build_media_blacklist_key(media_id, season_ep);
+    let now = crate::services::downloads::types::now_ms();
+    {
+        let dl_svc = state.downloads.lock().await;
+        dl_svc
+            .db()
+            .add_subtitle_blacklist(&bl_key, provider, provider_sub_id, reason, now)
+            .map_err(|e| JsonRpcError::business(e.to_string()))?;
+    }
+
+    let (vp, rel, title, year, imdb_id, is_movie) =
+        resolve_media_video_target(state, media_id, season_ep).await?;
+    let Some(video_path) = vp else {
+        return Ok(json!({ "blacklisted": true, "retried": false }));
+    };
+
+    let existing_srt = video_path.with_extension(format!("{norm_lang}.srt"));
+    if existing_srt.is_file() {
+        let _ = tokio::fs::remove_file(&existing_srt).await;
+    }
+
+    let mut cfg = crate::services::SubtitleService::load_runtime_config(state).await;
+    cfg.language = raw_lang.to_string();
+    let bl = {
+        let dl_svc = state.downloads.lock().await;
+        dl_svc
+            .db()
+            .list_subtitle_blacklist(&bl_key)
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+    };
+
+    let replacement = crate::services::SubtitleService::auto_fetch_for_video_with_config(
+        &video_path,
+        rel.as_deref(),
+        &title,
+        year,
+        imdb_id.as_deref(),
+        is_movie,
+        season_ep,
+        &cfg,
+        &bl,
+    )
+    .await
+    .map_err(JsonRpcError::business)?;
+
+    crate::services::MediaOrganizer::notify_media_servers(state);
+
+    Ok(json!({
+        "blacklisted": true,
+        "retried": true,
+        "replacementPath": replacement.map(|p| p.to_string_lossy().to_string())
     }))
 }
 

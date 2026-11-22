@@ -37,6 +37,18 @@ selector de archivos/carpetas — ya no hace falta introducir la ruta a mano.
 | `rememberCancelled` | `remember_cancelled` | bool | `true` | Entrada en el historial al cancelar | `RememberCancelledFiles` |
 | `rememberDownloaded` | `remember_downloaded` | bool | `true` | Entrada en el historial al completar | `RememberDownloadedFiles` |
 
+### Subtítulos y automatización multimedia
+
+| Clave `settings.set` | Clave persistida | Tipo | Por defecto | Efecto |
+|---|---|---|---|---|
+| `subtitlesAutoDownload` | `subtitles_auto_download` | bool | `true` | Descarga automática de subtítulos faltantes tras organizar o en el ciclo periódico |
+| `subtitlesLanguage` | `subtitles_language` | string | `"spa"` | Idioma objetivo para descarga automática |
+| `subtitlesVariant` | `subtitles_variant` | `"es-ES"` \| `"es-LA"` \| `"any"` | `"es-ES"` | Preferencia de variante de español (penaliza o descarta variantes incompatibles) |
+| `subtitlesAllowHi` | `subtitles_allow_hi` | bool | `false` | Permite subtítulos para personas con discapacidad auditiva (*Hearing Impaired*) |
+| `subtitlesMinScore` | `subtitles_min_score` | u32 (0–200) | `40` | Puntuación mínima exigida para descargar automáticamente un candidato |
+| `subtitlesAutoSync` | `subtitles_auto_sync` | `"off"` \| `"fps_only"` \| `"embedded_sub"` | `"embedded_sub"` | Cascada de sincronización automática post-descarga (FPS / pista embebida) |
+| `opensubtitlesApiKey` | `opensubtitles_api_key` | string | `""` | Clave opcional para la API REST v1 de OpenSubtitles.com |
+
 ### Servidores (sección Conexión)
 
 | Clave | Persistida | Tipo | Por defecto | Efecto | eMule |

@@ -755,6 +755,8 @@ pub struct MediaItem {
     pub quality_profile: String,
     pub root_folder: String,
     pub file_path: Option<String>,
+    #[serde(default)]
+    pub original_release_name: Option<String>,
     pub download_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -773,6 +775,8 @@ pub struct EpisodeItem {
     pub status: String, // "wanted" | "downloading" | "completed"
     pub monitored: bool,
     pub file_path: Option<String>,
+    #[serde(default)]
+    pub original_release_name: Option<String>,
     pub download_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,

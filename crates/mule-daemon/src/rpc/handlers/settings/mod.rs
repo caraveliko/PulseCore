@@ -87,6 +87,11 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "scorerAntiFake",
     "subtitlesAutoDownload",
     "subtitlesLanguage",
+    "subtitlesVariant",
+    "subtitlesAllowHi",
+    "subtitlesMinScore",
+    "subtitlesAutoSync",
+    "opensubtitlesApiKey",
     "cleanerEnabled",
     "mcpEnabled",
     "mcpToolProfile",
@@ -345,6 +350,23 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             obj.insert("plexUrl".to_string(), json!(dls.get_setting("plex_url").ok().flatten().unwrap_or_default()));
             obj.insert("plexToken".to_string(), json!(dls.get_setting("plex_token").ok().flatten().unwrap_or_default()));
             obj.insert("kodiUrl".to_string(), json!(dls.get_setting("kodi_url").ok().flatten().unwrap_or_default()));
+            obj.insert(
+                "subtitlesVariant".to_string(),
+                json!(dls.get_setting("subtitles_variant").ok().flatten().unwrap_or_else(|| "es-ES".to_string())),
+            );
+            obj.insert("subtitlesAllowHi".to_string(), json!(read("subtitles_allow_hi", false)));
+            obj.insert(
+                "subtitlesMinScore".to_string(),
+                json!(dls.get_setting("subtitles_min_score").ok().flatten().and_then(|s| s.parse::<u32>().ok()).unwrap_or(40)),
+            );
+            obj.insert(
+                "subtitlesAutoSync".to_string(),
+                json!(dls.get_setting("subtitles_auto_sync").ok().flatten().unwrap_or_else(|| "embedded_sub".to_string())),
+            );
+            obj.insert(
+                "opensubtitlesApiKey".to_string(),
+                json!(dls.get_setting("opensubtitles_api_key").ok().flatten().unwrap_or_default()),
+            );
         }
         base_settings
     };
@@ -1123,6 +1145,7 @@ pub async fn handle_settings_set(
         ("qualityUpgradeEnabled", "quality_upgrade_enabled"),
         ("scorerAntiFake", "scorer_anti_fake"),
         ("subtitlesAutoDownload", "subtitles_auto_download"),
+        ("subtitlesAllowHi", "subtitles_allow_hi"),
         ("cleanerEnabled", "cleaner_enabled"),
         ("legalDisclaimerAccepted", "legal_disclaimer_accepted"),
     ] {
@@ -1185,6 +1208,68 @@ pub async fn handle_settings_set(
             .await
             .set_setting("subtitles_language", lang)?;
         keys.push("subtitlesLanguage");
+    }
+    if let Some(val) = params.get("subtitlesVariant") {
+        let variant = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'subtitlesVariant'"))?
+            .trim();
+        if !["es-ES", "es-LA", "any"].contains(&variant) {
+            return Err(JsonRpcError::invalid_params(
+                "'subtitlesVariant' must be 'es-ES', 'es-LA' or 'any'",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("subtitles_variant", variant)?;
+        keys.push("subtitlesVariant");
+    }
+    if let Some(val) = params.get("subtitlesMinScore") {
+        let score = val
+            .as_u64()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'subtitlesMinScore'"))?;
+        if score > 200 {
+            return Err(JsonRpcError::invalid_params(
+                "'subtitlesMinScore' must be between 0 and 200",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("subtitles_min_score", &score.to_string())?;
+        keys.push("subtitlesMinScore");
+    }
+    if let Some(val) = params.get("subtitlesAutoSync") {
+        let mode = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'subtitlesAutoSync'"))?
+            .trim();
+        if !["off", "fps_only", "embedded_sub"].contains(&mode) {
+            return Err(JsonRpcError::invalid_params(
+                "'subtitlesAutoSync' must be 'off', 'fps_only' or 'embedded_sub'",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("subtitles_auto_sync", mode)?;
+        keys.push("subtitlesAutoSync");
+    }
+    if let Some(val) = params.get("opensubtitlesApiKey") {
+        let key = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'opensubtitlesApiKey'"))?
+            .trim();
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("opensubtitles_api_key", key)?;
+        keys.push("opensubtitlesApiKey");
     }
     if let Some(val) = params.get("mcpEnabled") {
         let en = val

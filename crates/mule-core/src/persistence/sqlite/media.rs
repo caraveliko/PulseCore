@@ -11,8 +11,8 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
         "INSERT INTO media_library (
             id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
             overview, poster_path, backdrop_path, status, monitored,
-            quality_profile, root_folder, file_path, download_id, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             original_title=excluded.original_title,
@@ -25,6 +25,7 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
             quality_profile=excluded.quality_profile,
             root_folder=excluded.root_folder,
             file_path=COALESCE(excluded.file_path, media_library.file_path),
+            original_release_name=COALESCE(excluded.original_release_name, media_library.original_release_name),
             download_id=excluded.download_id,
             updated_at=excluded.updated_at",
         params![
@@ -44,6 +45,7 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
             item.quality_profile,
             item.root_folder,
             item.file_path,
+            item.original_release_name,
             item.download_id,
             item.created_at,
             item.updated_at,
@@ -86,7 +88,7 @@ pub fn find_media_by_download_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE download_id = ?1",
     )?;
     let mut rows = stmt.query(params![download_id])?;
@@ -103,7 +105,7 @@ pub fn find_episode_by_download_id(
 ) -> Result<Option<EpisodeItem>, CoreError> {
     let mut stmt = conn.prepare(
         "SELECT id, media_id, season_number, episode_number, title, air_date,
-                status, monitored, file_path, download_id, created_at, updated_at
+                status, monitored, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_episodes WHERE download_id = ?1",
     )?;
     let mut rows = stmt.query(params![download_id])?;
@@ -118,9 +120,10 @@ pub fn find_episode_by_download_id(
             status: row.get(6)?,
             monitored: row.get::<_, i32>(7)? != 0,
             file_path: row.get(8)?,
-            download_id: row.get(9)?,
-            created_at: row.get(10)?,
-            updated_at: row.get(11)?,
+            original_release_name: row.get(9)?,
+            download_id: row.get(10)?,
+            created_at: row.get(11)?,
+            updated_at: row.get(12)?,
         }))
     } else {
         Ok(None)
@@ -137,7 +140,7 @@ pub fn get_media_item(conn: &Connection, id: &str) -> Result<Option<MediaItem>, 
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -155,7 +158,7 @@ pub fn get_media_by_tmdb_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE tmdb_id = ?1",
     )?;
     let mut rows = stmt.query(params![tmdb_id])?;
@@ -173,7 +176,7 @@ pub fn get_media_by_tvdb_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE tvdb_id = ?1",
     )?;
     let mut rows = stmt.query(params![tvdb_id])?;
@@ -191,7 +194,7 @@ pub fn list_media_items(
 ) -> Result<Vec<MediaItem>, CoreError> {
     let mut sql = "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                           overview, poster_path, backdrop_path, status, monitored,
-                          quality_profile, root_folder, file_path, download_id, created_at, updated_at
+                          quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
                    FROM media_library WHERE 1=1".to_string();
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -219,14 +222,15 @@ pub fn insert_episode(conn: &Connection, ep: &EpisodeItem) -> Result<(), CoreErr
     conn.execute(
         "INSERT INTO media_episodes (
             id, media_id, season_number, episode_number, title, air_date,
-            status, monitored, file_path, download_id, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            status, monitored, file_path, original_release_name, download_id, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
         ON CONFLICT(media_id, season_number, episode_number) DO UPDATE SET
             title=excluded.title,
             air_date=excluded.air_date,
             status=excluded.status,
             monitored=excluded.monitored,
             file_path=excluded.file_path,
+            original_release_name=COALESCE(excluded.original_release_name, media_episodes.original_release_name),
             download_id=excluded.download_id,
             updated_at=excluded.updated_at",
         params![
@@ -239,6 +243,7 @@ pub fn insert_episode(conn: &Connection, ep: &EpisodeItem) -> Result<(), CoreErr
             ep.status,
             ep.monitored as i32,
             ep.file_path,
+            ep.original_release_name,
             ep.download_id,
             ep.created_at,
             ep.updated_at,
@@ -262,14 +267,15 @@ pub fn insert_episodes_batch(
         let mut stmt = tx.prepare(
             "INSERT INTO media_episodes (
                 id, media_id, season_number, episode_number, title, air_date,
-                status, monitored, file_path, download_id, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                status, monitored, file_path, original_release_name, download_id, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT(media_id, season_number, episode_number) DO UPDATE SET
                 title=excluded.title,
                 air_date=excluded.air_date,
                 status=excluded.status,
                 monitored=excluded.monitored,
                 file_path=excluded.file_path,
+                original_release_name=COALESCE(excluded.original_release_name, media_episodes.original_release_name),
                 download_id=excluded.download_id,
                 updated_at=excluded.updated_at",
         )?;
@@ -285,6 +291,7 @@ pub fn insert_episodes_batch(
                 ep.status,
                 ep.monitored as i32,
                 ep.file_path,
+                ep.original_release_name,
                 ep.download_id,
                 ep.created_at,
                 ep.updated_at,
@@ -302,7 +309,7 @@ pub fn get_episodes_for_media(
 ) -> Result<Vec<EpisodeItem>, CoreError> {
     let mut stmt = conn.prepare(
         "SELECT id, media_id, season_number, episode_number, title, air_date,
-                status, monitored, file_path, download_id, created_at, updated_at
+                status, monitored, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_episodes WHERE media_id = ?1
          ORDER BY season_number ASC, episode_number ASC",
     )?;
@@ -317,9 +324,10 @@ pub fn get_episodes_for_media(
             status: row.get(6)?,
             monitored: row.get::<_, i32>(7)? != 0,
             file_path: row.get(8)?,
-            download_id: row.get(9)?,
-            created_at: row.get(10)?,
-            updated_at: row.get(11)?,
+            original_release_name: row.get(9)?,
+            download_id: row.get(10)?,
+            created_at: row.get(11)?,
+            updated_at: row.get(12)?,
         })
     })?;
     let mut episodes = Vec::new();
@@ -336,7 +344,7 @@ pub fn get_calendar_episodes(
 ) -> Result<Vec<CalendarEpisode>, CoreError> {
     let mut sql = String::from(
         "SELECT e.id, e.media_id, e.season_number, e.episode_number, e.title, e.air_date,
-                e.status, e.monitored, e.file_path, e.download_id, e.created_at, e.updated_at,
+                e.status, e.monitored, e.file_path, e.original_release_name, e.download_id, e.created_at, e.updated_at,
                 m.title, m.poster_path, m.year
          FROM media_episodes e
          JOIN media_library m ON e.media_id = m.id
@@ -374,13 +382,14 @@ pub fn get_calendar_episodes(
             status: row.get(6)?,
             monitored: row.get::<_, i32>(7)? != 0,
             file_path: row.get(8)?,
-            download_id: row.get(9)?,
-            created_at: row.get(10)?,
-            updated_at: row.get(11)?,
+            original_release_name: row.get(9)?,
+            download_id: row.get(10)?,
+            created_at: row.get(11)?,
+            updated_at: row.get(12)?,
         };
-        let series_title: String = row.get(12)?;
-        let series_poster_path: Option<String> = row.get(13)?;
-        let series_year: Option<u32> = row.get(14)?;
+        let series_title: String = row.get(13)?;
+        let series_poster_path: Option<String> = row.get(14)?;
+        let series_year: Option<u32> = row.get(15)?;
 
         Ok(CalendarEpisode {
             episode: ep,
@@ -480,8 +489,97 @@ fn row_to_media(row: &rusqlite::Row) -> Result<MediaItem, rusqlite::Error> {
         quality_profile: row.get(13)?,
         root_folder: row.get(14)?,
         file_path: row.get(15)?,
-        download_id: row.get(16)?,
-        created_at: row.get(17)?,
-        updated_at: row.get(18)?,
+        original_release_name: row.get(16)?,
+        download_id: row.get(17)?,
+        created_at: row.get(18)?,
+        updated_at: row.get(19)?,
     })
+}
+
+fn set_table_original_release_name(
+    conn: &Connection,
+    table: &str,
+    id: &str,
+    release_name: &str,
+    now_ms: i64,
+) -> Result<(), CoreError> {
+    let sql = format!(
+        "UPDATE {table} SET original_release_name = ?1, updated_at = ?2 WHERE id = ?3"
+    );
+    conn.execute(&sql, params![release_name, now_ms, id])?;
+    Ok(())
+}
+
+/// Persiste el nombre original de lanzamiento (*release*) de una película.
+pub fn set_media_original_release_name(
+    conn: &Connection,
+    id: &str,
+    release_name: &str,
+    now_ms: i64,
+) -> Result<(), CoreError> {
+    set_table_original_release_name(conn, "media_library", id, release_name, now_ms)
+}
+
+/// Persiste el nombre original de lanzamiento (*release*) de un episodio.
+pub fn set_episode_original_release_name(
+    conn: &Connection,
+    id: &str,
+    release_name: &str,
+    now_ms: i64,
+) -> Result<(), CoreError> {
+    set_table_original_release_name(conn, "media_episodes", id, release_name, now_ms)
+}
+
+/// Añade un subtítulo rechazado a la lista negra persistente.
+pub fn add_subtitle_blacklist(
+    conn: &Connection,
+    media_key: &str,
+    provider: &str,
+    provider_sub_id: &str,
+    reason: Option<&str>,
+    now_ms: i64,
+) -> Result<(), CoreError> {
+    conn.execute(
+        "INSERT INTO subtitle_blacklist (media_key, provider, provider_sub_id, reason, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(media_key, provider, provider_sub_id) DO UPDATE SET
+            reason = COALESCE(excluded.reason, subtitle_blacklist.reason),
+            created_at = excluded.created_at",
+        params![media_key, provider, provider_sub_id, reason, now_ms],
+    )?;
+    Ok(())
+}
+
+/// Comprueba si un candidato de subtítulo figura en la lista negra para una clave multimedia.
+pub fn is_subtitle_blacklisted(
+    conn: &Connection,
+    media_key: &str,
+    provider: &str,
+    provider_sub_id: &str,
+) -> Result<bool, CoreError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(1) FROM subtitle_blacklist
+         WHERE media_key = ?1 AND provider = ?2 AND provider_sub_id = ?3",
+        params![media_key, provider, provider_sub_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+/// Devuelve todos los pares `(provider, provider_sub_id)` en lista negra para una clave multimedia.
+pub fn list_subtitle_blacklist(
+    conn: &Connection,
+    media_key: &str,
+) -> Result<Vec<(String, String)>, CoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, provider_sub_id FROM subtitle_blacklist WHERE media_key = ?1",
+    )?;
+    let rows = stmt.query_map(params![media_key], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
 }

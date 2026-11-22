@@ -879,6 +879,10 @@ impl MediaOrganizer {
                     if let Ok(dl_uuid) = Uuid::parse_str(download_id) {
                         let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                     }
+                    let orig_release = completed_file_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.to_string());
                     let _ = dl_svc.db().update_episode_status(
                         &ep.id,
                         "completed",
@@ -886,6 +890,9 @@ impl MediaOrganizer {
                         None,
                         now,
                     );
+                    if let Some(ref rel) = orig_release {
+                        let _ = dl_svc.db().set_episode_original_release_name(&ep.id, rel, now);
+                    }
 
                     // Si todos los episodios monitorizados están ahora completados, marcar la serie como completada
                     let all_eps = dl_svc.db().get_episodes_for_media(&series.id).unwrap_or_default();
@@ -965,6 +972,10 @@ impl MediaOrganizer {
 
             purge_superseded_movie_files(&dest_dir, &dest_file, item.file_path.as_deref());
 
+            let orig_release = completed_file_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
             let dest_str = dest_file.to_string_lossy().to_string();
             {
                 let mut dl_svc = state.downloads.lock().await;
@@ -972,6 +983,9 @@ impl MediaOrganizer {
                     let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                 }
                 let _ = dl_svc.db().update_media_completed(&item.id, &dest_str, now);
+                if let Some(ref rel) = orig_release {
+                    let _ = dl_svc.db().set_media_original_release_name(&item.id, rel, now);
+                }
             }
 
             info!(
@@ -1085,8 +1099,15 @@ impl MediaOrganizer {
                         if let Ok(dl_uuid) = Uuid::parse_str(download_id) {
                             let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                         }
+                        let orig_release = completed_file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .map(|s| s.to_string());
                         if let Some(mut ep) = existing_ep {
                             ep.file_path = Some(dest_str.clone());
+                            if orig_release.is_some() {
+                                ep.original_release_name = orig_release;
+                            }
                             ep.status = "completed".to_string();
                             ep.download_id = Some(download_id.to_string());
                             ep.updated_at = now;
@@ -1103,6 +1124,7 @@ impl MediaOrganizer {
                                 status: "completed".to_string(),
                                 monitored: true,
                                 file_path: Some(dest_str.clone()),
+                                original_release_name: orig_release,
                                 download_id: Some(download_id.to_string()),
                                 created_at: now,
                                 updated_at: now,
@@ -1181,6 +1203,7 @@ impl MediaOrganizer {
                             quality_profile: "1080p-es".to_string(),
                             root_folder: effective_movies_root.to_string_lossy().to_string(),
                             file_path: None,
+                            original_release_name: None,
                             download_id: Some(download_id.to_string()),
                             created_at: now,
                             updated_at: now,
@@ -1211,6 +1234,7 @@ impl MediaOrganizer {
                     quality_profile: "1080p-es".to_string(),
                     root_folder: effective_movies_root.to_string_lossy().to_string(),
                     file_path: None,
+                    original_release_name: None,
                     download_id: Some(download_id.to_string()),
                     created_at: now,
                     updated_at: now,
@@ -1252,6 +1276,10 @@ impl MediaOrganizer {
 
             purge_superseded_movie_files(&dest_dir, &dest_file, final_movie.file_path.as_deref());
 
+            let orig_release = completed_file_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
             let dest_str = dest_file.to_string_lossy().to_string();
             {
                 let mut dl_svc = state.downloads.lock().await;
@@ -1259,6 +1287,9 @@ impl MediaOrganizer {
                     let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                 }
                 let _ = dl_svc.db().update_media_completed(&final_movie.id, &dest_str, now);
+                if let Some(ref rel) = orig_release {
+                    let _ = dl_svc.db().set_media_original_release_name(&final_movie.id, rel, now);
+                }
             }
 
             info!("[ORGANIZER] Auto-organized manual download movie '{}' -> '{}'", final_movie.title, dest_str);
@@ -1551,6 +1582,7 @@ mod tests {
             quality_profile: "1080p-es".to_string(),
             root_folder: nas_dir.path().join("Movies").to_string_lossy().to_string(),
             file_path: None,
+            original_release_name: None,
             download_id: Some("dl-guard-1".to_string()),
             created_at: 1,
             updated_at: 1,
@@ -1608,6 +1640,7 @@ mod tests {
             quality_profile: "1080p-es".to_string(),
             root_folder: "/movies".to_string(),
             file_path: None,
+            original_release_name: None,
             download_id: None,
             created_at: 1,
             updated_at: 1,

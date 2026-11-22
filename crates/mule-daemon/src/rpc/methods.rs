@@ -107,6 +107,8 @@ pub async fn handle_request(
         "subtitles.download" => handle_subtitles_download(state, req.params).await,
         "subtitles.check" => handle_subtitles_check(state, req.params).await,
         "subtitles.autoFetch" => handle_subtitles_auto_fetch(state, req.params).await,
+        "subtitles.sync" => handle_subtitles_sync(state, req.params).await,
+        "subtitles.blacklistAndRetry" => handle_subtitles_blacklist_and_retry(state, req.params).await,
         "indexer.list" => handle_indexer_list(state).await,
         "indexer.add" => handle_indexer_add(state, req.params).await,
         "indexer.delete" => handle_indexer_delete(state, req.params).await,

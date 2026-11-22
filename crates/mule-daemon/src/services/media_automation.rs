@@ -180,8 +180,13 @@ impl MediaAutomation {
                             }
                         }
 
-                        // 3. Obtener subtítulos en español faltantes mediante el motor Bazarr / OpenSubtitles
-                        let sub_res = SubtitleService::auto_fetch_all_missing(&state, "spa").await;
+                        // 3. Obtener subtítulos faltantes mediante el motor Bazarr / OpenSubtitles si está habilitado
+                        let sub_cfg = SubtitleService::load_runtime_config(&state).await;
+                        let sub_res = if sub_cfg.enabled {
+                            SubtitleService::auto_fetch_all_missing(&state, &sub_cfg.language).await
+                        } else {
+                            serde_json::json!({ "downloaded": [], "skipped": "disabled" })
+                        };
                         if let Some(arr) = sub_res["downloaded"].as_array() {
                             if !arr.is_empty() {
                                 info!("[MEDIA_AUTOMATION] Downloaded {} missing subtitles", arr.len());
@@ -215,8 +220,13 @@ impl MediaAutomation {
                             }
                             // Limpiar duplicados y residuos de forma reactiva
                             let _ = MediaCleaner::clean_all(&state, false).await;
-                            // Obtener automáticamente subtítulos en español faltantes para medios recién vinculados
-                            let sub_res = SubtitleService::auto_fetch_all_missing(&state, "spa").await;
+                            // Obtener automáticamente subtítulos faltantes para medios recién vinculados
+                            let sub_cfg = SubtitleService::load_runtime_config(&state).await;
+                            let sub_res = if sub_cfg.enabled {
+                                SubtitleService::auto_fetch_all_missing(&state, &sub_cfg.language).await
+                            } else {
+                                serde_json::json!({ "downloaded": [], "skipped": "disabled" })
+                            };
                             emit_media_ready_notification(&state, &org_res, &sub_res).await;
                         }
                     }

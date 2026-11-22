@@ -76,6 +76,13 @@ pub fn compute_opensubtitles_hash(path: &Path) -> Result<(u64, u64)> {
 }
 ```
 Formato de ruta de consulta: `moviebytesize-{size}/moviehash-{hash:016x}/sublanguageid-{lang}`.
+Para búsquedas por IMDb ID de series, incluir siempre `season-{s}/episode-{e}` además de `imdbid-{id}`.
+
+### Puntuación, validación y sincronización (ADR `adr_subtitulos_sincronizacion.md`)
+- Los candidatos de OpenSubtitles (y opcionalmente OpenSubtitles.com REST v1 si existe `opensubtitlesApiKey`) se evalúan mediante `subtitles::scorer` combinando hash, grupo de *release* (`original_release_name`), fuente, servicio, edición, FPS, variante (`es-ES`/`es-LA`) y confianza.
+- Toda descarga se valida sintácticamente en `subtitles::srt` (mínimo 10 bloques, duración compatible con `MediaProbeInfo.duration_secs` y heurística de idioma) antes de escribir `<video>.es.srt`.
+- Si no hubo coincidencia exacta por `moviehash` y `subtitlesAutoSync != "off"`, `subtitles::sync` reescala por FPS si difieren y alinea el `.srt` contra la pista textual embebida extraída con `ffmpeg`.
+- Los subtítulos rechazados se registran en `subtitle_blacklist` (SQLite) para evitar redescargas.
 
 ### Decodificación del flujo de subtítulos
 - Las descargas están comprimidas en `.gz`: descomprimir al vuelo usando `flate2::read::GzDecoder`.

@@ -511,15 +511,17 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         conn.execute_batch("ALTER TABLE peer_sources ADD COLUMN quic_port INTEGER DEFAULT 0;")?;
     }
 
-    // Migración: file_path en media_library
+    // Migración: file_path y original_release_name en media_library y media_episodes
     let mut stmt_ml = conn.prepare("PRAGMA table_info(media_library)")?;
     let mut rows_ml = stmt_ml.query([])?;
     let mut has_ml_file_path = false;
+    let mut has_ml_release_name = false;
     while let Some(row) = rows_ml.next()? {
         let col_name: String = row.get(1)?;
         if col_name == "file_path" {
             has_ml_file_path = true;
-            break;
+        } else if col_name == "original_release_name" {
+            has_ml_release_name = true;
         }
     }
     drop(rows_ml);
@@ -527,6 +529,41 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
     if !has_ml_file_path {
         let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN file_path TEXT;");
     }
+    if !has_ml_release_name {
+        let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN original_release_name TEXT;");
+    }
+
+    let mut stmt_ep = conn.prepare("PRAGMA table_info(media_episodes)")?;
+    let mut rows_ep = stmt_ep.query([])?;
+    let mut has_ep_release_name = false;
+    while let Some(row) = rows_ep.next()? {
+        let col_name: String = row.get(1)?;
+        if col_name == "original_release_name" {
+            has_ep_release_name = true;
+            break;
+        }
+    }
+    drop(rows_ep);
+    drop(stmt_ep);
+    if !has_ep_release_name {
+        let _ = conn.execute_batch("ALTER TABLE media_episodes ADD COLUMN original_release_name TEXT;");
+    }
+
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS subtitle_blacklist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_key TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            provider_sub_id TEXT NOT NULL,
+            reason TEXT,
+            created_at INTEGER NOT NULL,
+            UNIQUE(media_key, provider, provider_sub_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_subtitle_blacklist_key
+            ON subtitle_blacklist(media_key);
+        ",
+    )?;
 
     // Restablece las fuentes de pares huérfanas en estado conectado al inicio (limpieza tras cierre abrupto o reinicio)
     let _ = conn.execute_batch(
