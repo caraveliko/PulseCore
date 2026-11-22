@@ -52,9 +52,40 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 El servicio incorpora un panel de control web reactivo y moderno servido directamente en el puerto `4660`, sin dependencias externas:
 
 <div align="center">
-  <img src="docs/screenshots/downloads.jpg" alt="Panel de control Web de Pulse Core" width="85%" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"/>
-  <p><em>Panel de control reactivo en tiempo real servido nativamente por <code>mule-daemon</code> (Axum + WebSockets).</em></p>
+  <img src="docs/screenshots/filmoteca.png" alt="Filmoteca y cartelera multimedia de Pulse Core" width="92%"/>
+  <p><em><strong>Filmoteca integrada:</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
 </div>
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/descargas.png" alt="Cola de descargas eD2K y Torrent" width="100%"/>
+      <br/>
+      <strong>Cola de descargas híbrida (eD2K + Torrent)</strong><br/>
+      <sub>Mapa continuo de partes, prioridades, fuentes y telemetría de ancho de banda en tiempo real.</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/red-p2p.png" alt="Red P2P: Servidores eD2K y Kademlia DHT" width="100%"/>
+      <br/>
+      <strong>Red P2P unificada (eD2K + Kad DHT)</strong><br/>
+      <sub>Conexión HighID con soporte PC26-AEAD, estado de servidores y tabla de enrutamiento Kademlia.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/compartidos.png" alt="Biblioteca compartida y subidas activas" width="100%"/>
+      <br/>
+      <strong>Compartidos y control de subida (USS)</strong><br/>
+      <sub>KPIs de ratio global, tráfico histórico, prioridad por archivo y envíos activos en vivo.</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/opciones.png" alt="Opciones, almacenamiento y guardián NFS/NAS" width="100%"/>
+      <br/>
+      <strong>Opciones y guardián NFS / NAS</strong><br/>
+      <sub>Configuración de almacenamiento, detección de montajes de red, límites USS y automatización.</sub>
+    </td>
+  </tr>
+</table>
 
 Además de la gestión de descargas, búsquedas, servidores eD2K, red Kad y biblioteca Cine & Series, la WebUI integra:
 - **Monitor interactivo de ancho de banda y tráfico P2P**: gráfica SVG de hasta 10 minutos con ventanas configurables, picos, medias y desglose por protocolo (`eD2K/Kad` y `Torrent`).
