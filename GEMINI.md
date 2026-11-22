@@ -7,3 +7,4 @@ Recordatorios esenciales:
 - **Pruebas 100 % sin conexión**: ejecutar `python3 scripts/smart_test.py --mode smart` (o `cargo test --workspace --all-features --lib --tests`) sin tráfico de red saliente.
 - **Seguridad y política «Solo Vídeo»**: no debilitar `mule-network-policy`, no exponer `lab.*` en compilaciones estándar y delegar cualquier comprobación de contenido en `mule_network_policy::content_policy`.
 - **Español de España obligatorio**: todo código documentado, comentarios (`//`, `///`, `//!`, `/* ... */`) y archivos `.md` deben redactarse exclusivamente en español de España.
+- **Disciplina anti-«4 D»**: sin **Duplicación** (reutilizar propietarios únicos), sin **Desviación** (ceñirse al alcance, sin `.unwrap()` en producción ni claves huérfanas), sin **Diluvio** (módulos pequeños y cohesivos en Rust y `web/assets/js/`) y sin **Disfraz** (sin *no-ops* ni `catch` silenciosos ni pruebas de decorado; verificar siempre con `smart_test.py` y `clippy`).

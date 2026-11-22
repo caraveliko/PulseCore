@@ -1,0 +1,53 @@
+services:
+  pulsecore:
+    # Para usar la imagen publicada en GHCR en lugar de compilar en local,
+    # comenta "build: ." y descomenta la línea "image:" siguiente:
+    # image: ghcr.io/caraveliko/pulsecore:latest
+    build: .
+    container_name: pulsecore
+    restart: unless-stopped
+
+    ports:
+      # Interfaz Web (WebUI) y API RPC/REST
+      - "4660:4660/tcp"
+      # Puerto eD2K entrante (TCP)
+      - "39735:39735/tcp"
+      # Puerto Kad DHT entrante (UDP)
+      - "39737:39737/udp"
+
+    volumes:
+      # Base de datos SQLite, logs, auth.token y ajustes
+      - ./docker-data/config:/config
+      # Volumen único compartido para permitir hardlinks instantáneos entre descargas y biblioteca
+      - ./docker-data/data:/data
+
+    environment:
+      TZ: Europe/Madrid
+      PUID: "1000"
+      PGID: "1000"
+      RUST_LOG: info
+      # Descomenta y define un token fijo si expones la WebUI fuera de localhost:
+      # MULE_AUTH_TOKEN: cambia-este-token-secreto
+      # Integraciones opcionales con el ecosistema Servarr / reproductores:
+      # EMULERUST_SONARR_URL: http://sonarr:8989
+      # EMULERUST_SONARR_API_KEY: ""
+      # EMULERUST_RADARR_URL: http://radarr:7878
+      # EMULERUST_RADARR_API_KEY: ""
+      # EMULERUST_JELLYFIN_URL: http://jellyfin:8096
+      # EMULERUST_JELLYFIN_API_KEY: ""
+
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+    stop_grace_period: 15s
+
+    # --- Opciones de red avanzadas (sustituyen a "ports:" si se activan) ---
+    # 1) Modo host (necesario si quieres habilitar UPnP automático contra tu router):
+    # network_mode: host
+    # environment:
+    #   MULE_UPNP: "true"
+    #
+    # 2) Enrutar todo el tráfico P2P a través de un contenedor VPN (ej. Gluetun):
+    # network_mode: "service:gluetun"

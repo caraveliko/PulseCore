@@ -1,0 +1,21 @@
+# Contexto mínimo para compilación Docker de Pulse Core.
+.git
+.github
+.vscode
+.agents
+.gemini
+.cargo
+target
+dist
+docs
+wiki
+Asset
+docker-data
+
+# Nunca incluir claves privadas ni documentos locales en el contexto de imagen.
+release_ed25519.key
+*.md
+scripts/
+docker-compose.yml
+Dockerfile*
+.dockerignore

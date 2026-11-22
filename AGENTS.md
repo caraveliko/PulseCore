@@ -123,6 +123,15 @@ Distinciones **legítimas** que no deben fusionarse (nombres parecidos, semánti
 
 Salvaguarda: `scripts/test_duplicates.ps1` (integrado en `verify_all.ps1`) falla si aparece un nuevo clon exacto fuera de `scripts/dup_allowlist.txt`. Informe detallado: `docs/qa/rapport_doublons_rust.md`, regenerado mediante `python scripts/find_duplicates.py > target/dup-report.txt`.
 
+## Disciplina anti-«4 D» (código asistido por IA)
+
+Todo cambio generado o asistido por IA debe evitar activamente los cuatro riesgos estructurales siguientes:
+
+1. **Duplicación**: nunca copiar lógica, estilos CSS ni bloques entre archivos; reutilizar el propietario único y pasar la guardia B1 (`scripts/find_duplicates.py`).
+2. **Desviación (*drift*)**: ceñirse al alcance solicitado sin introducir claves huérfanas, funciones no pedidas ni contradicciones con `AGENTS.md` (por ejemplo, prohibido `.unwrap()` en producción y prohibidos ajustes declarados sin lectura ni persistencia).
+3. **Diluvio**: evitar cambios monolíticos («granadas de código») y archivos gigantes; mantener módulos pequeños y cohesivos tanto en Rust como en la WebUI (`web/assets/base.css`, `web/assets/js/*.js`).
+4. **Disfraz**: prohibido entregar soluciones de decorado, `todo!()`/`unimplemented!()`, *no-ops* silenciosos sin documentar ni registrar (`tracing::debug!`), bloques `catch` vacíos en JavaScript o pruebas que pasen sin verificar el comportamiento real. Todo cambio debe demostrarse con `python3 scripts/smart_test.py --mode smart` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
 ## Documentación asociada
 
 - `docs/INDEX.md` — inventario exhaustivo de archivos

@@ -558,6 +558,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } => {
                     tracing::info!("==> Shutting down mule-daemon via Ctrl+C...");
                 }
+                _ = wait_for_sigterm() => {
+                    tracing::info!("==> Apagando mule-daemon por señal SIGTERM...");
+                }
                 _ = shutdown_notify.notified() => {
                     tracing::info!("==> Shutting down mule-daemon via shutdown signal/watchdog...");
                 }
@@ -601,6 +604,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Espera la señal `SIGTERM` en sistemas Unix para permitir un apagado ordenado en Docker/systemd.
+#[cfg(unix)]
+async fn wait_for_sigterm() {
+    match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        Ok(mut sigterm) => {
+            sigterm.recv().await;
+        }
+        Err(e) => {
+            tracing::warn!("No se pudo registrar el manejador de SIGTERM: {e}");
+            std::future::pending::<()>().await;
+        }
+    }
+}
+
+/// En plataformas no Unix no existe `SIGTERM`; la tarea permanece en espera indefinida.
+#[cfg(not(unix))]
+async fn wait_for_sigterm() {
+    std::future::pending::<()>().await;
 }
 
 #[cfg(windows)]
