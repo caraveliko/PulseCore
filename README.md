@@ -221,11 +221,11 @@ cargo build --release --bin mule-daemon --bin mule-cli --bin mule-mcp --bin mule
 
 Una vez finalizada la compilación, ejecuta el binario generado:
 
-- **En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
+- **🐧 En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
   ```bash
   ./target/release/mule-daemon
   ```
-- **En Windows (CMD o PowerShell):**
+- **🪟 En Windows (CMD o PowerShell):**
   ```powershell
   .\target\release\mule-daemon.exe
   ```
