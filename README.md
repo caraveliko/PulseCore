@@ -54,7 +54,7 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
 
 <div align="center">
   <img src="docs/screenshots/filmoteca-cartelera.png" alt="Filmoteca y cartelera multimedia de Pulse Core" width="92%"/>
-  <p><em><strong>Filmoteca integrada (tema Pulse Aurora):</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
+  <p><em><strong>Filmoteca integrada:</strong> cartelera multimedia con seguimiento en vivo de descargas eD2K/Torrent, perfiles de calidad y filtros instantáneos.</em></p>
 </div>
 
 <table>
@@ -62,13 +62,13 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
     <td width="50%" align="center">
       <img src="docs/screenshots/descargas-cinema.png" alt="Cola de descargas eD2K y Torrent" width="100%"/>
       <br/>
-      <strong>Cola de descargas híbrida (tema Cine Ámbar)</strong><br/>
+      <strong>Cola de descargas híbrida (eD2K + Torrent)</strong><br/>
       <sub>Mapa continuo de partes, prioridades, fuentes y telemetría de ancho de banda en tiempo real.</sub>
     </td>
     <td width="50%" align="center">
       <img src="docs/screenshots/red-p2p-silk.png" alt="Red P2P: Servidores eD2K y Kademlia DHT" width="100%"/>
       <br/>
-      <strong>Red P2P unificada (tema Seda Nocturna)</strong><br/>
+      <strong>Red P2P unificada (eD2K + Kad DHT)</strong><br/>
       <sub>Conexión HighID con soporte PC26-AEAD, estado de servidores y tabla de enrutamiento Kademlia.</sub>
     </td>
   </tr>
@@ -76,13 +76,13 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
     <td width="50%" align="center">
       <img src="docs/screenshots/compartidos-emerald.png" alt="Biblioteca compartida y subidas activas" width="100%"/>
       <br/>
-      <strong>Compartidos y control de subida (tema Esmeralda Oscuro)</strong><br/>
+      <strong>Compartidos y control de subida (USS)</strong><br/>
       <sub>KPIs de ratio global, tráfico histórico, prioridad por archivo y envíos activos en vivo.</sub>
     </td>
     <td width="50%" align="center">
       <img src="docs/screenshots/opciones-midnight.png" alt="Opciones, almacenamiento y guardián NFS/NAS" width="100%"/>
       <br/>
-      <strong>Opciones y guardián NFS / NAS (tema Azul Noche)</strong><br/>
+      <strong>Opciones y guardián NFS / NAS</strong><br/>
       <sub>Configuración de almacenamiento, detección de montajes de red, límites USS y automatización.</sub>
     </td>
   </tr>

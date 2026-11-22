@@ -29,8 +29,37 @@ window._updateEnvFromHello = function(helloRes) {
   if (typeof helloRes.managedBySystemd === 'boolean') {
     updateUiState.environment.managedBySystemd = helloRes.managedBySystemd;
   }
+  if (typeof helloRes.runningInDocker === 'boolean') {
+    updateUiState.environment.runningInDocker = helloRes.runningInDocker;
+  }
+  if (helloRes.workdirPath) {
+    updateUiState.environment.workdirPath = helloRes.workdirPath;
+  }
   renderUpdateEnvironment();
 };
+
+function applyDockerOptionsNotices(isDocker, workdirPath) {
+  const show = Boolean(isDocker);
+  const toggleDisplay = (id, displayVal) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = displayVal;
+  };
+
+  const badge = document.getElementById('pref-docker-env-badge');
+  if (badge) {
+    badge.style.display = show ? 'inline-flex' : 'none';
+    if (show) {
+      badge.textContent = workdirPath ? `🐳 Docker · ${workdirPath}` : '🐳 Docker';
+    }
+  }
+
+  toggleDisplay('docker-folders-notice', show ? 'block' : 'none');
+  toggleDisplay('docker-nfs-notice', show ? 'block' : 'none');
+  toggleDisplay('docker-network-notice', show ? 'block' : 'none');
+  toggleDisplay('docker-updates-notice', show ? 'block' : 'none');
+  toggleDisplay('btn-upload-update-bin', show ? 'none' : 'inline-flex');
+}
+window._applyDockerOptionsNotices = applyDockerOptionsNotices;
 
 function showUpdateModalFeedback(kind, message) {
   const box = document.getElementById('modal-upd-feedback');
@@ -66,9 +95,22 @@ function renderUpdateEnvironment() {
 
   const verLabel = env.currentVersion ? `v${env.currentVersion}` : '—';
   const triple = env.platformTriple || 'desconocida';
-  const runtimeText = env.managedBySystemd ? 'systemd (reinicio automático)' : 'Proceso independiente';
-  const runtimeShort = env.managedBySystemd ? 'systemd' : 'Independiente';
+  const isDocker = env.runningInDocker === true;
+  const runtimeText = isDocker
+    ? 'Contenedor Docker'
+    : (env.managedBySystemd ? 'systemd (reinicio automático)' : 'Proceso independiente');
+  const runtimeShort = isDocker
+    ? 'Docker'
+    : (env.managedBySystemd ? 'systemd' : 'Independiente');
   const canWrite = typeof env.canSelfUpdate === 'boolean' ? env.canSelfUpdate : null;
+
+  if (typeof env.runningInDocker === 'boolean') {
+    applyDockerOptionsNotices(isDocker, env.workdirPath);
+  }
+  const applyBtn = document.getElementById('btn-apply-update');
+  if (applyBtn && isDocker) {
+    applyBtn.style.display = 'none';
+  }
 
   const verBadge = document.getElementById('update-current-ver-badge');
   if (verBadge && env.currentVersion) verBadge.textContent = `Versión instalada: ${verLabel}`;
@@ -87,9 +129,14 @@ function renderUpdateEnvironment() {
   if (modeEl) modeEl.textContent = runtimeText;
 
   const writeEl = document.getElementById('update-writable-val');
-  if (writeEl && canWrite !== null) {
-    writeEl.textContent = canWrite ? 'Correcto (escribible)' : 'Solo lectura';
-    writeEl.style.color = canWrite ? '#4ade80' : '#fbbf24';
+  if (writeEl) {
+    if (isDocker) {
+      writeEl.textContent = 'Gestionado por imagen Docker';
+      writeEl.style.color = '#60a5fa';
+    } else if (canWrite !== null) {
+      writeEl.textContent = canWrite ? 'Correcto (escribible)' : 'Solo lectura';
+      writeEl.style.color = canWrite ? '#4ade80' : '#fbbf24';
+    }
   }
 
   const ttVer = document.getElementById('header-update-tt-ver');

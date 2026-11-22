@@ -1048,6 +1048,7 @@
           </div>
           <span id="pref-unsaved-badge" class="badge badge-completing" style="display: none;">● Cambios sin guardar</span>
           <span id="pref-saved-badge" class="badge badge-completed" style="display: none;">✓ Opciones guardadas</span>
+          <span id="pref-docker-env-badge" class="badge" style="display: none; background: rgba(36, 150, 237, 0.16); color: #60a5fa; border: 1px solid rgba(36, 150, 237, 0.4);">🐳 Docker</span>
         </div>
 
         <div class="settings-header-controls">
@@ -1090,6 +1091,9 @@
         <div class="settings-content-area">
           <!-- CONTENEDOR 1: 📁 ALMACENAMIENTO Y BIBLIOTECAS -->
           <div id="opt-folders" class="opt-subpanel" style="display: block;">
+            <div id="docker-folders-notice" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(36, 150, 237, 0.4); background: rgba(36, 150, 237, 0.10); font-size: 0.8rem; color: #dbeafe; line-height: 1.45;">
+              🐳 <strong>Entorno Docker detectado:</strong> las rutas mostradas son rutas <strong>internas del contenedor</strong> (<code>/config</code>, <code>/data/downloads</code>, <code>/data/media</code>). Para apuntar a otros discos o carpetas del servidor, edita los volúmenes en <code>docker-compose.yml</code>.
+            </div>
             <div class="opt-card">
               <div class="opt-card-header">
                 <h4 class="opt-card-title"><span>📥</span> <span>Carpetas de Descarga</span></h4>
@@ -1149,9 +1153,13 @@
                   <button type="button" class="btn btn-sm" onclick="openFolderBrowser('pref-nas-root-dir', 'Carpeta principal de tu Mediateca')" title="Abrir explorador de carpetas" aria-label="Examinar carpeta principal de Mediateca" style="padding: 7px 11px; flex-shrink: 0;">📂</button>
                 </div>
                 <div class="opt-row-desc" id="help-nas-root-dir">PulseCore organizará aquí tus películas y series automáticamente. Detecta subcarpetas como <code>Movies</code>/<code>Películas</code> y <code>Series</code>/<code>TV Shows</code>.</div>
+                <div id="hardlink-status-box" style="display: none; margin-top: 8px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: rgba(15, 23, 42, 0.55); font-size: 0.78rem; line-height: 1.4;"></div>
               </div>
 
               <div id="nas-only-settings-wrap" style="display: none;">
+                <div id="docker-nfs-notice" style="display: none; margin: 10px 0; padding: 9px 12px; border-radius: 6px; border: 1px solid rgba(36, 150, 237, 0.35); background: rgba(36, 150, 237, 0.08); font-size: 0.78rem; color: #bfdbfe; line-height: 1.4;">
+                  🐳 <strong>Nota Docker + NAS:</strong> si el recurso NFS/SMB lo monta el sistema anfitrión antes de pasarlo como volumen a Docker, <code>/etc/fstab</code> dentro del contenedor no reflejará ese montaje.
+                </div>
                 <div id="nfs-mount-status-box" style="margin: 10px 0; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); background: rgba(15, 23, 42, 0.55); font-size: 0.8rem; display: none;"></div>
                 <div class="opt-row">
                   <div class="opt-row-info">
@@ -1372,6 +1380,9 @@
                 <div class="opt-row-ctrl">
                   <input type="checkbox" class="opt-switch" id="pref-upnp-enabled">
                 </div>
+              </div>
+              <div id="docker-network-notice" style="display: none; margin: 10px 0 4px; padding: 9px 12px; border-radius: 6px; border: 1px solid rgba(36, 150, 237, 0.35); background: rgba(36, 150, 237, 0.08); font-size: 0.78rem; color: #bfdbfe; line-height: 1.4;">
+                🐳 <strong>Red en Docker:</strong> en modo <code>bridge</code>, UPnP no puede alcanzar tu router (requiere <code>network_mode: host</code>). Si cambias los puertos TCP/UDP aquí, recuerda actualizar también la sección <code>ports:</code> en <code>docker-compose.yml</code>.
               </div>
               <div class="opt-row opt-advanced-only">
                 <div class="opt-row-info">
@@ -1908,9 +1919,13 @@
                   <span id="update-current-ver-badge" class="badge" style="background: rgba(255,255,255,0.06); color: #fff;">Versión: detectando...</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <button class="btn btn-sm" onclick="openUpdateModal()">📦 Subir binario Linux…</button>
+                  <button class="btn btn-sm" id="btn-upload-update-bin" onclick="openUpdateModal()">📦 Subir binario Linux…</button>
                   <button class="btn btn-sm btn-primary" onclick="checkSystemUpdate()" id="btn-check-updates">🔍 Comprobar Ahora</button>
                 </div>
+              </div>
+
+              <div id="docker-updates-notice" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(36, 150, 237, 0.4); background: rgba(36, 150, 237, 0.10); font-size: 0.8rem; color: #dbeafe; line-height: 1.45;">
+                🐳 <strong>Ejecución en contenedor Docker:</strong> la sustitución en caliente del binario está deshabilitada porque el sistema de archivos del contenedor es efímero. Para actualizar a una nueva versión, ejecuta en tu servidor: <code>docker compose pull &amp;&amp; docker compose up -d</code>.
               </div>
 
               <div id="update-card-desc" style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px;">

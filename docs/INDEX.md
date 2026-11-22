@@ -25,10 +25,16 @@
 | `CODE_OF_CONDUCT.md` | Código de conducta comunitario (Contributor Covenant 2.1) |
 | `.gitattributes` | Fines de línea deterministas (CRLF en scripts, binarios) |
 | `.github/workflows/ci.yml` | CI GitHub Actions (Rust check/clippy/test) |
+| `.github/workflows/docker.yml` | Pipeline de publicación multi-arquitectura (`amd64`/`arm64`) en GHCR |
 | `.github/workflows/release.yml` | Pipeline de release en tag `v*` (compilación estándar + publicación GitHub Release) |
 | `.github/dependabot.yml` | Actualizaciones automáticas de dependencias (cargo, actions) |
 | `.github/ISSUE_TEMPLATE/` | Formularios de incidencias GitHub (bug, funcionalidad, contacto de seguridad) |
 | `.github/PULL_REQUEST_TEMPLATE.md` | Lista de verificación PR (validación, fidelidad de protocolo, seguridad) |
+| `Dockerfile` | Imagen Docker multi-etapa (`cargo-chef` + `debian:bookworm-slim`) |
+| `.dockerignore` | Exclusiones del contexto de compilación Docker |
+| `docker-compose.yml` | Orquestación Compose con volumen único para *hardlinks* y perfiles de red |
+| `docker/Dockerfile.ci` | Imagen runtime ligera para publicaciones multi-arquitectura en CI |
+| `docker/entrypoint.sh` | Punto de entrada del contenedor con soporte `PUID`/`PGID` |
 | `Asset/pulse-core-logo.svg` | Logotipo vectorial oficial de Pulse Core |
 | `web/index.html` | Interfaz web integrada (WebUI) servida por `mule-daemon` |
 | `wiki/` | Documentación de usuario para la Wiki de GitHub |
@@ -540,6 +546,7 @@
 | `docs/INDEX.md` | Índice exhaustivo de los archivos del repositorio |
 | `docs/ASSISTANT.md` | Guía de uso del asistente de IA local: instalación, modos REPL/prompt/serve, perfiles de herramientas, seguridad, protocolo WS, resolución de problemas |
 | `docs/CHANGELOG.md` | Registro de cambios (Keep a Changelog) |
+| `docs/docker.md` | Guía de despliegue y operación con Docker y Docker Compose |
 | `docs/SETTINGS.md` | Referencia completa de los ajustes (`settings.get`/`set`): claves RPC/persistidas, valores por defecto, aplicación en caliente, equivalentes en eMule |
 
 ### docs/architecture/ — Arquitectura e informes

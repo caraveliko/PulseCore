@@ -369,9 +369,13 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
 
     let portable_default =
         crate::workdir::WorkDirectoryResolver::resolve(None, None).default_download_dir;
+    let hardlink_capable = are_paths_on_same_device(&current_dir, &fallback_nas_root);
     let mut result = json!({
         "defaultDownloadDir": current_dir.to_string_lossy(),
         "portableDownloadDir": portable_default.to_string_lossy(),
+        "workdirPath": state.config.data_dir.to_string_lossy(),
+        "runningInDocker": crate::services::updater::is_running_in_docker(),
+        "hardlinkCapable": hardlink_capable,
         "isCustom": custom_dir.is_some(),
         "effectiveMoviesDir": effective_movies_dir.to_string_lossy(),
         "effectiveSeriesDir": effective_series_dir.to_string_lossy(),
@@ -1534,6 +1538,51 @@ pub(crate) async fn apply_udp_state(state: &AppState, enabled: bool) {
         let _ = state.kad.udp().stop().await;
         state.server_udp.stop().await;
         state.stop_quic_transport().await;
+    }
+}
+
+/// Resuelve el primer ancestro existente de una ruta para consultar sus metadatos en disco.
+fn existing_ancestor_metadata(path: &std::path::Path) -> Option<std::fs::Metadata> {
+    let mut current = Some(path);
+    while let Some(p) = current {
+        if let Ok(meta) = std::fs::metadata(p) {
+            return Some(meta);
+        }
+        current = p.parent();
+    }
+    None
+}
+
+/// Comprueba si dos rutas residen en el mismo dispositivo (`st_dev`) para permitir enlaces duros (`hard_link`).
+pub(crate) fn are_paths_on_same_device(
+    path_a: &std::path::Path,
+    path_b: &std::path::Path,
+) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta_a = existing_ancestor_metadata(path_a)?;
+        let meta_b = existing_ancestor_metadata(path_b)?;
+        Some(meta_a.dev() == meta_b.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path_a, path_b);
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::are_paths_on_same_device;
+
+    #[test]
+    fn test_are_paths_on_same_device_mismo_tempdir() {
+        let tmp = tempfile::tempdir().expect("tempdir válido");
+        let dir_a = tmp.path().join("downloads");
+        let dir_b = tmp.path().join("media/Movies");
+        std::fs::create_dir_all(&dir_a).expect("crear downloads");
+        assert_eq!(are_paths_on_same_device(&dir_a, &dir_b), Some(true));
     }
 }
 

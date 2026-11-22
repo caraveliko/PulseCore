@@ -258,5 +258,6 @@ fn handle_hello(
         "defaultDownloadDir": state.config.default_download_dir.to_string_lossy(),
         "platformTriple": crate::services::updater::UpdateManifest::current_platform_triple(),
         "managedBySystemd": crate::services::updater::is_managed_by_systemd(),
+        "runningInDocker": crate::services::updater::is_running_in_docker(),
     }))
 }

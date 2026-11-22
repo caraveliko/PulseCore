@@ -38,6 +38,26 @@ pub fn is_managed_by_systemd() -> bool {
     }
 }
 
+/// Indica si el proceso actual se está ejecutando dentro de un contenedor Docker/OCI en Linux.
+pub fn is_running_in_docker() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if std::path::Path::new("/.dockerenv").exists() {
+            return true;
+        }
+        if let Ok(val) = std::env::var("PULSE_DOCKER") {
+            if matches!(val.trim().to_lowercase().as_str(), "1" | "true" | "yes") {
+                return true;
+            }
+        }
+        std::env::var_os("container").is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 /// Comprueba mediante una sonda efímera si el directorio del ejecutable permite escritura.
 pub fn is_executable_dir_writable(target_exe: &Path) -> bool {
     let Some(parent) = target_exe.parent() else {

@@ -657,6 +657,27 @@ function updateRamProfileBadge() {
   }
 }
 
+function renderHardlinkStatus(hardlinkCapable) {
+  const box = document.getElementById('hardlink-status-box');
+  if (!box) return;
+  if (hardlinkCapable === true) {
+    box.style.display = 'block';
+    box.style.borderColor = 'rgba(34, 197, 94, 0.38)';
+    box.style.background = 'rgba(34, 197, 94, 0.10)';
+    box.style.color = '#86efac';
+    box.innerHTML = '🟢 <strong>Mismo volumen detectado:</strong> enlaces duros (<em>hardlinks</em>) instantáneos activos entre descargas y mediateca, sin duplicar espacio en disco.';
+  } else if (hardlinkCapable === false) {
+    box.style.display = 'block';
+    box.style.borderColor = 'rgba(245, 158, 11, 0.45)';
+    box.style.background = 'rgba(245, 158, 11, 0.10)';
+    box.style.color = '#fde68a';
+    box.innerHTML = '⚠️ <strong>Volúmenes o discos distintos (EXDEV):</strong> el organizador tendrá que copiar los archivos completos en lugar de crear enlaces duros. Si usas Docker o NAS, monta descargas y mediateca dentro del mismo volumen (p. ej. <code>/data</code>).';
+  } else {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+}
+
 function renderNfsMountStatus(nfsStatus, discoveredMounts) {
   const box = document.getElementById('nfs-mount-status-box');
   if (!box) return;
@@ -753,6 +774,10 @@ async function loadPreferences() {
     const initialStorageMode = (s.nasRequireNfs || (s.nfsStatus && s.nfsStatus.isNetworkMount) || nasRootStr.startsWith('/mnt/nas') || nasRootStr.startsWith('//')) ? 'nas' : 'local';
     setStorageLocationMode(initialStorageMode);
     renderNfsMountStatus(s.nfsStatus, s.discoveredMounts);
+    renderHardlinkStatus(s.hardlinkCapable);
+    if (typeof s.runningInDocker === 'boolean' && typeof window._applyDockerOptionsNotices === 'function') {
+      window._applyDockerOptionsNotices(s.runningInDocker, s.workdirPath);
+    }
 
     // Conexión & Caudal
     setVal('pref-cap-down', s.capacityDownloadKbs || '');

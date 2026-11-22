@@ -19,8 +19,8 @@ use super::error::UpdaterError;
 use super::http_fetch::fetch_validated_response;
 use super::installer::{
     get_current_executable_path, get_staging_executable_path, has_rollback_backup,
-    is_executable_dir_writable, is_managed_by_systemd, replace_current_executable,
-    rollback_to_backup, write_staging_binary,
+    is_executable_dir_writable, is_managed_by_systemd, is_running_in_docker,
+    replace_current_executable, rollback_to_backup, write_staging_binary,
 };
 use super::manifest::{TargetAsset, UpdateManifest};
 use super::verifier::{
@@ -94,6 +94,8 @@ pub struct UpdateEnvironmentInfo {
     pub has_rollback_backup: bool,
     /// Indica si el proceso está supervisado por `systemd`.
     pub managed_by_systemd: bool,
+    /// Indica si el proceso se ejecuta dentro de un contenedor Docker/OCI.
+    pub running_in_docker: bool,
     /// URL configurada para consultar manifiestos oficiales.
     pub manifest_url: String,
     /// Canal configurado (`stable`, `beta`, etc.).
@@ -208,10 +210,15 @@ impl UpdaterService {
     /// Devuelve la información real del servidor y si puede autoactualizarse en disco.
     pub async fn environment_info(&self) -> UpdateEnvironmentInfo {
         let exe_path = get_current_executable_path().ok();
-        let can_self_update = exe_path
-            .as_deref()
-            .map(is_executable_dir_writable)
-            .unwrap_or(false);
+        let running_in_docker = is_running_in_docker();
+        let can_self_update = if running_in_docker {
+            false
+        } else {
+            exe_path
+                .as_deref()
+                .map(is_executable_dir_writable)
+                .unwrap_or(false)
+        };
         let has_rollback_backup = exe_path
             .as_deref()
             .map(has_rollback_backup)
@@ -229,6 +236,7 @@ impl UpdaterService {
             can_self_update,
             has_rollback_backup,
             managed_by_systemd: is_managed_by_systemd(),
+            running_in_docker,
             manifest_url: self.manifest_url.read().await.clone(),
             channel: self.channel.clone(),
             auto_check_enabled: self.auto_check_enabled,
