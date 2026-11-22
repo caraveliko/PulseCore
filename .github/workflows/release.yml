@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Etiqueta opcional para los artefactos de prueba'
+        required: false
+        default: 'dev'
 
 permissions:
   contents: write
@@ -11,6 +17,7 @@ jobs:
   init-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v7
 
@@ -20,22 +27,29 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           notes_file="docs/releases/RELEASE_NOTES_${tag#v}.md"
+          extra_flags=()
+          if [[ "$tag" == *-* ]]; then
+            extra_flags+=(--prerelease)
+          fi
           if [ -f "$notes_file" ]; then
             gh release create "$tag" \
               --title "Pulse Core $tag" \
               --notes-file "$notes_file" \
-              --verify-tag
+              --verify-tag \
+              "${extra_flags[@]}"
           else
             gh release create "$tag" \
               --title "Pulse Core $tag" \
               --generate-notes \
-              --verify-tag
+              --verify-tag \
+              "${extra_flags[@]}"
           fi
 
   windows:
     name: Build & publish Windows bundle
     runs-on: windows-latest
     needs: init-release
+    if: always() && (needs.init-release.result == 'success' || needs.init-release.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
 
@@ -86,6 +100,7 @@ jobs:
             -File scripts\test_packaged_bundle.ps1
 
       - name: Subir artefacto Windows a Release
+        if: github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -100,10 +115,20 @@ jobs:
           foreach ($s in $sbom) { $assets += $s.FullName }
           gh release upload $tag $assets --clobber
 
+      - name: Subir artefacto Windows de prueba (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsecore-windows-x64-${{ inputs.label }}
+          path: |
+            dist/PulseCore-Server-Windows-x64.zip
+            target/release/mule-daemon.exe
+
   linux:
     name: Build & publish Linux bundle
     runs-on: ubuntu-latest
     needs: init-release
+    if: always() && (needs.init-release.result == 'success' || needs.init-release.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
 
@@ -120,7 +145,7 @@ jobs:
 
       - name: Empaquetar distribución Linux
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${GITHUB_REF_NAME:-${{ inputs.label }}}"
           bundle="PulseCore-${tag}-linux-x64"
           mkdir -p "dist/$bundle"
           cp target/release/mule-daemon target/release/mule-cli target/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
@@ -129,6 +154,7 @@ jobs:
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
       - name: Subir artefacto Linux a la Release de GitHub
+        if: github.event_name == 'push'
         run: |
           tag="${GITHUB_REF_NAME}"
           gh release upload "$tag" \
@@ -139,10 +165,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Subir artefacto Linux de prueba (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsecore-linux-x64-${{ inputs.label }}
+          path: |
+            dist/PulseCore-*.tar.gz
+            dist/mule-daemon-linux-x86_64
+
   linux-arm64:
     name: Build & publish Raspberry Pi (ARM64) bundle
     runs-on: ubuntu-latest
     needs: init-release
+    if: always() && (needs.init-release.result == 'success' || needs.init-release.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
 
@@ -171,7 +207,7 @@ jobs:
 
       - name: Empaquetar distribución Raspberry Pi (ARM64)
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${GITHUB_REF_NAME:-${{ inputs.label }}}"
           bundle="PulseCore-${tag}-linux-arm64"
           mkdir -p "dist/$bundle"
           cp target/aarch64-unknown-linux-gnu/release/mule-daemon target/aarch64-unknown-linux-gnu/release/mule-cli target/aarch64-unknown-linux-gnu/release/mule-assistant scripts/mule-daemon.service "dist/$bundle/"
@@ -180,6 +216,7 @@ jobs:
           (cd dist && sha256sum "$bundle.tar.gz" > "$bundle.tar.gz.sha256")
 
       - name: Subir artefacto Raspberry Pi (ARM64) a la Release de GitHub
+        if: github.event_name == 'push'
         run: |
           tag="${GITHUB_REF_NAME}"
           gh release upload "$tag" \
@@ -190,10 +227,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Subir artefacto ARM64 de prueba (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsecore-linux-arm64-${{ inputs.label }}
+          path: |
+            dist/PulseCore-*.tar.gz
+            dist/mule-daemon-linux-aarch64
+
   generate-update-manifest:
     name: Generate & sign update manifest
     runs-on: ubuntu-latest
     needs: [windows, linux, linux-arm64]
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v7
 
