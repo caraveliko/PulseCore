@@ -8,6 +8,13 @@ name: Packages
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'wiki/**'
+      - 'Asset/**'
+      - 'AGENTS.md'
+      - 'GEMINI.md'
   workflow_dispatch:
 
 concurrency:
