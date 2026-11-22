@@ -260,11 +260,13 @@ Para resolver cualquier problema con la mayor rapidez posible, comprueba lo sigu
 Este proyecto se distribuye bajo la licencia **GPL-2.0-or-later**.
 Consulta los archivos [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE) para información sobre autoría original, licencias de terceros y referencias protocolarias.
 
+Este proyecto utiliza metadatos públicos procedentes de [TMDB](https://www.themoviedb.org/), pero no está respaldado ni certificado por TMDB.
+
 ---
 
 ## ⚖️ Exención de Responsabilidad Legal
 
 1. **Finalidad técnica y de preservación**: **Pulse Core** es un proyecto de software libre con fines didácticos, de investigación y de preservación tecnológica de protocolos P2P históricos.
-2. **Ausencia de catálogo**: El proyecto no gestiona, no promueve ni mantiene índices de contenido protegido ni servidores de intercambio de archivos.
+2. **Ausencia de índices de descarga**: El proyecto no aloja, no indexa ni distribuye archivos multimedia, enlaces `ed2k://`, enlaces `magnet:?`, rastreadores ni listas de servidores de terceros. La integración con servicios públicos de metadatos (como TMDB) se limita exclusivamente a información descriptiva (títulos, años, sinopsis y carátulas) para catalogar y organizar la biblioteca local del usuario.
 3. **Responsabilidad exclusiva del usuario**: Corresponde al usuario asegurarse de que su utilización del software se ajusta a las leyes y regulaciones vigentes en su territorio en materia de telecomunicaciones y propiedad intelectual.
 4. **Garantía**: Conforme a los términos de la licencia GPL-2.0-or-later, este software se suministra «TAL CUAL», sin ninguna garantía explícita ni implícita de rendimiento o adecuación a un fin particular.
