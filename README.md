@@ -179,7 +179,7 @@ El proyecto está organizado en un workspace de Cargo modular de 12 crates, dond
 ## 🚀 Inicio Rápido
 
 <a id="docker"></a>
-### 🐳 Despliegue con Docker (NAS, servidores y Raspberry Pi)
+### <img src="Asset/icons/docker.svg" width="20" height="20" align="absmiddle" alt="Docker"/> Despliegue con Docker (NAS, servidores y Raspberry Pi)
 
 Pulse Core incluye soporte oficial para Docker (`linux/amd64` y `linux/arm64`) basado en `debian:bookworm-slim` con `tikv-jemallocator`, `HEALTHCHECK` integrado en `/health`, apagado ordenado por `SIGTERM` y ejecución no-root configurable mediante `PUID`/`PGID`.
 
@@ -221,11 +221,11 @@ cargo build --release --bin mule-daemon --bin mule-cli --bin mule-mcp --bin mule
 
 Una vez finalizada la compilación, ejecuta el binario generado:
 
-- **🐧 En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
+- <img src="Asset/icons/linux.svg" width="17" height="17" align="absmiddle" alt="Linux"/> **En Linux / Raspberry Pi (`x86_64` / `aarch64`):**
   ```bash
   ./target/release/mule-daemon
   ```
-- **🪟 En Windows (CMD o PowerShell):**
+- <img src="Asset/icons/windows.svg" width="16" height="16" align="absmiddle" alt="Windows"/> **En Windows (CMD o PowerShell):**
   ```powershell
   .\target\release\mule-daemon.exe
   ```
@@ -235,7 +235,7 @@ Una vez iniciado el servicio, accede a la interfaz desde cualquier navegador:
 
 ---
 
-### Actualización y despliegue en Linux / Raspberry Pi (`systemd`)
+### <img src="Asset/icons/linux.svg" width="20" height="20" align="absmiddle" alt="Linux"/> Actualización y despliegue en Linux / Raspberry Pi (`systemd`)
 
 Para compilar, instalar o actualizar el servicio en un host Linux local o de forma cruzada hacia una Raspberry Pi (`aarch64`) con respaldo `.old`:
 
@@ -253,7 +253,7 @@ Para compilar, instalar o actualizar el servicio en un host Linux local o de for
 
 ---
 
-### Empaquetado para distribución en Windows (Opcional)
+### <img src="Asset/icons/windows.svg" width="18" height="18" align="absmiddle" alt="Windows"/> Empaquetado para distribución en Windows (Opcional)
 
 Si deseas empaquetar una versión completa comprimida en `.zip` con scripts `.bat` de arranque automático y manifiestos SBOM:
 ```powershell
