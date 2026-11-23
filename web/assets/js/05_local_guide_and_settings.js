@@ -810,7 +810,7 @@ async function loadPreferences() {
     setChk('pref-safe-connect', !!s.safeConnect);
     setVal('pref-server-autoupdate-path', s.serverAutoupdatePath || '');
 
-    // Servarr
+    // Servarr y Modo de Uso Dinámico
     selectOrganizeMode(s.organizeEnabled !== false);
     if (s.mediaServerProfile) setVal('pref-media-server-profile', s.mediaServerProfile);
     setChk('pref-generate-nfo-artwork', s.generateNfoAndArtwork !== false);
@@ -826,6 +826,8 @@ async function loadPreferences() {
     setChk('pref-cleaner-enabled', s.cleanerEnabled !== false);
     setChk('pref-subtitles-auto', s.subtitlesAutoDownload !== false);
     if (s.subtitlesLanguage) setVal('pref-subtitles-language', s.subtitlesLanguage);
+    selectUsageMode(s.usageMode || 'mediaserver', false);
+    selectPlayerProfile(s.mediaServerProfile || 'jellyfin', false);
 
     // Seguridad & Privacidad
     setChk('pref-obf-enabled', !!s.obfuscationEnabled);
@@ -882,6 +884,115 @@ function selectOrganizeMode(enabled) {
   if (details) details.style.display = isMediaCenter ? 'block' : 'none';
 }
 window.selectOrganizeMode = selectOrganizeMode;
+
+function selectPlayerProfile(profile, applyPreset = false) {
+  const normalized = ['jellyfin', 'plex', 'kodi'].includes(profile) ? profile : 'jellyfin';
+  const sel = document.getElementById('pref-media-server-profile');
+  if (sel) sel.value = normalized;
+
+  ['jellyfin', 'plex', 'kodi'].forEach(p => {
+    document.getElementById(`usage-player-${p}`)?.classList.toggle('active', p === normalized);
+    const fields = document.getElementById(`player-fields-${p}`);
+    if (fields) {
+      fields.style.display = p === normalized ? 'grid' : 'none';
+    }
+  });
+
+  if (applyPreset) {
+    const modeEl = document.getElementById('pref-usage-mode');
+    const curMode = modeEl ? modeEl.value : 'mediaserver';
+    if (normalized === 'kodi' && curMode !== 'server247') {
+      selectUsageMode('kodi', false);
+    } else if (normalized !== 'kodi' && curMode === 'kodi') {
+      selectUsageMode('mediaserver', false);
+    }
+    if (typeof markOptionsDirty === 'function') markOptionsDirty();
+  }
+}
+window.selectPlayerProfile = selectPlayerProfile;
+
+function selectUsageMode(mode, applyPresets = false) {
+  const validMode = ['direct', 'kodi', 'mediaserver', 'server247'].includes(mode) ? mode : 'mediaserver';
+  const hidden = document.getElementById('pref-usage-mode');
+  if (hidden) hidden.value = validMode;
+
+  const tabSettings = document.getElementById('tab-settings');
+  if (tabSettings) tabSettings.dataset.usageMode = validMode;
+
+  ['direct', 'kodi', 'mediaserver', 'server247'].forEach(m => {
+    document.getElementById(`usage-card-${m}`)?.classList.toggle('active', m === validMode);
+  });
+
+  const isDirect = validMode === 'direct';
+  const isKodi = validMode === 'kodi';
+  const isMediaServer = validMode === 'mediaserver';
+  const isServer247 = validMode === 'server247';
+
+  // Visibilidad de tarjetas, pestañas y bloques contextuales
+  const libCard = document.getElementById('opt-card-library-location');
+  if (libCard) libCard.style.display = isDirect ? 'none' : '';
+
+  const btnServarr = document.getElementById('btn-opt-servarr');
+  if (btnServarr) btnServarr.style.display = isDirect ? 'none' : '';
+
+  const btnInteg = document.getElementById('btn-opt-integration');
+  if (btnInteg) btnInteg.style.display = (isDirect || isKodi) ? 'none' : '';
+
+  const btnMcp = document.getElementById('btn-opt-mcp');
+  if (btnMcp) btnMcp.style.display = isDirect ? 'none' : '';
+
+  const streamRow = document.getElementById('opt-row-streaming-cap');
+  if (streamRow) {
+    streamRow.style.display = (isMediaServer || isServer247) ? 'flex' : 'none';
+  }
+
+  const playerPills = document.getElementById('usage-player-pills');
+  if (playerPills) {
+    playerPills.style.display = isDirect ? 'none' : 'flex';
+  }
+
+  // Si la pestaña activa quedó oculta al cambiar de modo, volver a Almacenamiento
+  const activePanel = document.querySelector('#tab-settings .opt-subpanel[style*="display: block"]');
+  if (activePanel) {
+    const id = activePanel.id;
+    if ((isDirect && (id === 'opt-servarr' || id === 'opt-integration' || id === 'opt-mcp')) || (isKodi && id === 'opt-integration')) {
+      if (typeof switchOptionsTab === 'function') switchOptionsTab('opt-folders');
+    }
+  }
+
+  const summaryEl = document.getElementById('usage-mode-summary-text');
+  if (summaryEl) {
+    const summaries = {
+      direct: '📥 Modo Descarga Directa: solo ves carpetas de descarga, velocidad, red P2P y privacidad. Los vídeos se guardan tal cual sin renombrar.',
+      kodi: '🛋️ Modo Kodi / Local: prioriza organización limpia, ficheros .nfo + carátulas locales, subtítulos .es.srt y conexión Kodi JSON-RPC.',
+      mediaserver: '🍿 Modo Servidor Multimedia: adaptado a Plex / Jellyfin / Emby con etiquetas TMDB, Auto-Grabber y recorte de subida en streaming.',
+      server247: '🖥️ Modo Servidor 24/7 / NAS: muestra todo el panel completo (protección NFS, autoactualización, integraciones *Arr, MCP y cuotas).'
+    };
+    summaryEl.textContent = summaries[validMode] || '';
+  }
+
+  if (applyPresets) {
+    if (isDirect) {
+      selectOrganizeMode(false);
+    } else {
+      selectOrganizeMode(true);
+      if (isKodi) {
+        selectPlayerProfile('kodi', false);
+        const nfo = document.getElementById('pref-generate-nfo-artwork');
+        if (nfo) nfo.checked = true;
+        const sub = document.getElementById('pref-subtitles-auto');
+        if (sub) sub.checked = true;
+      } else if (isMediaServer) {
+        const curProf = document.getElementById('pref-media-server-profile')?.value || 'jellyfin';
+        selectPlayerProfile(curProf === 'kodi' ? 'jellyfin' : curProf, false);
+        const grab = document.getElementById('pref-auto-grabber-enabled');
+        if (grab) grab.checked = true;
+      }
+    }
+    if (typeof markOptionsDirty === 'function') markOptionsDirty();
+  }
+}
+window.selectUsageMode = selectUsageMode;
 
 async function savePreferences() {
   const btn = document.getElementById('btn-save-preferences');
@@ -969,7 +1080,9 @@ async function savePreferences() {
     const srvUpd = getStr('pref-server-autoupdate-path');
     if (srvUpd !== null) payload.serverAutoupdatePath = srvUpd;
 
-    // Servarr
+    // Servarr y Modo de Uso Dinámico
+    const usageModeVal = getStr('pref-usage-mode');
+    if (usageModeVal) payload.usageMode = usageModeVal;
     const orgEl = document.getElementById('pref-organize-enabled');
     if (orgEl) payload.organizeEnabled = orgEl.value !== 'false';
     const msProf = getStr('pref-media-server-profile');

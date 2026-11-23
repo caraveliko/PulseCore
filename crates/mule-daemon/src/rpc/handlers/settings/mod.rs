@@ -103,6 +103,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "autoUpdateEnabled",
     "webuiPassword",
     "legalDisclaimerAccepted",
+    "usageMode",
 ];
 
 pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError> {
@@ -358,6 +359,30 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                 "subtitlesVariant".to_string(),
                 json!(dls.get_setting("subtitles_variant").ok().flatten().unwrap_or_else(|| "es-ES".to_string())),
             );
+            let persisted_usage_mode = dls
+                .get_setting("usage_mode")
+                .ok()
+                .flatten()
+                .filter(|m| matches!(m.as_str(), "direct" | "kodi" | "mediaserver" | "server247"));
+            let inferred_usage_mode = persisted_usage_mode.unwrap_or_else(|| {
+                if !read("organize_enabled", true) {
+                    "direct".to_string()
+                } else if read("nas_require_nfs", false) {
+                    "server247".to_string()
+                } else {
+                    let ms_prof = dls
+                        .get_setting("media_server_profile")
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| "jellyfin".to_string());
+                    if ms_prof == "kodi" {
+                        "kodi".to_string()
+                    } else {
+                        "mediaserver".to_string()
+                    }
+                }
+            });
+            obj.insert("usageMode".to_string(), json!(inferred_usage_mode));
             obj.insert("subtitlesAllowHi".to_string(), json!(read("subtitles_allow_hi", false)));
             obj.insert(
                 "subtitlesMinScore".to_string(),
@@ -1310,6 +1335,27 @@ pub async fn handle_settings_set(
             .set_setting("auto_update_enabled", if enabled { "1" } else { "0" })?;
         state.updater.set_auto_update_enabled(enabled);
         keys.push("autoUpdateEnabled");
+    }
+    if let Some(val) = params.get("usageMode") {
+        let mode = val
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'usageMode'"))?
+            .trim()
+            .to_lowercase();
+        if !matches!(
+            mode.as_str(),
+            "direct" | "kodi" | "mediaserver" | "server247"
+        ) {
+            return Err(JsonRpcError::invalid_params(
+                "'usageMode' must be 'direct', 'kodi', 'mediaserver' or 'server247'",
+            ));
+        }
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("usage_mode", &mode)?;
+        keys.push("usageMode");
     }
     if let Some(val) = params.get("mcpEnabled") {
         let en = val

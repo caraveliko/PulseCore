@@ -17,7 +17,7 @@
 
   <script src="/session-config.js"></script>
   <link rel="stylesheet" href="/assets/base.css?v=1">
-  <link rel="stylesheet" href="/assets/theme.css?v=20">
+  <link rel="stylesheet" href="/assets/theme.css?v=21">
 </head>
 <body>
   <!-- Escena atmosférica fija detrás de las superficies translúcidas -->
@@ -1134,6 +1134,56 @@
         </div>
       </div>
 
+      <!-- Selector Global de Modo de Uso Dinámico -->
+      <div class="usage-mode-banner" id="usage-mode-banner">
+        <input type="hidden" id="pref-usage-mode" value="mediaserver">
+        <div class="usage-mode-head">
+          <div>
+            <div class="usage-mode-eyebrow">PERFIL DE USO DINÁMICO</div>
+            <div class="usage-mode-heading">Adapta las opciones a tu forma de ver contenido</div>
+          </div>
+          <div class="usage-player-pills" id="usage-player-pills">
+            <span class="usage-player-label">Reproductor:</span>
+            <button type="button" class="usage-player-pill active" id="usage-player-jellyfin" onclick="selectPlayerProfile('jellyfin', true)">🟣 Jellyfin / Emby</button>
+            <button type="button" class="usage-player-pill" id="usage-player-plex" onclick="selectPlayerProfile('plex', true)">🟠 Plex</button>
+            <button type="button" class="usage-player-pill" id="usage-player-kodi" onclick="selectPlayerProfile('kodi', true)">🔵 Kodi / Infuse</button>
+          </div>
+        </div>
+        <div class="usage-mode-grid">
+          <button type="button" class="usage-mode-card" id="usage-card-direct" onclick="selectUsageMode('direct', true)">
+            <span class="usage-mode-icon">📥</span>
+            <div>
+              <div class="usage-mode-title">Descarga Directa</div>
+              <div class="usage-mode-sub">P2P clásico: baja archivos tal cual a tu carpeta, sin Mediateca ni .nfo.</div>
+            </div>
+          </button>
+          <button type="button" class="usage-mode-card" id="usage-card-kodi" onclick="selectUsageMode('kodi', true)">
+            <span class="usage-mode-icon">🛋️</span>
+            <div>
+              <div class="usage-mode-title">Kodi / Reproductor Local</div>
+              <div class="usage-mode-sub">Carpetas limpias, .nfo + carátulas y subtítulos listos para Kodi, Infuse o VLC.</div>
+            </div>
+          </button>
+          <button type="button" class="usage-mode-card active" id="usage-card-mediaserver" onclick="selectUsageMode('mediaserver', true)">
+            <span class="usage-mode-icon">🍿</span>
+            <div>
+              <div class="usage-mode-title">Servidor Plex / Jellyfin</div>
+              <div class="usage-mode-sub">Experiencia tipo Netflix: etiquetas TMDB, Auto-Grabber y recorte en streaming.</div>
+            </div>
+          </button>
+          <button type="button" class="usage-mode-card" id="usage-card-server247" onclick="selectUsageMode('server247', true)">
+            <span class="usage-mode-icon">🖥️</span>
+            <div>
+              <div class="usage-mode-title">Servidor 24/7 / NAS + Arr</div>
+              <div class="usage-mode-sub">Panel completo: protección NFS, autoactualización, *Arr, MCP y cuotas.</div>
+            </div>
+          </button>
+        </div>
+        <div class="usage-mode-context-bar" id="usage-mode-context-bar">
+          <span id="usage-mode-summary-text">Mostrando opciones de Servidor Multimedia (Plex / Jellyfin / Emby) y automatización de Filmoteca.</span>
+        </div>
+      </div>
+
       <!-- Espacio de trabajo en 2 columnas: Menú Lateral + Área de Contenido -->
       <div class="settings-workspace">
         <aside class="settings-sidebar" id="options-nav-cluster">
@@ -1190,7 +1240,7 @@
               </div>
             </div>
 
-            <div class="opt-card">
+            <div class="opt-card" id="opt-card-library-location">
               <div class="opt-card-header">
                 <h4 class="opt-card-title"><span>🎬</span> <span>Ubicación de tu Filmoteca</span></h4>
               </div>
@@ -1333,7 +1383,7 @@
                   <input type="number" class="form-control opt-input-num" id="pref-idle-upload-cap" min="0" placeholder="0 = Desactivado">
                 </div>
               </div>
-              <div class="opt-row opt-advanced-only">
+              <div class="opt-row opt-advanced-only" id="opt-row-streaming-cap">
                 <div class="opt-row-info">
                   <div class="opt-row-title">Techo durante streaming Jellyfin / Plex (KB/s)</div>
                   <div class="opt-row-desc">Recorta temporalmente la subida cuando hay una reproducción activa en tu servidor multimedia (<code>0</code> = desactivado).</div>
@@ -1573,7 +1623,7 @@
                     <div class="opt-row-desc">Adapta las etiquetas de carpeta (<code>[tmdbid]</code>, <code>{tmdb}</code> o limpio) a tu reproductor favorito.</div>
                   </div>
                   <div class="opt-row-ctrl">
-                    <select class="form-control opt-select" id="pref-media-server-profile">
+                    <select class="form-control opt-select" id="pref-media-server-profile" onchange="selectPlayerProfile(this.value, false)">
                       <option value="jellyfin">Jellyfin / Emby ([tmdbid-...])</option>
                       <option value="plex">Plex ({tmdb-...})</option>
                       <option value="kodi">Kodi / Infuse / Universal (limpio)</option>
@@ -1589,14 +1639,18 @@
                     <input type="checkbox" class="opt-switch" id="pref-generate-nfo-artwork">
                   </div>
                 </div>
-                <div class="opt-row-stack opt-advanced-only">
-                  <div class="opt-row-title">Notificación automática a servidores multimedia (opcional)</div>
+                <div class="opt-row-stack opt-advanced-only" id="opt-row-media-notify">
+                  <div class="opt-row-title">Notificación automática a tu servidor multimedia (opcional)</div>
                   <div class="opt-row-desc">Envía una señal de escaneo al terminar una descarga organizada.</div>
-                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
+                  <div id="player-fields-jellyfin" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
                     <input type="text" class="form-control" id="pref-jellyfin-url" placeholder="Jellyfin / Emby URL (http://127.0.0.1:8096)">
                     <input type="password" class="form-control" id="pref-jellyfin-apikey" autocomplete="off" placeholder="Jellyfin API Key">
+                  </div>
+                  <div id="player-fields-plex" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
                     <input type="text" class="form-control" id="pref-plex-url" placeholder="Plex URL (http://127.0.0.1:32400)">
                     <input type="password" class="form-control" id="pref-plex-token" autocomplete="off" placeholder="Plex X-Plex-Token">
+                  </div>
+                  <div id="player-fields-kodi" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
                     <input type="text" class="form-control" id="pref-kodi-url" placeholder="Kodi JSON-RPC URL (http://127.0.0.1:8080)">
                   </div>
                 </div>
@@ -3652,7 +3706,7 @@
   <script src="/assets/js/02_downloads_and_bandwidth.js?v=2"></script>
   <script src="/assets/js/03_inspector_servers_kad.js?v=2"></script>
   <script src="/assets/js/04_actions_and_onboarding.js?v=2"></script>
-  <script src="/assets/js/05_local_guide_and_settings.js?v=2"></script>
+  <script src="/assets/js/05_local_guide_and_settings.js?v=3"></script>
   <script src="/assets/js/06_updates_notifications_scheduler.js?v=2"></script>
   <script src="/assets/js/07_media_core.js?v=6"></script>
   <script src="/assets/js/08_media_servarr_and_subtitles.js?v=2"></script>
