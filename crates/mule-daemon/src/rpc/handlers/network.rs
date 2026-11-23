@@ -161,6 +161,54 @@ pub async fn handle_network_get_audit_log(
     }))
 }
 
+/// Extrae un entero `usize` obligatorio desde un objeto JSON de presupuestos.
+fn extract_budget_usize(
+    obj: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<usize, JsonRpcError> {
+    let raw = obj
+        .get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("Missing or invalid '{field}'")))?;
+    usize::try_from(raw)
+        .map_err(|_| JsonRpcError::invalid_params(&format!("Out-of-range '{field}'")))
+}
+
+/// Extrae un entero `u64` obligatorio desde un objeto JSON de presupuestos.
+fn extract_budget_u64(
+    obj: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<u64, JsonRpcError> {
+    obj.get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("Missing or invalid '{field}'")))
+}
+
+/// Construye `ResourceBudgets` extrayendo explícitamente cada campo desde JSON.
+fn parse_resource_budgets(val: &Value) -> Result<mule_network_policy::ResourceBudgets, JsonRpcError> {
+    let obj = val
+        .as_object()
+        .ok_or_else(|| JsonRpcError::invalid_params("Invalid budgets format: expected object"))?;
+
+    let rate_limit_raw = extract_budget_u64(obj, "rate_limit_per_min")?;
+    let rate_limit_per_min = u32::try_from(rate_limit_raw)
+        .map_err(|_| JsonRpcError::invalid_params("Out-of-range 'rate_limit_per_min'"))?;
+
+    Ok(mule_network_policy::ResourceBudgets {
+        max_active_peer_connections: extract_budget_usize(obj, "max_active_peer_connections")?,
+        max_active_server_connections: extract_budget_usize(
+            obj,
+            "max_active_server_connections",
+        )?,
+        max_active_listeners: extract_budget_usize(obj, "max_active_listeners")?,
+        connect_timeout_ms: extract_budget_u64(obj, "connect_timeout_ms")?,
+        handshake_timeout_ms: extract_budget_u64(obj, "handshake_timeout_ms")?,
+        max_frame_size_bytes: extract_budget_usize(obj, "max_frame_size_bytes")?,
+        max_total_buffer_bytes: extract_budget_usize(obj, "max_total_buffer_bytes")?,
+        rate_limit_per_min,
+    })
+}
+
 pub async fn handle_network_set_budgets(
     state: &AppState,
     params: Option<Value>,
@@ -171,8 +219,7 @@ pub async fn handle_network_set_budgets(
     } else {
         &params
     };
-    let budgets: mule_network_policy::ResourceBudgets = serde_json::from_value(budgets_val.clone())
-        .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid budgets format: {e}")))?;
+    let budgets = parse_resource_budgets(budgets_val)?;
 
     state
         .network_policy

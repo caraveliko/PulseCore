@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -228,6 +229,31 @@ def resolve_test_target(
     return suite_dir if suite_dir in crate_info.test_targets else None, None
 
 
+class _InlineScriptExtractor(HTMLParser):
+    """Extrae bloques de código JavaScript inline de etiquetas `<script>` sin atributo `src`."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.scripts: List[str] = []
+        self._in_inline_script = False
+        self._buf: List[str] = []
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        if tag.lower() == "script" and not any(k.lower() == "src" for k, _ in attrs):
+            self._in_inline_script = True
+            self._buf.clear()
+
+    def handle_data(self, data: str) -> None:
+        if self._in_inline_script:
+            self._buf.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "script" and self._in_inline_script:
+            self.scripts.append("".join(self._buf))
+            self._buf.clear()
+            self._in_inline_script = False
+
+
 def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
     """Valida la sintaxis de todos los bloques <script> en `web/index.html` y los módulos JS en `web/assets/`."""
     assets_dir = ROOT / "web" / "assets"
@@ -247,7 +273,10 @@ def validate_web_js(dry_run: bool) -> Tuple[bool, float]:
     scripts: List[str] = []
     if WEB_INDEX_PATH.is_file():
         html = WEB_INDEX_PATH.read_text(encoding="utf-8")
-        scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
+        extractor = _InlineScriptExtractor()
+        extractor.feed(html)
+        extractor.close()
+        scripts = extractor.scripts
     temp_paths: List[Path] = []
     inline_count = 0
     try:

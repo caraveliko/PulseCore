@@ -243,15 +243,15 @@ async fn test_notifications_rpc_crud_event_and_secret_masking() {
     .expect("res setConfig");
 
     let raw_set_json = serde_json::to_string(&set_res).unwrap();
-    for secret in [
-        "super-secret-tg-token",
-        "super-secret-ntfy-token",
-        "secret-hook",
-        "super-secret-webhook",
+    for (campo, valor) in [
+        ("telegram.botToken", "super-secret-tg-token"),
+        ("ntfy.token", "super-secret-ntfy-token"),
+        ("discord.webhookUrl", "secret-hook"),
+        ("webhook.secret", "super-secret-webhook"),
     ] {
         assert!(
-            !raw_set_json.contains(secret),
-            "La vista de configuración no debe filtrar el secreto {secret}"
+            !raw_set_json.contains(valor),
+            "La vista de configuración no debe filtrar la credencial de {campo}"
         );
     }
     assert_eq!(set_res["telegram"]["hasBotToken"], true);

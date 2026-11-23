@@ -26,6 +26,8 @@ const TRANSMISSION_RPC_VERSION_MIN: i32 = 14;
 const TRANSMISSION_VERSION: &str = "4.0.5";
 const TRANSMISSION_SESSION_HEADER: &str = "x-transmission-session-id";
 const TORRENT_ID_OFFSET: i64 = 100_000;
+/// Tamaño máximo permitido para el cuerpo JSON de una petición Transmission RPC (8 MiB).
+const MAX_TRANSMISSION_RPC_BODY_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 pub struct TransmissionRequest {
@@ -150,7 +152,15 @@ pub async fn handle_transmission_rpc(
             .into_response();
     }
 
-    let req: TransmissionRequest = match serde_json::from_slice(&body) {
+    if body.len() > MAX_TRANSMISSION_RPC_BODY_BYTES {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(TransmissionResponse::error("Payload too large", None)),
+        )
+            .into_response();
+    }
+
+    let Json(req) = match Json::<TransmissionRequest>::from_bytes(&body) {
         Ok(r) => r,
         Err(e) => {
             return (

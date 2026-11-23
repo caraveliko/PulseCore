@@ -645,6 +645,70 @@ pub async fn handle_media_search_releases(
         .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
 }
 
+/// Extrae una cadena obligatoria desde un objeto JSON de lanzamiento.
+fn extract_release_str(
+    obj: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String, JsonRpcError> {
+    obj.get(field)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            JsonRpcError::invalid_params(&format!("Invalid release object: missing '{field}'"))
+        })
+}
+
+/// Construye `ScoredRelease` extrayendo explícitamente cada campo desde JSON.
+fn parse_scored_release(val: &Value) -> Result<crate::services::scorer::ScoredRelease, JsonRpcError> {
+    let obj = val.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("Invalid release object: expected JSON object")
+    })?;
+
+    let size_bytes = obj.get("sizeBytes").and_then(Value::as_u64).ok_or_else(|| {
+        JsonRpcError::invalid_params("Invalid release object: missing 'sizeBytes'")
+    })?;
+    let sources = obj.get("sources").and_then(Value::as_u64).ok_or_else(|| {
+        JsonRpcError::invalid_params("Invalid release object: missing 'sources'")
+    })?;
+    let score_raw = obj
+        .get("score")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| JsonRpcError::invalid_params("Invalid release object: missing 'score'"))?;
+    let score = i32::try_from(score_raw).map_err(|_| {
+        JsonRpcError::invalid_params("Invalid release object: out-of-range 'score'")
+    })?;
+    let is_rejected = obj
+        .get("isRejected")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            JsonRpcError::invalid_params("Invalid release object: missing 'isRejected'")
+        })?;
+    let rejection_reason = match obj.get("rejectionReason") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(JsonRpcError::invalid_params(
+                "Invalid release object: invalid 'rejectionReason'",
+            ))
+        }
+    };
+
+    Ok(crate::services::scorer::ScoredRelease {
+        title: extract_release_str(obj, "title")?,
+        protocol: extract_release_str(obj, "protocol")?,
+        link: extract_release_str(obj, "link")?,
+        hash: extract_release_str(obj, "hash")?,
+        size_bytes,
+        sources,
+        score,
+        quality: extract_release_str(obj, "quality")?,
+        language: extract_release_str(obj, "language")?,
+        is_rejected,
+        rejection_reason,
+        indexer_name: extract_release_str(obj, "indexerName")?,
+    })
+}
+
 /// Descarga manualmente un candidato de lanzamiento específico para un elemento multimedia
 pub async fn handle_media_grab_release(
     state: &AppState,
@@ -654,9 +718,7 @@ pub async fn handle_media_grab_release(
     let media_id = params["mediaId"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' parameter"))?;
-    let release_val = params["release"].clone();
-    let release: crate::services::scorer::ScoredRelease = serde_json::from_value(release_val)
-        .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid release object: {e}")))?;
+    let release = parse_scored_release(&params["release"])?;
 
     match crate::services::AutoGrabber::grab_release(state, media_id, &release).await {
         Ok(dl_id) => Ok(json!({ "success": true, "downloadId": dl_id })),
