@@ -11,7 +11,9 @@ mod fs_browser;
 mod logs;
 mod system_metrics;
 
-pub use fs_browser::{handle_settings_list_dirs, handle_settings_pick_folder};
+pub use fs_browser::{
+    handle_settings_list_dirs, handle_settings_open_folder, handle_settings_pick_folder,
+};
 pub use logs::handle_logs;
 pub use system_metrics::{
     get_cached_nas_disk_space, handle_disk_space, handle_nas_info,
@@ -98,6 +100,7 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "ramProfile",
     "logLevel",
     "updateChannel",
+    "autoUpdateEnabled",
     "webuiPassword",
     "legalDisclaimerAccepted",
 ];
@@ -394,8 +397,10 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         crate::workdir::WorkDirectoryResolver::resolve(None, None).default_download_dir;
     let hardlink_capable = are_paths_on_same_device(&current_dir, &fallback_nas_root);
     let active_update_channel = state.updater.get_channel().await;
+    let auto_update_enabled = state.updater.is_auto_update_enabled();
     let mut result = json!({
         "updateChannel": active_update_channel,
+        "autoUpdateEnabled": auto_update_enabled,
         "defaultDownloadDir": current_dir.to_string_lossy(),
         "portableDownloadDir": portable_default.to_string_lossy(),
         "workdirPath": state.config.data_dir.to_string_lossy(),
@@ -1293,6 +1298,18 @@ pub async fn handle_settings_set(
             .await
             .map_err(|e| JsonRpcError::business(e.to_string()))?;
         keys.push("updateChannel");
+    }
+    if let Some(val) = params.get("autoUpdateEnabled") {
+        let enabled = val
+            .as_bool()
+            .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'autoUpdateEnabled'"))?;
+        state
+            .downloads
+            .lock()
+            .await
+            .set_setting("auto_update_enabled", if enabled { "1" } else { "0" })?;
+        state.updater.set_auto_update_enabled(enabled);
+        keys.push("autoUpdateEnabled");
     }
     if let Some(val) = params.get("mcpEnabled") {
         let en = val

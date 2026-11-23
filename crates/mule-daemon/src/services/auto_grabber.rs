@@ -15,8 +15,9 @@ use crate::services::indexer_aggregator::IndexerAggregator;
 use crate::services::media_probe::probe_video_file;
 use crate::services::organizer::detect_quality_tag;
 use crate::services::scorer::{
-    evaluate_release, extract_tv_episode_numbers, matches_release, matches_release_with_alts,
-    matches_season_pack_release, spanish_title_search_variants, ScoredRelease,
+    evaluate_release, extract_tv_episode_numbers, matches_release_with_alts,
+    matches_season_pack_release, spanish_title_search_variants, strip_trailing_year_suffix,
+    ScoredRelease,
 };
 use crate::state::AppState;
 use mule_core::model::{EpisodeItem, MediaItem};
@@ -983,6 +984,7 @@ impl AutoGrabber {
         aggregator: &IndexerAggregator,
         item: &MediaItem,
         only_episode_id: Option<&str>,
+        only_season: Option<u32>,
         ag_state: &mut AutoGrabberState,
         force: bool,
     ) -> Vec<Value> {
@@ -991,6 +993,11 @@ impl AutoGrabber {
 
         let episodes = {
             let dl_svc = state.downloads.lock().await;
+            if let Some(target_season) = only_season {
+                let _ = dl_svc
+                    .db()
+                    .set_season_monitored(&item.id, target_season, true, now);
+            }
             dl_svc.db().get_episodes_for_media(&item.id).unwrap_or_default()
         };
 
@@ -1002,6 +1009,11 @@ impl AutoGrabber {
             .filter(|ep| {
                 if let Some(target_ep_id) = only_episode_id {
                     return ep.id == target_ep_id;
+                }
+                if let Some(target_season) = only_season {
+                    if ep.season_number != target_season {
+                        return false;
+                    }
                 }
                 if !ep.monitored || ep.status != "wanted" {
                     return false;
@@ -1034,6 +1046,13 @@ impl AutoGrabber {
         });
 
         let mut handled_ep_ids: HashSet<String> = HashSet::new();
+        let search_title = strip_trailing_year_suffix(&item.title);
+        let ext_details = state.media_metadata.get_extended_details(item).await;
+        let alt_refs: Vec<&str> = ext_details
+            .alternative_titles
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
 
         // 0. Búsqueda inteligente de paquetes de temporada completa si se buscan >= 3 episodios de una misma temporada
         if only_episode_id.is_none() {
@@ -1055,10 +1074,10 @@ impl AutoGrabber {
                     None => continue,
                 };
                 let es_variants =
-                    spanish_title_search_variants(&item.title, item.original_title.as_deref());
+                    spanish_title_search_variants(search_title, item.original_title.as_deref());
                 let mut pack_queries = vec![
-                    format!("{} Temporada {season_num}", item.title),
-                    format!("{} S{season_num:02}", item.title),
+                    format!("{search_title} Temporada {season_num}"),
+                    format!("{search_title} S{season_num:02}"),
                 ];
                 if let Some(ref orig) = item.original_title {
                     if !orig.is_empty() && !orig.eq_ignore_ascii_case(&item.title) {
@@ -1238,7 +1257,7 @@ impl AutoGrabber {
 
         let batch_limit = if only_episode_id.is_some() || force { 24 } else { 8 };
         let es_variants =
-            spanish_title_search_variants(&item.title, item.original_title.as_deref());
+            spanish_title_search_variants(search_title, item.original_title.as_deref());
         let remaining_eps: Vec<EpisodeItem> = wanted_eps
             .into_iter()
             .filter(|e| !handled_ep_ids.contains(&e.id))
@@ -1249,15 +1268,24 @@ impl AutoGrabber {
         // una sola vez para evitar N búsquedas redundantes sobre la misma palabra clave Kad de título.
         let mut base_series_releases = Vec::new();
         if !remaining_eps.is_empty() {
-            let mut base_queries = vec![item.title.clone()];
+            let mut base_queries = vec![search_title.to_string()];
             if let Some(ref orig) = item.original_title {
-                if !orig.is_empty() && !orig.eq_ignore_ascii_case(&item.title) {
-                    base_queries.push(orig.clone());
+                let clean_orig = strip_trailing_year_suffix(orig);
+                if !clean_orig.is_empty() && !clean_orig.eq_ignore_ascii_case(search_title) {
+                    base_queries.push(clean_orig.to_string());
                 }
             }
             for es_t in &es_variants {
                 if !base_queries.iter().any(|q| q.eq_ignore_ascii_case(es_t)) {
                     base_queries.push(es_t.clone());
+                }
+            }
+            for alt_title in ext_details.alternative_titles.iter().take(4) {
+                let clean_alt = strip_trailing_year_suffix(alt_title);
+                if !clean_alt.is_empty()
+                    && !base_queries.iter().any(|q| q.eq_ignore_ascii_case(clean_alt))
+                {
+                    base_queries.push(clean_alt.to_string());
                 }
             }
             let base_futs = base_queries
@@ -1295,16 +1323,20 @@ impl AutoGrabber {
                 continue;
             }
             let mut ep_queries = vec![
-                format!("{} S{:02}E{:02}", item.title, ep.season_number, ep.episode_number),
-                format!("{} {}x{:02}", item.title, ep.season_number, ep.episode_number),
+                format!("{search_title} S{:02}E{:02}", ep.season_number, ep.episode_number),
+                format!("{search_title} {}x{:02}", ep.season_number, ep.episode_number),
             ];
             if ep.season_number >= 1 && ep.episode_number < 100 {
                 let cap_code = ep.season_number * 100 + ep.episode_number;
-                ep_queries.push(format!("{} Cap.{}", item.title, cap_code));
+                ep_queries.push(format!("{search_title} Cap.{cap_code}"));
             }
             for es_t in &es_variants {
                 ep_queries.push(format!(
                     "{es_t} {}x{:02}",
+                    ep.season_number, ep.episode_number
+                ));
+                ep_queries.push(format!(
+                    "{es_t} S{:02}E{:02}",
                     ep.season_number, ep.episode_number
                 ));
             }
@@ -1348,10 +1380,11 @@ impl AutoGrabber {
                     *rejection_counts.entry(reason).or_insert(0) += 1;
                     continue;
                 }
-                if !matches_release(
+                if !matches_release_with_alts(
                     &r.title,
                     &item.title,
                     item.original_title.as_deref(),
+                    &alt_refs,
                     item.year,
                     false,
                     Some((ep.season_number, ep.episode_number)),
@@ -1582,12 +1615,13 @@ impl AutoGrabber {
         grabbed_episodes
     }
 
-    /// Fuerza la ejecución inmediata de AutoGrabber sobre una película o serie específica desde la interfaz.
+    /// Fuerza la ejecución inmediata de AutoGrabber sobre una película, serie o temporada específica desde la interfaz.
     pub async fn grab_for_media_id(
         state: &AppState,
         aggregator: &IndexerAggregator,
         media_id: &str,
         episode_id: Option<&str>,
+        season_number: Option<u32>,
     ) -> Result<Value, String> {
         let _pass_guard = autograb_pass_mutex().lock().await;
         aggregator.invalidate_cache().await;
@@ -1617,6 +1651,7 @@ impl AutoGrabber {
                 aggregator,
                 &item,
                 episode_id,
+                season_number,
                 &mut ag_state,
                 true,
             )
@@ -1685,6 +1720,7 @@ impl AutoGrabber {
                     state,
                     aggregator,
                     &item,
+                    None,
                     None,
                     &mut ag_state,
                     force,

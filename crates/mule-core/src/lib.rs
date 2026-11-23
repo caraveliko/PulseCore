@@ -23,5 +23,7 @@ pub use persistence::{
     Database, DownloadRepository, KadRepository, PeerSourceRepository, ServerRepository,
 };
 pub use ranges::RangeSet;
-pub use storage::{finalize_file, AllocationPolicy, CollisionStrategy, PartFile};
+pub use storage::{
+    finalize_file, finalize_file_with_progress, AllocationPolicy, CollisionStrategy, PartFile,
+};
 pub use verification::{verify_aich_block, verify_part_hash};

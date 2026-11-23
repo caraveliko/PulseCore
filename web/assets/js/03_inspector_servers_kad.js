@@ -57,11 +57,23 @@ async function refreshInspector(resetView = false) {
 
     // Fase y Ubicación de Almacenamiento
     const statusLower = (snap.status || '').toLowerCase();
+    const stageMeta = typeof getDownloadCompletionStageMeta === 'function' ? getDownloadCompletionStageMeta(snap) : { active: false };
     const stageBox = document.getElementById('insp-stage-box');
     const stageText = document.getElementById('insp-stage-text');
     const stageDot = document.getElementById('insp-stage-dot');
     if (stageBox && stageText) {
-      if (statusLower === 'completing') {
+      if (stageMeta.active) {
+        const isVerify = stageMeta.key === 'verifying_hashes';
+        const isReconstruct = stageMeta.key === 'reconstructing';
+        const isOrg = stageMeta.key === 'organizing';
+        const color = isVerify ? '#c084fc' : (isReconstruct ? '#38bdf8' : (isOrg ? '#34d399' : '#fbbf24'));
+        const bg = isVerify ? 'rgba(168, 85, 247, 0.08)' : (isReconstruct ? 'rgba(56, 189, 248, 0.08)' : (isOrg ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)'));
+        const border = isVerify ? 'rgba(168, 85, 247, 0.4)' : (isReconstruct ? 'rgba(56, 189, 248, 0.4)' : (isOrg ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)'));
+        stageBox.style.borderColor = border;
+        stageBox.style.background = bg;
+        if (stageDot) stageDot.style.background = color;
+        stageText.innerHTML = `<strong style="color:${color};">${escapeHtml(stageMeta.pipelineTitle)}:</strong> ${escapeHtml(stageMeta.pipelineSub)}`;
+      } else if (statusLower === 'completing') {
         stageBox.style.borderColor = 'rgba(245, 158, 11, 0.4)';
         stageBox.style.background = 'rgba(245, 158, 11, 0.08)';
         if (stageDot) stageDot.style.background = '#fbbf24';

@@ -108,6 +108,10 @@ impl LogControl {
     }
 }
 
+/// Mapa compartido de subetapas de finalización post-descarga (`(etapa, progreso_copia)`).
+pub type CompletionStageMap =
+    Arc<std::sync::Mutex<std::collections::HashMap<Uuid, (String, Option<f64>)>>>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: DaemonConfig,
@@ -173,6 +177,8 @@ pub struct AppState {
     pub nas_transfer_semaphore: Arc<tokio::sync::Semaphore>,
     /// Identificador de la descarga que posee actualmente la ranura de copia al NAS.
     pub active_nas_transfer_id: Arc<tokio::sync::Mutex<Option<Uuid>>>,
+    /// Estado detallado en tiempo real del proceso de finalización por descarga (`(etapa, progreso_copia)`).
+    pub completion_stages: CompletionStageMap,
     /// Cliente de metadatos para el gestor multimedia unificado (reemplazo de Radarr/Sonarr/TMDB).
     pub media_metadata: Arc<crate::services::MediaMetadataService>,
     /// Hash en memoria de la contraseña opcional de la WebUI para peticiones en red local.
@@ -415,6 +421,12 @@ impl AppState {
                     .map(str::to_string)
             })
             .unwrap_or_else(|| config.update_channel.clone());
+        let persisted_auto_update = downloads
+            .get_setting("auto_update_enabled")
+            .ok()
+            .flatten()
+            .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
         downloads.set_event_channel(event_tx.clone(), Arc::clone(&sequence));
         let dl_arc = Arc::new(Mutex::new(downloads));
         server_session.set_downloads(Arc::clone(&dl_arc));
@@ -710,6 +722,7 @@ impl AppState {
                 config.update_check_enabled,
             ),
         );
+        updater.set_auto_update_enabled(persisted_auto_update);
         Self {
             config,
             downloads: dl_arc,
@@ -744,6 +757,7 @@ impl AppState {
             pseudonymizer: Arc::new(mule_filter::SessionPseudonymizer::new()),
             nas_transfer_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             active_nas_transfer_id: Arc::new(Mutex::new(None)),
+            completion_stages: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             media_metadata: Arc::new(crate::services::MediaMetadataService::new()),
             webui_password_hash: Arc::new(std::sync::RwLock::new(initial_webui_pass_hash)),
             updater,
@@ -1118,16 +1132,58 @@ impl AppState {
         }
     }
 
+    /// Actualiza o limpia la subetapa de finalización post-descarga de un archivo.
+    pub fn set_completion_stage(&self, id: Uuid, stage: Option<(&str, Option<f64>)>) {
+        if let Ok(mut guard) = self.completion_stages.lock() {
+            match stage {
+                Some((s, prog)) => {
+                    guard.insert(id, (s.to_string(), prog));
+                }
+                None => {
+                    guard.remove(&id);
+                }
+            }
+        }
+    }
+
+    /// Enriquece una instantánea de descarga con su subetapa de finalización y estado de cola NAS.
+    pub fn enrich_completion_metadata(
+        &self,
+        snapshot: &mut DownloadSnapshot,
+        active_nas_id: Option<Uuid>,
+    ) {
+        if snapshot.status == "completing" {
+            snapshot.nas_copy_active = Some(active_nas_id == Some(snapshot.id));
+        }
+        if let Ok(guard) = self.completion_stages.lock() {
+            if let Some((stage, prog)) = guard.get(&snapshot.id) {
+                snapshot.completion_stage = Some(stage.clone());
+                snapshot.copy_progress = *prog;
+                return;
+            }
+        }
+        if snapshot.status == "verifying" {
+            snapshot.completion_stage = Some("verifying_hashes".to_string());
+        } else if snapshot.status == "completing" {
+            snapshot.completion_stage = match snapshot.nas_copy_active {
+                Some(true) => Some("copying".to_string()),
+                Some(false) => Some("queued_copy".to_string()),
+                None => Some("reconstructing".to_string()),
+            };
+        }
+    }
+
     /// Emite un evento secuenciado de actualización de descarga a todos los suscriptores activos de WebSocket.
     pub fn broadcast_download_update(&self, mut snapshot: DownloadSnapshot) {
         // Adjunta los rangos de bloques en vuelo del enjambre (segmentos amarillos "pendientes"
         // de eMule) — el servicio de descargas no puede ver las sesiones de pares por sí mismo.
         snapshot.pending_ranges = self.peer_session.try_pending_ranges(&snapshot.ed2k_hash);
-        if snapshot.status == "completing" {
-            if let Ok(guard) = self.active_nas_transfer_id.try_lock() {
-                snapshot.nas_copy_active = Some(*guard == Some(snapshot.id));
-            }
-        }
+        let active_nas_id = self
+            .active_nas_transfer_id
+            .try_lock()
+            .ok()
+            .and_then(|guard| *guard);
+        self.enrich_completion_metadata(&mut snapshot, active_nas_id);
         self.emit_event(|sequence| DaemonEvent::DownloadUpdated {
             sequence,
             download: snapshot,

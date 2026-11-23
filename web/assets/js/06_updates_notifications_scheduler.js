@@ -128,6 +128,14 @@ function renderUpdateEnvironment() {
   const modalChanSelect = document.getElementById('modal-update-channel-select');
   if (modalChanSelect) modalChanSelect.value = chanVal;
 
+  const autoUpdateOn = env.autoUpdateEnabled === true;
+  const autoSelect = document.getElementById('update-auto-mode-select');
+  if (autoSelect) autoSelect.value = autoUpdateOn ? 'auto' : 'manual';
+  const modalAutoSwitch = document.getElementById('modal-update-auto-switch');
+  if (modalAutoSwitch && modalAutoSwitch.checked !== autoUpdateOn) {
+    modalAutoSwitch.checked = autoUpdateOn;
+  }
+
   const modeEl = document.getElementById('update-runtime-mode-val');
   if (modeEl) modeEl.textContent = runtimeText;
 
@@ -198,6 +206,37 @@ async function changeUpdateChannel(channel) {
   }
 }
 window.changeUpdateChannel = changeUpdateChannel;
+
+async function changeAutoUpdateMode(enabled) {
+  const isAuto = Boolean(enabled);
+  const autoSelect = document.getElementById('update-auto-mode-select');
+  if (autoSelect) autoSelect.value = isAuto ? 'auto' : 'manual';
+  const modalAutoSwitch = document.getElementById('modal-update-auto-switch');
+  if (modalAutoSwitch) modalAutoSwitch.checked = isAuto;
+
+  try {
+    await client.call('settings.set', { autoUpdateEnabled: isAuto });
+    if (!updateUiState.environment) updateUiState.environment = {};
+    updateUiState.environment.autoUpdateEnabled = isAuto;
+    renderUpdateEnvironment();
+
+    const msg = isAuto
+      ? '⚡ Auto-actualización activada: el servidor instalará nuevas versiones oficiales automáticamente.'
+      : '🖐️ Modo manual activado: se avisará antes de descargar o instalar actualizaciones.';
+    addLog('info', msg);
+    showUpdateModalFeedback(isAuto ? 'success' : 'info', msg);
+    if (typeof showToast === 'function') {
+      showToast(isAuto ? 'Auto-actualización activada' : 'Actualizaciones en modo manual', 'info', isAuto ? '⚡' : '🖐️');
+    }
+
+    if (isAuto && updateUiState.snapshot && updateUiState.snapshot.status === 'update_available') {
+      confirmAndApplyOfficialUpdate();
+    }
+  } catch (err) {
+    showUpdateModalFeedback('error', 'Error guardando modo de actualización: ' + (err.message || err));
+  }
+}
+window.changeAutoUpdateMode = changeAutoUpdateMode;
 
 function requestRollbackConfirm() {
   const box = document.getElementById('modal-upd-rollback-confirm');

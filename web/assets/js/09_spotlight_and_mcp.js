@@ -446,6 +446,11 @@ async function openFolderBrowser(inputId, title) {
   const initialPath = input ? input.value.trim() : '';
   folderBrowserTargetInputId = inputId;
 
+  const confirmBtn = document.getElementById('btn-folder-confirm');
+  const viewerActions = document.getElementById('folder-viewer-actions');
+  if (confirmBtn) confirmBtn.style.display = 'inline-flex';
+  if (viewerActions) viewerActions.style.display = 'none';
+
   if (isLocalBrowserHost()) {
     try {
       const picked = await client.call('settings.pickFolder', {
@@ -469,6 +474,120 @@ async function openFolderBrowser(inputId, title) {
   const modal = document.getElementById('folder-browser-modal');
   if (modal) modal.classList.add('active');
   await loadFolderBrowserPath(initialPath);
+}
+
+let folderBrowserHighlightedFile = null;
+
+function renderFolderEntries(listEl, directories, files, highlightedFile) {
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const dirs = Array.isArray(directories) ? directories : [];
+  const fileList = Array.isArray(files) ? files : [];
+
+  if (dirs.length === 0 && fileList.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;';
+    empty.textContent = 'Esta carpeta está vacía.';
+    listEl.appendChild(empty);
+    return;
+  }
+
+  dirs.forEach(dir => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'btn btn-sm';
+    row.style.cssText = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; justify-content: flex-start; padding: 7px 10px; background: transparent; border: 1px solid transparent;';
+    row.textContent = `📁 ${dir.name}`;
+    row.title = dir.path;
+    row.addEventListener('click', () => loadFolderBrowserPath(dir.path));
+    listEl.appendChild(row);
+  });
+
+  if (fileList.length > 0 && !folderBrowserTargetInputId) {
+    fileList.forEach(f => {
+      const isTarget = highlightedFile && f.name === highlightedFile;
+      const row = document.createElement('div');
+      row.style.cssText = `display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; ${isTarget ? 'background: rgba(var(--primary-rgb), 0.14); border: 1px solid rgba(var(--primary-rgb), 0.45); color: #ffffff; font-weight: 600;' : 'color: var(--text-muted); border: 1px solid transparent;'}`;
+      const sizeStr = typeof formatBytes === 'function' ? formatBytes(f.sizeBytes || 0) : `${f.sizeBytes || 0} B`;
+      const isVideo = /\.(mkv|mp4|avi|mov|wmv|m4v|ts|webm)$/i.test(f.name || '');
+      const icon = isVideo ? '🎬' : (/\.srt$/i.test(f.name || '') ? '💬' : '📄');
+      row.innerHTML = `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(f.path)}">${icon} ${escapeHtml(f.name)}</span><span style="font-family: var(--font-mono); font-size: 0.74rem; flex-shrink: 0;">${sizeStr}</span>`;
+      listEl.appendChild(row);
+    });
+  }
+}
+
+async function openDestinationFolder(opts = {}) {
+  folderBrowserTargetInputId = null;
+  folderBrowserHighlightedFile = null;
+  const confirmBtn = document.getElementById('btn-folder-confirm');
+  const viewerActions = document.getElementById('folder-viewer-actions');
+  if (confirmBtn) confirmBtn.style.display = 'none';
+  if (viewerActions) viewerActions.style.display = 'flex';
+
+  const titleEl = document.getElementById('folder-browser-title');
+  if (titleEl) {
+    titleEl.textContent = opts.title ? `Carpeta de destino: ${opts.title}` : 'Carpeta de destino';
+  }
+  const modal = document.getElementById('folder-browser-modal');
+  if (modal) modal.classList.add('active');
+
+  const listEl = document.getElementById('folder-browser-list');
+  const pathInput = document.getElementById('folder-browser-path');
+  const rootsEl = document.getElementById('folder-browser-roots');
+  const upBtn = document.getElementById('folder-browser-up');
+  if (listEl) {
+    listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">Localizando carpeta en el servidor...</div>';
+  }
+
+  try {
+    const res = await client.call('settings.openFolder', {
+      path: opts.path || undefined,
+      mediaId: opts.mediaId || undefined,
+      downloadId: opts.downloadId || undefined,
+      openNative: isLocalBrowserHost()
+    });
+    if (pathInput) pathInput.value = res.resolvedDir || '';
+    folderBrowserParentPath = res.parentPath || null;
+    folderBrowserHighlightedFile = res.highlightedFile || null;
+    if (upBtn) upBtn.disabled = !folderBrowserParentPath;
+
+    if (rootsEl) {
+      rootsEl.innerHTML = '';
+      (res.roots || []).forEach(root => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm';
+        btn.textContent = `💾 ${root}`;
+        btn.style.cssText = 'padding: 3px 8px; font-size: 0.78rem;';
+        btn.addEventListener('click', () => loadFolderBrowserPath(root));
+        rootsEl.appendChild(btn);
+      });
+    }
+
+    renderFolderEntries(listEl, res.directories, res.files, folderBrowserHighlightedFile);
+  } catch (e) {
+    if (listEl) {
+      listEl.innerHTML = `<div style="padding: 16px; color: #fca5a5;">No se pudo abrir la carpeta: ${escapeHtml(e.message || String(e))}</div>`;
+    }
+  }
+}
+
+function copyCurrentFolderPath(asNetworkShare) {
+  const pathInput = document.getElementById('folder-browser-path');
+  const raw = pathInput ? pathInput.value.trim() : '';
+  if (!raw) return;
+  let textToCopy = raw;
+  if (asNetworkShare) {
+    const host = window.location.hostname || '127.0.0.1';
+    const clean = raw.replace(/^\/+/, '').replace(/\//g, '\\');
+    textToCopy = `\\\\${host}\\${clean}`;
+  }
+  navigator.clipboard.writeText(textToCopy).then(() => {
+    if (typeof showToast === 'function') {
+      showToast(`Ruta copiada: ${textToCopy}`, 'success', '📋');
+    }
+  }).catch(() => {});
 }
 
 async function loadFolderBrowserPath(path) {
@@ -500,27 +619,7 @@ async function loadFolderBrowserPath(path) {
       });
     }
 
-    if (listEl) {
-      listEl.innerHTML = '';
-      const dirs = res.directories || [];
-      if (dirs.length === 0) {
-        const empty = document.createElement('div');
-        empty.style.cssText = 'padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;';
-        empty.textContent = 'Esta carpeta no contiene subcarpetas.';
-        listEl.appendChild(empty);
-      } else {
-        dirs.forEach(dir => {
-          const row = document.createElement('button');
-          row.type = 'button';
-          row.className = 'btn btn-sm';
-          row.style.cssText = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; justify-content: flex-start; padding: 7px 10px; background: transparent; border: 1px solid transparent;';
-          row.textContent = `📁 ${dir.name}`;
-          row.title = dir.path;
-          row.addEventListener('click', () => loadFolderBrowserPath(dir.path));
-          listEl.appendChild(row);
-        });
-      }
-    }
+    renderFolderEntries(listEl, res.directories || [], res.files || [], folderBrowserHighlightedFile);
   } catch (e) {
     if (listEl) {
       listEl.innerHTML = `<div style="padding: 16px; color: #fca5a5;">Error al listar carpetas: ${escapeHtml(e.message || String(e))}</div>`;
@@ -730,6 +829,8 @@ async function restoreFullBackupFromFile(inputEl) {
 }
 
 window.openFolderBrowser = openFolderBrowser;
+window.openDestinationFolder = openDestinationFolder;
+window.copyCurrentFolderPath = copyCurrentFolderPath;
 window.loadFolderBrowserPath = loadFolderBrowserPath;
 window.loadFolderBrowserParent = loadFolderBrowserParent;
 window.confirmFolderBrowserSelection = confirmFolderBrowserSelection;

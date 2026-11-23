@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 
 use crate::error::CoreError;
 
+/// Intervalo mínimo en bytes entre notificaciones de progreso durante la copia por fragmentos (2 MiB).
+pub const COPY_PROGRESS_NOTIFY_INTERVAL_BYTES: u64 = 2 * 1024 * 1024;
+
 /// Estrategia a seguir si el archivo de destino objetivo ya existe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CollisionStrategy {
@@ -27,6 +30,20 @@ pub fn finalize_file(
     target_path: &Path,
     strategy: CollisionStrategy,
 ) -> Result<PathBuf, CoreError> {
+    finalize_file_with_progress(temp_path, target_path, strategy, |_, _| {})
+}
+
+/// Finaliza una descarga completada desde su archivo `.part` hacia la ruta de destino
+/// notificando el progreso de copia `(bytes_copiados, bytes_totales)`.
+pub fn finalize_file_with_progress<F>(
+    temp_path: &Path,
+    target_path: &Path,
+    strategy: CollisionStrategy,
+    mut on_progress: F,
+) -> Result<PathBuf, CoreError>
+where
+    F: FnMut(u64, u64),
+{
     let resolved = match strategy {
         CollisionStrategy::FailIfExists if target_path.exists() => {
             return Err(CoreError::TargetFileExists(target_path.to_path_buf()));
@@ -40,9 +57,11 @@ pub fn finalize_file(
     }
 
     // Intentar primero el renombrado atómico
-    if fs::rename(temp_path, &resolved).is_err() {
+    if fs::rename(temp_path, &resolved).is_ok() {
+        on_progress(1, 1);
+    } else {
         // Alternativa mediante copia por fragmentos (alineada a 128 KiB para NFS/sistemas de archivos en red) + eliminación entre límites de sistemas de archivos
-        copy_chunked(temp_path, &resolved)?;
+        copy_chunked_with_progress(temp_path, &resolved, on_progress)?;
         let _ = fs::remove_file(temp_path);
     }
 
@@ -52,8 +71,22 @@ pub fn finalize_file(
 /// Copia un archivo en fragmentos de 128 KiB (coincidiendo con el wsize estándar de NFS) con una sincronización final,
 /// optimizando transferencias entre sistemas de archivos a través de NVMe local y montajes de red.
 pub fn copy_chunked(src_path: &Path, dst_path: &Path) -> std::io::Result<u64> {
+    copy_chunked_with_progress(src_path, dst_path, |_, _| {})
+}
+
+/// Copia un archivo en fragmentos de 128 KiB notificando el progreso acumulado cada
+/// [`COPY_PROGRESS_NOTIFY_INTERVAL_BYTES`].
+pub fn copy_chunked_with_progress<F>(
+    src_path: &Path,
+    dst_path: &Path,
+    mut on_progress: F,
+) -> std::io::Result<u64>
+where
+    F: FnMut(u64, u64),
+{
     const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB alineados con el wsize de NFS
     let mut src = std::fs::File::open(src_path)?;
+    let total_bytes = src.metadata().map(|m| m.len()).unwrap_or(0);
     let mut dst = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -62,6 +95,8 @@ pub fn copy_chunked(src_path: &Path, dst_path: &Path) -> std::io::Result<u64> {
 
     let mut buf = vec![0u8; CHUNK_SIZE];
     let mut total_copied = 0u64;
+    let mut last_notified = 0u64;
+    on_progress(0, total_bytes);
 
     loop {
         let n = std::io::Read::read(&mut src, &mut buf)?;
@@ -70,9 +105,14 @@ pub fn copy_chunked(src_path: &Path, dst_path: &Path) -> std::io::Result<u64> {
         }
         std::io::Write::write_all(&mut dst, &buf[..n])?;
         total_copied += n as u64;
+        if total_copied.saturating_sub(last_notified) >= COPY_PROGRESS_NOTIFY_INTERVAL_BYTES {
+            last_notified = total_copied;
+            on_progress(total_copied, total_bytes);
+        }
     }
 
     dst.sync_data()?;
+    on_progress(total_copied, total_bytes);
     Ok(total_copied)
 }
 

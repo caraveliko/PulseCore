@@ -303,16 +303,27 @@ async function execMediaSearch() {
       const year = it.year ? `(${it.year})` : '';
       const overview = it.overview ? it.overview.slice(0, 140) + '...' : 'Sin sinopsis disponible.';
 
+      const seasonScopeSelect = isTv
+        ? `<select id="search-season-scope-${idx}" class="form-control" style="width: auto; padding: 4px 8px; font-size: 0.74rem; height: 29px;" title="Elige qué temporadas descargar automáticamente">
+             <option value="all">Todas las temporadas</option>
+             <option value="latest">Solo última temporada</option>
+             <option value="season_1">Solo Temporada 1</option>
+           </select>`
+        : '';
+
       return `
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; gap: 12px; align-items: center;">
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
           ${poster}
-          <div style="flex: 1;">
+          <div style="flex: 1; min-width: 180px;">
             <div style="font-weight: 700; font-size: 0.95rem; color: var(--text);">${typeBadge}${escapeHtml(it.title)} <span style="font-weight: normal; color: var(--text-muted); font-size: 0.85rem;">${year}</span></div>
             <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.3; margin-top: 4px;">${escapeHtml(overview)}</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="addMediaSearchResult(${idx}, this)">
-            ➕ Añadir
-          </button>
+          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+            ${seasonScopeSelect}
+            <button class="btn btn-primary btn-sm" onclick="addMediaSearchResult(${idx}, this)">
+              ➕ Añadir
+            </button>
+          </div>
         </div>
       `;
     }).join('');
@@ -330,8 +341,13 @@ async function addMediaSearchResult(idx, btnEl) {
   }
   item.posterPath = item.posterPath || item.posterUrl;
   item.backdropPath = item.backdropPath || item.backdropUrl;
+  const scopeEl = document.getElementById(`search-season-scope-${idx}`);
+  const payload = Object.assign({}, item);
+  if (scopeEl && scopeEl.value) {
+    payload.seasonScope = scopeEl.value;
+  }
   try {
-    await client.call('media.add', item);
+    await client.call('media.add', payload);
     showToast(`Añadido "${item.title}" a la biblioteca`, 'success', '🎬');
     addLog('success', `Añadido título a biblioteca: ${item.title}`);
     closeModal('modal-media-search');
@@ -772,7 +788,11 @@ async function openMediaDetail(mediaId) {
     }
 
     // 4. Título y Título Original
-    document.getElementById('series-detail-title').textContent = `${item.title}${item.year ? ' (' + item.year + ')' : ''}`;
+    const yearSuffix = item.year ? ` (${item.year})` : '';
+    const displayTitle = (yearSuffix && !item.title.endsWith(yearSuffix))
+      ? `${item.title}${yearSuffix}`
+      : item.title;
+    document.getElementById('series-detail-title').textContent = displayTitle;
     const origTitleEl = document.getElementById('media-sheet-original-title');
     if (origTitleEl) {
       if (item.originalTitle && item.originalTitle.toLowerCase() !== item.title.toLowerCase()) {
@@ -833,10 +853,12 @@ async function openMediaDetail(mediaId) {
       }
 
       if (actionsEl) {
+        const safeFilePathAttr = escapeHtml(item.filePath || '').replace(/'/g, "\\'");
         actionsEl.style.display = 'flex';
         actionsEl.innerHTML = `
           <button class="btn" style="padding: 8px 14px; background: rgba(56,189,248,0.16); border-color: rgba(56,189,248,0.4); color: #38bdf8; font-weight: 600;" onclick="triggerSingleAutoGrab('${item.id}', null, '${safeTitleAttr}')" title="Ejecutar AutoGrabber de precisión ahora">${item.status === 'completed' ? '🔄 Buscar Upgrade (Auto-Grab)' : '⚡ Auto-Grab Ahora'}</button>
           <button class="btn" style="padding: 8px 14px;" onclick="closeModal('modal-media-detail'); openReleasesModal('${item.id}', '${safeTitleAttr}', true)" title="Buscar lanzamientos manualmente en Kad y trackers">🔍 Buscar Fuentes</button>
+          <button class="btn" style="padding: 8px 14px;" onclick="openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Abrir carpeta de destino en el servidor">📂 Abrir carpeta</button>
           ${details.trailerYoutubeId ? `<a class="btn" style="padding: 8px 14px; text-decoration: none;" href="https://www.youtube.com/watch?v=${encodeURIComponent(details.trailerYoutubeId)}" target="_blank" rel="noopener">🎞️ Ver Tráiler</a>` : ''}
           ${item.status === 'completed' ? `<button class="btn" style="padding: 8px 14px;" onclick="closeModal('modal-media-detail'); openSubtitlesModal('${item.id}', '${safeTitleAttr}', true)" title="Descargar subtítulos (Bazarr)">💬 Subtítulos (Bazarr)</button>` : ''}
           <button class="btn" style="padding: 8px 14px; color:#f85149; border-color: rgba(248,81,73,0.3);" onclick="closeModal('modal-media-detail'); deleteMediaItem('${item.id}')">🗑 Eliminar Película</button>
@@ -876,6 +898,7 @@ async function openMediaDetail(mediaId) {
         actionsEl.innerHTML = `
           <button class="btn" style="padding: 8px 16px; background: rgba(56,189,248,0.16); border-color: rgba(56,189,248,0.4); color: #38bdf8; font-weight: 600;" onclick="triggerSingleAutoGrab('${item.id}', null, '${safeTitleAttr}')" title="Ejecutar AutoGrabber sobre capítulos pendientes">⚡ Auto-Grab Serie Ahora</button>
           <button class="btn btn-primary" style="padding: 8px 16px;" onclick="closeModal('modal-media-detail'); openReleasesModal('${item.id}', '${safeTitleAttr}', false)" title="Buscar lanzamientos de la serie">🔍 Buscar Fuentes de la Serie</button>
+          <button class="btn" style="padding: 8px 14px;" onclick="openDestinationFolder({ mediaId: '${item.id}', title: '${safeTitleAttr}' })" title="Abrir carpeta de la serie en el servidor">📂 Abrir carpeta</button>
           <button class="btn" style="padding: 8px 14px; color:#f85149; border-color: rgba(248,81,73,0.3);" onclick="closeModal('modal-media-detail'); deleteMediaItem('${item.id}')">🗑 Eliminar Serie</button>
         `;
       }
@@ -1125,16 +1148,16 @@ function initSeriesSeasonsAndEpisodes() {
   episodes.forEach(ep => {
     const s = ep.seasonNumber || 1;
     if (!seasonMap.has(s)) {
-      seasonMap.set(s, { total: 0, completed: 0 });
+      seasonMap.set(s, { total: 0, completed: 0, monitoredCount: 0 });
     }
     const entry = seasonMap.get(s);
     entry.total += 1;
     if (ep.status === 'completed') entry.completed += 1;
+    if (ep.monitored !== false) entry.monitoredCount += 1;
   });
 
   const seasons = Array.from(seasonMap.keys()).sort((a, b) => a - b);
-  if (seasons.length > 0) {
-    // Seleccionar por defecto la primera temporada que tenga capítulos o la temporada 1
+  if (seasons.length > 0 && !seasons.includes(currentMediaDetailState.selectedSeason)) {
     currentMediaDetailState.selectedSeason = seasons[0];
   }
 
@@ -1142,11 +1165,12 @@ function initSeriesSeasonsAndEpisodes() {
     tabsEl.innerHTML = seasons.map(s => {
       const st = seasonMap.get(s);
       const isComplete = st.total > 0 && st.completed === st.total;
+      const isMuted = st.monitoredCount === 0 && !isComplete;
       return `
-        <button class="season-tab-btn ${s === currentMediaDetailState.selectedSeason ? 'active' : ''}"
+        <button class="season-tab-btn ${s === currentMediaDetailState.selectedSeason ? 'active' : ''} ${isMuted ? 'is-muted' : ''}"
                 id="season-tab-btn-${s}"
                 onclick="selectSeriesSeason(${s})">
-          <span>Temporada ${s}</span>
+          <span>${isMuted ? '🔕 ' : ''}Temporada ${s}</span>
           <span class="season-tab-count">${st.completed}/${st.total}${isComplete ? ' ✓' : ''}</span>
         </button>
       `;
@@ -1155,6 +1179,69 @@ function initSeriesSeasonsAndEpisodes() {
 
   renderCurrentSeriesSeason();
 }
+
+async function triggerSeasonAutoGrab(mediaId, seasonNumber, title) {
+  showToastNotification(`⚡ Buscando y descargando Temporada ${seasonNumber} de "${title}"...`, 'info', '📺');
+  try {
+    const res = await client.call('media.autoGrab', { mediaId, seasonNumber });
+    const grabbedE = (res && res.grabbedEpisodes) || [];
+    if (grabbedE.length > 0) {
+      showToastNotification(`✅ Temporada ${seasonNumber}: ${grabbedE.length} elemento(s) añadidos a la cola`, 'success', '📺');
+    } else {
+      showToastNotification(`Búsqueda de Temporada ${seasonNumber} completada`, 'info', '🔎');
+    }
+    await openMediaDetail(mediaId);
+    if (typeof loadMediaLibrary === 'function') loadMediaLibrary();
+  } catch (e) {
+    showToastNotification(`Error descargando Temporada ${seasonNumber}: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+async function toggleSeasonMonitored(mediaId, seasonNumber, nextMonitored) {
+  try {
+    await client.call('media.setSeasonMonitored', {
+      mediaId,
+      seasonNumber,
+      monitored: Boolean(nextMonitored),
+      onlyThisSeason: false
+    });
+    showToastNotification(
+      nextMonitored
+        ? `🔔 Temporada ${seasonNumber} activada para descarga automática`
+        : `🔕 Temporada ${seasonNumber} omitida (ya vista / sin descarga automática)`,
+      'success',
+      nextMonitored ? '🔔' : '👁️'
+    );
+    await openMediaDetail(mediaId);
+  } catch (e) {
+    showToastNotification(`Error actualizando temporada: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+async function setOnlySeasonMonitored(mediaId, seasonNumber) {
+  try {
+    await client.call('media.setSeasonMonitored', {
+      mediaId,
+      seasonNumber,
+      monitored: true,
+      onlyThisSeason: true
+    });
+    showToastNotification(`🎯 Solo Temporada ${seasonNumber} activa (temporadas anteriores omitidas)`, 'success', '🎯');
+    await openMediaDetail(mediaId);
+  } catch (e) {
+    showToastNotification(`Error aislando temporada: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+function openSeasonReleaseSearch(mediaId, seriesTitle, seasonNumber) {
+  const sTag = `S${String(seasonNumber).padStart(2, '0')}`;
+  openReleasesModal(mediaId, `${seriesTitle} ${sTag}`, false);
+}
+
+window.triggerSeasonAutoGrab = triggerSeasonAutoGrab;
+window.toggleSeasonMonitored = toggleSeasonMonitored;
+window.setOnlySeasonMonitored = setOnlySeasonMonitored;
+window.openSeasonReleaseSearch = openSeasonReleaseSearch;
 
 function selectSeriesSeason(seasonNumber) {
   currentMediaDetailState.selectedSeason = seasonNumber;
@@ -1181,8 +1268,34 @@ function renderCurrentSeriesSeason() {
     .sort((a, b) => a.episodeNumber - b.episodeNumber);
 
   const completedInSeason = seasonEps.filter(e => e.status === 'completed').length;
+  const monitoredInSeason = seasonEps.filter(e => e.monitored !== false).length;
+  const isSeasonMonitored = monitoredInSeason > 0;
   if (summaryEl) {
     summaryEl.textContent = `Temporada ${selectedSeason}: ${completedInSeason} de ${seasonEps.length} completados`;
+  }
+
+  const safeSeriesTitle = escapeHtml(item.title).replace(/'/g, "\\'");
+  const smartBarEl = document.getElementById('series-season-smart-bar');
+  if (smartBarEl) {
+    const pendingInSeason = seasonEps.filter(e => e.status !== 'completed').length;
+    smartBarEl.innerHTML = `
+      <div class="season-smart-status">
+        <span class="badge ${isSeasonMonitored ? 'badge-dl' : 'badge-pause'}">
+          ${isSeasonMonitored ? `🔔 Siguiendo Temporada ${selectedSeason}` : `👁️ Temporada ${selectedSeason} omitida (ya vista)`}
+        </span>
+        <span style="font-size: 0.76rem; color: var(--text-muted);">
+          ${pendingInSeason > 0 ? `${pendingInSeason} episodio(s) pendientes` : 'Temporada completa en disco'}
+        </span>
+      </div>
+      <div class="season-smart-actions">
+        ${pendingInSeason > 0 ? `<button type="button" class="btn btn-sm btn-primary" onclick="triggerSeasonAutoGrab('${item.id}', ${selectedSeason}, '${safeSeriesTitle}')" title="Buscar pack o episodios solo de la Temporada ${selectedSeason}">⚡ Descargar Temporada ${selectedSeason}</button>` : ''}
+        <button type="button" class="btn btn-sm" onclick="setOnlySeasonMonitored('${item.id}', ${selectedSeason})" title="Omitir automáticamente el resto de temporadas y seguir solo la Temporada ${selectedSeason}">🎯 Solo seguir T.${selectedSeason}</button>
+        <button type="button" class="btn btn-sm" onclick="toggleSeasonMonitored('${item.id}', ${selectedSeason}, ${!isSeasonMonitored})" title="${isSeasonMonitored ? 'Omitir esta temporada para no descargarla automáticamente' : 'Volver a activar la descarga automática de esta temporada'}">
+          ${isSeasonMonitored ? `👁️ Omitir T.${selectedSeason} (Ya vista)` : `🔔 Activar T.${selectedSeason}`}
+        </button>
+        <button type="button" class="btn btn-sm" onclick="closeModal('modal-media-detail'); openSeasonReleaseSearch('${item.id}', '${safeSeriesTitle}', ${selectedSeason})" title="Buscar manualmente pack o episodios de la Temporada ${selectedSeason}">🔍 Pack / Fuentes T.${selectedSeason}</button>
+      </div>
+    `;
   }
 
   if (filterVal === 'completed') {
@@ -1199,8 +1312,6 @@ function renderCurrentSeriesSeason() {
     `;
     return;
   }
-
-  const safeSeriesTitle = escapeHtml(item.title).replace(/'/g, "\\'");
 
   container.innerHTML = seasonEps.map(ep => {
     const epCode = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
@@ -1260,6 +1371,7 @@ function renderCurrentSeriesSeason() {
             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
               ${ep.status === 'completed' ? `<span class="badge badge-completed" style="font-size: 0.72rem; padding: 2px 7px;">✔ En disco</span>` : `<button class="btn btn-sm" style="background:rgba(56,189,248,0.16); color:#38bdf8; border-color:rgba(56,189,248,0.35);" onclick="triggerSingleAutoGrab('${item.id}', '${ep.id}', '${safeSeriesTitle} ${epCode}')" title="Auto-Grab automático para ${epCode}">⚡ Auto</button>`}
               <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${item.id}', '${safeSeriesTitle}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Buscar fuentes para ${epCode}">🔍 Fuentes</button>
+              ${ep.status === 'completed' && ep.filePath ? `<button class="btn btn-sm" onclick="openDestinationFolder({ path: '${safeFilePathAttr}', title: '${safeSeriesTitle} ${epCode}' })" title="Abrir carpeta de destino">📂</button>` : ''}
               ${ep.status === 'completed' ? `<button class="btn btn-sm" onclick="openSubtitlesModal('${item.id}', '${safeSeriesTitle} ${epCode}', false, ${ep.seasonNumber}, ${ep.episodeNumber}, '${safeFilePathAttr}')" title="Subtítulos (Bazarr)">💬 Subs</button>` : ''}
             </div>
           </div>

@@ -26,6 +26,12 @@ pub const MAX_UPDATE_PAYLOAD_BYTES: usize = 64 * 1024 * 1024;
 /// Intervalo predeterminado de comprobación periódica en segundo plano (24 horas).
 pub const DEFAULT_CHECK_INTERVAL: Duration = Duration::from_secs(86400);
 
+/// Retraso inicial antes de la primera comprobación del supervisor de autoactualización.
+pub const AUTO_UPDATE_INITIAL_DELAY: Duration = Duration::from_secs(90);
+
+/// Intervalo de comprobación periódica cuando la autoactualización desatendida está activa (6 horas).
+pub const AUTO_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 3600);
+
 /// Sufijo temporal para el binario preparado en fase de verificación (*staging*).
 pub const UPDATE_STAGING_SUFFIX: &str = ".update";
 

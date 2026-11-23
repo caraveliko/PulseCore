@@ -507,6 +507,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register_task(notification_monitor_handle.abort_handle())
         .await;
 
+    // Supervisor periódico de autoactualización desatendida (activo solo si el usuario lo habilita)
+    let auto_update_handle =
+        mule_daemon::rpc::handlers::updater::start_auto_update_monitor(state.clone());
+    state
+        .register_task(auto_update_handle.abort_handle())
+        .await;
+
     let shutdown_notify = state.shutdown_notify.clone();
     let upnp_cleanup = state.upnp.clone();
     let listener_cleanup = state.inbound_listener.clone();

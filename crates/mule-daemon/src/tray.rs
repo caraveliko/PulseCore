@@ -801,6 +801,8 @@ mod tests {
                 pending_ranges: Vec::new(),
                 max_sources: None,
                 nas_copy_active: None,
+                completion_stage: None,
+                copy_progress: None,
                 protocol: Some("ed2k".to_string()),
             },
         }

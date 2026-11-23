@@ -103,6 +103,8 @@ pub struct UpdateEnvironmentInfo {
     pub channel: String,
     /// Indica si está habilitada la comprobación automática al iniciar.
     pub auto_check_enabled: bool,
+    /// Indica si la autoactualización desatendida (descarga, instalación y reinicio automático) está activa.
+    pub auto_update_enabled: bool,
     /// Límite máximo permitido en bytes para descargas y subidas locales.
     pub max_upload_bytes: usize,
 }
@@ -150,6 +152,7 @@ pub struct UpdaterService {
     current_version: String,
     channel: RwLock<String>,
     auto_check_enabled: bool,
+    auto_update_enabled: AtomicBool,
     status: RwLock<UpdateStatusSnapshot>,
     cached_asset: RwLock<Option<(String, TargetAsset)>>,
     is_busy: AtomicBool,
@@ -225,11 +228,22 @@ impl UpdaterService {
             current_version,
             channel: RwLock::new(normalized_channel),
             auto_check_enabled,
+            auto_update_enabled: AtomicBool::new(false),
             status: RwLock::new(UpdateStatusSnapshot::Idle),
             cached_asset: RwLock::new(None),
             is_busy: AtomicBool::new(false),
             restart_pending: AtomicBool::new(false),
         }
+    }
+
+    /// Comprueba si la autoactualización desatendida está habilitada.
+    pub fn is_auto_update_enabled(&self) -> bool {
+        self.auto_update_enabled.load(Ordering::SeqCst)
+    }
+
+    /// Activa o desactiva la autoactualización desatendida en segundo plano.
+    pub fn set_auto_update_enabled(&self, enabled: bool) {
+        self.auto_update_enabled.store(enabled, Ordering::SeqCst);
     }
 
     /// Devuelve el canal de actualización activo (`"stable"` o `"beta"`).
@@ -325,6 +339,7 @@ impl UpdaterService {
             manifest_url: self.manifest_url.read().await.clone(),
             channel: self.channel.read().await.clone(),
             auto_check_enabled: self.auto_check_enabled,
+            auto_update_enabled: self.is_auto_update_enabled(),
             max_upload_bytes: MAX_UPDATE_PAYLOAD_BYTES,
         }
     }

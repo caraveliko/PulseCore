@@ -98,6 +98,11 @@ pub async fn handle_media_get(
     let details = state.media_metadata.get_extended_details(&item).await;
 
     let mut needs_db_update = false;
+    let cleaned_title = crate::services::scorer::strip_trailing_year_suffix(&item.title).to_string();
+    if !cleaned_title.is_empty() && cleaned_title != item.title {
+        item.title = cleaned_title;
+        needs_db_update = true;
+    }
     if item.backdrop_path.is_none() && details.backdrop_url.is_some() {
         item.backdrop_path = details.backdrop_url.clone();
         needs_db_update = true;
@@ -117,6 +122,24 @@ pub async fn handle_media_get(
     if item.imdb_id.is_none() && details.imdb_id.is_some() {
         item.imdb_id = details.imdb_id.clone();
         needs_db_update = true;
+    }
+    let current_ov = item.overview.as_deref().unwrap_or("").trim();
+    if (current_ov.is_empty() || crate::services::media_metadata::is_likely_english_text(current_ov))
+        && details
+            .spanish_overview
+            .as_deref()
+            .is_some_and(|ov| !ov.trim().is_empty() && !crate::services::media_metadata::is_likely_english_text(ov))
+    {
+        item.overview = details.spanish_overview.clone();
+        needs_db_update = true;
+    }
+    if let Some(ref es_t) = details.spanish_title {
+        if item.title.eq_ignore_ascii_case(item.original_title.as_deref().unwrap_or(""))
+            && !es_t.eq_ignore_ascii_case(&item.title)
+        {
+            item.title = es_t.clone();
+            needs_db_update = true;
+        }
     }
     // Si el título registrado quedó en inglés y existe una traducción oficial en español
     if item.title.eq_ignore_ascii_case(item.original_title.as_deref().unwrap_or("")) {
@@ -170,9 +193,10 @@ pub async fn handle_media_add(
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
-    let title = params["title"]
+    let raw_title = params["title"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'title' parameter"))?;
+    let title = crate::services::scorer::strip_trailing_year_suffix(raw_title);
     let media_type = params["mediaType"]
         .as_str()
         .unwrap_or("movie")
@@ -250,23 +274,50 @@ pub async fn handle_media_add(
         .insert_media_item(&item)
         .map_err(|e| JsonRpcError::business(format!("Database insert error: {e}")))?;
 
+    let season_scope = params["seasonScope"].as_str().unwrap_or("all");
+    let explicit_seasons: Option<std::collections::HashSet<u32>> = params["monitoredSeasons"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u32))
+                .collect()
+        });
+
     if let Some(episodes) = episodes_to_insert {
+        let max_season = episodes
+            .iter()
+            .map(|(s, _, _, _)| *s)
+            .filter(|&s| s > 0)
+            .max()
+            .unwrap_or(1);
+
         let ep_items: Vec<EpisodeItem> = episodes
             .into_iter()
-            .map(|(s, ep, ep_title, air_date)| EpisodeItem {
-                id: Uuid::new_v4().to_string(),
-                media_id: id.clone(),
-                season_number: s,
-                episode_number: ep,
-                title: ep_title,
-                air_date,
-                status: "wanted".to_string(),
-                monitored: true,
-                file_path: None,
-                original_release_name: None,
-                download_id: None,
-                created_at: now,
-                updated_at: now,
+            .map(|(s, ep, ep_title, air_date)| {
+                let is_monitored = if let Some(ref set) = explicit_seasons {
+                    set.contains(&s)
+                } else {
+                    match season_scope {
+                        "latest" => s == max_season,
+                        "season_1" => s == 1,
+                        _ => true,
+                    }
+                };
+                EpisodeItem {
+                    id: Uuid::new_v4().to_string(),
+                    media_id: id.clone(),
+                    season_number: s,
+                    episode_number: ep,
+                    title: ep_title,
+                    air_date,
+                    status: "wanted".to_string(),
+                    monitored: is_monitored,
+                    file_path: None,
+                    original_release_name: None,
+                    download_id: None,
+                    created_at: now,
+                    updated_at: now,
+                }
             })
             .collect();
         let _ = dl_svc.insert_episodes_batch(&ep_items);
@@ -546,10 +597,11 @@ pub async fn handle_media_search_releases(
         if !query_param.is_empty() {
             q_list.push(query_param.to_string());
         } else {
+            let clean_item_title = crate::services::scorer::strip_trailing_year_suffix(&item.title);
             if let Some(year) = item.year {
-                q_list.push(format!("{} {year}", item.title));
+                q_list.push(format!("{clean_item_title} {year}"));
             }
-            q_list.push(item.title.clone());
+            q_list.push(clean_item_title.to_string());
             if let Some(ref orig) = item.original_title {
                 if !orig.is_empty() && !orig.eq_ignore_ascii_case(&item.title) {
                     if let Some(year) = item.year {
@@ -732,6 +784,46 @@ pub async fn handle_media_scan_disk(state: &AppState) -> Result<Value, JsonRpcEr
     Ok(summary)
 }
 
+/// Activa o desactiva la monitorización automática de una temporada concreta (o deja solo esa temporada activa).
+pub async fn handle_media_set_season_monitored(
+    state: &AppState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
+    let media_id = params["mediaId"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' parameter"))?;
+    let season_number = params["seasonNumber"]
+        .as_u64()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'seasonNumber' parameter"))?
+        as u32;
+    let only_this_season = params["onlyThisSeason"].as_bool().unwrap_or(false);
+    let monitored = params["monitored"].as_bool().unwrap_or(true);
+    let now = now_ms();
+
+    let dl_svc = state.downloads.lock().await;
+    let updated = if only_this_season {
+        dl_svc
+            .db()
+            .set_only_season_monitored(media_id, season_number, now)
+            .map_err(|e| JsonRpcError::business(format!("Database error: {e}")))?
+    } else {
+        dl_svc
+            .db()
+            .set_season_monitored(media_id, season_number, monitored, now)
+            .map_err(|e| JsonRpcError::business(format!("Database error: {e}")))?
+    };
+
+    Ok(json!({
+        "success": true,
+        "mediaId": media_id,
+        "seasonNumber": season_number,
+        "monitored": if only_this_season { true } else { monitored },
+        "onlyThisSeason": only_this_season,
+        "updatedEpisodes": updated
+    }))
+}
+
 /// Desencadena una pasada bajo demanda del programador de auto-descarga (global o para un medio/episodio/lista negra específico)
 pub async fn handle_media_auto_grab(
     state: &AppState,
@@ -746,12 +838,14 @@ pub async fn handle_media_auto_grab(
         if let Some(media_id) = p["mediaId"].as_str() {
             if !media_id.is_empty() {
                 let ep_id = p["episodeId"].as_str().filter(|s| !s.is_empty());
+                let season_num = p["seasonNumber"].as_u64().map(|n| n as u32);
                 let aggregator = crate::services::IndexerAggregator::new();
                 return crate::services::AutoGrabber::grab_for_media_id(
                     state,
                     &aggregator,
                     media_id,
                     ep_id,
+                    season_num,
                 )
                 .await
                 .map_err(JsonRpcError::business);

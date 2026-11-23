@@ -7,8 +7,25 @@ use super::dictionaries::{
 };
 use super::MAX_EPISODE_RANGE_SPAN;
 
+/// Elimina un sufijo redundante de año entre paréntesis al final de un título
+/// (p. ej. `"The Body (2026)"` -> `"The Body"`), preservando títulos que son
+/// únicamente un año (p. ej. `"1923"` o `"(2026)"`).
+pub fn strip_trailing_year_suffix(title: &str) -> &str {
+    let trimmed = title.trim();
+    if let Some(without_close) = trimmed.strip_suffix(')') {
+        if let Some(open_idx) = without_close.rfind('(') {
+            let inside = without_close[open_idx + 1..].trim();
+            let prefix = without_close[..open_idx].trim();
+            if !prefix.is_empty() && is_year_token(inside).is_some() {
+                return prefix;
+            }
+        }
+    }
+    trimmed
+}
+
 pub fn clean_title_tokens(title: &str) -> Vec<String> {
-    let normalized = normalize_accents_and_symbols(title);
+    let normalized = normalize_accents_and_symbols(strip_trailing_year_suffix(title));
     let tokens: Vec<String> = normalized
         .split_whitespace()
         .filter(|&t| !STOP_WORDS.contains(&t) && (t.len() > 1 || t.chars().all(|c| c.is_ascii_digit())))
@@ -522,7 +539,7 @@ fn matches_series_or_movie_title_tokens(
         .filter(|v| !v.is_empty())
         .collect();
 
-    // Comprobación estricta de año para películas
+    // Comprobación estricta de año para películas y protección frente a series homónimas antiguas
     if is_movie {
         if let Some(year) = expected_year {
             if !cand_years.is_empty() {
@@ -539,6 +556,10 @@ fn matches_series_or_movie_title_tokens(
                     return false;
                 }
             }
+        }
+    } else if let Some(year) = expected_year {
+        if !cand_years.is_empty() && !cand_years.iter().any(|&y| y >= year.saturating_sub(1)) {
+            return false;
         }
     }
 

@@ -13,35 +13,58 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <script>try{var _a=localStorage.getItem('pulsecore_atmosphere');if(_a)document.documentElement.dataset.atmosphere=_a;}catch(_){}</script>
+  <script>try{var _a=localStorage.getItem('pulsecore_atmosphere');if(_a)document.documentElement.dataset.atmosphere=_a;var _fx=localStorage.getItem('pulsecore_dynamic_fx');document.documentElement.dataset.dynamicFx=(_fx==='off')?'off':'on';}catch(_){}</script>
 
   <script src="/session-config.js"></script>
   <link rel="stylesheet" href="/assets/base.css?v=1">
-  <link rel="stylesheet" href="/assets/theme.css?v=12">
+  <link rel="stylesheet" href="/assets/theme.css?v=20">
 </head>
 <body>
   <!-- Escena atmosférica fija detrás de las superficies translúcidas -->
   <div id="ambient-scene" class="ambient-scene" aria-hidden="true">
     <div id="ambient-bg-layer" class="ambient-bg-layer"></div>
+    <div class="ambient-orbs">
+      <div class="ambient-orb orb-a"></div>
+      <div class="ambient-orb orb-b"></div>
+      <div class="ambient-orb orb-c"></div>
+    </div>
     <div id="ambient-media-backdrop" class="ambient-media-backdrop"></div>
     <svg class="ambient-constellation" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
-      <g stroke="currentColor" stroke-width="0.9" stroke-opacity="0.32" fill="none">
+      <g class="constellation-edges" stroke="currentColor" stroke-width="0.9" stroke-opacity="0.28" fill="none">
         <line x1="90" y1="110" x2="210" y2="170" />
         <line x1="210" y1="170" x2="150" y2="290" />
         <line x1="210" y1="170" x2="340" y2="120" />
+        <line x1="1380" y1="130" x2="1490" y2="210" />
+        <line x1="1380" y1="130" x2="1270" y2="195" />
         <line x1="1460" y1="760" x2="1340" y2="690" />
         <line x1="1340" y1="690" x2="1410" y2="570" />
         <line x1="1340" y1="690" x2="1210" y2="750" />
+        <line x1="140" y1="760" x2="260" y2="700" />
+        <line x1="260" y1="700" x2="320" y2="810" />
       </g>
-      <g fill="currentColor" fill-opacity="0.55">
-        <circle cx="90" cy="110" r="2.2" />
-        <circle cx="210" cy="170" r="3" />
-        <circle cx="150" cy="290" r="2" />
-        <circle cx="340" cy="120" r="1.8" />
-        <circle cx="1460" cy="760" r="2.2" />
-        <circle cx="1340" cy="690" r="3" />
-        <circle cx="1410" cy="570" r="2" />
-        <circle cx="1210" cy="750" r="1.8" />
+      <g class="constellation-pulses" stroke="currentColor" stroke-width="1.35" stroke-opacity="0.65" fill="none">
+        <line x1="90" y1="110" x2="210" y2="170" />
+        <line x1="210" y1="170" x2="340" y2="120" />
+        <line x1="1380" y1="130" x2="1490" y2="210" />
+        <line x1="1460" y1="760" x2="1340" y2="690" />
+        <line x1="1340" y1="690" x2="1210" y2="750" />
+        <line x1="140" y1="760" x2="260" y2="700" />
+      </g>
+      <g fill="currentColor" fill-opacity="0.6">
+        <circle class="constellation-node node-p1" cx="90" cy="110" r="2.2" />
+        <circle class="constellation-node node-p2" cx="210" cy="170" r="3.1" />
+        <circle class="constellation-node node-p3" cx="150" cy="290" r="2" />
+        <circle class="constellation-node node-p1" cx="340" cy="120" r="1.9" />
+        <circle class="constellation-node node-p2" cx="1380" cy="130" r="2.6" />
+        <circle class="constellation-node node-p3" cx="1490" cy="210" r="2" />
+        <circle class="constellation-node node-p1" cx="1270" cy="195" r="1.8" />
+        <circle class="constellation-node node-p2" cx="1460" cy="760" r="2.2" />
+        <circle class="constellation-node node-p1" cx="1340" cy="690" r="3.1" />
+        <circle class="constellation-node node-p3" cx="1410" cy="570" r="2" />
+        <circle class="constellation-node node-p2" cx="1210" cy="750" r="1.8" />
+        <circle class="constellation-node node-p3" cx="140" cy="760" r="2.1" />
+        <circle class="constellation-node node-p1" cx="260" cy="700" r="2.6" />
+        <circle class="constellation-node node-p2" cx="320" cy="810" r="1.9" />
       </g>
     </svg>
     <div id="ambient-vignette" class="ambient-vignette"></div>
@@ -54,7 +77,7 @@
       <!-- Marca -->
       <div class="brand-section" style="min-width: auto;">
         <div class="brand-mark-wrap">
-          <img src="/assets/pulse-core-mark.svg?v=1" alt="Pulse Core" class="brand-mark-img">
+          <img src="/assets/pulse-core-mark.svg?v=2" alt="Pulse Core" class="brand-mark-img">
         </div>
         <div class="brand-wordmark">
           <div class="brand-name-line">
@@ -186,6 +209,13 @@
               <strong id="atmosphere-intensity-val" style="font-family: var(--font-mono); color: var(--text);">85%</strong>
             </div>
             <input type="range" id="atmosphere-intensity-range" class="atmosphere-range" min="0" max="100" step="5" value="85" oninput="setAtmosphereIntensity(this.value)">
+          </div>
+          <div class="atmosphere-toggle-row">
+            <label for="atmosphere-dynamic-toggle" class="atmosphere-toggle-label">
+              <span>Efectos dinámicos y pulso P2P</span>
+              <small>Nebulosa viva, reflejo en tarjetas y flujo en barras</small>
+            </label>
+            <input type="checkbox" id="atmosphere-dynamic-toggle" class="opt-switch" checked onchange="setAtmosphereDynamicFx(this.checked)">
           </div>
         </div>
       </div>
@@ -387,16 +417,13 @@
 
         <!-- Derecha: Botón Primario + Enlace manual + Desplegable Herramientas -->
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <button class="btn media-add-hero-btn" id="btn-media-add" onclick="openMediaSearchModal()">
+          <button class="btn media-add-hero-btn" id="btn-media-add" onclick="openMediaSearchModal()" title="Buscar y añadir películas o series desde TMDB">
             <span class="media-add-icon-badge" aria-hidden="true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
             <span class="media-add-copy">
               <span class="media-add-title">Añadir Título</span>
-              <span class="media-add-sub">Buscar películas y series · TMDB</span>
-            </span>
-            <span class="media-add-arrow" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span class="media-add-sub">TMDB</span>
             </span>
           </button>
 
@@ -756,7 +783,10 @@
                   <div class="insp-prop-group-title">Ubicación & Almacenamiento</div>
                   <div class="insp-prop-row">
                     <span class="insp-prop-key">Destino final:</span>
-                    <span class="insp-prop-val" id="insp-dest" title="" style="max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 440px;">
+                      <span class="insp-prop-val" id="insp-dest" title="" style="max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+                      <button type="button" class="btn btn-sm" style="padding: 2px 7px; font-size: 0.72rem; flex-shrink: 0;" onclick="if(selectedDownloadId && typeof openDestinationFolder==='function') openDestinationFolder({ downloadId: selectedDownloadId, title: document.getElementById('insp-title')?.textContent || 'Descarga' })" title="Abrir carpeta de destino">📂</button>
+                    </span>
                   </div>
                   <div class="insp-prop-row">
                     <span class="insp-prop-key">Archivo temporal:</span>
@@ -1228,6 +1258,41 @@
 
           <!-- CONTENEDOR 2: ⚡ VELOCIDAD Y CONEXIONES -->
           <div id="opt-connection" class="opt-subpanel" style="display: none;">
+            <div class="opt-card">
+              <div class="opt-card-header">
+                <h4 class="opt-card-title"><span>🧠</span> <span>Asistente y Perfiles Inteligentes de Velocidad</span></h4>
+                <span id="smart-profile-active-badge" class="badge badge-dl" style="display: none; font-size: 0.72rem;">Perfil aplicado</span>
+              </div>
+              <div class="bw-scanner-box">
+                <div class="bw-scanner-head">
+                  <div>
+                    <div class="opt-row-title">Escáner de Red, Latencia y Hardware</div>
+                    <div class="opt-row-desc">Mide la respuesta de tu red, detecta el equipo (CPU, RAM, NAS) y calcula 4 perfiles a medida para bajada y subida.</div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <select id="bw-line-hint" class="form-control" style="width: auto; font-size: 0.78rem; padding: 5px 10px;" onchange="refreshSmartProfilesPreview()">
+                      <option value="auto">Detección automática</option>
+                      <option value="100">Fibra 100 Mbps</option>
+                      <option value="300">Fibra 300 Mbps</option>
+                      <option value="600">Fibra 600 Mbps</option>
+                      <option value="1000">Fibra 1 Gbps</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-primary" id="btn-run-bw-scanner" onclick="runSmartBandwidthScanner()">📡 Escanear Red y Equipo</button>
+                  </div>
+                </div>
+                <div id="bw-scanner-progress-wrap" style="display: none; margin-top: 10px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 4px;">
+                    <span id="bw-scanner-step">Analizando hardware y latencia...</span>
+                    <span id="bw-scanner-pct" style="font-family: var(--font-mono);">0%</span>
+                  </div>
+                  <div class="progress-bar-bg"><div id="bw-scanner-bar" class="progress-bar-fill" style="width: 0%;"></div></div>
+                </div>
+                <div id="bw-scanner-metrics" class="bw-scanner-metrics" style="display: none;"></div>
+              </div>
+
+              <div class="smart-profile-grid" id="smart-profile-grid"></div>
+            </div>
+
             <div class="opt-card">
               <div class="opt-card-header">
                 <h4 class="opt-card-title"><span>📶</span> <span>Límites de Velocidad</span></h4>
@@ -1982,6 +2047,13 @@
               </button>
 
               <div id="update-action-card" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                  <span style="color: var(--text-muted);">Modo de actualización:</span>
+                  <select id="update-auto-mode-select" onchange="changeAutoUpdateMode(this.value === 'auto')" style="background: rgba(15,23,42,0.85); color: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.78rem; font-weight: 600;">
+                    <option value="manual">Manual (avisar antes de instalar)</option>
+                    <option value="auto">Automático (instalar y reiniciar en servidor)</option>
+                  </select>
+                </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                   <span style="color: var(--text-muted);">Canal de versiones:</span>
                   <select id="update-channel-select" onchange="changeUpdateChannel(this.value)" style="background: rgba(15,23,42,0.85); color: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.78rem; font-weight: 600;">
@@ -2772,9 +2844,15 @@
 
       <div id="folder-browser-list" style="overflow-y: auto; flex: 1; min-height: 220px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-sub); padding: 6px; display: flex; flex-direction: column; gap: 4px;"></div>
 
-      <div class="modal-footer" style="margin-top: 14px;">
-        <button type="button" class="btn" onclick="closeFolderBrowser()">Cancelar</button>
-        <button type="button" class="btn btn-primary" onclick="confirmFolderBrowserSelection()">Seleccionar esta carpeta</button>
+      <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div id="folder-viewer-actions" style="display: none; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm" id="btn-folder-copy-path" onclick="copyCurrentFolderPath(false)">📋 Copiar ruta</button>
+          <button type="button" class="btn btn-sm" id="btn-folder-copy-smb" onclick="copyCurrentFolderPath(true)">🌐 Copiar ruta de red</button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-left: auto;">
+          <button type="button" class="btn" onclick="closeFolderBrowser()">Cerrar</button>
+          <button type="button" class="btn btn-primary" id="btn-folder-confirm" onclick="confirmFolderBrowserSelection()">Seleccionar esta carpeta</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2949,6 +3027,8 @@
               </div>
             </div>
 
+            <div id="series-season-smart-bar" class="season-smart-bar"></div>
+
             <div class="episodes-cards-grid" id="series-episodes-body"></div>
           </div>
         </div>
@@ -3113,6 +3193,7 @@
   <!-- MENÚ CONTEXTUAL FLOTANTE (CLIC DERECHO ESTILO EMULE/QBITTORRENT) -->
   <div id="context-menu" class="context-menu">
     <div class="context-item" data-action="force-start" style="color: #38bdf8; font-weight: 600;">⚡ Forzar inicio inmediato (Saltar cola)</div>
+    <div class="context-item" data-action="open-folder">📂 Abrir carpeta de destino</div>
     <div class="context-divider"></div>
     <div class="context-item" data-action="resume">▶ Reanudar</div>
     <div class="context-item" data-action="pause">⏸ Pausar</div>
@@ -3378,6 +3459,14 @@
             </div>
           </div>
 
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+            <div>
+              <div style="font-size: 0.81rem; font-weight: 600; color: #f8fafc;">Auto-actualización desatendida (Servidor / Raspberry Pi)</div>
+              <div style="font-size: 0.73rem; color: var(--text-muted);">Comprueba cada 6 h, descarga, verifica firma Ed25519, guarda copia <code>.old</code> y reinicia vía <code>systemd</code>.</div>
+            </div>
+            <input type="checkbox" id="modal-update-auto-switch" class="opt-switch" onchange="changeAutoUpdateMode(this.checked)">
+          </div>
+
           <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
             <button class="btn btn-sm btn-success" id="btn-modal-apply-official" onclick="requestOfficialUpdateConfirm()" style="display: none; font-weight: 700;">
               🚀 Descargar e instalar
@@ -3560,14 +3649,14 @@
   </div>
 
   <script src="/assets/js/01_client_and_telemetry.js?v=1"></script>
-  <script src="/assets/js/02_downloads_and_bandwidth.js?v=1"></script>
-  <script src="/assets/js/03_inspector_servers_kad.js?v=1"></script>
-  <script src="/assets/js/04_actions_and_onboarding.js?v=1"></script>
-  <script src="/assets/js/05_local_guide_and_settings.js?v=1"></script>
-  <script src="/assets/js/06_updates_notifications_scheduler.js?v=1"></script>
-  <script src="/assets/js/07_media_core.js?v=2"></script>
-  <script src="/assets/js/08_media_servarr_and_subtitles.js?v=1"></script>
-  <script src="/assets/js/09_spotlight_and_mcp.js?v=1"></script>
-  <script src="/assets/atmosphere.js?v=3"></script>
+  <script src="/assets/js/02_downloads_and_bandwidth.js?v=2"></script>
+  <script src="/assets/js/03_inspector_servers_kad.js?v=2"></script>
+  <script src="/assets/js/04_actions_and_onboarding.js?v=2"></script>
+  <script src="/assets/js/05_local_guide_and_settings.js?v=2"></script>
+  <script src="/assets/js/06_updates_notifications_scheduler.js?v=2"></script>
+  <script src="/assets/js/07_media_core.js?v=6"></script>
+  <script src="/assets/js/08_media_servarr_and_subtitles.js?v=2"></script>
+  <script src="/assets/js/09_spotlight_and_mcp.js?v=2"></script>
+  <script src="/assets/atmosphere.js?v=4"></script>
 </body>
 </html>

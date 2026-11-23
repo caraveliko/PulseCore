@@ -13,7 +13,8 @@ use crate::services::notifications::{
     NotificationKind, NotificationSeverity,
 };
 use crate::services::updater::{
-    is_managed_by_systemd, UpdateStatusSnapshot, UpdaterError, RESTART_RESPONSE_GRACE_MS,
+    is_managed_by_systemd, is_running_in_docker, UpdateStatusSnapshot, UpdaterError,
+    AUTO_UPDATE_CHECK_INTERVAL, AUTO_UPDATE_INITIAL_DELAY, RESTART_RESPONSE_GRACE_MS,
 };
 use crate::state::AppState;
 
@@ -206,4 +207,65 @@ pub async fn handle_rollback_update(
             "Fallo al revertir a la versión anterior: {e}"
         ))),
     }
+}
+
+/// Supervisor en segundo plano que comprueba e instala actualizaciones automáticamente
+/// cuando `auto_update_enabled` está activo (modo servidor / Raspberry Pi).
+pub fn start_auto_update_monitor(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        tokio::time::sleep(AUTO_UPDATE_INITIAL_DELAY).await;
+        let mut interval = tokio::time::interval(AUTO_UPDATE_CHECK_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            interval.tick().await;
+            if !state.updater.is_auto_update_enabled() {
+                continue;
+            }
+            if is_running_in_docker()
+                || state.network_policy.state() == mule_network_policy::NetworkState::Disabled
+                || state.network_policy.profile().is_loopback_only()
+            {
+                continue;
+            }
+            let env = state.updater.environment_info().await;
+            if !env.can_self_update {
+                continue;
+            }
+            if let Ok(UpdateStatusSnapshot::UpdateAvailable { version, .. }) =
+                state.updater.check_for_updates(&state.network_policy).await
+            {
+                tracing::info!(
+                    version = %version,
+                    "Autoactualización activa: descargando e instalando nueva versión"
+                );
+                if let Err(err) = state.updater.download_and_stage(&state.network_policy).await {
+                    tracing::warn!("Error descargando autoactualización v{version}: {err}");
+                    continue;
+                }
+                if let Err(err) = state.updater.apply_update().await {
+                    tracing::warn!("Error aplicando autoactualización v{version}: {err}");
+                    continue;
+                }
+                let _ = state
+                    .notifications
+                    .notify(
+                        &state,
+                        NotificationEventInput {
+                            kind: NotificationKind::UpdateAvailable,
+                            severity: NotificationSeverity::Info,
+                            category: NotificationCategory::System,
+                            title: format!("Pulse Core actualizado a v{version}"),
+                            body: "Se ha instalado automáticamente la nueva versión oficial. Reiniciando servicio…".to_string(),
+                            metadata: Some(json!({ "version": version, "autoApplied": true })),
+                            dedupe_key: Some(format!("auto-update:{version}")),
+                            cooldown_secs: DISK_LOW_COOLDOWN_SECS,
+                        },
+                    )
+                    .await;
+                schedule_graceful_restart(&state);
+                break;
+            }
+        }
+    })
 }

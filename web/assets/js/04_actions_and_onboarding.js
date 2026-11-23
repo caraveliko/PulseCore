@@ -419,6 +419,11 @@ document.querySelectorAll('#context-menu .context-item').forEach(item => {
         addLog('info', `Reiniciada descarga: ${displayName}`);
         refreshDownloads();
         break;
+      case 'open-folder':
+        if (typeof openDestinationFolder === 'function') {
+          openDestinationFolder({ downloadId: id, title: displayName });
+        }
+        break;
       case 'prio-high':
       case 'prio-normal':
       case 'prio-low':

@@ -1,44 +1,44 @@
-<!-- Logotipo compacto de Pulse Core optimizado para cabecera (28-40 px) -->
+<!-- Logotipo compacto de Pulse Core optimizado para cabecera (36-48 px) -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
   <defs>
-    <linearGradient id="pcMarkGrad" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pcMarkGrad" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#00f5d4" />
       <stop offset="52%" stop-color="#00bbf9" />
       <stop offset="100%" stop-color="#7c3aed" />
     </linearGradient>
     <radialGradient id="pcMarkGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.34" />
-      <stop offset="65%" stop-color="#00bbf9" stop-opacity="0.10" />
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.38" />
+      <stop offset="68%" stop-color="#00bbf9" stop-opacity="0.12" />
       <stop offset="100%" stop-color="#060911" stop-opacity="0" />
     </radialGradient>
   </defs>
 
   <!-- Halo atmosférico del núcleo -->
-  <circle cx="32" cy="32" r="29" fill="url(#pcMarkGlow)" />
+  <circle cx="32" cy="32" r="31" fill="url(#pcMarkGlow)" />
 
   <!-- Anillo orbital discontinuo de enjambre -->
-  <circle cx="32" cy="32" r="24" stroke="url(#pcMarkGrad)" stroke-width="1.35" stroke-opacity="0.45" stroke-dasharray="4 4" />
+  <circle cx="32" cy="32" r="27.5" stroke="url(#pcMarkGrad)" stroke-width="1.5" stroke-opacity="0.52" stroke-dasharray="4.5 4" />
 
   <!-- Conexiones hexagonales de nodos hacia el núcleo -->
-  <g stroke="url(#pcMarkGrad)" stroke-width="1.4" stroke-opacity="0.62" stroke-linecap="round">
-    <line x1="32" y1="8" x2="32" y2="18" />
-    <line x1="52.8" y1="20" x2="44.1" y2="25" />
-    <line x1="52.8" y1="44" x2="44.1" y2="39" />
-    <line x1="32" y1="56" x2="32" y2="46" />
-    <line x1="11.2" y1="44" x2="19.9" y2="39" />
-    <line x1="11.2" y1="20" x2="19.9" y2="25" />
+  <g stroke="url(#pcMarkGrad)" stroke-width="1.65" stroke-opacity="0.72" stroke-linecap="round">
+    <line x1="32" y1="4.5" x2="32" y2="14" />
+    <line x1="55.8" y1="18.25" x2="47.6" y2="23" />
+    <line x1="55.8" y1="45.75" x2="47.6" y2="41" />
+    <line x1="32" y1="59.5" x2="32" y2="50" />
+    <line x1="8.2" y1="45.75" x2="16.4" y2="41" />
+    <line x1="8.2" y1="18.25" x2="16.4" y2="23" />
   </g>
 
   <!-- Seis nodos periféricos de la red P2P -->
-  <circle cx="32" cy="8" r="2.7" fill="#00f5d4" />
-  <circle cx="52.8" cy="20" r="2.5" fill="#00bbf9" />
-  <circle cx="52.8" cy="44" r="2.5" fill="#7c3aed" />
-  <circle cx="32" cy="56" r="2.7" fill="#00bbf9" />
-  <circle cx="11.2" cy="44" r="2.5" fill="#7c3aed" />
-  <circle cx="11.2" cy="20" r="2.5" fill="#00f5d4" />
+  <circle cx="32" cy="4.5" r="3.1" fill="#00f5d4" />
+  <circle cx="55.8" cy="18.25" r="2.9" fill="#00bbf9" />
+  <circle cx="55.8" cy="45.75" r="2.9" fill="#7c3aed" />
+  <circle cx="32" cy="59.5" r="3.1" fill="#00bbf9" />
+  <circle cx="8.2" cy="45.75" r="2.9" fill="#7c3aed" />
+  <circle cx="8.2" cy="18.25" r="2.9" fill="#00f5d4" />
 
   <!-- Núcleo central con aro de gradiente y trazo de pulso -->
-  <circle cx="32" cy="32" r="14.5" fill="#070b14" stroke="url(#pcMarkGrad)" stroke-width="2.4" />
-  <path d="M 20.5 32 H 26 L 28.6 25 L 31.6 39 L 34.4 27.5 L 36.8 34 L 38.5 32 H 43.5"
-        stroke="#00f5d4" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="32" cy="32" r="18" fill="#070b14" stroke="url(#pcMarkGrad)" stroke-width="2.6" />
+  <path d="M 17.5 32 H 24.2 L 27.4 23 L 31.4 41 L 34.8 26.2 L 37.8 34.8 L 39.8 32 H 46.5"
+        stroke="#00f5d4" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" />
 </svg>

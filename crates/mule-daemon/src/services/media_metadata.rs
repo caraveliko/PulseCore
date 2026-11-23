@@ -17,6 +17,10 @@ const MAX_CAST_CREDITS: usize = 16;
 const MAX_PHOTO_FALLBACK_LOOKUPS: usize = 6;
 /// Tiempo máximo de espera (en segundos) para una petición de foto de Wikipedia de respaldo.
 const PHOTO_FALLBACK_TIMEOUT_SECS: u64 = 4;
+/// Tiempo máximo de espera (en segundos) para la traducción automática de sinopsis al español.
+const TRANSLATION_FALLBACK_TIMEOUT_SECS: u64 = 4;
+/// Longitud máxima de cada fragmento enviado al traductor de respaldo.
+const MAX_TRANSLATION_CHUNK_CHARS: usize = 450;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +73,10 @@ pub struct MediaExtendedDetails {
     pub episode_meta: HashMap<String, EpisodeRichMeta>,
     #[serde(default)]
     pub alternative_titles: Vec<String>,
+    #[serde(default)]
+    pub spanish_title: Option<String>,
+    #[serde(default)]
+    pub spanish_overview: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +101,67 @@ pub struct MediaMetadataService {
     client: Client,
     details_cache: Arc<RwLock<HashMap<String, MediaExtendedDetails>>>,
     person_photo_cache: Arc<RwLock<HashMap<String, Option<String>>>>,
+    es_overview_cache: Arc<RwLock<HashMap<String, String>>>,
+}
+
+/// Detecta de forma heurística si una sinopsis está redactada en inglés.
+pub fn is_likely_english_text(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.len() < 16 {
+        return false;
+    }
+    let padded = format!(" {} ", trimmed.to_lowercase());
+    let en_markers = [
+        " the ", " and ", " with ", " when ", " after ", " their ", " from ", " into ",
+        " while ", " who ", " his ", " her ", " they ", " that ", " this ", " have ",
+        " has ", " been ", " finds ", " discovers ", " wakes ", " must ", " world ",
+        " life ", " family ", " young ", " two ", " one ", " for ", " are ", " is ",
+    ];
+    let es_markers = [
+        " el ", " la ", " los ", " las ", " una ", " con ", " para ", " por ", " del ",
+        " que ", " cuando ", " pero ", " como ", " sus ", " tras ", " hacia ", " donde ",
+        " mientras ", " entre ", " sobre ", " hasta ", " desde ", " todo ", " vida ",
+        " años ", " es ", " son ", " un ", " en ", " su ", " se ", " al ",
+    ];
+    let en_hits = en_markers.iter().filter(|m| padded.contains(*m)).count();
+    let es_hits = es_markers.iter().filter(|m| padded.contains(*m)).count();
+    en_hits > es_hits && en_hits >= 2
+}
+
+/// Traduce nombres de géneros cinematográficos/televisivos de TMDB/TVDB al español de España.
+pub fn translate_genre_to_spanish(genre: &str) -> String {
+    match genre.trim().to_lowercase().as_str() {
+        "action" => "Acción",
+        "action & adventure" => "Acción y aventura",
+        "adventure" => "Aventura",
+        "animation" => "Animación",
+        "biography" => "Biografía",
+        "children" => "Infantil",
+        "comedy" => "Comedia",
+        "crime" => "Crimen",
+        "documentary" => "Documental",
+        "drama" => "Drama",
+        "family" => "Familia",
+        "fantasy" => "Fantasía",
+        "history" => "Historia",
+        "horror" => "Terror",
+        "mini-series" | "miniseries" => "Miniserie",
+        "music" => "Música",
+        "musical" => "Musical",
+        "mystery" => "Misterio",
+        "reality" | "reality tv" => "Telerrealidad",
+        "romance" => "Romance",
+        "science fiction" | "sci-fi" | "sci-fi & fantasy" => "Ciencia ficción",
+        "soap" => "Telenovela",
+        "sport" | "sports" => "Deporte",
+        "suspense" | "thriller" => "Suspense",
+        "talk" => "Entrevistas",
+        "tv movie" => "Película de TV",
+        "war" | "war & politics" => "Bélica",
+        "western" => "Western",
+        other => return other.to_string(),
+    }
+    .to_string()
 }
 
 impl MediaMetadataService {
@@ -108,37 +177,128 @@ impl MediaMetadataService {
             client,
             details_cache: Arc::new(RwLock::new(HashMap::new())),
             person_photo_cache: Arc::new(RwLock::new(HashMap::new())),
+            es_overview_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Extrae el título y la sinopsis traducidos al español (prioridad `es-ES`, luego `es-MX` / `es`)
-    /// desde la tabla `Translations` de la API Radarr/TMDB cuando están disponibles.
+    /// desde la tabla `Translations` de la API Radarr/TMDB buscando ambos campos de forma independiente.
     fn extract_spanish_translation(item: &serde_json::Value) -> (Option<String>, Option<String>) {
         let Some(translations) = item["Translations"].as_array() else {
             return (None, None);
         };
         let preferred_langs = ["es-ES", "es-MX", "es", "spa"];
+        let mut best_title: Option<String> = None;
+        let mut best_overview: Option<String> = None;
         for pref in preferred_langs {
             for t in translations {
                 let lang = t["Language"].as_str().unwrap_or("");
                 if lang.eq_ignore_ascii_case(pref) {
-                    let title = t["Title"]
-                        .as_str()
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(String::from);
-                    let overview = t["Overview"]
-                        .as_str()
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(String::from);
-                    if title.is_some() || overview.is_some() {
-                        return (title, overview);
+                    if best_title.is_none() {
+                        best_title = t["Title"]
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(String::from);
+                    }
+                    if best_overview.is_none() {
+                        best_overview = t["Overview"]
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty() && !is_likely_english_text(s))
+                            .map(String::from);
+                    }
+                    if best_title.is_some() && best_overview.is_some() {
+                        return (best_title, best_overview);
                     }
                 }
             }
         }
-        (None, None)
+        (best_title, best_overview)
+    }
+
+    /// Garantiza una sinopsis en español de España: si el texto origen está en inglés,
+    /// aplica traducción automática con caché en memoria.
+    pub async fn ensure_spanish_overview(
+        &self,
+        cache_key: &str,
+        raw_overview: Option<String>,
+    ) -> Option<String> {
+        let trimmed = raw_overview
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?
+            .to_string();
+        if !is_likely_english_text(&trimmed) {
+            return Some(trimmed);
+        }
+        if let Some(cached) = self.es_overview_cache.read().await.get(cache_key).cloned() {
+            return Some(cached);
+        }
+        if let Some(translated) = self.translate_en_to_es_mymemory(&trimmed).await {
+            self.es_overview_cache
+                .write()
+                .await
+                .insert(cache_key.to_string(), translated.clone());
+            return Some(translated);
+        }
+        Some(trimmed)
+    }
+
+    async fn translate_en_to_es_mymemory(&self, text: &str) -> Option<String> {
+        let mut chunks: Vec<String> = Vec::new();
+        let mut current = String::new();
+        for sentence in text.split_inclusive(['.', '!', '?']) {
+            if !current.is_empty() && current.len() + sentence.len() > MAX_TRANSLATION_CHUNK_CHARS {
+                chunks.push(current.trim().to_string());
+                current.clear();
+            }
+            current.push_str(sentence);
+        }
+        if !current.trim().is_empty() {
+            chunks.push(current.trim().to_string());
+        }
+        if chunks.is_empty() {
+            return None;
+        }
+
+        let mut translated_parts = Vec::with_capacity(chunks.len());
+        for chunk in chunks.into_iter().take(4) {
+            let encoded: String = url::form_urlencoded::byte_serialize(chunk.as_bytes()).collect();
+            let url = format!("https://api.mymemory.translated.net/get?q={encoded}&langpair=en|es");
+            let Ok(Ok(resp)) = tokio::time::timeout(
+                Duration::from_secs(TRANSLATION_FALLBACK_TIMEOUT_SECS),
+                self.client.get(&url).send(),
+            )
+            .await
+            else {
+                return None;
+            };
+            if !resp.status().is_success() {
+                return None;
+            }
+            let Ok(bytes) = resp.bytes().await else {
+                return None;
+            };
+            let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+                return None;
+            };
+            let part = val["responseData"]["translatedText"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())?;
+            if part.to_uppercase().contains("MYMEMORY WARNING") {
+                return None;
+            }
+            translated_parts.push(part.to_string());
+        }
+
+        let joined = translated_parts.join(" ").trim().to_string();
+        if joined.is_empty() || is_likely_english_text(&joined) {
+            None
+        } else {
+            Some(joined)
+        }
     }
 
     /// Busca películas a través del proxy de metadatos abierto y en caché de Cloudflare de Radarr
@@ -246,7 +406,8 @@ impl MediaMetadataService {
                 let tvdb_id = item["tvdbId"].as_u64();
                 let tmdb_id = item["tmdbId"].as_u64();
                 let imdb_id = item["imdbId"].as_str().map(String::from);
-                let title = item["title"].as_str().unwrap_or("").to_string();
+                let raw_title = item["title"].as_str().unwrap_or("");
+                let title = crate::services::scorer::strip_trailing_year_suffix(raw_title).to_string();
                 let year = item["firstAired"]
                     .as_str()
                     .and_then(|d| d.get(0..4))
@@ -325,7 +486,10 @@ impl MediaMetadataService {
                 }
             });
         let year = item["Year"].as_u64().map(|y| y as u32);
-        let overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
+        let raw_overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
+        let overview = self
+            .ensure_spanish_overview(&format!("movie:{tmdb_id}"), raw_overview)
+            .await;
         let imdb_id = item["ImdbId"].as_str().map(String::from);
         let mut poster_url = None;
         let mut backdrop_url = None;
@@ -377,12 +541,16 @@ impl MediaMetadataService {
 
         let tmdb_id = item["tmdbId"].as_u64();
         let imdb_id = item["imdbId"].as_str().map(String::from);
-        let title = item["title"].as_str().unwrap_or("").to_string();
+        let raw_title = item["title"].as_str().unwrap_or("");
+        let title = crate::services::scorer::strip_trailing_year_suffix(raw_title).to_string();
         let year = item["firstAired"]
             .as_str()
             .and_then(|d| d.get(0..4))
             .and_then(|y| y.parse::<u32>().ok());
-        let overview = item["overview"].as_str().map(String::from);
+        let raw_overview = item["overview"].as_str().map(String::from);
+        let overview = self
+            .ensure_spanish_overview(&format!("tv:{tvdb_id}"), raw_overview)
+            .await;
         let mut poster_url = None;
         let mut backdrop_url = None;
 
@@ -551,10 +719,17 @@ impl MediaMetadataService {
             }
         }
 
+        let (es_title, es_overview) = Self::extract_spanish_translation(&val);
+        details.spanish_title = es_title;
+        let raw_overview = es_overview.or_else(|| val["Overview"].as_str().map(String::from));
+        details.spanish_overview = self
+            .ensure_spanish_overview(&format!("movie:{tid}"), raw_overview)
+            .await;
+
         if let Some(genres) = val["Genres"].as_array() {
             details.genres = genres
                 .iter()
-                .filter_map(|g| g.as_str().map(String::from))
+                .filter_map(|g| g.as_str().map(translate_genre_to_spanish))
                 .collect();
         }
 
@@ -746,10 +921,14 @@ impl MediaMetadataService {
             .and_then(|v| v.parse::<f64>().ok())
             .or_else(|| val["rating"]["value"].as_f64());
 
+        details.spanish_overview = self
+            .ensure_spanish_overview(&format!("tv:{tvid}"), val["overview"].as_str().map(String::from))
+            .await;
+
         if let Some(genres) = val["genres"].as_array() {
             details.genres = genres
                 .iter()
-                .filter_map(|g| g.as_str().map(String::from))
+                .filter_map(|g| g.as_str().map(translate_genre_to_spanish))
                 .collect();
         }
 

@@ -542,8 +542,10 @@ impl DiskScanner {
             let mut candidates: Vec<MediaItem> = Vec::new();
 
             for item in all_items {
+                let ov_trimmed = item.overview.as_deref().unwrap_or("").trim();
                 let needs_metadata = item.poster_path.as_deref().unwrap_or("").trim().is_empty()
-                    || item.overview.as_deref().unwrap_or("").trim().is_empty()
+                    || ov_trimmed.is_empty()
+                    || crate::services::media_metadata::is_likely_english_text(ov_trimmed)
                     || item.year.is_none();
 
                 let mut needs_episodes = false;
@@ -570,8 +572,10 @@ impl DiskScanner {
 
         let mut enriched_count = 0usize;
         for mut item in items_to_enrich {
+            let ov_trimmed = item.overview.as_deref().unwrap_or("").trim();
             let needs_metadata = item.poster_path.as_deref().unwrap_or("").trim().is_empty()
-                || item.overview.as_deref().unwrap_or("").trim().is_empty()
+                || ov_trimmed.is_empty()
+                || crate::services::media_metadata::is_likely_english_text(ov_trimmed)
                 || item.year.is_none();
 
             let needs_episodes = if item.media_type == "tv" {
@@ -649,8 +653,17 @@ impl DiskScanner {
                 if item.year.is_none() {
                     item.year = meta.year;
                 }
-                if item.overview.as_deref().unwrap_or("").trim().is_empty() {
+                let cur_ov = item.overview.as_deref().unwrap_or("").trim();
+                if (cur_ov.is_empty() || crate::services::media_metadata::is_likely_english_text(cur_ov))
+                    && meta.overview.as_deref().is_some_and(|o| !o.trim().is_empty())
+                {
                     item.overview = meta.overview;
+                }
+                if !meta.title.trim().is_empty()
+                    && item.title.eq_ignore_ascii_case(item.original_title.as_deref().unwrap_or(""))
+                    && !meta.title.eq_ignore_ascii_case(&item.title)
+                {
+                    item.title = meta.title;
                 }
                 if item.poster_path.as_deref().unwrap_or("").trim().is_empty() {
                     item.poster_path = meta.poster_url;

@@ -29,9 +29,7 @@ pub async fn handle_downloads_list(state: &AppState) -> Result<Value, JsonRpcErr
         if let Some(ranges) = pending_map.get(&detail.snapshot.ed2k_hash) {
             detail.snapshot.pending_ranges = ranges.clone();
         }
-        if detail.snapshot.status == "completing" {
-            detail.snapshot.nas_copy_active = Some(Some(detail.snapshot.id) == active_nas_id);
-        }
+        state.enrich_completion_metadata(&mut detail.snapshot, active_nas_id);
     }
 
     // Adjuntar descargas activas de BitTorrent desde el motor mule-torrent
@@ -60,6 +58,8 @@ pub async fn handle_downloads_list(state: &AppState) -> Result<Value, JsonRpcErr
                     pending_ranges: vec![],
                     max_sources: None,
                     nas_copy_active: None,
+                    completion_stage: None,
+                    copy_progress: None,
                     protocol: Some("torrent".to_string()),
                 },
                 ed2k_hash: t.info_hash.clone(),
@@ -107,10 +107,8 @@ pub async fn handle_downloads_get(
         .pending_ranges_for_file(&dl.ed2k_hash)
         .await;
 
-    if dl.snapshot.status == "completing" {
-        let active_nas_id = state.current_nas_transfer().await;
-        dl.snapshot.nas_copy_active = Some(Some(dl.snapshot.id) == active_nas_id);
-    }
+    let active_nas_id = state.current_nas_transfer().await;
+    state.enrich_completion_metadata(&mut dl.snapshot, active_nas_id);
 
     Ok(crate::rpc::handlers::json_value(&dl))
 }

@@ -668,6 +668,9 @@ function updateSparklines(downSpeed, upSpeed) {
   if (downPoly) downPoly.setAttribute('points', pointsToSvg(downHistory));
   const upPoly = document.getElementById('sparkline-up-poly');
   if (upPoly) upPoly.setAttribute('points', pointsToSvg(upHistory));
+  if (typeof window.updateAtmosphereTelemetry === 'function') {
+    window.updateAtmosphereTelemetry(downSpeed, upSpeed);
+  }
 
   // Actualizar gráfica extendida del panel inspector (solo si la pestaña de rendimiento está visible)
   const inspPerf = document.getElementById('insp-perf');
@@ -735,12 +738,13 @@ async function refreshDownloads() {
       const status = (dl.status || '').toLowerCase();
       const total = dl.totalBytes || dl.total_bytes || 0;
       const transferred = dl.receivedBytes || dl.received_bytes || 0;
-      const isComplete = (total > 0 && transferred >= total) || status === 'completed';
+      const isPostProcessing = status === 'verifying' || status === 'completing' || Boolean(dl.completionStage || dl.completion_stage);
+      const isComplete = !isPostProcessing && ((total > 0 && transferred >= total) || status === 'completed');
 
       const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash && (!dl.parts || dl.parts.length === 0));
       if (isTorrent) countBt++; else countEd2k++;
 
-      if (status === 'completing') {
+      if (isPostProcessing) {
         countCompleting++;
       } else if (status === 'completed' || isComplete) {
         countCompleted++;
@@ -896,7 +900,120 @@ function fixMojibake(str) {
   }
 }
 
-function getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas) {
+function getDownloadCompletionStageMeta(dl) {
+  const statusLower = (dl?.status || '').toLowerCase();
+  const rawStage = (dl?.completionStage || dl?.completion_stage || '').toLowerCase();
+  const nasActive = dl?.nasCopyActive ?? dl?.nas_copy_active;
+  const copyProgRaw = dl?.copyProgress ?? dl?.copy_progress;
+  const hasCopyProg = typeof copyProgRaw === 'number' && Number.isFinite(copyProgRaw);
+  const copyPct = hasCopyProg ? Math.max(0, Math.min(100, Math.round(copyProgRaw * 100))) : null;
+
+  let key = rawStage;
+  if (!key) {
+    if (statusLower === 'verifying') key = 'verifying_hashes';
+    else if (statusLower === 'completing') {
+      if (nasActive === true) key = 'copying';
+      else if (nasActive === false) key = 'queued_copy';
+      else key = 'reconstructing';
+    }
+  }
+
+  if (!key) {
+    return { active: false, key: '', stepIndex: 0, badgeHtml: '', pipelineTitle: '', pipelineSub: '', progressPct: 100 };
+  }
+
+  switch (key) {
+    case 'verifying_hashes':
+      return {
+        active: true,
+        key,
+        stepIndex: 1,
+        badgeHtml: '<span class="badge badge-verifying"><span class="dl-spin">🔍</span> Verificando hashes</span>',
+        pipelineTitle: 'Paso 1/4 · Verificando hashes',
+        pipelineSub: 'Comprobando integridad MD4 / eD2K de todas las partes',
+        progressPct: 100
+      };
+    case 'reconstructing':
+      return {
+        active: true,
+        key,
+        stepIndex: 2,
+        badgeHtml: '<span class="badge badge-reconstructing"><span class="dl-spin">⚙️</span> Reconstruyendo</span>',
+        pipelineTitle: 'Paso 2/4 · Reconstruyendo archivo',
+        pipelineSub: 'Consolidando .part y validando cabecera del contenedor',
+        progressPct: 100
+      };
+    case 'queued_copy':
+      return {
+        active: true,
+        key,
+        stepIndex: 3,
+        badgeHtml: '<span class="badge badge-completing">🕒 En cola de copia</span>',
+        pipelineTitle: 'Paso 3/4 · En cola de copia',
+        pipelineSub: 'Esperando turno FIFO para escribir en destino / NAS',
+        progressPct: 0
+      };
+    case 'copying': {
+      const pctSuffix = copyPct !== null ? ` (${copyPct}%)` : '...';
+      return {
+        active: true,
+        key,
+        stepIndex: 3,
+        badgeHtml: `<span class="badge badge-completing"><span class="dl-spin">⏳</span> Copiando${pctSuffix}</span>`,
+        pipelineTitle: `Paso 3/4 · Copiando a destino${pctSuffix}`,
+        pipelineSub: copyPct !== null
+          ? `Transfiriendo archivo reconstruido al almacenamiento final (${copyPct}%)`
+          : 'Transfiriendo archivo reconstruido al almacenamiento final',
+        progressPct: copyPct !== null ? copyPct : 100
+      };
+    }
+    case 'organizing':
+      return {
+        active: true,
+        key,
+        stepIndex: 4,
+        badgeHtml: '<span class="badge badge-organizing"><span class="dl-spin">🎬</span> Organizando</span>',
+        pipelineTitle: 'Paso 4/4 · Organizando en Filmoteca',
+        pipelineSub: 'Clasificando carpeta definitiva, subtítulos y Compartidos',
+        progressPct: 100
+      };
+    default:
+      return {
+        active: true,
+        key: 'reconstructing',
+        stepIndex: 2,
+        badgeHtml: '<span class="badge badge-completing"><span class="dl-spin">⏳</span> Finalizando...</span>',
+        pipelineTitle: 'Finalizando archivo...',
+        pipelineSub: 'Procesando archivo descargado',
+        progressPct: 100
+      };
+  }
+}
+
+function renderDownloadStagePipeline(stageMeta) {
+  if (!stageMeta || !stageMeta.active) return '';
+  const steps = [
+    { idx: 1, label: '1. Verificar' },
+    { idx: 2, label: '2. Reconstruir' },
+    { idx: 3, label: '3. Copiar' },
+    { idx: 4, label: '4. Organizar' }
+  ];
+  const pills = steps.map(s => {
+    const cls = s.idx < stageMeta.stepIndex ? 'is-done' : (s.idx === stageMeta.stepIndex ? 'is-current' : '');
+    return `<span class="dl-stage-pill ${cls}">${s.label}</span>`;
+  }).join('');
+  return `
+    <div class="dl-stage-pipeline">
+      <div class="dl-stage-steps">${pills}</div>
+      <div class="dl-stage-desc">${escapeHtml(stageMeta.pipelineSub)}</div>
+    </div>
+  `;
+}
+
+function getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas, stageMeta) {
+  if (stageMeta && stageMeta.active) {
+    return stageMeta.badgeHtml;
+  }
   if (isTransferringToNas) {
     return '<span class="badge badge-completing"><span style="display:inline-block; animation: spin 2s linear infinite;">⏳</span> Finalizando...</span>';
   } else if (statusLower === 'verifying') {
@@ -927,7 +1044,8 @@ function renderDownloadsTable() {
     const status = (dl.status || '').toLowerCase();
     const total = dl.totalBytes || dl.total_bytes || 0;
     const transferred = dl.receivedBytes || dl.received_bytes || 0;
-    const isComplete = (total > 0 && transferred >= total) || status === 'completed';
+    const isPostProcessing = status === 'verifying' || status === 'completing' || Boolean(dl.completionStage || dl.completion_stage);
+    const isComplete = !isPostProcessing && ((total > 0 && transferred >= total) || status === 'completed');
 
     // Filtro texto
     if (currentSearchFilter && !name.includes(currentSearchFilter)) return false;
@@ -936,10 +1054,10 @@ function renderDownloadsTable() {
     if (hideCompletedInUi && isComplete) return false;
 
     // Filtro estado (Píldoras)
-    if (currentFilterStatus === 'downloading' && (status !== 'downloading' || isComplete || status === 'completing')) return false;
+    if (currentFilterStatus === 'downloading' && (status !== 'downloading' || isComplete || isPostProcessing)) return false;
     if (currentFilterStatus === 'queued' && (status !== 'queued' && status !== 'waiting_for_sources' && status !== 'waitingforsources')) return false;
-    if (currentFilterStatus === 'completing' && status !== 'completing') return false;
-    if (currentFilterStatus === 'completed' && (!isComplete || status === 'completing')) return false;
+    if (currentFilterStatus === 'completing' && !isPostProcessing) return false;
+    if (currentFilterStatus === 'completed' && !isComplete) return false;
     if (currentFilterStatus === 'paused' && (status !== 'paused' || isComplete)) return false;
 
     // Filtro protocolo (Segmented control)
@@ -1022,12 +1140,14 @@ function renderDownloadsTable() {
       const id = dl.id || item.id || '';
       const total = dl.totalBytes || dl.total_bytes || 0;
       const transferred = dl.receivedBytes || dl.received_bytes || 0;
+      const stageMeta = getDownloadCompletionStageMeta(dl);
+      const isPostProcessing = stageMeta.active;
       const progress = total > 0 ? ((transferred / total) * 100).toFixed(1) : (dl.progress ? (dl.progress * 100).toFixed(1) : '0.0');
-      const isComplete = progress >= 100.0;
+      const isComplete = !isPostProcessing && (parseFloat(progress) >= 100.0 || (dl.status || '').toLowerCase() === 'completed');
       const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
       const sourceCount = dl.sourceCount || dl.source_count || 0;
       const statusLower = (dl.status || '').toLowerCase();
-      const isTransferringToNas = statusLower === 'completing';
+      const isTransferringToNas = statusLower === 'completing' || isPostProcessing;
 
       const isSelected = selectedDownloadId === id;
       const isChecked = selectedIds.has(id);
@@ -1041,25 +1161,52 @@ function renderDownloadsTable() {
       const cb = row.querySelector('.row-checkbox');
       if (cb && cb.checked !== isChecked) cb.checked = isChecked;
 
-      // Celda 1: Barra de progreso o cinta de partes
+      // Celda 1: Barra de progreso, cinta de partes y pipeline de etapas
+      const nameCell = row.children[1];
       const pRibbon = row.querySelector('.part-ribbon');
       if (pRibbon) {
-        if (isComplete) {
+        if (isComplete || isPostProcessing) {
           pRibbon.remove();
         } else if (dl.parts && dl.parts.length > 0) {
           const nextSegs = buildPartRibbonSegments(dl.parts);
           if (pRibbon.innerHTML !== nextSegs) pRibbon.innerHTML = nextSegs;
         }
       }
-      const pFill = row.querySelector('.progress-bar-fill');
-      if (pFill) {
-        if (isComplete) {
-          const pBg = row.querySelector('.progress-bar-bg');
-          if (pBg) pBg.remove();
-        } else {
-          pFill.style.width = `${progress}%`;
-          const fillClass = `progress-bar-fill ${isTransferringToNas ? 'completing' : (statusLower === 'paused' ? 'paused' : '')}`;
-          if (pFill.className !== fillClass) pFill.className = fillClass;
+      let pFill = row.querySelector('.progress-bar-fill');
+      if (isComplete) {
+        const pBg = row.querySelector('.progress-bar-bg');
+        if (pBg) pBg.remove();
+      } else if (isPostProcessing) {
+        const barPct = stageMeta.key === 'copying' ? stageMeta.progressPct : 100;
+        if (!pFill && nameCell) {
+          const bgDiv = document.createElement('div');
+          bgDiv.className = 'progress-bar-bg completing-bg';
+          bgDiv.innerHTML = `<div class="progress-bar-fill completing" style="width: ${barPct}%"></div>`;
+          nameCell.appendChild(bgDiv);
+        } else if (pFill) {
+          pFill.style.width = `${barPct}%`;
+          if (!pFill.classList.contains('completing')) pFill.className = 'progress-bar-fill completing';
+          if (pFill.parentElement && !pFill.parentElement.classList.contains('completing-bg')) {
+            pFill.parentElement.classList.add('completing-bg');
+          }
+        }
+      } else if (pFill) {
+        pFill.style.width = `${progress}%`;
+        const fillClass = `progress-bar-fill ${statusLower === 'paused' ? 'paused' : ''}`;
+        if (pFill.className !== fillClass) pFill.className = fillClass;
+      }
+
+      if (nameCell) {
+        const existingPipe = nameCell.querySelector('.dl-stage-pipeline');
+        if (isPostProcessing) {
+          const pipeHtml = renderDownloadStagePipeline(stageMeta);
+          if (existingPipe) {
+            existingPipe.outerHTML = pipeHtml;
+          } else {
+            nameCell.insertAdjacentHTML('beforeend', pipeHtml);
+          }
+        } else if (existingPipe) {
+          existingPipe.remove();
         }
       }
 
@@ -1070,7 +1217,10 @@ function renderDownloadsTable() {
 
       // Celda 3: Porcentaje
       if (row.children[3]) {
-        row.children[3].innerHTML = `<strong style="color: ${isComplete ? '#34d399' : '#fff'};">${progress}%</strong>`;
+        const pctLabel = isPostProcessing && stageMeta.key === 'copying'
+          ? `${stageMeta.progressPct}%`
+          : `${progress}%`;
+        row.children[3].innerHTML = `<strong style="color: ${isComplete ? '#34d399' : (isPostProcessing ? '#fbbf24' : '#fff')};">${pctLabel}</strong>`;
       }
 
       // Celda 4: Velocidad
@@ -1093,7 +1243,7 @@ function renderDownloadsTable() {
 
       // Celda 7: Badge de estado
       if (row.children[7]) {
-        const statusBadge = getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas);
+        const statusBadge = getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas, stageMeta);
         row.children[7].innerHTML = statusBadge;
       }
     });
@@ -1110,8 +1260,10 @@ function renderDownloadsTable() {
     const id = dl.id || item.id || '';
     const total = dl.totalBytes || dl.total_bytes || 0;
     const transferred = dl.receivedBytes || dl.received_bytes || 0;
+    const stageMeta = getDownloadCompletionStageMeta(dl);
+    const isPostProcessing = stageMeta.active;
     const progress = total > 0 ? ((transferred / total) * 100).toFixed(1) : (dl.progress ? (dl.progress * 100).toFixed(1) : '0.0');
-    const isComplete = progress >= 100.0;
+    const isComplete = !isPostProcessing && (parseFloat(progress) >= 100.0 || (dl.status || '').toLowerCase() === 'completed');
     const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
     const sourceCount = dl.sourceCount || dl.source_count || 0;
 
@@ -1129,18 +1281,26 @@ function renderDownloadsTable() {
     const categoryBadge = category ? `<span class="badge-category-outline">${category}</span>` : '';
 
     const statusLower = (dl.status || '').toLowerCase();
-    const isTransferringToNas = statusLower === 'completing';
-    const statusBadge = getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas);
+    const isTransferringToNas = statusLower === 'completing' || isPostProcessing;
+    const statusBadge = getDownloadStatusBadge(statusLower, isComplete, isTransferringToNas, stageMeta);
 
-    // Cinta continua de partes (o barra clásica si aún no hay mapa de partes); se oculta al 100%
+    // Cinta continua de partes (o barra clásica si aún no hay mapa de partes); se oculta al 100% definitivo
     let progressBarHtml = '';
     if (!isComplete) {
-      if (dl.parts && dl.parts.length > 0 && !isTransferringToNas) {
+      if (isPostProcessing) {
+        const barPct = stageMeta.key === 'copying' ? stageMeta.progressPct : 100;
+        progressBarHtml = `
+          <div class="progress-bar-bg completing-bg">
+            <div class="progress-bar-fill completing" style="width: ${barPct}%"></div>
+          </div>
+          ${renderDownloadStagePipeline(stageMeta)}
+        `;
+      } else if (dl.parts && dl.parts.length > 0) {
         progressBarHtml = `<div class="part-ribbon" title="${progress}% completado">${buildPartRibbonSegments(dl.parts)}</div>`;
       } else {
         progressBarHtml = `
-          <div class="progress-bar-bg ${isTransferringToNas ? 'completing-bg' : ''}">
-            <div class="progress-bar-fill ${isTransferringToNas ? 'completing' : (statusLower === 'paused' ? 'paused' : '')}" style="width: ${progress}%"></div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill ${statusLower === 'paused' ? 'paused' : ''}" style="width: ${progress}%"></div>
           </div>
         `;
       }
@@ -1295,21 +1455,36 @@ function showSmartTooltip(targetEl, type, id) {
     const transferred = dl.receivedBytes || dl.received_bytes || 0;
     const remaining = Math.max(0, total - transferred);
     const progress = total > 0 ? ((transferred / total) * 100).toFixed(1) : (dl.progress ? (dl.progress * 100).toFixed(1) : '0.0');
-    const isComplete = progress >= 100.0;
+    const stageMeta = getDownloadCompletionStageMeta(dl);
+    const isComplete = !stageMeta.active && (parseFloat(progress) >= 100.0 || (dl.status || '').toLowerCase() === 'completed');
     const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
     const sourceCount = dl.sourceCount || dl.source_count || 0;
     const statusLower = (dl.status || '').toLowerCase();
-    const isTransferringToNas = statusLower === 'completing';
-    const isActivelyWritingToNas = isTransferringToNas && (dl.nasCopyActive === true || dl.nas_copy_active === true);
-    const isQueuedForNas = isTransferringToNas && (dl.nasCopyActive === false || dl.nas_copy_active === false);
+    const isTransferringToNas = statusLower === 'completing' || stageMeta.active;
+    const isQueuedForNas = stageMeta.key === 'queued_copy' || (isTransferringToNas && (dl.nasCopyActive === false || dl.nas_copy_active === false));
     const isTorrent = rawName.startsWith('⚡ [Torrent]') || (hash.length === 40 && !item.ed2kHash);
     const displayName = fixMojibake(isTorrent ? rawName.replace(/^⚡ \[Torrent\]\s*/, '') : rawName);
     const category = dl.categoryId || dl.category_id || 'Sin categoría';
 
     switch (type) {
       case 'status':
-        if (isTransferringToNas) {
-          if (isQueuedForNas) {
+        if (stageMeta.active) {
+          if (stageMeta.key === 'verifying_hashes') {
+            html = `
+              <div class="stt-header" style="color: #c084fc;">🔍 ${escapeHtml(stageMeta.pipelineTitle)}</div>
+              <div class="stt-desc">${escapeHtml(stageMeta.pipelineSub)}. Si alguna parte estuviera corrupta, se reintentará automáticamente antes de reconstruir.</div>
+            `;
+          } else if (stageMeta.key === 'reconstructing') {
+            html = `
+              <div class="stt-header" style="color: #38bdf8;">⚙️ ${escapeHtml(stageMeta.pipelineTitle)}</div>
+              <div class="stt-desc">${escapeHtml(stageMeta.pipelineSub)} antes de iniciar la copia al almacenamiento definitivo.</div>
+            `;
+          } else if (stageMeta.key === 'organizing') {
+            html = `
+              <div class="stt-header" style="color: #34d399;">🎬 ${escapeHtml(stageMeta.pipelineTitle)}</div>
+              <div class="stt-desc">${escapeHtml(stageMeta.pipelineSub)}.</div>
+            `;
+          } else if (isQueuedForNas) {
             html = `
               <div class="stt-header" style="color: #fbbf24;">🕒 En Cola de Guardado NAS (Esperando Turno)</div>
               <div class="stt-desc">Descarga completada y verificada al 100%. Para no saturar los discos ni la CPU del Synology DS212j, el gestor transfiere los archivos al NAS de uno en uno en cola FIFO secuencial.</div>

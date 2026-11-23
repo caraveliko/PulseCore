@@ -547,3 +547,93 @@ fn test_spanish_title_variants_for_roan_and_luna() {
         spanish_title_search_variants("A Trip to the Moon", Some("Le Voyage dans la Lune"));
     assert!(luna_variants.iter().any(|v| v.to_lowercase().contains("viaje")));
 }
+
+#[test]
+fn test_series_with_disambiguation_year_suffix_and_the_body_2026() {
+    assert_eq!(strip_trailing_year_suffix("The Body (2026)"), "The Body");
+    assert_eq!(strip_trailing_year_suffix("1923"), "1923");
+    assert_eq!(strip_trailing_year_suffix("The Office (US)"), "The Office (US)");
+
+    let body_variants = spanish_title_search_variants("The Body (2026)", None);
+    assert!(
+        body_variants.iter().any(|v| v.eq_ignore_ascii_case("El cuerpo")),
+        "Se esperaba la variante 'El cuerpo', obtenido: {body_variants:?}"
+    );
+
+    // Lanzamientos reales de 'The Body (2026)' en eD2K/Kad
+    assert!(matches_release(
+        "El.cuerpo.1x01.Dios.guarrilla.(Spanish.English.Subs).WEBRip.1080p.x265-EAC3.EAC3.Atmos.by.Legan.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 1)),
+    ));
+    assert!(matches_release(
+        "The Body 2026 1x04 1080p - I Saw Grace Franklin with the Devil (Multisub) - Spanish subs integrados by JuAnItO.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 4)),
+    ));
+
+    let exploradores_rel = "El cuerpo 1x06 (2026) Web Dl 1080x264 E-AC3 5.1 hipolismata ivi25 para exploradoresp2p.mkv";
+    assert!(matches_release(
+        exploradores_rel,
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 6)),
+    ));
+    let scored_expl = evaluate_release(
+        exploradores_rel,
+        "ed2k",
+        "ed2k://|file|sample|1246000000|0123456789abcdef0123456789abcdef|/",
+        "0123456789abcdef0123456789abcdef",
+        1_246_000_000,
+        5,
+        "eD2k/Kad",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(!scored_expl.is_rejected);
+    assert_eq!(scored_expl.language, "Castellano");
+    assert_eq!(scored_expl.quality, "1080p");
+
+    // Falsos positivos que deben seguir rechazándose
+    assert!(!matches_release(
+        "3 Body Problem - S01E01 - Countdown - HDTV-2160p - Spanish 1x01.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 1)),
+    ));
+    assert!(!matches_release(
+        "El.comisario.10x03.El.diablo.en.el.cuerpo.(Spanish.Subs).WEBRip.1080p.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((10, 3)),
+    ));
+    assert!(!matches_release(
+        "Cuerpo.de.Élite.1x09.El.virus.(Spanish.Subs).WEBRip.1080p.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 9)),
+    ));
+    assert!(!matches_release(
+        "The.Body.2004.S01E01.1080p.Castellano.mkv",
+        "The Body (2026)",
+        None,
+        Some(2026),
+        false,
+        Some((1, 1)),
+    ));
+}

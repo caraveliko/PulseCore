@@ -145,12 +145,12 @@ function renderLiveDownloadsStrip(allDownloads) {
   const activeOrPending = list.filter(item => {
     const dl = item.snapshot || item;
     const st = (dl.status || '').toLowerCase();
-    return st === 'downloading' || st === 'completing' || st === 'waiting' || st === 'queued' || st === 'paused';
+    return st === 'downloading' || st === 'verifying' || st === 'completing' || st === 'waiting' || st === 'queued' || st === 'paused' || Boolean(dl.completionStage || dl.completion_stage);
   });
   const downloadingNow = activeOrPending.filter(item => {
     const dl = item.snapshot || item;
     const st = (dl.status || '').toLowerCase();
-    return st === 'downloading' || st === 'completing';
+    return st === 'downloading' || st === 'verifying' || st === 'completing' || Boolean(dl.completionStage || dl.completion_stage);
   });
 
   const queueCountEl = document.getElementById('subview-queue-count');
@@ -207,8 +207,12 @@ function renderLiveDownloadsStrip(allDownloads) {
     const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
     const sources = dl.sourceCount || dl.source_count || 0;
     const st = (dl.status || '').toLowerCase();
+    const stageMeta = typeof getDownloadCompletionStageMeta === 'function' ? getDownloadCompletionStageMeta(dl) : { active: false };
     const isTorrent = dl.protocol === 'torrent' || item.protocol === 'torrent' || rawName.startsWith('⚡ [Torrent]');
     const protoTag = isTorrent ? 'BT' : 'eD2k';
+    const leftStatusText = stageMeta.active
+      ? stageMeta.pipelineTitle.replace(/^Paso \d\/\d · /, '')
+      : (speed > 0 ? formatSpeed(speed) : (st === 'paused' ? 'En pausa' : 'Esperando fuentes'));
 
     return `
       <button type="button" class="live-dl-card ${st === 'paused' ? 'is-paused' : ''}" onclick="openDownloadInQueue('${escapeHtml(id)}')" title="${escapeHtml(displayName)}">
@@ -217,9 +221,9 @@ function renderLiveDownloadsStrip(allDownloads) {
           <span class="live-dl-name">${escapeHtml(displayName)}</span>
           <span class="live-dl-pct tabular-nums">${pct.toFixed(1)}%</span>
         </div>
-        <div class="live-dl-bar"><div class="live-dl-bar-fill ${st === 'completing' ? 'completing' : (st === 'paused' ? 'paused' : '')}" style="width: ${pct.toFixed(1)}%"></div></div>
+        <div class="live-dl-bar"><div class="live-dl-bar-fill ${stageMeta.active || st === 'completing' ? 'completing' : (st === 'paused' ? 'paused' : '')}" style="width: ${pct.toFixed(1)}%"></div></div>
         <div class="live-dl-card-meta tabular-nums">
-          <span>${speed > 0 ? formatSpeed(speed) : (st === 'paused' ? 'En pausa' : 'Esperando fuentes')}</span>
+          <span>${escapeHtml(leftStatusText)}</span>
           <span>${sources} ${sources === 1 ? 'fuente' : 'fuentes'}</span>
         </div>
       </button>
@@ -373,6 +377,75 @@ async function updateMediaDiskSpace() {
   } catch (e) { console.warn('[PulseCore] error al cargar medios:', e); }
 }
 
+const mediaFlipDetailsCache = new Map();
+
+async function prefetchFlipCardMeta(mediaId) {
+  if (!mediaId) return;
+  const existing = mediaFlipDetailsCache.get(mediaId);
+  if (existing === 'loading') return;
+  if (existing && typeof existing === 'object') {
+    const extraEl = document.getElementById(`flip-extra-${mediaId}`);
+    if (extraEl && existing.extraHtml) extraEl.innerHTML = existing.extraHtml;
+    const synEl = document.getElementById(`flip-synopsis-${mediaId}`);
+    if (synEl && existing.overview && synEl.dataset.fallback === '1') {
+      synEl.textContent = existing.overview;
+      synEl.dataset.fallback = '0';
+    }
+    return;
+  }
+
+  mediaFlipDetailsCache.set(mediaId, 'loading');
+  try {
+    const res = await client.call('media.get', { id: mediaId });
+    const item = res?.item || {};
+    const details = res?.details || {};
+    const episodes = Array.isArray(res?.episodes) ? res.episodes : [];
+    const chips = [];
+
+    const tmdb = details.ratings?.tmdb;
+    const imdb = details.ratings?.imdb;
+    if (tmdb && tmdb > 0) {
+      chips.push(`<span class="media-flip-chip is-rating">★ ${Number(tmdb).toFixed(1)}</span>`);
+    } else if (imdb && imdb > 0) {
+      chips.push(`<span class="media-flip-chip is-rating">★ ${Number(imdb).toFixed(1)}</span>`);
+    }
+
+    if (details.runtimeMins && details.runtimeMins > 0) {
+      chips.push(`<span class="media-flip-chip">⏱ ${details.runtimeMins}m</span>`);
+    }
+    if (item.mediaType === 'tv' && episodes.length > 0) {
+      const doneCount = episodes.filter(e => e.status === 'completed').length;
+      chips.push(`<span class="media-flip-chip">${doneCount}/${episodes.length} ep.</span>`);
+    }
+    if (Array.isArray(details.genres)) {
+      for (const g of details.genres.slice(0, 2)) {
+        if (g) chips.push(`<span class="media-flip-chip">${escapeHtml(String(g))}</span>`);
+      }
+    }
+
+    const extraHtml = chips.join('');
+    const overview = (details.spanishOverview || item.overview || '').trim();
+    mediaFlipDetailsCache.set(mediaId, { extraHtml, overview });
+
+    const extraEl = document.getElementById(`flip-extra-${mediaId}`);
+    if (extraEl && extraHtml) {
+      extraEl.innerHTML = extraHtml;
+    }
+    const synEl = document.getElementById(`flip-synopsis-${mediaId}`);
+    if (synEl && overview) {
+      synEl.textContent = overview;
+      synEl.dataset.fallback = '0';
+    }
+    const libEntry = (Array.isArray(mediaLibraryItems) ? mediaLibraryItems : []).find(x => x.id === mediaId);
+    if (libEntry && overview) {
+      libEntry.overview = overview;
+    }
+  } catch (err) {
+    mediaFlipDetailsCache.delete(mediaId);
+    console.debug('[PulseCore] flip metadata:', err);
+  }
+}
+
 function renderMediaCards() {
   const container = document.getElementById('media-grid-container');
   const emptyMsg = document.getElementById('media-empty-msg');
@@ -402,38 +475,38 @@ function renderMediaCards() {
     const isMovie = item.mediaType === 'movie';
     const yearStr = item.year ? item.year : '';
     const qualityStr = item.qualityProfile || '1080p';
-    const isCompleted = item.status === 'completed';
 
-    // 1. Estado en carátula:
-    // - En biblioteca (estado natural): sutil indicador verde de 8px en esquina para no tapar el arte
-    // - Descargando / Buscada: insignias de excepción compactas
+    // 1. Estado en carátula: solo se muestran insignias cuando hay descarga o búsqueda activa
     let statusBadge = '';
-    if (isCompleted) {
-      statusBadge = `<div class="media-status-dot" title="En biblioteca"></div>`;
-    } else if (item.status === 'downloading') {
+    let backStatusLabel = '🟢 En disco';
+    let backStatusClass = 'is-done';
+    if (item.status === 'downloading') {
       statusBadge = `<span class="badge badge-dl media-exception-badge">⬇ Descargando</span>`;
+      backStatusLabel = '⬇ Descargando';
+      backStatusClass = 'is-dl';
     } else if (item.status === 'wanted') {
       statusBadge = `<span class="badge badge-wait media-exception-badge">🟡 Buscada</span>`;
+      backStatusLabel = '🟡 Buscada';
+      backStatusClass = 'is-wait';
     }
 
-    // 2. Botón central del hover overlay
-    const centerBtn = `
-      <button class="media-overlay-info-btn" onclick="event.stopPropagation(); openMediaDetail('${item.id}')" title="${isMovie ? 'Ver ficha técnica' : 'Ver temporadas y episodios'}">
-        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-      </button>
-      <span style="font-size: 0.75rem; font-weight: 600; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">${isMovie ? 'Ficha Técnica' : 'Ver Episodios'}</span>
-    `;
+    const safeTitleAttr = escapeHtml(item.title).replace(/'/g, "\\'");
+    const safeFilePathAttr = escapeHtml(item.filePath || '').replace(/'/g, "\\'");
 
-    // 3. Botones de acción directos en el hover overlay (Ficha, Fuentes, Eliminar)
+    // 2. Botones de acción directos en la cara trasera (Ficha, Fuentes, Carpeta, Eliminar)
     const quickActions = `
-      <div class="media-overlay-quick-actions" onclick="event.stopPropagation()">
+      <div class="media-flip-actions" onclick="event.stopPropagation()">
         <button class="btn-icon-overlay" onclick="openMediaDetail('${item.id}')" title="Ver ficha técnica">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
           <span>Ficha</span>
         </button>
-        <button class="btn-icon-overlay" onclick="openReleasesModal('${item.id}', '${escapeHtml(item.title)}', ${isMovie})" title="Buscar fuentes en Kad y trackers">
+        <button class="btn-icon-overlay" onclick="openReleasesModal('${item.id}', '${safeTitleAttr}', ${isMovie})" title="Buscar fuentes en Kad y trackers">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <span>Fuentes</span>
+        </button>
+        <button class="btn-icon-overlay" onclick="openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Abrir carpeta de destino">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>Carpeta</span>
         </button>
         <button class="btn-icon-overlay btn-danger-overlay" onclick="deleteMediaItem('${item.id}')" title="Eliminar de biblioteca">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -442,7 +515,7 @@ function renderMediaCards() {
       </div>
     `;
 
-    // 4. Icono diminuto vectorial según tipo junto al año
+    // 3. Icono diminuto vectorial según tipo junto al año
     const typeIcon = isMovie
       ? `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`
       : `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>`;
@@ -452,14 +525,43 @@ function renderMediaCards() {
          <div class="media-poster-fallback" style="display: none;">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`
       : `<div class="media-poster-fallback">${typeIcon}<br><strong style="margin-top:8px;color:#f1f5f9;">${escapeHtml(item.title)}</strong><small style="color:var(--text-muted);margin-top:4px;">${yearStr}</small></div>`;
 
+    const bgUrl = (item.backdropPath || item.posterPath || '').replace(/'/g, "\\'");
+    const bgStyle = bgUrl ? `style="background-image: url('${escapeHtml(bgUrl)}');"` : '';
+    const cachedMeta = mediaFlipDetailsCache.get(item.id);
+    const cachedExtraHtml = (cachedMeta && typeof cachedMeta === 'object' && cachedMeta.extraHtml)
+      ? cachedMeta.extraHtml
+      : `<span class="media-flip-chip">${escapeHtml(qualityStr)}</span>`;
+    const rawOverview = (item.overview || (cachedMeta && typeof cachedMeta === 'object' ? cachedMeta.overview : '') || '').trim();
+    const hasOverview = rawOverview.length > 0;
+    const synopsisText = hasOverview
+      ? rawOverview
+      : 'Haz clic para abrir la ficha completa, reparto y fuentes P2P.';
+    const origHtml = (item.originalTitle && item.originalTitle.toLowerCase() !== (item.title || '').toLowerCase())
+      ? `<div class="media-flip-orig">${escapeHtml(item.originalTitle)}</div>`
+      : '';
+
     return `
-      <div class="media-card movie-card" id="media-card-${item.id}" onclick="openMediaDetail('${item.id}')" title="Ver ficha de ${escapeHtml(item.title)}">
+      <div class="media-card movie-card" id="media-card-${item.id}" onclick="openMediaDetail('${item.id}')" onmouseenter="prefetchFlipCardMeta('${item.id}')" oncontextmenu="event.preventDefault(); openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Clic para ver ficha · Clic derecho para abrir carpeta">
         <div class="media-poster-box movie-poster-box">
-          ${statusBadge}
-          ${posterHtml}
-          <div class="media-card-overlay">
-            ${centerBtn}
-            ${quickActions}
+          <div class="media-flip-inner">
+            <div class="media-flip-face media-flip-front">
+              ${statusBadge}
+              ${posterHtml}
+            </div>
+            <div class="media-flip-face media-flip-back">
+              <div class="media-flip-back-bg" ${bgStyle}></div>
+              <div class="media-flip-header">
+                <div class="media-flip-top-row">
+                  <span class="media-flip-type">${isMovie ? '🎬' : '📺'} ${yearStr || '—'}</span>
+                  <span class="media-flip-status ${backStatusClass}">${backStatusLabel}</span>
+                </div>
+                <div class="media-flip-back-title">${escapeHtml(item.title)}</div>
+                ${origHtml}
+                <div class="media-flip-extra" id="flip-extra-${item.id}">${cachedExtraHtml}</div>
+              </div>
+              <div class="media-flip-synopsis" id="flip-synopsis-${item.id}" data-fallback="${hasOverview ? '0' : '1'}">${escapeHtml(synopsisText)}</div>
+              ${quickActions}
+            </div>
           </div>
         </div>
         <div class="media-card-body movie-info">

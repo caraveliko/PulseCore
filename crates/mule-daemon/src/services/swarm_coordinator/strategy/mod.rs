@@ -231,6 +231,11 @@ impl SwarmCoordinator {
         for (id, temp_path, target_path, expected_hash, total_size) in pending_verifications {
             let state_clone = self.state.clone();
             tokio::spawn(async move {
+                state_clone.set_completion_stage(id, Some(("verifying_hashes", None)));
+                if let Some(snap) = state_clone.downloads.lock().await.get_download(&id) {
+                    state_clone.broadcast_download_update(snap);
+                }
+
                 // Ruta rápida (`PerformFileComplete` / `CalculateIdentifier` de eMule):
                 // la raíz eD2K se deriva del conjunto de hashes de partes ya verificadas
                 // en la recepción — ninguna relectura del archivo completo (~total_size de `pread`
@@ -268,12 +273,18 @@ impl SwarmCoordinator {
                 match hash_res {
                     Ok(Ok(computed)) => {
                         if computed.root_hash.0 == expected_hash {
+                            state_clone.set_completion_stage(id, Some(("reconstructing", None)));
+                            if let Some(snap) = state_clone.downloads.lock().await.get_download(&id) {
+                                state_clone.broadcast_download_update(snap);
+                            }
+
                             let prep = {
                                 let mut dl_guard = state_clone.downloads.lock().await;
                                 dl_guard.prepare_finalize(&id)
                             };
                             match prep {
                                 Ok((temp_path, target_path, snap)) => {
+                                    state_clone.set_completion_stage(id, Some(("queued_copy", Some(0.0))));
                                     state_clone.broadcast_download_update(snap.clone());
                                     tracing::info!(
                                         "Download {id} ('{}') verified eD2K hash ({}) - State: Completing (copying asynchronously to NAS/destination: {})",
@@ -305,6 +316,7 @@ impl SwarmCoordinator {
                                                             file_size,
                                                             free
                                                         );
+                                                        state_bg.set_completion_stage(id, None);
                                                         let mut dl_guard = state_bg.downloads.lock().await;
                                                         if let Ok(snap) = dl_guard.update_status(
                                                             &id,
@@ -319,6 +331,7 @@ impl SwarmCoordinator {
                                                 }
 
                                                 // Transmitir actualización indicando que esta descarga está escribiendo activamente en el NAS
+                                                state_bg.set_completion_stage(id, Some(("copying", Some(0.0))));
                                                 if let Some(mut cur_snap) = {
                                                     let dl_guard = state_bg.downloads.lock().await;
                                                     dl_guard.get_download(&id)
@@ -331,11 +344,25 @@ impl SwarmCoordinator {
                                                     snap.file_name
                                                 );
 
+                                                let state_prog = state_bg.clone();
                                                 let final_res = tokio::task::spawn_blocking(move || {
-                                                    mule_core::finalize_file(
+                                                    mule_core::finalize_file_with_progress(
                                                         &temp_path,
                                                         &target_path,
                                                         mule_core::CollisionStrategy::Rename,
+                                                        move |copied, total| {
+                                                            let pct = if total > 0 {
+                                                                (copied as f64 / total as f64).clamp(0.0, 1.0)
+                                                            } else {
+                                                                1.0
+                                                            };
+                                                            state_prog.set_completion_stage(id, Some(("copying", Some(pct))));
+                                                            if let Ok(dl_guard) = state_prog.downloads.try_lock() {
+                                                                if let Some(s) = dl_guard.get_download(&id) {
+                                                                    state_prog.broadcast_download_update(s);
+                                                                }
+                                                            }
+                                                        },
                                                     )
                                                 })
                                                 .await;
@@ -350,6 +377,7 @@ impl SwarmCoordinator {
                                                         let mut dl_guard = state_bg.downloads.lock().await;
                                                         match dl_guard.commit_finalize(&id, final_path.clone()) {
                                                             Ok(snap) => {
+                                                                state_bg.set_completion_stage(id, Some(("organizing", Some(1.0))));
                                                                 state_bg.broadcast_download_update(snap.clone());
                                                                 tracing::info!(
                                                                     "Download {id} ('{}') successfully finished copying to NAS and finalized",
@@ -371,14 +399,20 @@ impl SwarmCoordinator {
                                                                             tracing::warn!("[ORGANIZER] Instant organize failed for {id_str}: {e}");
                                                                         }
                                                                     }
+                                                                    state_org.set_completion_stage(id, None);
+                                                                    if let Some(done_snap) = state_org.downloads.lock().await.get_download(&id) {
+                                                                        state_org.broadcast_download_update(done_snap);
+                                                                    }
                                                                 });
                                                             }
                                                             Err(e) => {
+                                                                state_bg.set_completion_stage(id, None);
                                                                 tracing::error!("Failed to commit finalize for download {id}: {e}");
                                                             }
                                                         }
                                                     }
                                                     Ok(Err(e)) => {
+                                                        state_bg.set_completion_stage(id, None);
                                                         tracing::error!("Failed to copy download {id} to destination/NAS: {e}");
                                                         let mut dl_guard = state_bg.downloads.lock().await;
                                                         if let Ok(snap) = dl_guard.update_status(
@@ -389,17 +423,20 @@ impl SwarmCoordinator {
                                                         }
                                                     }
                                                     Err(e) => {
+                                                        state_bg.set_completion_stage(id, None);
                                                         tracing::error!("Join error during finalize task for {id}: {e}");
                                                     }
                                                 }
                                             }
                                             Err(e) => {
+                                                state_bg.set_completion_stage(id, None);
                                                 tracing::error!("Failed to acquire NAS semaphore for download {id}: {e}");
                                             }
                                         }
                                     });
                                 }
                                 Err(e) => {
+                                    state_clone.set_completion_stage(id, None);
                                     tracing::error!("Failed to prepare finalize for download {id}: {e}");
                                     let maybe_snap = {
                                         let dl_guard = state_clone.downloads.lock().await;
@@ -411,6 +448,7 @@ impl SwarmCoordinator {
                                 }
                             }
                         } else {
+                            state_clone.set_completion_stage(id, None);
                             // Discrepancia global de MD4: si se conoce el conjunto de hashes por parte,
                             // identificar las partes dañadas y desalojar solo esos rangos
                             // para volver a descargarlos (recuperación de partes dañadas de CPartFile en eMule)

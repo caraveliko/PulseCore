@@ -56,6 +56,13 @@ pub struct DownloadSnapshot {
     /// activo únicamente cuando el estado es `Completing`.
     #[serde(default)]
     pub nas_copy_active: Option<bool>,
+    /// Subetapa detallada durante la verificación y finalización post-descarga:
+    /// `"verifying_hashes"`, `"reconstructing"`, `"queued_copy"`, `"copying"`, `"organizing"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_stage: Option<String>,
+    /// Progreso (0.0 a 1.0) de la copia del archivo reconstruido hacia el destino final.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_progress: Option<f64>,
     /// Protocolo: "ed2k" o "torrent"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
@@ -428,6 +435,8 @@ pub fn make_snapshot(
         pending_ranges: Vec::new(),
         max_sources: dl.max_sources,
         nas_copy_active: None,
+        completion_stage: None,
+        copy_progress: None,
         protocol: Some("ed2k".to_string()),
     }
 }

@@ -29,7 +29,7 @@ mod tests;
 pub use dictionaries::spanish_title_search_variants;
 pub use matching::{
     clean_title_tokens, extract_tv_episode_numbers, matches_release, matches_release_with_alts,
-    matches_season_pack_release, normalize_accents_and_symbols,
+    matches_season_pack_release, normalize_accents_and_symbols, strip_trailing_year_suffix,
 };
 
 use dictionaries::{FORBIDDEN_EXTENSIONS, TRUSTED_RELEASE_GROUPS};
@@ -189,12 +189,14 @@ pub fn evaluate_release(
         "2160p".to_string()
     } else if lower.contains("1080p")
         || lower.contains("1080i")
+        || lower.contains("1080x")
         || lower.contains(".1080.")
         || lower.contains(" 1080 ")
         || lower.contains("fhd")
         || lower.contains("bluray")
         || lower.contains("bdrip")
         || lower.contains("web-dl")
+        || lower.contains("web dl")
         || lower.contains("webrip")
     {
         "1080p".to_string()

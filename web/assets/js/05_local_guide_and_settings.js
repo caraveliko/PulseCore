@@ -1071,3 +1071,321 @@ if (document.getElementById('btn-save-preferences')) {
   document.getElementById('btn-save-preferences').onclick = savePreferences;
 }
 
+// === ESCÁNER DE ANCHO DE BANDA Y PERFILES INTELIGENTES DE VELOCIDAD ===
+let lastBandwidthScanResult = null;
+let selectedSmartProfileId = localStorage.getItem('pulsecore_smart_speed_profile') || '';
+
+function getSmartScanBaseContext() {
+  const hint = document.getElementById('bw-line-hint')?.value || 'auto';
+  const hostMemBytes = lastDiskSpaceInfo?.host?.memTotalBytes || 0;
+  const hostRamGb = hostMemBytes > 0 ? hostMemBytes / (1024 * 1024 * 1024) : 4.0;
+  const hostOs = lastDiskSpaceInfo?.host?.os || 'linux';
+  const isNas = Boolean(lastDiskSpaceInfo?.nas?.nfs?.isNetworkMount);
+
+  if (lastBandwidthScanResult && hint === 'auto') {
+    return lastBandwidthScanResult;
+  }
+
+  let downMbps = 300;
+  let upMbps = 300;
+  if (hint !== 'auto') {
+    const n = parseInt(hint, 10) || 300;
+    downMbps = n;
+    upMbps = n;
+  } else if (lastBandwidthScanResult) {
+    downMbps = lastBandwidthScanResult.downMbps;
+    upMbps = lastBandwidthScanResult.upMbps;
+  }
+
+  return {
+    downMbps,
+    upMbps,
+    rttMs: lastBandwidthScanResult ? lastBandwidthScanResult.rttMs : 12,
+    hostRamGb,
+    hostOs,
+    isNas,
+    isLowRamDevice: hostRamGb > 0 && hostRamGb <= 4.5,
+    measured: Boolean(lastBandwidthScanResult)
+  };
+}
+
+function buildSmartSpeedProfiles(ctx) {
+  const capDownKbs = Math.round((ctx.downMbps * 1000) / 8);
+  const capUpKbs = Math.round((ctx.upMbps * 1000) / 8);
+  const isLowRam = ctx.isLowRamDevice;
+
+  return [
+    {
+      id: 'eco',
+      icon: '🌱',
+      title: 'Eco · 24/7 Silencioso',
+      tag: isLowRam ? 'Ideal RPi / NAS' : 'Bajo consumo',
+      desc: 'Prioriza estabilidad térmica, disco/NAS y navegación sin saturación.',
+      capDownKbs,
+      capUpKbs,
+      dlLimitKbs: Math.max(512, Math.round(capDownKbs * 0.75)),
+      ulLimitKbs: Math.max(128, Math.round(capUpKbs * 0.55)),
+      ussEnabled: true,
+      idleCapKbs: Math.max(128, Math.round(capUpKbs * 0.45)),
+      streamCapKbs: Math.max(64, Math.round(capUpKbs * 0.30)),
+      smartSlotKbs: 128,
+      maxGlobal: 280,
+      maxConnMin: 45,
+      maxPerFile: 180,
+      maxActive: 15,
+      ramProfile: 'low'
+    },
+    {
+      id: 'balanced',
+      icon: '⚖️',
+      title: 'Equilibrado Inteligente',
+      tag: 'Recomendado',
+      desc: 'Máxima bajada con USS/LEDBAT++ controlando la latencia de subida.',
+      capDownKbs,
+      capUpKbs,
+      dlLimitKbs: 0,
+      ulLimitKbs: Math.max(256, Math.round(capUpKbs * 0.80)),
+      ussEnabled: true,
+      idleCapKbs: 0,
+      streamCapKbs: Math.max(128, Math.round(capUpKbs * 0.45)),
+      smartSlotKbs: 256,
+      maxGlobal: 500,
+      maxConnMin: 60,
+      maxPerFile: 300,
+      maxActive: 25,
+      ramProfile: isLowRam ? 'balanced' : 'balanced'
+    },
+    {
+      id: 'streaming',
+      icon: '🎬',
+      title: 'Prioridad Streaming',
+      tag: 'Latencia cero',
+      desc: 'Recorta la subida automáticamente al reproducir en Jellyfin, Plex o Kodi.',
+      capDownKbs,
+      capUpKbs,
+      dlLimitKbs: Math.max(1024, Math.round(capDownKbs * 0.85)),
+      ulLimitKbs: Math.max(200, Math.round(capUpKbs * 0.70)),
+      ussEnabled: true,
+      idleCapKbs: Math.max(200, Math.round(capUpKbs * 0.70)),
+      streamCapKbs: Math.max(64, Math.round(capUpKbs * 0.22)),
+      smartSlotKbs: 192,
+      maxGlobal: 400,
+      maxConnMin: 50,
+      maxPerFile: 240,
+      maxActive: 20,
+      ramProfile: 'balanced'
+    },
+    {
+      id: 'turbo',
+      icon: '🚀',
+      title: 'Turbo Fibra · Enjambre',
+      tag: 'Máximo caudal',
+      desc: 'Exprime toda la línea para descargas grandes y compartición agresiva.',
+      capDownKbs,
+      capUpKbs,
+      dlLimitKbs: 0,
+      ulLimitKbs: Math.max(512, Math.round(capUpKbs * 0.92)),
+      ussEnabled: true,
+      idleCapKbs: 0,
+      streamCapKbs: Math.max(256, Math.round(capUpKbs * 0.60)),
+      smartSlotKbs: 512,
+      maxGlobal: isLowRam ? 650 : 900,
+      maxConnMin: 120,
+      maxPerFile: 450,
+      maxActive: 35,
+      ramProfile: isLowRam ? 'balanced' : 'high'
+    }
+  ];
+}
+
+function renderSmartSpeedProfiles() {
+  const grid = document.getElementById('smart-profile-grid');
+  if (!grid) return;
+  const ctx = getSmartScanBaseContext();
+  const profiles = buildSmartSpeedProfiles(ctx);
+
+  grid.innerHTML = profiles.map(p => {
+    const isActive = selectedSmartProfileId === p.id;
+    const dlText = p.dlLimitKbs === 0 ? 'Ilimitada' : `${(p.dlLimitKbs / 1024).toFixed(1)} MB/s`;
+    const ulText = `${(p.ulLimitKbs / 1024).toFixed(1)} MB/s`;
+    return `
+      <button type="button" class="smart-profile-card ${isActive ? 'active' : ''}" onclick="applySmartSpeedProfile('${p.id}')">
+        <div class="smart-profile-head">
+          <span class="smart-profile-title">${p.icon} ${p.title}</span>
+          <span class="smart-profile-tag">${p.tag}</span>
+        </div>
+        <div class="smart-profile-desc">${p.desc}</div>
+        <div class="smart-profile-specs">
+          <span>⬇ ${dlText}</span>
+          <span>⬆ ${ulText}</span>
+          <span>🔌 ${p.maxGlobal} conns</span>
+          <span>🧠 RAM: ${p.ramProfile}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+window.refreshSmartProfilesPreview = function() {
+  renderSmartSpeedProfiles();
+};
+
+async function runSmartBandwidthScanner() {
+  const btn = document.getElementById('btn-run-bw-scanner');
+  const progWrap = document.getElementById('bw-scanner-progress-wrap');
+  const stepEl = document.getElementById('bw-scanner-step');
+  const pctEl = document.getElementById('bw-scanner-pct');
+  const barEl = document.getElementById('bw-scanner-bar');
+  const metricsEl = document.getElementById('bw-scanner-metrics');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Escaneando...';
+  }
+  if (progWrap) progWrap.style.display = 'block';
+
+  const setProg = (pct, label) => {
+    if (barEl) barEl.style.width = `${pct}%`;
+    if (pctEl) pctEl.textContent = `${pct}%`;
+    if (stepEl) stepEl.textContent = label;
+  };
+
+  try {
+    setProg(18, 'Consultando hardware del servidor y almacenamiento...');
+    const diskInfo = await client.call('system.diskSpace', {}).catch(() => lastDiskSpaceInfo);
+    const limitsInfo = await client.call('limits.get', {}).catch(() => cachedLimitsInfo);
+
+    setProg(46, 'Midiendo latencia RTT y estabilidad de enlace...');
+    const rttSamples = [];
+    for (let i = 0; i < 4; i++) {
+      const t0 = performance.now();
+      await client.call('system.status', {}).catch(() => null);
+      rttSamples.push(performance.now() - t0);
+    }
+    const avgRpcMs = rttSamples.reduce((a, b) => a + b, 0) / Math.max(1, rttSamples.length);
+
+    setProg(75, 'Midiendo caudal efectivo de transferencia...');
+    let measuredDownMbps = 0;
+    try {
+      const tStart = performance.now();
+      const resp = await fetch(`/assets/theme.css?scan=${Date.now()}`, { cache: 'no-store' });
+      const buf = await resp.arrayBuffer();
+      const dtSec = Math.max(0.004, (performance.now() - tStart) / 1000);
+      const mbps = (buf.byteLength * 8) / (dtSec * 1_000_000);
+      measuredDownMbps = Math.round(Math.max(25, Math.min(1000, mbps)));
+    } catch (_) {
+      measuredDownMbps = 300;
+    }
+
+    const hint = document.getElementById('bw-line-hint')?.value || 'auto';
+    const peakSessionDownMbps = sessionPeakDown > 0 ? Math.round((sessionPeakDown * 8) / 1_000_000) : 0;
+    const peakSessionUpMbps = sessionPeakUp > 0 ? Math.round((sessionPeakUp * 8) / 1_000_000) : 0;
+
+    let finalDownMbps = hint !== 'auto' ? parseInt(hint, 10) : Math.max(measuredDownMbps, peakSessionDownMbps);
+    if (!Number.isFinite(finalDownMbps) || finalDownMbps < 50) finalDownMbps = 300;
+    // Normalizar a escalones habituales de fibra si está cerca
+    const tiers = [100, 300, 500, 600, 1000];
+    if (hint === 'auto') {
+      const closest = tiers.find(t => Math.abs(t - finalDownMbps) <= 75);
+      if (closest) finalDownMbps = closest;
+    }
+    const finalUpMbps = hint !== 'auto'
+      ? finalDownMbps
+      : Math.max(Math.round(finalDownMbps * 0.8), peakSessionUpMbps, 100);
+
+    const ussPing = limitsInfo?.uss?.lowestPingMs || limitsInfo?.uss?.latencyMs || null;
+    const rttMs = Math.round(ussPing || avgRpcMs || 10);
+    const memBytes = diskInfo?.host?.memTotalBytes || 0;
+    const hostRamGb = memBytes > 0 ? (memBytes / (1024 * 1024 * 1024)) : 4.0;
+    const hostName = diskInfo?.host?.hostname || 'PulseCore';
+    const isNas = Boolean(diskInfo?.nas?.nfs?.isNetworkMount);
+
+    lastBandwidthScanResult = {
+      downMbps: finalDownMbps,
+      upMbps: finalUpMbps,
+      rttMs,
+      hostRamGb,
+      hostOs: diskInfo?.host?.os || 'linux',
+      hostName,
+      isNas,
+      isLowRamDevice: hostRamGb <= 4.5,
+      measured: true
+    };
+
+    setProg(100, 'Escaneo completado · Perfiles recalculados a tu medida');
+
+    if (metricsEl) {
+      metricsEl.style.display = 'grid';
+      metricsEl.innerHTML = `
+        <div class="bw-scan-stat"><span>Bajada estimada</span><strong>${finalDownMbps} Mbps (${Math.round(finalDownMbps / 8)} MB/s)</strong></div>
+        <div class="bw-scan-stat"><span>Subida estimada</span><strong>${finalUpMbps} Mbps (${Math.round(finalUpMbps / 8)} MB/s)</strong></div>
+        <div class="bw-scan-stat"><span>Latencia RTT</span><strong>${rttMs} ms</strong></div>
+        <div class="bw-scan-stat"><span>Equipo detectado</span><strong>${escapeHtml(hostName)} · ${hostRamGb.toFixed(1)} GB${isNas ? ' · NAS' : ''}</strong></div>
+      `;
+    }
+
+    renderSmartSpeedProfiles();
+    showToast('Escaneo completado: selecciona un perfil a medida', 'success', '📡');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '📡 Escanear Red y Equipo';
+    }
+  }
+}
+
+async function applySmartSpeedProfile(profileId) {
+  const ctx = getSmartScanBaseContext();
+  const profile = buildSmartSpeedProfiles(ctx).find(p => p.id === profileId);
+  if (!profile) return;
+
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = Boolean(v); };
+
+  setVal('pref-cap-down', profile.capDownKbs);
+  setVal('pref-cap-up', profile.capUpKbs);
+  setChk('pref-uss-enabled', profile.ussEnabled);
+  setVal('pref-idle-upload-cap', profile.idleCapKbs);
+  setVal('pref-streaming-upload-cap', profile.streamCapKbs);
+  setVal('pref-smart-slot-target', profile.smartSlotKbs);
+  setVal('pref-max-global', profile.maxGlobal);
+  setVal('pref-max-conn-min', profile.maxConnMin);
+  setVal('pref-max-per-file', profile.maxPerFile);
+  setVal('pref-max-active-downloads', profile.maxActive);
+  setVal('pref-ram-profile', profile.ramProfile);
+  updateRamProfileBadge();
+
+  selectedSmartProfileId = profile.id;
+  try { localStorage.setItem('pulsecore_smart_speed_profile', profile.id); } catch (_) { /* Ignorar */ }
+  renderSmartSpeedProfiles();
+
+  const badge = document.getElementById('smart-profile-active-badge');
+  if (badge) {
+    badge.textContent = `${profile.icon} ${profile.title}`;
+    badge.style.display = 'inline-flex';
+  }
+
+  try {
+    await client.call('limits.set', {
+      downloadLimit: profile.dlLimitKbs,
+      uploadLimit: profile.ulLimitKbs,
+      connectionsPerMinute: profile.maxConnMin,
+      smartSlotTargetKbs: profile.smartSlotKbs,
+      uss: {
+        enabled: profile.ussEnabled,
+        maxUploadBytesPerSec: profile.ulLimitKbs * 1024,
+        idleUploadCapBytesPerSec: profile.idleCapKbs * 1024,
+        streamingUploadCapBytesPerSec: profile.streamCapKbs * 1024
+      }
+    });
+    await savePreferences();
+    showToast(`Perfil "${profile.title}" aplicado y guardado`, 'success', profile.icon);
+  } catch (e) {
+    showToast(`Error aplicando perfil: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+window.runSmartBandwidthScanner = runSmartBandwidthScanner;
+window.applySmartSpeedProfile = applySmartSpeedProfile;
+renderSmartSpeedProfiles();
+

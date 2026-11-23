@@ -1043,6 +1043,25 @@ impl Database {
         media::update_episode_status(&self.conn, id, status, file_path, download_id, now_ms)
     }
 
+    pub fn set_season_monitored(
+        &self,
+        media_id: &str,
+        season_number: u32,
+        monitored: bool,
+        now_ms: i64,
+    ) -> Result<usize, CoreError> {
+        media::set_season_monitored(&self.conn, media_id, season_number, monitored, now_ms)
+    }
+
+    pub fn set_only_season_monitored(
+        &self,
+        media_id: &str,
+        season_number: u32,
+        now_ms: i64,
+    ) -> Result<usize, CoreError> {
+        media::set_only_season_monitored(&self.conn, media_id, season_number, now_ms)
+    }
+
     pub fn update_media_completed(
         &self,
         id: &str,

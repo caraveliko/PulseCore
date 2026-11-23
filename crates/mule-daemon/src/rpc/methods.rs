@@ -76,6 +76,7 @@ pub async fn handle_request(
         "settings.set" => handle_settings_set(state, req.params).await,
         "settings.listDirs" => handle_settings_list_dirs(state, req.params).await,
         "settings.pickFolder" => handle_settings_pick_folder(req.params).await,
+        "settings.openFolder" => handle_settings_open_folder(state, req.params).await,
         "settings.setRetentionDays" => handle_settings_set_retention_days(state, req.params).await,
         "settings.resetDownloadDir" => handle_settings_reset_download_dir(state).await,
         "settings.exportBackup" => crate::rpc::backup::handle_settings_export_backup(state).await,
@@ -100,6 +101,7 @@ pub async fn handle_request(
         "media.refreshMetadata" => handle_media_refresh_metadata(state).await,
         "media.calendar" => handle_media_calendar(state, req.params).await,
         "media.autoGrab" => handle_media_auto_grab(state, req.params).await,
+        "media.setSeasonMonitored" => handle_media_set_season_monitored(state, req.params).await,
         "media.organize" => handle_media_organize(state, req.params).await,
         "media.clean" => handle_media_clean(state, req.params).await,
         // Automatización de subtítulos con Bazarr

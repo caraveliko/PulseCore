@@ -4,5 +4,8 @@
 pub mod finalizer;
 pub mod part_file;
 
-pub use finalizer::{copy_chunked, finalize_file, CollisionStrategy};
+pub use finalizer::{
+    copy_chunked, copy_chunked_with_progress, finalize_file, finalize_file_with_progress,
+    CollisionStrategy,
+};
 pub use part_file::{AllocationPolicy, PartFile, PartFileIoStats};

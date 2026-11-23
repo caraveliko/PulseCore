@@ -282,6 +282,8 @@ fn test_smart_queue_stalled_download_rotates_below_queued_downloads() {
         pending_ranges: vec![],
         max_sources: None,
         nas_copy_active: None,
+        completion_stage: None,
+        copy_progress: None,
         protocol: None,
     };
 
@@ -306,6 +308,8 @@ fn test_smart_queue_stalled_download_rotates_below_queued_downloads() {
         pending_ranges: vec![],
         max_sources: None,
         nas_copy_active: None,
+        completion_stage: None,
+        copy_progress: None,
         protocol: None,
     };
 

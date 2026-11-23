@@ -471,6 +471,40 @@ pub fn update_episode_status(
     Ok(())
 }
 
+/// Activa o desactiva la monitorización automática de una temporada concreta.
+pub fn set_season_monitored(
+    conn: &Connection,
+    media_id: &str,
+    season_number: u32,
+    monitored: bool,
+    now_ms: i64,
+) -> Result<usize, CoreError> {
+    let mon_int = if monitored { 1 } else { 0 };
+    let updated = conn.execute(
+        "UPDATE media_episodes SET monitored = ?1, updated_at = ?2 WHERE media_id = ?3 AND season_number = ?4",
+        params![mon_int, now_ms, media_id, season_number],
+    )?;
+    Ok(updated)
+}
+
+/// Deja monitorizada únicamente la temporada indicada y desactiva el resto de temporadas no completadas.
+pub fn set_only_season_monitored(
+    conn: &Connection,
+    media_id: &str,
+    season_number: u32,
+    now_ms: i64,
+) -> Result<usize, CoreError> {
+    let u1 = conn.execute(
+        "UPDATE media_episodes SET monitored = 1, updated_at = ?1 WHERE media_id = ?2 AND season_number = ?3",
+        params![now_ms, media_id, season_number],
+    )?;
+    let u2 = conn.execute(
+        "UPDATE media_episodes SET monitored = 0, updated_at = ?1 WHERE media_id = ?2 AND season_number != ?3 AND status != 'completed'",
+        params![now_ms, media_id, season_number],
+    )?;
+    Ok(u1 + u2)
+}
+
 fn row_to_media(row: &rusqlite::Row) -> Result<MediaItem, rusqlite::Error> {
     Ok(MediaItem {
         id: row.get(0)?,

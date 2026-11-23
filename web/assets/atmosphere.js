@@ -8,6 +8,19 @@
 
   const STORAGE_ATMOSPHERE_KEY = 'pulsecore_atmosphere';
   const STORAGE_INTENSITY_KEY = 'pulsecore_bg_intensity';
+  const STORAGE_DYNAMIC_FX_KEY = 'pulsecore_dynamic_fx';
+  const P2P_ENERGY_MAX_BPS = 10 * 1024 * 1024;
+  const SPOTLIGHT_SELECTOR = [
+    '.media-card',
+    '.movie-card',
+    '.opt-card',
+    '.shares-kpi-card',
+    '.live-dl-card',
+    '.metric-card',
+    '.bw-kpi-card',
+    '.atmosphere-card',
+    '.share-folder-card',
+  ].join(', ');
   const VALID_ATMOSPHERES = new Set([
     'aurora',
     'cinema',
@@ -34,6 +47,9 @@
 
   let mediaBackdropTimer = null;
   let lastBackdropUrl = '';
+  let spotlightRafId = null;
+  let pendingPointer = null;
+  let lastSpotlightCard = null;
 
   /**
    * Aplica la atmósfera seleccionada al documento y actualiza controles visuales.
@@ -85,6 +101,84 @@
       } catch (_) {
         /* Ignorar si el almacenamiento local está restringido */
       }
+    }
+  }
+
+  /**
+   * Activa o desactiva los efectos dinámicos ambientales y el pulso reactivo P2P.
+   */
+  function applyAtmosphereDynamicFx(enabled, persist = true) {
+    const isOn = Boolean(enabled);
+    document.documentElement.dataset.dynamicFx = isOn ? 'on' : 'off';
+
+    const toggle = document.getElementById('atmosphere-dynamic-toggle');
+    if (toggle && toggle.checked !== isOn) {
+      toggle.checked = isOn;
+    }
+
+    if (!isOn && lastSpotlightCard) {
+      lastSpotlightCard.style.removeProperty('--spot-x');
+      lastSpotlightCard.style.removeProperty('--spot-y');
+      lastSpotlightCard = null;
+    }
+
+    if (persist) {
+      try {
+        localStorage.setItem(STORAGE_DYNAMIC_FX_KEY, isOn ? 'on' : 'off');
+      } catch (_) {
+        /* Ignorar si el almacenamiento local está restringido */
+      }
+    }
+  }
+
+  /**
+   * Actualiza la energía visual de la atmósfera según el caudal P2P actual (bytes/s).
+   */
+  function updateAtmosphereTelemetry(downBps = 0, upBps = 0) {
+    const down = Math.max(0, Number(downBps) || 0);
+    const up = Math.max(0, Number(upBps) || 0);
+    const totalWeighted = down + up * 1.2;
+    const energy = Math.min(1, Math.sqrt(totalWeighted / P2P_ENERGY_MAX_BPS));
+    const pulseDuration = (7.0 - energy * 4.8).toFixed(2);
+    const rootStyle = document.documentElement.style;
+
+    rootStyle.setProperty('--p2p-energy', energy.toFixed(3));
+    rootStyle.setProperty('--p2p-pulse-duration', `${pulseDuration}s`);
+    document.documentElement.dataset.p2pActive = totalWeighted > 1024 ? 'true' : 'false';
+  }
+
+  /**
+   * Procesa el seguimiento especular bajo el cursor con requestAnimationFrame.
+   */
+  function flushSpotlightFrame() {
+    spotlightRafId = null;
+    if (!pendingPointer) return;
+    if (document.documentElement.dataset.dynamicFx === 'off') {
+      pendingPointer = null;
+      return;
+    }
+
+    const { clientX, clientY, target } = pendingPointer;
+    pendingPointer = null;
+
+    const vw = window.innerWidth || 1;
+    const vh = window.innerHeight || 1;
+    const pctX = Math.max(0, Math.min(100, (clientX / vw) * 100)).toFixed(1);
+    const pctY = Math.max(0, Math.min(100, (clientY / vh) * 100)).toFixed(1);
+    document.documentElement.style.setProperty('--ambient-cursor-x', `${pctX}%`);
+    document.documentElement.style.setProperty('--ambient-cursor-y', `${pctY}%`);
+
+    const card = target && target.closest ? target.closest(SPOTLIGHT_SELECTOR) : null;
+    if (lastSpotlightCard && lastSpotlightCard !== card) {
+      lastSpotlightCard.style.removeProperty('--spot-x');
+      lastSpotlightCard.style.removeProperty('--spot-y');
+    }
+    lastSpotlightCard = card;
+
+    if (card) {
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty('--spot-x', `${(clientX - rect.left).toFixed(1)}px`);
+      card.style.setProperty('--spot-y', `${(clientY - rect.top).toFixed(1)}px`);
     }
   }
 
@@ -151,15 +245,31 @@
   function initAtmosphereController() {
     let savedAtm = 'aurora';
     let savedIntensity = '85';
+    let savedDynamicFx = 'on';
     try {
       savedAtm = localStorage.getItem(STORAGE_ATMOSPHERE_KEY) || 'aurora';
       savedIntensity = localStorage.getItem(STORAGE_INTENSITY_KEY) || '85';
+      savedDynamicFx = localStorage.getItem(STORAGE_DYNAMIC_FX_KEY) || 'on';
     } catch (_) {
       /* Mantener valores predeterminados */
     }
 
     applyAtmosphere(savedAtm, false);
     applyAtmosphereIntensity(savedIntensity, false);
+    applyAtmosphereDynamicFx(savedDynamicFx !== 'off', false);
+    updateAtmosphereTelemetry(0, 0);
+
+    document.addEventListener('pointermove', (ev) => {
+      if (document.documentElement.dataset.dynamicFx === 'off') return;
+      pendingPointer = {
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        target: ev.target,
+      };
+      if (!spotlightRafId) {
+        spotlightRafId = requestAnimationFrame(flushSpotlightFrame);
+      }
+    }, { passive: true });
 
     document.addEventListener('click', (ev) => {
       const container = document.getElementById('atmosphere-header-container');
@@ -217,6 +327,8 @@
 
   window.setAtmosphere = (name) => applyAtmosphere(name, true);
   window.setAtmosphereIntensity = (val) => applyAtmosphereIntensity(val, true);
+  window.setAtmosphereDynamicFx = (enabled) => applyAtmosphereDynamicFx(Boolean(enabled), true);
+  window.updateAtmosphereTelemetry = updateAtmosphereTelemetry;
   window.toggleAtmospherePopover = toggleAtmospherePopover;
   window.clearMediaAmbientBackdrop = clearMediaBackdrop;
 

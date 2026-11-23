@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach" & Antigravity
 
-use super::matching::{clean_title_tokens, normalize_accents_and_symbols};
+use super::matching::{clean_title_tokens, normalize_accents_and_symbols, strip_trailing_year_suffix};
 
 pub(super) const FORBIDDEN_EXTENSIONS: &[&str] = &[
     ".exe", ".scr", ".bat", ".cmd", ".vbs", ".zip", ".rar", ".7z", ".iso", ".tar", ".gz",
@@ -14,7 +14,7 @@ pub(super) const TRUSTED_RELEASE_GROUPS: &[&str] = &[
     "grantorrent", "divxtotal", "atomixhq", "depechemode13", "grupots", "grupohds", "sharerip",
     "parip", "hispashare", "hispamula", "forosfreaky", "nocturniap2p", "latabernadelcangrejo",
     "mokesky", "piter332", "kowalski", "sitherkiller", "oli3112", "byp58", "ercius", "yumand22",
-    "rubesp",
+    "rubesp", "legan", "exploradoresp2p", "juanpaleo",
 ];
 
 /// Traducciones al español comunes de palabras frecuentes en títulos de series/películas en inglés.
@@ -150,6 +150,7 @@ pub(super) const EN_ES_TITLE_WORD_EQUIVALENTS: &[(&str, &str)] = &[
     ("doctor", "doctor"),
     ("good", "buen"),
     ("bad", "malo"),
+    ("body", "cuerpo"),
     ("breaking", "breaking"),
     ("stranger", "stranger"),
     ("things", "things"),
@@ -200,6 +201,7 @@ pub(super) const KNOWN_SERIES_SPANISH_TITLES: &[(&str, &[&str])] = &[
     ("silo", &["Silo"]),
     ("pantheon", &["Pantheon"]),
     ("dark", &["Dark"]),
+    ("the body", &["El cuerpo"]),
     ("monsieur ibrahim", &["El señor Ibrahim y las flores del Corán", "El senor Ibrahim y las flores del Coran"]),
     ("monsieur ibrahim et les fleurs du coran", &["El señor Ibrahim y las flores del Corán", "El senor Ibrahim y las flores del Coran"]),
     ("a touch of spice", &["Un toque de canela"]),
@@ -214,12 +216,16 @@ pub(super) const KNOWN_SERIES_SPANISH_TITLES: &[(&str, &[&str])] = &[
 
 /// Genera las variantes de títulos en español para una serie o película con el fin de hallar las versiones hispanohablantes.
 pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) -> Vec<String> {
+    let clean_title = strip_trailing_year_suffix(title);
+    let clean_orig = original_title.map(strip_trailing_year_suffix);
     let mut out = Vec::new();
     let mut push_unique = |cand: String| {
         let trimmed = cand.trim().to_string();
         if !trimmed.is_empty()
             && !trimmed.eq_ignore_ascii_case(title)
+            && !trimmed.eq_ignore_ascii_case(clean_title)
             && !original_title.map(|o| trimmed.eq_ignore_ascii_case(o)).unwrap_or(false)
+            && !clean_orig.map(|o| trimmed.eq_ignore_ascii_case(o)).unwrap_or(false)
             && !out.iter().any(|x: &String| x.eq_ignore_ascii_case(&trimmed))
         {
             out.push(trimmed);
@@ -227,7 +233,8 @@ pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) 
     };
 
     for src in [Some(title), original_title].into_iter().flatten() {
-        let norm = normalize_accents_and_symbols(src);
+        let clean_src = strip_trailing_year_suffix(src);
+        let norm = normalize_accents_and_symbols(clean_src);
         let joined = norm.split_whitespace().collect::<Vec<_>>().join(" ");
         for &(en_key, es_list) in KNOWN_SERIES_SPANISH_TITLES {
             if joined == en_key {
@@ -238,7 +245,7 @@ pub fn spanish_title_search_variants(title: &str, original_title: Option<&str>) 
         }
 
         // Traducción palabra por palabra si todas las palabras significativas tienen un equivalente directo en español
-        let tokens = clean_title_tokens(src);
+        let tokens = clean_title_tokens(clean_src);
         if !tokens.is_empty() && tokens.len() <= 6 {
             let mut translated = Vec::with_capacity(tokens.len());
             let mut any_changed = false;
