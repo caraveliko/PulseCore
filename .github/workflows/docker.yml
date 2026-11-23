@@ -78,13 +78,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Descargar binarios amd64
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: pulsecore-linux-amd64
           path: dist/bin/amd64
 
       - name: Descargar binarios arm64
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: pulsecore-linux-arm64
           path: dist/bin/arm64
