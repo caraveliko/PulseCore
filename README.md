@@ -7,7 +7,7 @@
 **Reinvención moderna y asíncrona en Rust de las redes eMule (eD2K + Kad DHT) y Torrent, con protocolo PC26, automatización multimedia nativa, centro de notificaciones e interfaz web integrada.**
 
 [![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/Licencia-GPL--2.0--or--later-blue.svg)](LICENSE)
-[![Versión: v0.4.5](https://img.shields.io/badge/Versi%C3%B3n-v0.4.5-success.svg)](docs/CHANGELOG.md)
+[![Versión: v0.4.8](https://img.shields.io/badge/Versi%C3%B3n-v0.4.8-success.svg)](docs/CHANGELOG.md)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Windows%20%7C%20Linux%20%7C%20aarch64-lightgrey)](README.md)
 [![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED.svg)](docs/docker.md)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](Cargo.toml)
@@ -32,7 +32,7 @@ Está especialmente diseñado para **servidores domésticos, microservidores, NA
 
 > [![Advertencia](https://img.shields.io/badge/ADVERTENCIA-DESARROLLO%20ACTIVO-orange.svg)](README.md)
 >
-> **Estado actual del proyecto (`v0.4.5`):** El núcleo operativo y la infraestructura de servidor están completos y probados: identificación eD2K (MD4 + AICH + SUI V2/V3), perfil de transporte moderno `PC26` (`X25519 + ML-KEM-768`, `ChaCha20-Poly1305` y `QUIC`), endurecimiento de Kad DHT para WAN (defensa anti-Sybil y cliente *LowID Buddy*), política fija «Solo Vídeo», centro de notificaciones multicanal, actualizador híbrido con *rollback* `O(1)`, guardián de montajes NFS/NAS, interfaz web con telemetría de ancho de banda en tiempo real y organización mediante enlaces duros. Actualmente seguimos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
+> **Estado actual del proyecto (`v0.4.8`):** El núcleo operativo y la infraestructura de servidor están completos y probados: identificación eD2K (MD4 + AICH + SUI V2/V3), perfil de transporte moderno `PC26` (`X25519 + ML-KEM-768`, `ChaCha20-Poly1305` y `QUIC`), endurecimiento de Kad DHT para WAN (defensa anti-Sybil y cliente *LowID Buddy*), política fija «Solo Vídeo», motor heurístico y lingüístico nativo para **español de España (`es-ES`)**, centro de notificaciones multicanal, actualizador híbrido con autoactualización configurable y *rollback* `O(1)`, guardián de montajes NFS/NAS, interfaz web dinámica con tarjetas 3D Flip, pipeline de finalización en 4 etapas y telemetría de ancho de banda en tiempo real. Actualmente seguimos afinando la contención de ancho de banda en descargas concurrentes masivas y la convergencia de fuentes en enjambres híbridos.
 >
 > **Entornos validados:** Probado con éxito en estaciones de trabajo AMD Ryzen / Intel Core bajo Windows 10/11 x64, Linux x86_64 (Arch, Debian, Ubuntu) y procesadores ARM64 (Raspberry Pi 4 y 5 bajo Raspberry Pi OS, con consumos inferiores a ~45 MB de RAM en reposo).
 
@@ -90,9 +90,12 @@ El servicio incorpora un panel de control web reactivo y moderno servido directa
 </table>
 
 Además de la gestión de descargas, búsquedas, servidores eD2K, red Kad y biblioteca Cine & Series, la WebUI integra:
+- **Cartelera con tarjetas 3D Flip estilo Trakt.tv**: al situar el cursor sobre una carátula realiza un zoom previo suave y se voltea en 3D mostrando la sinopsis en español, puntuación, géneros y botones directos (`Ficha`, `Fuentes`, `Carpeta`, `Eliminar`), además de soporte de **descarga selectiva por temporadas** en series.
+- **Pipeline visual de finalización en 4 etapas**: en la cola de descargas muestra en vivo si un archivo al 100 % está en `1. Verificar` (hashes MD4/eD2K), `2. Reconstruir` (contenedor `.part`), `3. Copiar` (porcentaje real hacia destino/NAS) o `4. Organizar` (Filmoteca y Compartidos).
+- **Opciones dinámicas por Modo de Uso y escáner inteligente de red**: adapta la configuración a tu perfil (**Descarga Directa**, **Kodi / Local**, **Servidor Plex / Jellyfin** o **Servidor 24/7 / NAS + Arr**) e incluye un escáner de hardware y latencia con 4 perfiles de velocidad a medida.
 - **Monitor interactivo de ancho de banda y tráfico P2P**: gráfica SVG de hasta 10 minutos con ventanas configurables, picos, medias y desglose por protocolo (`eD2K/Kad` y `Torrent`).
 - **Centro de notificaciones en tiempo real**: campana animada con contador de no leídos, *toasts* no intrusivos, filtros por severidad y configuración directa de canales externos.
-- **Estado de montajes NFS/NAS y actualización en caliente**: diagnóstico del almacenamiento de red y modal *Drag & Drop* para instalar nuevas compilaciones locales o revertir al binario anterior con un clic.
+- **Estado de montajes NFS/NAS y autoactualización configurable**: diagnóstico del almacenamiento de red, modo de actualización manual o desatendida (cada 6 h con verificación Ed25519) y modal *Drag & Drop* con *rollback* `O(1)`.
 
 ---
 
@@ -112,25 +115,40 @@ Pulse Core incorpora su propio motor de gestión de medios sin depender de progr
 - **Guardián de montajes NFS / NAS (`nfs_mount`)**: inspecciona `/proc/mounts`, `/etc/fstab` y la disponibilidad TCP en el puerto `2049` antes de crear directorios o transferir archivos, evitando saturar accidentalmente la tarjeta SD o el disco local si el NAS se encuentra desmontado.
 - **Sincronización de subtítulos y puntuación inteligente**: cliente REST integrado con OpenSubtitles (VLSub) que calcula el hash exacto de 64 bits (`primeros 64 KB + últimos 64 KB + tamaño`) para descargar y normalizar a UTF-8 el subtítulo `.es.srt` sincronizado al milisegundo, junto con algoritmos propios de filtrado y descarte de falsos positivos.
 
-### 3. Política estricta «Solo Vídeo» e inspección en vuelo (`ADR 0006`)
+### 3. Motor Lingüístico y Heurístico Nativo para Español de España (`es-ES`)
+A diferencia de las herramientas de automatización pensadas únicamente para el ecosistema anglosajón, Pulse Core integra en `mule-daemon::services::scorer` y `media_metadata` un motor diseñado específicamente para las redes P2P y el catálogo audiovisual en **español de España**:
+- **Distinción estricta `Castellano (es-ES)` vs. `Latino` vs. `VOSE`**: identifica etiquetas reales de nuestras redes (`Castellano`, `Castellano 5.1`, `ESP`, `ES-ES`, `Dual`, `[Spa]`) y penaliza o descarta doblajes `Latino` cuando el perfil activo es `1080p-es` / `2160p-es`.
+- **Cruce bilingüe de títulos (`EN ↔ ES-ES`) y numeración española**: relaciona automáticamente el título original con la traducción oficial en España (p. ej. *Die Hard* ↔ *Jungla de cristal*, *Talk to Me* ↔ *Háblame*) y reconoce tanto la nomenclatura clásica española en eMule (`1x01`, `Temp. 1`, `Cap. 101`, `T1`) como el estándar internacional (`S01E01`).
+- **Heurística de confianza de la escena P2P española**: prioriza lanzamientos verificados de grupos y *uploaders* reconocidos del entorno hispano (`Bryan_122`, `eth@n`, `yamil`, `Caloriana`, `HDO`, `Geot`, `krom`, `Wolfmax4K`, `NocturniaP2P`, `ExploradoresP2P`, `Hispashare`, etc.) descartando falsos positivos.
+- **Metadatos, géneros y sinopsis 100 % en `es-ES`**: prioriza traducciones oficiales `es-ES` y clasificación por edades de España (`ES`), traduce automáticamente los géneros y aplica traducción de respaldo cuando un proveedor externo (como TVDB/Skyhook) solo devuelve sinopsis en inglés.
+- **Reparación automática de caracteres (`fix_mojibake`) y subtítulos `.es.srt`**: corrige al vuelo eñes (`ñ`), tildes y signos (`¿`, `¡`) mal codificados entre clientes clásicos `ISO-8859-1 / Windows-1252` y `UTF-8`, tanto en nombres de archivo eD2K como en los subtítulos descargados por huella de 64 bits.
+
+| Escenario real en redes P2P | Herramienta anglosajona (`*Arr` estándar) | Motor `es-ES` de Pulse Core |
+| :--- | :--- | :--- |
+| `La.Jungla.de.Cristal.(1988).[1080p.Castellano.AC3].mkv` | ❌ No lo asocia con *Die Hard (1988)* | ✅ Cruza título `EN ↔ ES-ES` y prioriza `Castellano` |
+| Episodio eD2K `Serie - 2x05 - Capitulo [ESP].mkv` | ❌ Suele exigir formato estricto `S02E05` | ✅ Reconoce `2x05`, `Cap. 205`, `T2` y `S02E05` |
+| Lanzamiento `[Latino]` al buscar en Castellano | ⚠️ Lo descarga como `Spanish` genérico | ✅ Distingue `es-ES` (Castellano) de `es-LA` (Latino) |
+| Caracteres rotos `El.SeÃ±or.de.los.Anillos.mkv` o `.srt` ANSI | ⚠️ Nombres o subtítulos con símbolos rotos | ✅ Reparación `fix_mojibake` y normalización `UTF-8` |
+
+### 4. Política estricta «Solo Vídeo» e inspección en vuelo (`ADR 0006`)
 Pulse Core aplica de forma fija en compilación la **[Política de Contenido «Solo Vídeo»](docs/ed2k/decisions/0006-politica-contenido-solo-video.md)** centralizada en `mule_network_policy::content_policy`, sin opciones para desactivarla y con cuatro puertas defensivas:
 - **Admisión y búsquedas**: bloqueo nominal de ejecutables, archivos comprimidos, imágenes de disco o dobles extensiones engañosas (`pelicula.exe.mkv`) en búsquedas eD2K/Kad/Torznab y al añadir enlaces.
 - **Inspección binaria temprana en vuelo**: al completarse y verificarse por MD4 la parte 0, valida en memoria la cabecera real del contenedor de vídeo antes de consolidar la descarga.
 - **Prefinalización, compartidos y Torrent**: exige cabeceras válidas al importar `.part.met`, compartir carpetas o admitir torrents multifichero (seleccionando exclusivamente pistas de vídeo y sus subtítulos acompañantes).
 
-### 4. Centro de notificaciones y alertas *Push* multicanal
+### 5. Centro de notificaciones y alertas *Push* multicanal
 Mantiene un registro histórico filtrable en SQLite con entregas en tiempo real hacia la WebUI (`event.notificationCreated`) y soporte nativo para canales externos protegidos contra SSRF (**Telegram, Discord, Gotify, ntfy, Pushover y Webhook genérico**), incluyendo horarios silenciosos configurables y redacción segura de credenciales.
 
-### 5. Actualización híbrida en caliente con *Rollback* `O(1)`
+### 6. Actualización híbrida en caliente con *Rollback* `O(1)`
 Diseñado para mantenerse al día en servidores domésticos sin fricción:
 - **Autoactualización y subida local autenticada**: comprobación oficial bajo `NetworkPolicyManager` y endpoint autenticado (`POST /api/system/upload-update`) con validación estricta de cabeceras `ELF64` (`x86_64` / `aarch64`) o `PE`.
 - **Respaldo instantáneo `.old` e integración `systemd`**: guarda la versión previa mediante enlace duro en Unix para revertir con un clic desde la WebUI, `mule-cli update rollback` o `scripts/update_linux.sh`, liberando el bloqueo de directorio al reiniciar bajo `systemd`.
 
-### 6. Control por Inteligencia Artificial (Servidor MCP + Asistente LLM local)
+### 7. Control por Inteligencia Artificial (Servidor MCP + Asistente LLM local)
 - **Servidor MCP (`mule-mcp`) con 98 herramientas**: expone todo el control del daemon mediante *Model Context Protocol* para asistentes como Antigravity, Claude Code o Gemini CLI, con clasificación por nivel de riesgo (`Read`, `Mutate`, `Destructive`) y filtrado estricto mediante perfiles `--tool-profile` (`read`, `safe`, `full`).
 - **Orquestador LLM local (`mule-assistant`)**: permite interactuar en lenguaje natural contra modelos locales en loopback (Ollama o `llama.cpp` vía `/api/chat`), solicitando confirmación explícita ante acciones destructivas.
 
-### 7. Seguridad de red sin concesiones
+### 8. Seguridad de red sin concesiones
 - **Aislamiento Loopback y Anti-SSRF**: ningún paquete malicioso ni redirección HTTP puede forzar al daemon a escanear tu red local o comunicarse con servicios internos protegidos.
 - **Filtrado dinámico de IPs (`ipfilter.dat`) unificado**: descarte inmediato de rangos sospechosos compartido de forma atómica entre eD2K/Kad y el motor Torrent.
 - **Cuotas pre-handshake e interruptor de corte atómico (*kill switch*)**: limitación simultánea por subred (`/24` en IPv4 y `/48` en IPv6) con tiempos de espera estrictos y cierre fulminante de todo el tráfico ante cualquier anomalía.
