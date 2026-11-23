@@ -51,7 +51,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "local-
 futures-util = "0.3"
 tokio-tungstenite = "0.29"
 unicode-normalization = "0.1"
-igd-next = "0.17"
+igd-next = "0.18"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 flate2 = "1.0"
 time = { version = "0.3", features = ["formatting", "local-offset"] }
