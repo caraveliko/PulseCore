@@ -30,9 +30,9 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
             updated_at=excluded.updated_at",
         params![
             item.id,
-            item.tmdb_id,
+            item.tmdb_id.map(|id| id as i64),
             item.imdb_id,
-            item.tvdb_id,
+            item.tvdb_id.map(|id| id as i64),
             item.media_type,
             item.title,
             item.original_title,
@@ -161,7 +161,7 @@ pub fn get_media_by_tmdb_id(
                 quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE tmdb_id = ?1",
     )?;
-    let mut rows = stmt.query(params![tmdb_id])?;
+    let mut rows = stmt.query(params![tmdb_id as i64])?;
     if let Some(row) = rows.next()? {
         Ok(Some(row_to_media(row)?))
     } else {
@@ -179,7 +179,7 @@ pub fn get_media_by_tvdb_id(
                 quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
          FROM media_library WHERE tvdb_id = ?1",
     )?;
-    let mut rows = stmt.query(params![tvdb_id])?;
+    let mut rows = stmt.query(params![tvdb_id as i64])?;
     if let Some(row) = rows.next()? {
         Ok(Some(row_to_media(row)?))
     } else {
@@ -474,9 +474,9 @@ pub fn update_episode_status(
 fn row_to_media(row: &rusqlite::Row) -> Result<MediaItem, rusqlite::Error> {
     Ok(MediaItem {
         id: row.get(0)?,
-        tmdb_id: row.get(1)?,
+        tmdb_id: row.get::<_, Option<i64>>(1)?.map(|v| v.max(0) as u64),
         imdb_id: row.get(2)?,
-        tvdb_id: row.get(3)?,
+        tvdb_id: row.get::<_, Option<i64>>(3)?.map(|v| v.max(0) as u64),
         media_type: row.get(4)?,
         title: row.get(5)?,
         original_title: row.get(6)?,

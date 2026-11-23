@@ -17,21 +17,17 @@ pub fn discover_gateway_with_fallback() -> Result<Gateway, String> {
         .map(|v4| SocketAddr::V4(SocketAddrV4::new(v4, 0)))
         .unwrap_or_else(|| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)));
 
-    let primary_options = SearchOptions {
-        bind_addr: primary_bind,
-        timeout: Some(Duration::from_secs(4)),
-        ..Default::default()
-    };
+    let mut primary_options = SearchOptions::default();
+    primary_options.bind_addr = primary_bind;
+    primary_options.timeout = Some(Duration::from_secs(4));
 
     match search_gateway(primary_options) {
         Ok(gw) => Ok(gw),
         Err(primary_err) => {
             debug!("Primary SSDP discovery on {primary_bind} failed: {primary_err}; trying fallback 0.0.0.0");
-            let fallback_options = SearchOptions {
-                bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)),
-                timeout: Some(Duration::from_secs(4)),
-                ..Default::default()
-            };
+            let mut fallback_options = SearchOptions::default();
+            fallback_options.bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0));
+            fallback_options.timeout = Some(Duration::from_secs(4));
             search_gateway(fallback_options).map_err(|fallback_err| {
                 format!("UPnP discovery failed (primary: {primary_err}, fallback: {fallback_err})")
             })
