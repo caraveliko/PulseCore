@@ -495,20 +495,75 @@ if (document.getElementById('btn-exec-media-del')) {
 // Modal Lanzamientos (Grabber)
 let currentSearchingMediaId = null;
 let currentSearchingIsMovie = true;
+let currentSearchingEpisodeId = null;
+let currentSearchingSeason = null;
+let currentSearchingEpisode = null;
+let currentSearchingStrictCastilian = false;
+let currentSearchingBlacklistCurrent = false;
+let currentSearchingLabel = '';
 
-async function openReleasesModal(mediaId, title, isMovie) {
+function onStrictCastilianToggle() {
+  const cb = document.getElementById('releases-strict-castilian');
+  currentSearchingStrictCastilian = !!(cb && cb.checked);
+  executeReleasesSearch();
+}
+window.onStrictCastilianToggle = onStrictCastilianToggle;
+
+async function openReleasesModal(mediaId, title, isMovie, options = {}) {
   currentSearchingMediaId = mediaId;
   currentSearchingIsMovie = !!isMovie;
+  currentSearchingEpisodeId = options.episodeId || null;
+  currentSearchingSeason = Number.isFinite(options.seasonNumber) ? options.seasonNumber : null;
+  currentSearchingEpisode = Number.isFinite(options.episodeNumber) ? options.episodeNumber : null;
+  currentSearchingStrictCastilian = !!options.strictCastilian;
+  currentSearchingBlacklistCurrent = !!options.blacklistCurrent;
+  currentSearchingLabel = title || '';
+
   const m = document.getElementById('modal-media-releases');
   const titleEl = document.getElementById('releases-modal-title');
   const queryInput = document.getElementById('releases-custom-query');
+  const strictCb = document.getElementById('releases-strict-castilian');
+  const replaceBanner = document.getElementById('releases-replace-banner');
 
-  if (titleEl) titleEl.textContent = `Lanzamientos para: ${title}`;
-  if (queryInput) queryInput.value = '';
+  if (titleEl) {
+    titleEl.textContent = currentSearchingBlacklistCurrent
+      ? `Siguiente en Castellano para: ${title}`
+      : `Lanzamientos para: ${title}`;
+  }
+  if (queryInput) queryInput.value = options.customQuery || '';
+  if (strictCb) strictCb.checked = currentSearchingStrictCastilian;
+  if (replaceBanner) {
+    replaceBanner.style.display = currentSearchingBlacklistCurrent ? 'flex' : 'none';
+  }
   if (m) m.classList.add('active');
 
   await executeReleasesSearch();
 }
+
+function openCastilianReplacementModal(mediaId, title, isMovie, episodeId = null, seasonNumber = null, episodeNumber = null) {
+  return openReleasesModal(mediaId, title, isMovie, {
+    episodeId,
+    seasonNumber,
+    episodeNumber,
+    strictCastilian: true,
+    blacklistCurrent: true
+  });
+}
+window.openCastilianReplacementModal = openCastilianReplacementModal;
+
+async function autoGrabRecommendedCastilianFromModal() {
+  if (!currentSearchingMediaId) return;
+  closeModal('modal-media-releases');
+  await triggerReplaceWrongLanguage(
+    currentSearchingMediaId,
+    currentSearchingEpisodeId,
+    currentSearchingSeason,
+    currentSearchingLabel,
+    true,
+    true
+  );
+}
+window.autoGrabRecommendedCastilianFromModal = autoGrabRecommendedCastilianFromModal;
 
 async function executeReleasesSearch() {
   if (!currentSearchingMediaId) return;
@@ -516,17 +571,26 @@ async function executeReleasesSearch() {
   const tableEl = document.getElementById('releases-table');
   const tbody = document.getElementById('releases-table-body');
   const queryInput = document.getElementById('releases-custom-query');
+  const strictCb = document.getElementById('releases-strict-castilian');
   const customQuery = queryInput ? queryInput.value.trim() : '';
+  currentSearchingStrictCastilian = !!(strictCb && strictCb.checked);
 
   if (loadingEl) {
-    loadingEl.innerHTML = `<div style="font-size: 1.5rem; margin-bottom:8px;">⏳</div>Buscando en enjambres eD2k y trackers${customQuery ? ' (' + escapeHtml(customQuery) + ')' : ''}...`;
+    loadingEl.innerHTML = `<div style="font-size: 1.5rem; margin-bottom:8px;">⏳</div>Buscando en enjambres eD2k y trackers${currentSearchingStrictCastilian ? ' (solo Castellano ES)' : ''}${customQuery ? ' (' + escapeHtml(customQuery) + ')' : ''}...`;
     loadingEl.style.display = 'block';
   }
   if (tableEl) tableEl.style.display = 'none';
   if (tbody) tbody.innerHTML = '';
 
   try {
-    const payload = { mediaId: currentSearchingMediaId, isMovie: currentSearchingIsMovie };
+    const payload = {
+      mediaId: currentSearchingMediaId,
+      isMovie: currentSearchingIsMovie,
+      strictCastilian: currentSearchingStrictCastilian
+    };
+    if (currentSearchingEpisodeId) payload.episodeId = currentSearchingEpisodeId;
+    if (currentSearchingSeason !== null) payload.seasonNumber = currentSearchingSeason;
+    if (currentSearchingEpisode !== null) payload.episodeNumber = currentSearchingEpisode;
     if (customQuery) {
       payload.query = customQuery;
     }
@@ -539,19 +603,37 @@ async function executeReleasesSearch() {
       return;
     }
 
+    const firstValidIdx = releases.findIndex(r => !r.isRejected && !r.isBlacklisted);
+
     if (tbody) {
       tbody.innerHTML = releases.map((r, idx) => {
         const protoBadge = r.protocol === 'torrent' ? '<span class="proto-badge proto-torrent">⚡ Torrent</span>' : '<span class="proto-badge proto-ed2k">🫏 eD2k</span>';
         const sizeMb = (r.sizeBytes / (1024 * 1024)).toFixed(1) + ' MB';
         const scoreClass = r.score >= 50 ? 'color: #22c55e;' : (r.score > 0 ? 'color: #eab308;' : 'color: #f85149;');
         const rejectedNote = r.isRejected ? `<div style="font-size: 0.72rem; color: #f85149;">❌ ${escapeHtml(r.rejectionReason || 'Rechazado')}</div>` : '';
+        const blacklistedBadge = r.isBlacklisted ? `<span class="badge" style="background: rgba(248,81,73,0.16); color: #f85149; font-size: 0.7rem;">⛔ Descartada</span>` : '';
+        const recommendedBadge = idx === firstValidIdx ? `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; font-size: 0.7rem; margin-right: 4px;">★ Recomendada</span>` : '';
+        let confBadge = '';
+        if (r.castilianConfidence === 'verified') {
+          confBadge = `<span class="badge" style="background: rgba(34,197,94,0.18); color: #4ade80; font-size: 0.7rem;">✅ Castellano ES</span>`;
+        } else if (r.castilianConfidence === 'dual') {
+          confBadge = `<span class="badge" style="background: rgba(56,189,248,0.18); color: #38bdf8; font-size: 0.7rem;">🇪🇸 Dual ES/EN</span>`;
+        } else if (r.castilianConfidence === 'possible') {
+          confBadge = `<span class="badge" style="background: rgba(234,179,8,0.18); color: #fde047; font-size: 0.7rem;">🟡 Posible ES</span>`;
+        }
+        const actionLabel = currentSearchingBlacklistCurrent ? '🔄 Reemplazar' : '⬇ Descargar';
+        const rowHighlight = idx === firstValidIdx ? 'background: rgba(34,197,94,0.06);' : '';
 
         return `
-          <tr class="release-table-row" style="${r.isRejected ? 'opacity: 0.6;' : ''}">
+          <tr class="release-table-row" style="${r.isRejected ? 'opacity: 0.6;' : rowHighlight}">
             <td>
-              <div style="font-weight: 600; font-size: 0.84rem; word-break: break-all;">${escapeHtml(r.title)}</div>
+              <div style="font-weight: 600; font-size: 0.84rem; word-break: break-all;">${recommendedBadge}${escapeHtml(r.title)}</div>
               ${rejectedNote}
-              <div style="font-size: 0.72rem; color: var(--text-muted);">${escapeHtml(r.indexerName || 'Indexer')} • Fuentes/Seeds: ${r.sources || 0}</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px;">
+                <span>${escapeHtml(r.indexerName || 'Indexer')} • Fuentes/Seeds: ${r.sources || 0}</span>
+                ${confBadge}
+                ${blacklistedBadge}
+              </div>
             </td>
             <td>${protoBadge}</td>
             <td style="font-family: var(--font-mono); font-size: 0.8rem;">${sizeMb}</td>
@@ -562,7 +644,7 @@ async function executeReleasesSearch() {
             <td style="font-weight: 700; ${scoreClass}">${r.score} pts</td>
             <td>
               <button class="btn btn-sm btn-primary" onclick='grabSpecificRelease(${idx})' ${r.isRejected ? 'disabled' : ''}>
-                ⬇ Descargar
+                ${actionLabel}
               </button>
             </td>
           </tr>
@@ -581,18 +663,75 @@ async function grabSpecificRelease(idx) {
   if (!release || !currentSearchingMediaId) return;
 
   try {
-    await client.call('media.grabRelease', {
+    const payload = {
       mediaId: currentSearchingMediaId,
-      release: release
-    });
+      release: release,
+      blacklistCurrent: currentSearchingBlacklistCurrent
+    };
+    if (currentSearchingEpisodeId) {
+      payload.episodeId = currentSearchingEpisodeId;
+    }
+    await client.call('media.grabRelease', payload);
     showToastNotification(`Lanzamiento capturado: ${release.title}`, 'success', '⚡');
     addLog('success', `Lanzamiento añadido a descargas: ${release.title}`);
     closeModal('modal-media-releases');
-    await loadMediaLibrary();
+    if (typeof loadMediaLibrary === 'function') await loadMediaLibrary();
+    if (currentMediaDetailState && currentMediaDetailState.item && currentMediaDetailState.item.id === currentSearchingMediaId) {
+      await openMediaDetail(currentSearchingMediaId);
+    }
   } catch (e) {
     showToastNotification('Error capturando lanzamiento: ' + e.message, 'error', '❌');
   }
 }
+
+async function triggerReplaceWrongLanguage(mediaId, episodeId, seasonNumber, label, autoGrab = true, skipConfirm = false) {
+  const isSeasonScope = seasonNumber !== null && seasonNumber !== undefined && !episodeId;
+  if (isSeasonScope && !skipConfirm) {
+    const ok = confirm(`¿Descartar la versión actual de "${label}" y buscar la siguiente recomendación en Castellano de España? Los archivos actuales se mantendrán hasta que terminen los nuevos.`);
+    if (!ok) return;
+  }
+
+  showToastNotification(`🇪🇸 Buscando siguiente recomendación en Castellano para "${label}"...`, 'info', '🔄');
+  try {
+    const payload = {
+      mediaId,
+      autoGrab: Boolean(autoGrab),
+      cancelActiveDownload: true
+    };
+    if (episodeId) payload.episodeId = episodeId;
+    if (seasonNumber !== null && seasonNumber !== undefined) payload.seasonNumber = seasonNumber;
+
+    const res = await client.call('media.replaceWrongLanguage', payload);
+    if (res && res.success) {
+      if (res.grabbed) {
+        showToastNotification(
+          `✅ Reemplazo iniciado: ${res.grabbed.title} [${res.grabbed.quality} · ${res.grabbed.language} · ${res.grabbed.score} pts]`,
+          'success',
+          '🇪🇸'
+        );
+      } else if (res.grabbedEpisodes && res.grabbedEpisodes.length > 0) {
+        showToastNotification(
+          `✅ Reemplazo iniciado para ${res.grabbedEpisodes.length} episodio(s) en Castellano`,
+          'success',
+          '🇪🇸'
+        );
+      } else {
+        showToastNotification('Búsqueda de reemplazo completada', 'info', '🔎');
+      }
+    } else {
+      showToastNotification(
+        (res && res.message) || 'No se encontró ninguna alternativa verificada en Castellano de España. El archivo actual se mantiene intacto.',
+        'warning',
+        '⚠️'
+      );
+    }
+    await openMediaDetail(mediaId);
+    if (typeof loadMediaLibrary === 'function') loadMediaLibrary();
+  } catch (e) {
+    showToastNotification(`Error cambiando a Castellano: ${e.message || e}`, 'error', '❌');
+  }
+}
+window.triggerReplaceWrongLanguage = triggerReplaceWrongLanguage;
 
 // Estado en memoria de la serie abierta actualmente para cambio instantáneo de temporada
 let currentMediaDetailState = {
@@ -699,6 +838,8 @@ async function openMediaDetail(mediaId) {
     const episodes = res.episodes || [];
     const details = res.details || {};
     const subtitles = res.subtitles || [];
+    const mediaProbe = res.mediaProbe || null;
+    const episodeProbes = res.episodeProbes || {};
     const autoGrab = res.autoGrab || {};
     const isMovie = item.mediaType === 'movie';
 
@@ -707,6 +848,8 @@ async function openMediaDetail(mediaId) {
       episodes,
       details,
       subtitles,
+      mediaProbe,
+      episodeProbes,
       autoGrab,
       selectedSeason: 1
     };
@@ -857,6 +1000,7 @@ async function openMediaDetail(mediaId) {
         actionsEl.style.display = 'flex';
         actionsEl.innerHTML = `
           <button class="btn" style="padding: 8px 14px; background: rgba(56,189,248,0.16); border-color: rgba(56,189,248,0.4); color: #38bdf8; font-weight: 600;" onclick="triggerSingleAutoGrab('${item.id}', null, '${safeTitleAttr}')" title="Ejecutar AutoGrabber de precisión ahora">${item.status === 'completed' ? '🔄 Buscar Upgrade (Auto-Grab)' : '⚡ Auto-Grab Ahora'}</button>
+          ${(item.status === 'completed' || item.status === 'downloading') ? `<button class="btn" style="padding: 8px 14px; background: rgba(234,179,8,0.14); border-color: rgba(234,179,8,0.38); color: #fde047; font-weight: 600;" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeTitleAttr}', true)" title="Si el archivo no está en Castellano de España, descartarlo y elegir o bajar la siguiente recomendación en español">🇪🇸 Cambiar versión (ES)</button>` : ''}
           <button class="btn" style="padding: 8px 14px;" onclick="closeModal('modal-media-detail'); openReleasesModal('${item.id}', '${safeTitleAttr}', true)" title="Buscar lanzamientos manualmente en Kad y trackers">🔍 Buscar Fuentes</button>
           <button class="btn" style="padding: 8px 14px;" onclick="openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Abrir carpeta de destino en el servidor">📂 Abrir carpeta</button>
           ${details.trailerYoutubeId ? `<a class="btn" style="padding: 8px 14px; text-decoration: none;" href="https://www.youtube.com/watch?v=${encodeURIComponent(details.trailerYoutubeId)}" target="_blank" rel="noopener">🎞️ Ver Tráiler</a>` : ''}
@@ -866,7 +1010,7 @@ async function openMediaDetail(mediaId) {
       }
 
       // Poblar paneles exclusivos de Película (Ficha Técnica + Archivo Local + AutoGrabber)
-      renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, autoGrab);
+      renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, autoGrab, mediaProbe);
     } else {
       if (movieSpecificEl) movieSpecificEl.style.display = 'none';
       if (tableWrapEl) tableWrapEl.style.display = 'block';
@@ -1063,7 +1207,7 @@ async function clearMediaBlacklist(targetId, mediaId) {
 }
 window.clearMediaBlacklist = clearMediaBlacklist;
 
-function renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, autoGrab) {
+function renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, autoGrab, mediaProbe = null) {
   const specsGridEl = document.getElementById('movie-tech-specs-grid');
   const fileBoxEl = document.getElementById('movie-file-details-box');
 
@@ -1114,13 +1258,35 @@ function renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, auto
       ? subtitles.map(lang => `<span class="badge badge-dl" style="font-size:0.75rem;">✓ Subtítulo ${escapeHtml(lang.toUpperCase())}</span>`).join(' ')
       : `<span class="badge badge-wait" style="font-size:0.75rem;">⚠️ Sin subtítulos locales (.srt)</span>`;
 
+    const audioLangsList = (mediaProbe && Array.isArray(mediaProbe.audioLanguages) && mediaProbe.audioLanguages.length > 0)
+      ? mediaProbe.audioLanguages.join(', ')
+      : 'desconocido';
+    const audioChip = mediaProbe
+      ? (mediaProbe.hasSpanishAudio
+        ? `<span class="badge badge-dl" style="font-size:0.75rem;">🔊 Audio: Castellano / ES (${escapeHtml(audioLangsList)})</span>`
+        : `<span class="badge" style="background: rgba(248,81,73,0.18); color: #fca5a5; border: 1px solid rgba(248,81,73,0.4); font-size:0.75rem;">⚠️ Audio detectado: ${escapeHtml(audioLangsList)}</span>`)
+      : '';
+    const wrongLangBanner = (item.filePath && mediaProbe && !mediaProbe.hasSpanishAudio) ? `
+      <div style="background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.35); border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <div style="font-size: 0.82rem; color: #fecaca;">
+          <strong>⚠️ Idioma no detectado en Castellano de España:</strong> las pistas reales del archivo son <code>${escapeHtml(audioLangsList)}</code>.
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm btn-primary" onclick="triggerReplaceWrongLanguage('${item.id}', null, null, '${safeTitleAttr}', true)">🇪🇸 Siguiente en Castellano (1 clic)</button>
+          <button type="button" class="btn btn-sm" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeTitleAttr}', true)">🎯 Elegir otra en Castellano</button>
+        </div>
+      </div>
+    ` : '';
+
     const fileNameOnly = item.filePath ? item.filePath.split('/').pop() : null;
     fileBoxEl.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 12px;">
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <span class="media-meta-chip">🎞️ Perfil: <strong>${escapeHtml(item.qualityProfile || '1080p')}</strong></span>
+          ${audioChip}
           ${subBadges}
         </div>
+        ${wrongLangBanner}
         ${item.filePath ? `
           <div style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
             <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px;">ARCHIVO CATALOGADO EN DISCO:</div>
@@ -1278,6 +1444,7 @@ function renderCurrentSeriesSeason() {
   const smartBarEl = document.getElementById('series-season-smart-bar');
   if (smartBarEl) {
     const pendingInSeason = seasonEps.filter(e => e.status !== 'completed').length;
+    const replaceableInSeason = seasonEps.some(e => e.status === 'completed' || e.status === 'downloading');
     smartBarEl.innerHTML = `
       <div class="season-smart-status">
         <span class="badge ${isSeasonMonitored ? 'badge-dl' : 'badge-pause'}">
@@ -1289,6 +1456,7 @@ function renderCurrentSeriesSeason() {
       </div>
       <div class="season-smart-actions">
         ${pendingInSeason > 0 ? `<button type="button" class="btn btn-sm btn-primary" onclick="triggerSeasonAutoGrab('${item.id}', ${selectedSeason}, '${safeSeriesTitle}')" title="Buscar pack o episodios solo de la Temporada ${selectedSeason}">⚡ Descargar Temporada ${selectedSeason}</button>` : ''}
+        ${replaceableInSeason ? `<button type="button" class="btn btn-sm" style="background:rgba(234,179,8,0.14); color:#fde047; border-color:rgba(234,179,8,0.35);" onclick="triggerReplaceWrongLanguage('${item.id}', null, ${selectedSeason}, '${safeSeriesTitle} T.${selectedSeason}', true)" title="Descartar la versión actual de toda la temporada y buscar la siguiente en Castellano de España">🇪🇸 Cambiar T.${selectedSeason} (ES)</button>` : ''}
         <button type="button" class="btn btn-sm" onclick="setOnlySeasonMonitored('${item.id}', ${selectedSeason})" title="Omitir automáticamente el resto de temporadas y seguir solo la Temporada ${selectedSeason}">🎯 Solo seguir T.${selectedSeason}</button>
         <button type="button" class="btn btn-sm" onclick="toggleSeasonMonitored('${item.id}', ${selectedSeason}, ${!isSeasonMonitored})" title="${isSeasonMonitored ? 'Omitir esta temporada para no descargarla automáticamente' : 'Volver a activar la descarga automática de esta temporada'}">
           ${isSeasonMonitored ? `👁️ Omitir T.${selectedSeason} (Ya vista)` : `🔔 Activar T.${selectedSeason}`}
@@ -1313,9 +1481,17 @@ function renderCurrentSeriesSeason() {
     return;
   }
 
+  const episodeProbes = currentMediaDetailState.episodeProbes || {};
   container.innerHTML = seasonEps.map(ep => {
     const epCode = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
     const rich = epMetaMap[epCode] || {};
+    const epProbe = episodeProbes[ep.id] || null;
+    const epAudioLangs = (epProbe && Array.isArray(epProbe.audioLanguages) && epProbe.audioLanguages.length > 0)
+      ? epProbe.audioLanguages.join(', ')
+      : 'desconocido';
+    const wrongLangEpBadge = (ep.status === 'completed' && epProbe && !epProbe.hasSpanishAudio)
+      ? `<span class="badge" style="background: rgba(248,81,73,0.18); color: #fca5a5; border: 1px solid rgba(248,81,73,0.4); font-size: 0.7rem; margin-right: 4px;" title="Audio real detectado: ${escapeHtml(epAudioLangs)}">⚠️ Sin audio ES</span>`
+      : '';
 
     let statusBadge = '<span class="badge badge-wait">🟡 Buscado</span>';
     let cardStateClass = 'wanted';
@@ -1351,7 +1527,7 @@ function renderCurrentSeriesSeason() {
               <div style="font-weight: 700; font-size: 0.96rem; color: #f8fafc; line-height: 1.25;">
                 ${ep.episodeNumber}. ${escapeHtml(ep.title || rich.title || 'Episodio ' + ep.episodeNumber)}
               </div>
-              <div style="flex-shrink: 0;">${statusBadge}</div>
+              <div style="flex-shrink: 0;">${wrongLangEpBadge}${statusBadge}</div>
             </div>
 
             ${airDateText ? `<div style="font-size: 0.74rem; color: #94a3b8; margin-bottom: 4px;">📅 Emisión: ${escapeHtml(airDateText)}</div>` : ''}
@@ -1370,7 +1546,8 @@ function renderCurrentSeriesSeason() {
 
             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
               ${ep.status === 'completed' ? `<span class="badge badge-completed" style="font-size: 0.72rem; padding: 2px 7px;">✔ En disco</span>` : `<button class="btn btn-sm" style="background:rgba(56,189,248,0.16); color:#38bdf8; border-color:rgba(56,189,248,0.35);" onclick="triggerSingleAutoGrab('${item.id}', '${ep.id}', '${safeSeriesTitle} ${epCode}')" title="Auto-Grab automático para ${epCode}">⚡ Auto</button>`}
-              <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${item.id}', '${safeSeriesTitle}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Buscar fuentes para ${epCode}">🔍 Fuentes</button>
+              ${(ep.status === 'completed' || ep.status === 'downloading') ? `<button class="btn btn-sm" style="background:rgba(234,179,8,0.14); color:#fde047; border-color:rgba(234,179,8,0.35);" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeSeriesTitle} ${epCode}', false, '${ep.id}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Idioma incorrecto: buscar siguiente recomendación en Castellano de España">🇪🇸</button>` : ''}
+              <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${item.id}', '${safeSeriesTitle}', ${ep.seasonNumber}, ${ep.episodeNumber}, '${ep.id}')" title="Buscar fuentes para ${epCode}">🔍 Fuentes</button>
               ${ep.status === 'completed' && ep.filePath ? `<button class="btn btn-sm" onclick="openDestinationFolder({ path: '${safeFilePathAttr}', title: '${safeSeriesTitle} ${epCode}' })" title="Abrir carpeta de destino">📂</button>` : ''}
               ${ep.status === 'completed' ? `<button class="btn btn-sm" onclick="openSubtitlesModal('${item.id}', '${safeSeriesTitle} ${epCode}', false, ${ep.seasonNumber}, ${ep.episodeNumber}, '${safeFilePathAttr}')" title="Subtítulos (Bazarr)">💬 Subs</button>` : ''}
             </div>
@@ -1382,9 +1559,13 @@ function renderCurrentSeriesSeason() {
 }
 window.renderCurrentSeriesSeason = renderCurrentSeriesSeason;
 
-function openEpisodeReleaseSearch(mediaId, seriesTitle, season, episode) {
+function openEpisodeReleaseSearch(mediaId, seriesTitle, season, episode, episodeId = null) {
   const epCode = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
-  openReleasesModal(mediaId, `${seriesTitle} ${epCode}`, false);
+  openReleasesModal(mediaId, `${seriesTitle} ${epCode}`, false, {
+    episodeId,
+    seasonNumber: season,
+    episodeNumber: episode
+  });
 }
 
 // Modal Indexadores

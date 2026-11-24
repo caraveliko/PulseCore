@@ -2951,9 +2951,20 @@
         <button class="btn btn-sm" onclick="closeModal('modal-media-releases')" style="padding: 2px 8px; font-size: 1.1rem;">✕</button>
       </div>
 
-      <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
-        <input type="text" id="releases-custom-query" class="form-control" placeholder="Buscar término o palabra clave (ej. Cabin, La cabaña, 1080p)..." onkeydown="if(event.key==='Enter') executeReleasesSearch()" style="flex: 1; padding: 6px 12px; font-size: 0.85rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text);">
+      <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap;">
+        <input type="text" id="releases-custom-query" class="form-control" placeholder="Buscar término o palabra clave (ej. Cabin, La cabaña, 1080p)..." onkeydown="if(event.key==='Enter') executeReleasesSearch()" style="flex: 1; min-width: 220px; padding: 6px 12px; font-size: 0.85rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text);">
+        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #e2e8f0; cursor: pointer; padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); user-select: none;">
+          <input type="checkbox" id="releases-strict-castilian" onchange="onStrictCastilianToggle()">
+          <span>🇪🇸 Solo Castellano (España)</span>
+        </label>
         <button class="btn btn-sm btn-primary" onclick="executeReleasesSearch()" style="white-space: nowrap; padding: 6px 14px;">🔍 Buscar</button>
+      </div>
+
+      <div id="releases-replace-banner" style="display: none; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.35);">
+        <div style="font-size: 0.82rem; color: #e2e8f0;">
+          <strong>🔄 Reemplazo en Castellano de España:</strong> el archivo actual se mantendrá en disco hasta que la nueva versión termine de descargarse.
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" id="btn-releases-auto-next" onclick="autoGrabRecommendedCastilianFromModal()">⚡ Bajar siguiente recomendada en ES</button>
       </div>
 
       <div id="releases-list-container" style="overflow-y: auto; flex: 1; min-height: 250px;">

@@ -2457,6 +2457,16 @@ main {
   font-family: var(--font-mono);
   font-weight: 500;
 }
+.badge-quality-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  line-height: 1;
+  color: #93c5fd;
+}
 .release-table-row:hover {
   background: rgba(255, 255, 255, 0.03);
 }

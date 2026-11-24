@@ -637,3 +637,53 @@ fn test_series_with_disambiguation_year_suffix_and_the_body_2026() {
         Some((1, 1)),
     ));
 }
+
+#[test]
+fn test_strict_castilian_confidence_and_filter() {
+    let make_rel = |title: &str, indexer: &str| {
+        evaluate_release(
+            title,
+            "torrent",
+            &format!("magnet:?xt=urn:btih:{title}"),
+            "0123456789abcdef0123456789abcdef",
+            2_500_000_000,
+            12,
+            indexer,
+            true,
+            "1080p-es",
+            "es",
+        )
+    };
+
+    let rel_verified = make_rel("Dune.Parte.Dos.2024.1080p.Castellano.x265.mkv", "Prowlarr");
+    let rel_group = make_rel("Dune.Parte.Dos.2024.1080p.Spanish.by.Bryan_122.mkv", "Prowlarr");
+    let rel_indexer = make_rel("Dune.Parte.Dos.2024.1080p.Spanish.mkv", "DonTorrent");
+    let rel_dual = make_rel("Dune.Parte.Dos.2024.1080p.Dual.Spanish.English.mkv", "Prowlarr");
+    let rel_possible = make_rel("Dune.Parte.Dos.2024.1080p.Spanish.mkv", "1337x");
+    let rel_vose = make_rel("Dune.Parte.Dos.2024.1080p.VOSE.mkv", "1337x");
+    let rel_latino = make_rel("Dune.Parte.Dos.2024.1080p.Latino.mkv", "1337x");
+    let rel_latam_spanish = make_rel("Dune.Parte.Dos.2024.1080p.Spanish.Latam.mkv", "1337x");
+
+    assert_eq!(castilian_confidence_level(&rel_verified), "verified");
+    assert_eq!(castilian_confidence_level(&rel_group), "verified");
+    assert_eq!(castilian_confidence_level(&rel_indexer), "verified");
+    assert_eq!(castilian_confidence_level(&rel_dual), "dual");
+    assert_eq!(castilian_confidence_level(&rel_possible), "possible");
+    assert_eq!(castilian_confidence_level(&rel_vose), "none");
+    assert_eq!(castilian_confidence_level(&rel_latino), "none");
+    assert_eq!(castilian_confidence_level(&rel_latam_spanish), "none");
+
+    assert!(is_strict_castilian_release(&rel_verified));
+    assert!(is_strict_castilian_release(&rel_possible));
+    assert!(!is_strict_castilian_release(&rel_vose));
+    assert!(!is_strict_castilian_release(&rel_latino));
+
+    let mut batch = vec![rel_possible.clone(), rel_verified.clone(), rel_vose, rel_latino];
+    apply_strict_castilian_filter(&mut batch);
+
+    assert!(!batch[0].is_rejected);
+    assert!(!batch[1].is_rejected);
+    assert!(batch[1].score > batch[0].score);
+    assert!(batch[2].is_rejected);
+    assert!(batch[3].is_rejected);
+}

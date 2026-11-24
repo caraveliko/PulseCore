@@ -101,6 +101,7 @@ pub async fn handle_request(
         "media.refreshMetadata" => handle_media_refresh_metadata(state).await,
         "media.calendar" => handle_media_calendar(state, req.params).await,
         "media.autoGrab" => handle_media_auto_grab(state, req.params).await,
+        "media.replaceWrongLanguage" => handle_media_replace_wrong_language(state, req.params).await,
         "media.setSeasonMonitored" => handle_media_set_season_monitored(state, req.params).await,
         "media.organize" => handle_media_organize(state, req.params).await,
         "media.clean" => handle_media_clean(state, req.params).await,

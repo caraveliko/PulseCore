@@ -175,6 +175,28 @@ pub async fn handle_media_get(
         (Vec::new(), None)
     };
 
+    let episode_probes = if item.media_type == "tv" {
+        let probe_futs: Vec<_> = episodes
+            .iter()
+            .filter_map(|ep| {
+                ep.file_path.as_deref().map(|fp| {
+                    let ep_id = ep.id.clone();
+                    let path = std::path::PathBuf::from(fp);
+                    async move {
+                        let probe = crate::services::media_probe::probe_video_file(&path).await;
+                        (ep_id, probe)
+                    }
+                })
+            })
+            .collect();
+        futures_util::future::join_all(probe_futs)
+            .await
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>()
+    } else {
+        std::collections::HashMap::new()
+    };
+
     let auto_grab = crate::services::AutoGrabber::get_diagnostics_for_media(state, id, &episodes).await;
 
     Ok(json!({
@@ -183,6 +205,7 @@ pub async fn handle_media_get(
         "details": details,
         "subtitles": subtitles,
         "mediaProbe": media_probe,
+        "episodeProbes": episode_probes,
         "autoGrab": auto_grab
     }))
 }
@@ -582,8 +605,12 @@ pub async fn handle_media_search_releases(
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
     let media_id = params["mediaId"].as_str().unwrap_or("");
     let query_param = params["query"].as_str().unwrap_or("");
+    let strict_castilian = params["strictCastilian"].as_bool().unwrap_or(false);
+    let episode_id = params["episodeId"].as_str().filter(|s| !s.is_empty());
+    let season_number = params["seasonNumber"].as_u64().map(|n| n as u32);
+    let episode_number = params["episodeNumber"].as_u64().map(|n| n as u32);
 
-    let (queries, is_movie, quality_profile, item_ctx) = if !media_id.is_empty() {
+    let (mut queries, is_movie, quality_profile, item_ctx) = if !media_id.is_empty() {
         let dl_svc = state.downloads.lock().await;
         let item = dl_svc
             .db()
@@ -654,9 +681,21 @@ pub async fn handle_media_search_releases(
         return Err(JsonRpcError::invalid_params("Must provide either 'mediaId' or 'query'"));
     };
 
+    if strict_castilian && query_param.is_empty() {
+        if let Some(base_q) = queries.first().cloned() {
+            if !base_q.to_lowercase().contains("castellano") {
+                queries.insert(0, format!("{base_q} Castellano"));
+            }
+        }
+    }
+
     let aggregator = crate::services::IndexerAggregator::new();
     let mut all_releases = Vec::new();
     let mut seen_links = std::collections::HashSet::new();
+    let ep_coords = match (season_number, episode_number) {
+        (Some(s), Some(e)) => Some((s, e)),
+        _ => None,
+    };
 
     for q in queries {
         let rels = aggregator.search_all(state, &q, is_movie, &quality_profile).await;
@@ -665,8 +704,8 @@ pub async fn handle_media_search_releases(
                 if !r.is_rejected {
                     if let Some((ref exp_title, ref exp_orig, ref alts, exp_year)) = item_ctx {
                         let alt_refs: Vec<&str> = alts.iter().map(|s| s.as_str()).collect();
-                        if is_movie
-                            && !crate::services::scorer::matches_release_with_alts(
+                        let matches = if is_movie {
+                            crate::services::scorer::matches_release_with_alts(
                                 &r.title,
                                 exp_title,
                                 exp_orig.as_deref(),
@@ -675,7 +714,22 @@ pub async fn handle_media_search_releases(
                                 true,
                                 None,
                             )
-                        {
+                        } else if let Some(coords) = ep_coords {
+                            query_param.is_empty()
+                                && !crate::services::scorer::matches_release_with_alts(
+                                    &r.title,
+                                    exp_title,
+                                    exp_orig.as_deref(),
+                                    &alt_refs,
+                                    exp_year,
+                                    false,
+                                    Some(coords),
+                                )
+                        } else {
+                            true
+                        };
+                        let should_reject = if is_movie { !matches } else { ep_coords.is_some() && matches };
+                        if should_reject {
                             r.is_rejected = true;
                             r.score = -500;
                             r.rejection_reason = Some(format!(
@@ -691,10 +745,38 @@ pub async fn handle_media_search_releases(
         }
     }
 
-    all_releases.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| b.sources.cmp(&a.sources)));
+    if strict_castilian {
+        crate::services::scorer::apply_strict_castilian_filter(&mut all_releases);
+    }
 
-    serde_json::to_value(all_releases)
-        .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}")))
+    let ag_state = crate::services::AutoGrabber::load_state(state).await;
+    let target_id = episode_id.unwrap_or(media_id);
+
+    let mut enriched: Vec<(i32, u64, Value)> = Vec::with_capacity(all_releases.len());
+    for mut r in all_releases {
+        let is_blacklisted = !target_id.is_empty()
+            && ag_state.is_release_blacklisted(target_id, &r.hash, &r.title);
+        if is_blacklisted && strict_castilian && !r.is_rejected {
+            r.is_rejected = true;
+            r.score = -999;
+            r.rejection_reason = Some("Descartada previamente (lista negra)".to_string());
+        }
+        let confidence = crate::services::scorer::castilian_confidence_level(&r);
+        let sort_score = r.score;
+        let sort_sources = r.sources;
+        if let Ok(mut val) = serde_json::to_value(&r) {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("castilianConfidence".to_string(), json!(confidence));
+                obj.insert("isBlacklisted".to_string(), json!(is_blacklisted));
+            }
+            enriched.push((sort_score, sort_sources, val));
+        }
+    }
+
+    enriched.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    let result_vals: Vec<Value> = enriched.into_iter().map(|(_, _, v)| v).collect();
+
+    Ok(Value::Array(result_vals))
 }
 
 /// Extrae una cadena obligatoria desde un objeto JSON de lanzamiento.
@@ -761,7 +843,7 @@ fn parse_scored_release(val: &Value) -> Result<crate::services::scorer::ScoredRe
     })
 }
 
-/// Descarga manualmente un candidato de lanzamiento específico para un elemento multimedia
+/// Descarga manualmente un candidato de lanzamiento específico para un elemento multimedia o episodio
 pub async fn handle_media_grab_release(
     state: &AppState,
     params: Option<Value>,
@@ -770,12 +852,61 @@ pub async fn handle_media_grab_release(
     let media_id = params["mediaId"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' parameter"))?;
+    let episode_id = params["episodeId"].as_str().filter(|s| !s.is_empty());
+    let blacklist_current = params["blacklistCurrent"].as_bool().unwrap_or(false);
     let release = parse_scored_release(&params["release"])?;
 
-    match crate::services::AutoGrabber::grab_release(state, media_id, &release).await {
+    if blacklist_current {
+        let mut ag_state = crate::services::AutoGrabber::load_state(state).await;
+        crate::services::AutoGrabber::blacklist_current_for_target(
+            state,
+            &mut ag_state,
+            media_id,
+            episode_id,
+            None,
+            crate::services::auto_grabber::WRONG_LANGUAGE_REASON,
+            true,
+        )
+        .await
+        .map_err(JsonRpcError::business)?;
+        crate::services::AutoGrabber::save_state(state, &ag_state).await;
+    }
+
+    match crate::services::AutoGrabber::grab_release_for_target(state, media_id, episode_id, &release)
+        .await
+    {
         Ok(dl_id) => Ok(json!({ "success": true, "downloadId": dl_id })),
         Err(e) => Err(JsonRpcError::business(e)),
     }
+}
+
+/// Descarta la versión actual por idioma incorrecto y busca o descarga la siguiente recomendación
+/// en Castellano de España, manteniendo intacto el archivo actual en disco hasta completar el reemplazo.
+pub async fn handle_media_replace_wrong_language(
+    state: &AppState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
+    let media_id = params["mediaId"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing 'mediaId' parameter"))?;
+    let episode_id = params["episodeId"].as_str().filter(|s| !s.is_empty());
+    let season_number = params["seasonNumber"].as_u64().map(|n| n as u32);
+    let auto_grab = params["autoGrab"].as_bool().unwrap_or(true);
+    let cancel_active_download = params["cancelActiveDownload"].as_bool().unwrap_or(true);
+
+    let aggregator = crate::services::IndexerAggregator::new();
+    crate::services::AutoGrabber::replace_wrong_language(
+        state,
+        &aggregator,
+        media_id,
+        episode_id,
+        season_number,
+        auto_grab,
+        cancel_active_download,
+    )
+    .await
+    .map_err(JsonRpcError::business)
 }
 
 /// Desencadena un escaneo bajo demanda de directorios locales (/cineseries/Peliculas y /Series)

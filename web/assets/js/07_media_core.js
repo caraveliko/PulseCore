@@ -471,6 +471,23 @@ function renderMediaCards() {
   }
   if (emptyMsg) emptyMsg.style.display = 'none';
 
+function renderCardQualityLogo(qualityProfile) {
+  const raw = String(qualityProfile || '1080p');
+  const lower = raw.toLowerCase();
+  let label = 'HD';
+  if (lower.includes('2160') || lower.includes('4k') || lower.includes('uhd')) {
+    label = '4K';
+  } else if (lower.includes('sd') || lower.includes('480')) {
+    label = 'SD';
+  }
+  return `<span class="badge-quality-outline badge-quality-logo" title="Perfil: ${escapeHtml(raw)}" aria-label="${label}">
+    <svg viewBox="0 0 28 16" width="26" height="15" role="img" aria-hidden="true">
+      <rect x="0.75" y="0.75" width="26.5" height="14.5" rx="3" fill="rgba(56, 189, 248, 0.1)" stroke="currentColor" stroke-width="1.25"></rect>
+      <text x="14" y="11.5" text-anchor="middle" fill="currentColor" font-size="9.5" font-weight="800" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" letter-spacing="0.4">${label}</text>
+    </svg>
+  </span>`;
+}
+
   container.innerHTML = filtered.map(item => {
     const isMovie = item.mediaType === 'movie';
     const yearStr = item.year ? item.year : '';
@@ -571,7 +588,7 @@ function renderMediaCards() {
               ${typeIcon}
               <span>${yearStr}</span>
             </span>
-            <span class="badge-quality-outline badge-1080p-es">${escapeHtml(qualityStr)}</span>
+            ${renderCardQualityLogo(qualityStr)}
           </div>
         </div>
       </div>

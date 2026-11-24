@@ -44,6 +44,22 @@ const EPISODE_SWEET_MAX_MB: u64 = 2200;
 const SEASON_PACK_SWEET_MIN_MB: u64 = 2500;
 const SEASON_PACK_SWEET_MAX_MB: u64 = 28000;
 pub(super) const MAX_EPISODE_RANGE_SPAN: u32 = 30;
+/// Bonificación adicional para lanzamientos con señal fuerte de Castellano de España en filtro estricto.
+const STRICT_CASTILIAN_VERIFIED_BONUS: i32 = 30;
+/// Bonificación adicional para lanzamientos Dual en filtro estricto.
+const STRICT_CASTILIAN_DUAL_BONUS: i32 = 10;
+/// Puntuación asignada a los lanzamientos descartados por el filtro estricto de Castellano de España.
+const STRICT_CASTILIAN_REJECTED_SCORE: i32 = -999;
+
+/// Comprueba si el título o el indexador pertenecen a una fuente española de confianza conocida.
+fn is_trusted_spanish_source(lower_title: &str, indexer_name: &str) -> bool {
+    TRUSTED_RELEASE_GROUPS.iter().any(|&grp| lower_title.contains(grp))
+        || indexer_name.eq_ignore_ascii_case("dontorrent")
+        || indexer_name.eq_ignore_ascii_case("grantorrent")
+        || indexer_name.eq_ignore_ascii_case("divxtotal")
+        || indexer_name.eq_ignore_ascii_case("atomixhq")
+        || indexer_name.eq_ignore_ascii_case("pctfenix")
+}
 
 pub fn evaluate_release(
     title: &str,
@@ -235,13 +251,7 @@ pub fn evaluate_release(
         .collect();
     let has_word = |w: &str| norm_words.iter().any(|nw| nw == w);
 
-    let has_trusted_spanish_group =
-        TRUSTED_RELEASE_GROUPS.iter().any(|&grp| lower.contains(grp))
-            || indexer_name.eq_ignore_ascii_case("dontorrent")
-            || indexer_name.eq_ignore_ascii_case("grantorrent")
-            || indexer_name.eq_ignore_ascii_case("divxtotal")
-            || indexer_name.eq_ignore_ascii_case("atomixhq")
-            || indexer_name.eq_ignore_ascii_case("pctfenix");
+    let has_trusted_spanish_group = is_trusted_spanish_source(&lower, indexer_name);
 
     let is_sub_prefix = |w: &str| {
         matches!(
@@ -439,6 +449,94 @@ pub fn evaluate_release(
         is_rejected,
         rejection_reason,
         indexer_name: indexer_name.to_string(),
+    }
+}
+
+/// Detecta marcadores de español latinoamericano cuando no hay indicación explícita de Castellano de España.
+pub fn has_latino_marker(title: &str) -> bool {
+    let lower = title.to_lowercase();
+    if lower.contains("castellano") || lower.contains("es-es") || lower.contains("es_es") {
+        return false;
+    }
+    if lower.contains("latino")
+        || lower.contains("es-419")
+        || lower.contains("es_419")
+        || lower.contains("latam")
+        || lower.contains("argentina")
+    {
+        return true;
+    }
+    let norm = normalize_accents_and_symbols(title);
+    norm.split_whitespace()
+        .any(|w| matches!(w, "lat" | "latin" | "mx" | "mex"))
+}
+
+/// Clasifica el nivel de confianza de que el lanzamiento contenga audio en Castellano de España.
+/// Posibles valores: `"verified"`, `"dual"`, `"possible"` o `"none"`.
+pub fn castilian_confidence_level(release: &ScoredRelease) -> &'static str {
+    if release.is_rejected || has_latino_marker(&release.title) {
+        return "none";
+    }
+    if release.language != "Castellano" && release.language != "Dual" {
+        return "none";
+    }
+
+    let lower = release.title.to_lowercase();
+    let norm_words: Vec<String> = normalize_accents_and_symbols(&release.title)
+        .split_whitespace()
+        .map(String::from)
+        .collect();
+    let has_standalone_esp = norm_words.iter().enumerate().any(|(idx, nw)| {
+        nw == "esp"
+            && (idx == 0
+                || !matches!(
+                    norm_words[idx - 1].as_str(),
+                    "sub" | "subs" | "subt" | "subtitulos" | "subtitulado" | "subtitled"
+                ))
+    });
+
+    let has_strong_spain_signal = lower.contains("castellano")
+        || lower.contains("es-es")
+        || lower.contains("es_es")
+        || has_standalone_esp
+        || is_trusted_spanish_source(&lower, &release.indexer_name);
+
+    if has_strong_spain_signal {
+        "verified"
+    } else if release.language == "Dual" {
+        "dual"
+    } else if release.language == "Castellano" {
+        "possible"
+    } else {
+        "none"
+    }
+}
+
+/// Indica si un lanzamiento supera el filtro estricto de Castellano de España.
+pub fn is_strict_castilian_release(release: &ScoredRelease) -> bool {
+    !release.is_rejected && castilian_confidence_level(release) != "none"
+}
+
+/// Aplica el filtro estricto de Castellano de España sobre un lote de lanzamientos evaluados,
+/// descartando VOSE/Latino/Inglés y priorizando fuentes españolas verificadas.
+pub fn apply_strict_castilian_filter(releases: &mut [ScoredRelease]) {
+    for r in releases.iter_mut() {
+        if r.is_rejected {
+            continue;
+        }
+        match castilian_confidence_level(r) {
+            "verified" => r.score += STRICT_CASTILIAN_VERIFIED_BONUS,
+            "dual" => r.score += STRICT_CASTILIAN_DUAL_BONUS,
+            "possible" => {}
+            _ => {
+                r.is_rejected = true;
+                r.score = STRICT_CASTILIAN_REJECTED_SCORE;
+                r.rejection_reason = Some(format!(
+                    "Descartado por filtro estricto de Castellano de España (idioma detectado: {})",
+                    r.language
+                ));
+            }
+        }
     }
 }
 
