@@ -428,7 +428,7 @@ document.getElementById('btn-open-add-modal').onclick = () => addModal.classList
 document.getElementById('btn-close-modal').onclick = () => addModal.classList.remove('active');
 document.getElementById('btn-submit-link').onclick = async () => {
   const rawText = document.getElementById('ed2k-input').value.trim();
-  if (!rawText) return alert('Por favor pega uno o varios enlaces ed2k:// o magnet: válidos');
+  if (!rawText) return appNotify('Por favor pega uno o varios enlaces ed2k:// o magnet: válidos', 'warning', '⚠️');
 
   const categoryChoice = document.getElementById('ed2k-category')?.value || 'auto';
   const initialPriority = document.getElementById('ed2k-priority')?.value || 'auto';
@@ -448,7 +448,7 @@ document.getElementById('btn-submit-link').onclick = async () => {
   }
 
   if (links.length === 0) {
-    return alert('No se detectaron enlaces eD2k ni Magnet válidos en el texto.');
+    return appNotify('No se detectaron enlaces eD2k ni Magnet válidos en el texto.', 'warning', '⚠️');
   }
 
   function detectCategoryFromLink(link) {
@@ -1171,7 +1171,7 @@ async function savePreferences() {
       setTimeout(() => { badge.style.display = 'none'; }, 3500);
     }
   } catch (e) {
-    alert('Error al guardar opciones: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error al guardar opciones: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   } finally {
     if (btn) {
       btn.disabled = false;

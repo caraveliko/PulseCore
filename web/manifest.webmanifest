@@ -1,7 +1,7 @@
 {
   "name": "Pulse Core",
   "short_name": "Pulse Core",
-  "description": "Cliente P2P unificado eD2K, Kademlia, BitTorrent y automatización multimedia Servarr.",
+  "description": "Cliente P2P unificado eD2K, Kademlia, BitTorrent y automatización multimedia nativa.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060911",

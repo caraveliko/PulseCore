@@ -37,6 +37,19 @@
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --header-height: 52px;
   --sidebar-width: 250px;
+  --tone-info: #38bdf8;
+  --tone-info-bg: rgba(56, 189, 248, 0.16);
+  --tone-info-border: rgba(56, 189, 248, 0.38);
+  --tone-warn: #fde047;
+  --tone-warn-bg: rgba(234, 179, 8, 0.15);
+  --tone-warn-border: rgba(234, 179, 8, 0.38);
+  --tone-success: #4ade80;
+  --tone-success-bg: rgba(34, 197, 94, 0.18);
+  --tone-success-border: rgba(34, 197, 94, 0.38);
+  --tone-danger: #f85149;
+  --tone-danger-soft: #fca5a5;
+  --tone-danger-bg: rgba(248, 81, 73, 0.16);
+  --tone-danger-border: rgba(248, 81, 73, 0.38);
 }
 * {
   box-sizing: border-box;
@@ -2910,6 +2923,24 @@ main {
   .bottom-statusbar-section {
     flex-shrink: 0 !important;
   }
+
+  /* Tarjetas de episodio y tabla de lanzamientos en móvil */
+  .episode-card {
+    flex-direction: column !important;
+  }
+  .episode-thumb-wrap {
+    width: 100% !important;
+    height: 150px !important;
+  }
+  .season-smart-actions {
+    flex-wrap: wrap !important;
+  }
+  #releases-table th:nth-child(2),
+  #releases-table td:nth-child(2),
+  #releases-table th:nth-child(3),
+  #releases-table td:nth-child(3) {
+    display: none !important;
+  }
 }
 
 /* MÓVILES MUY ESTRECHOS (<= 480px) */
@@ -2932,4 +2963,151 @@ main {
     padding: 6px 9px !important;
     font-size: 0.77rem !important;
   }
+}
+
+/* Modal de confirmación reutilizable */
+.app-confirm-dialog {
+  width: 440px;
+  max-width: 92vw;
+}
+.app-confirm-message {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-line;
+  margin-bottom: 18px;
+}
+.app-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.btn-danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-danger-solid:hover {
+  filter: brightness(1.08);
+}
+
+/* Skeleton loaders suaves */
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+}
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 8px;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  animation: pulse-skeleton 1.4s ease-in-out infinite;
+}
+.skeleton-thumb {
+  width: 44px;
+  height: 60px;
+  border-radius: 6px;
+  background: var(--bg-surface-3);
+  flex-shrink: 0;
+}
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-surface-3);
+}
+.skeleton-line.w-60 { width: 60%; }
+.skeleton-line.w-40 { width: 40%; }
+.skeleton-line.w-80 { width: 80%; }
+.skeleton-caption {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row,
+  .ambient-orb,
+  .constellation-pulses {
+    animation: none !important;
+  }
+  .media-flip-inner,
+  .media-card {
+    transition: none !important;
+  }
+}
+
+/* Clases semánticas para botones, insignias y avisos */
+.btn-tone-info {
+  background: var(--tone-info-bg);
+  border-color: var(--tone-info-border);
+  color: var(--tone-info);
+  font-weight: 600;
+}
+.btn-tone-warn {
+  background: var(--tone-warn-bg);
+  border-color: var(--tone-warn-border);
+  color: var(--tone-warn);
+  font-weight: 600;
+}
+.btn-tone-danger {
+  color: var(--tone-danger);
+  border-color: var(--tone-danger-border);
+}
+.badge-tone-success {
+  background: var(--tone-success-bg);
+  color: var(--tone-success);
+  font-size: 0.7rem;
+}
+.badge-tone-info {
+  background: var(--tone-info-bg);
+  color: var(--tone-info);
+  font-size: 0.7rem;
+}
+.badge-tone-warn {
+  background: var(--tone-warn-bg);
+  color: var(--tone-warn);
+  font-size: 0.7rem;
+}
+.badge-tone-danger {
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger-soft);
+  border: 1px solid var(--tone-danger-border);
+  font-size: 0.7rem;
+}
+.badge-tone-neutral {
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.72rem;
+}
+.banner-tone-info {
+  background: var(--tone-info-bg);
+  border: 1px solid var(--tone-info-border);
+  border-radius: 8px;
+}
+.banner-tone-danger {
+  background: var(--tone-danger-bg);
+  border: 1px solid var(--tone-danger-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }

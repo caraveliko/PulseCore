@@ -1,4 +1,4 @@
-// Pulse Core WebUI — Operaciones visuales de Cine y Series y gestión de subtítulos (Bazarr nativo).
+// Pulse Core WebUI — Operaciones visuales de Cine y Series y gestión nativa de subtítulos.
 // Extraído de web/index.html.
 
 // === GESTOR DE OPERACIONES VISUALES Y PROGRESO EN CINE & SERIES ===
@@ -104,7 +104,7 @@ async function triggerRefreshMetadata() {
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span>⏳</span> <span>Actualizando...</span>'; }
 
-  startMediaOperation('Descargando metadatos...', 'Consultando bases de datos de TMDB y Sonarr...', '🔄');
+  startMediaOperation('Descargando metadatos...', 'Consultando bases de datos de TMDB y metadatos de series...', '🔄');
   updateMediaOperation(45, 'Descargando pósters, sinopsis y fechas de emisión...');
 
   try {
@@ -173,7 +173,12 @@ async function triggerOrganize() {
 }
 
 async function triggerCleanLibrary() {
-  if (!confirm('¿Deseas ejecutar la limpieza de duplicados y archivos basura en la biblioteca y descargas? Los archivos repetidos de menor calidad y los residuos de incoming serán eliminados permanentemente.')) {
+  if (!(await appConfirm({
+    title: '⚠️ Limpiar duplicados y residuos',
+    message: '¿Deseas ejecutar la limpieza de duplicados y archivos basura en la biblioteca y descargas? Los archivos repetidos de menor calidad y los residuos de incoming serán eliminados permanentemente.',
+    confirmText: 'Limpiar ahora',
+    danger: true
+  }))) {
     return;
   }
   const btn = document.getElementById('btn-media-clean');
@@ -478,7 +483,7 @@ async function executeMediaDeletion() {
     icon.textContent = '❌';
     document.getElementById('del-progress-title').textContent = 'Error al eliminar';
     setTimeout(() => {
-      alert('Error eliminando título: ' + (err.message || JSON.stringify(err)));
+      appNotify('Error eliminando título: ' + (err.message || JSON.stringify(err)), 'error', '❌');
       closeModal('modal-media-delete');
     }, 1500);
   } finally {
@@ -576,7 +581,14 @@ async function executeReleasesSearch() {
   currentSearchingStrictCastilian = !!(strictCb && strictCb.checked);
 
   if (loadingEl) {
-    loadingEl.innerHTML = `<div style="font-size: 1.5rem; margin-bottom:8px;">⏳</div>Buscando en enjambres eD2k y trackers${currentSearchingStrictCastilian ? ' (solo audio verificado)' : ''}${customQuery ? ' (' + escapeHtml(customQuery) + ')' : ''}...`;
+    loadingEl.innerHTML = `
+      <div class="skeleton-stack">
+        <div class="skeleton-row"><div class="skeleton-lines"><div class="skeleton-line w-80"></div><div class="skeleton-line w-40"></div></div></div>
+        <div class="skeleton-row"><div class="skeleton-lines"><div class="skeleton-line w-60"></div><div class="skeleton-line w-40"></div></div></div>
+        <div class="skeleton-row"><div class="skeleton-lines"><div class="skeleton-line w-80"></div><div class="skeleton-line w-60"></div></div></div>
+        <div class="skeleton-caption">Buscando en enjambres eD2k y trackers${currentSearchingStrictCastilian ? ' (solo audio verificado)' : ''}${customQuery ? ' (' + escapeHtml(customQuery) + ')' : ''}...</div>
+      </div>
+    `;
     loadingEl.style.display = 'block';
   }
   if (tableEl) tableEl.style.display = 'none';
@@ -611,15 +623,15 @@ async function executeReleasesSearch() {
         const sizeMb = (r.sizeBytes / (1024 * 1024)).toFixed(1) + ' MB';
         const scoreClass = r.score >= 50 ? 'color: #22c55e;' : (r.score > 0 ? 'color: #eab308;' : 'color: #f85149;');
         const rejectedNote = r.isRejected ? `<div style="font-size: 0.72rem; color: #f85149;">❌ ${escapeHtml(r.rejectionReason || 'Rechazado')}</div>` : '';
-        const blacklistedBadge = r.isBlacklisted ? `<span class="badge" style="background: rgba(248,81,73,0.16); color: #f85149; font-size: 0.7rem;">⛔ Descartada</span>` : '';
-        const recommendedBadge = idx === firstValidIdx ? `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; font-size: 0.7rem; margin-right: 4px;">★ Recomendada</span>` : '';
+        const blacklistedBadge = r.isBlacklisted ? `<span class="badge badge-tone-danger">⛔ Descartada</span>` : '';
+        const recommendedBadge = idx === firstValidIdx ? `<span class="badge badge-tone-success" style="margin-right: 4px;">★ Recomendada</span>` : '';
         let confBadge = '';
         if (r.castilianConfidence === 'verified') {
-          confBadge = `<span class="badge" style="background: rgba(34,197,94,0.18); color: #4ade80; font-size: 0.7rem;">✅ Audio verificado</span>`;
+          confBadge = `<span class="badge badge-tone-success">✅ Audio verificado</span>`;
         } else if (r.castilianConfidence === 'dual') {
-          confBadge = `<span class="badge" style="background: rgba(56,189,248,0.18); color: #38bdf8; font-size: 0.7rem;">🇪🇸 Dual ES/EN</span>`;
+          confBadge = `<span class="badge badge-tone-info">🇪🇸 Dual ES/EN</span>`;
         } else if (r.castilianConfidence === 'possible') {
-          confBadge = `<span class="badge" style="background: rgba(234,179,8,0.18); color: #fde047; font-size: 0.7rem;">🟡 Posible ES</span>`;
+          confBadge = `<span class="badge badge-tone-warn">🟡 Posible ES</span>`;
         }
         const actionLabel = currentSearchingBlacklistCurrent ? '🔄 Reemplazar' : '⬇ Descargar';
         const rowHighlight = idx === firstValidIdx ? 'background: rgba(34,197,94,0.06);' : '';
@@ -638,8 +650,8 @@ async function executeReleasesSearch() {
             <td>${protoBadge}</td>
             <td style="font-family: var(--font-mono); font-size: 0.8rem;">${sizeMb}</td>
             <td>
-              <span class="badge" style="background: rgba(255,255,255,0.05); font-size: 0.72rem;">${escapeHtml(r.quality || 'HD')}</span>
-              <span class="badge" style="background: rgba(255,255,255,0.05); font-size: 0.72rem;">${escapeHtml(r.language || 'Multi')}</span>
+              <span class="badge badge-tone-neutral">${escapeHtml(r.quality || 'HD')}</span>
+              <span class="badge badge-tone-neutral">${escapeHtml(r.language || 'Multi')}</span>
             </td>
             <td style="font-weight: 700; ${scoreClass}">${r.score} pts</td>
             <td>
@@ -687,7 +699,11 @@ async function grabSpecificRelease(idx) {
 async function triggerReplaceWrongLanguage(mediaId, episodeId, seasonNumber, label, autoGrab = true, skipConfirm = false) {
   const isSeasonScope = seasonNumber !== null && seasonNumber !== undefined && !episodeId;
   if (isSeasonScope && !skipConfirm) {
-    const ok = confirm(`¿Descartar la versión actual de "${label}" y buscar la siguiente alternativa con audio verificado? Los archivos actuales se mantendrán hasta que terminen los nuevos.`);
+    const ok = await appConfirm({
+      title: 'Sustituir versión de temporada',
+      message: `¿Descartar la versión actual de "${label}" y buscar la siguiente alternativa con audio verificado? Los archivos actuales se mantendrán hasta que terminen los nuevos.`,
+      confirmText: 'Buscar sustitución'
+    });
     if (!ok) return;
   }
 
@@ -996,16 +1012,18 @@ async function openMediaDetail(mediaId) {
       }
 
       if (actionsEl) {
-        const safeFilePathAttr = escapeHtml(item.filePath || '').replace(/'/g, "\\'");
+        const safeTitleData = escapeHtml(item.title);
+        const safeFilePathData = escapeHtml(item.filePath || '');
+        const safeIdData = escapeHtml(item.id);
         actionsEl.style.display = 'flex';
         actionsEl.innerHTML = `
-          <button class="btn" style="padding: 8px 14px; background: rgba(56,189,248,0.16); border-color: rgba(56,189,248,0.4); color: #38bdf8; font-weight: 600;" onclick="triggerSingleAutoGrab('${item.id}', null, '${safeTitleAttr}')" title="Ejecutar AutoGrabber de precisión ahora">${item.status === 'completed' ? '🔄 Buscar Upgrade (Auto-Grab)' : '⚡ Auto-Grab Ahora'}</button>
-          ${(item.status === 'completed' || item.status === 'downloading') ? `<button class="btn" style="padding: 8px 14px; background: rgba(234,179,8,0.14); border-color: rgba(234,179,8,0.38); color: #fde047; font-weight: 600;" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeTitleAttr}', true)" title="Descartar la versión actual y elegir o bajar la siguiente con audio verificado">🔄 Cambiar versión</button>` : ''}
-          <button class="btn" style="padding: 8px 14px;" onclick="closeModal('modal-media-detail'); openReleasesModal('${item.id}', '${safeTitleAttr}', true)" title="Buscar lanzamientos manualmente en Kad y trackers">🔍 Buscar Fuentes</button>
-          <button class="btn" style="padding: 8px 14px;" onclick="openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Abrir carpeta de destino en el servidor">📂 Abrir carpeta</button>
+          <button class="btn btn-tone-info" style="padding: 8px 14px;" data-media-action="single-autograb" data-media-id="${safeIdData}" data-title="${safeTitleData}" title="Ejecutar AutoGrabber de precisión ahora">${item.status === 'completed' ? '🔄 Buscar Upgrade (Auto-Grab)' : '⚡ Auto-Grab Ahora'}</button>
+          ${(item.status === 'completed' || item.status === 'downloading') ? `<button class="btn btn-tone-warn" style="padding: 8px 14px;" data-media-action="replace-modal" data-close-detail="1" data-media-id="${safeIdData}" data-title="${safeTitleData}" data-is-movie="1" title="Descartar la versión actual y elegir o bajar la siguiente con audio verificado">🔄 Cambiar versión</button>` : ''}
+          <button class="btn" style="padding: 8px 14px;" data-media-action="open-releases" data-close-detail="1" data-media-id="${safeIdData}" data-title="${safeTitleData}" data-is-movie="1" title="Buscar lanzamientos manualmente en Kad y trackers">🔍 Buscar Fuentes</button>
+          <button class="btn" style="padding: 8px 14px;" data-media-action="open-folder" data-media-id="${safeIdData}" data-path="${safeFilePathData}" data-title="${safeTitleData}" title="Abrir carpeta de destino en el servidor">📂 Abrir carpeta</button>
           ${details.trailerYoutubeId ? `<a class="btn" style="padding: 8px 14px; text-decoration: none;" href="https://www.youtube.com/watch?v=${encodeURIComponent(details.trailerYoutubeId)}" target="_blank" rel="noopener">🎞️ Ver Tráiler</a>` : ''}
-          ${item.status === 'completed' ? `<button class="btn" style="padding: 8px 14px;" onclick="closeModal('modal-media-detail'); openSubtitlesModal('${item.id}', '${safeTitleAttr}', true)" title="Descargar subtítulos (Bazarr)">💬 Subtítulos (Bazarr)</button>` : ''}
-          <button class="btn" style="padding: 8px 14px; color:#f85149; border-color: rgba(248,81,73,0.3);" onclick="closeModal('modal-media-detail'); deleteMediaItem('${item.id}')">🗑 Eliminar Película</button>
+          ${item.status === 'completed' ? `<button class="btn" style="padding: 8px 14px;" data-media-action="open-subtitles" data-close-detail="1" data-media-id="${safeIdData}" data-title="${safeTitleData}" data-is-movie="1" title="Descargar subtítulos">💬 Subtítulos</button>` : ''}
+          <button class="btn btn-tone-danger" style="padding: 8px 14px;" data-media-action="delete-media" data-close-detail="1" data-media-id="${safeIdData}">🗑 Eliminar Película</button>
         `;
       }
 
@@ -1264,16 +1282,16 @@ function renderMovieSpecificPanels(item, details, subtitles, safeTitleAttr, auto
     const audioChip = mediaProbe
       ? (mediaProbe.hasSpanishAudio
         ? `<span class="badge badge-dl" style="font-size:0.75rem;">🔊 Audio: Castellano / ES (${escapeHtml(audioLangsList)})</span>`
-        : `<span class="badge" style="background: rgba(248,81,73,0.18); color: #fca5a5; border: 1px solid rgba(248,81,73,0.4); font-size:0.75rem;">⚠️ Audio detectado: ${escapeHtml(audioLangsList)}</span>`)
+        : `<span class="badge badge-tone-danger" style="font-size:0.75rem;">⚠️ Audio detectado: ${escapeHtml(audioLangsList)}</span>`)
       : '';
     const wrongLangBanner = (item.filePath && mediaProbe && !mediaProbe.hasSpanishAudio) ? `
-      <div style="background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.35); border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <div class="banner-tone-danger">
         <div style="font-size: 0.82rem; color: #fecaca;">
           <strong>⚠️ Audio no verificado en tu idioma:</strong> las pistas reales del archivo son <code>${escapeHtml(audioLangsList)}</code>.
         </div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-          <button type="button" class="btn btn-sm btn-primary" onclick="triggerReplaceWrongLanguage('${item.id}', null, null, '${safeTitleAttr}', true)">⚡ Probar siguiente verificada (1 clic)</button>
-          <button type="button" class="btn btn-sm" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeTitleAttr}', true)">🎯 Elegir otra verificada</button>
+          <button type="button" class="btn btn-sm btn-primary" data-media-action="replace-auto" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">⚡ Probar siguiente verificada (1 clic)</button>
+          <button type="button" class="btn btn-sm" data-media-action="replace-modal" data-close-detail="1" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}" data-is-movie="1">🎯 Elegir otra verificada</button>
         </div>
       </div>
     ` : '';
@@ -1455,13 +1473,13 @@ function renderCurrentSeriesSeason() {
         </span>
       </div>
       <div class="season-smart-actions">
-        ${pendingInSeason > 0 ? `<button type="button" class="btn btn-sm btn-primary" onclick="triggerSeasonAutoGrab('${item.id}', ${selectedSeason}, '${safeSeriesTitle}')" title="Buscar pack o episodios solo de la Temporada ${selectedSeason}">⚡ Descargar Temporada ${selectedSeason}</button>` : ''}
-        ${replaceableInSeason ? `<button type="button" class="btn btn-sm" style="background:rgba(234,179,8,0.14); color:#fde047; border-color:rgba(234,179,8,0.35);" onclick="triggerReplaceWrongLanguage('${item.id}', null, ${selectedSeason}, '${safeSeriesTitle} T.${selectedSeason}', true)" title="Descartar la versión actual de toda la temporada y buscar la siguiente con audio verificado">🔄 Sustituir T.${selectedSeason}</button>` : ''}
-        <button type="button" class="btn btn-sm" onclick="setOnlySeasonMonitored('${item.id}', ${selectedSeason})" title="Omitir automáticamente el resto de temporadas y seguir solo la Temporada ${selectedSeason}">🎯 Solo seguir T.${selectedSeason}</button>
-        <button type="button" class="btn btn-sm" onclick="toggleSeasonMonitored('${item.id}', ${selectedSeason}, ${!isSeasonMonitored})" title="${isSeasonMonitored ? 'Omitir esta temporada para no descargarla automáticamente' : 'Volver a activar la descarga automática de esta temporada'}">
+        ${pendingInSeason > 0 ? `<button type="button" class="btn btn-sm btn-primary" data-media-action="season-autograb" data-media-id="${escapeHtml(item.id)}" data-season="${selectedSeason}" data-title="${escapeHtml(item.title)}" title="Buscar pack o episodios solo de la Temporada ${selectedSeason}">⚡ Descargar Temporada ${selectedSeason}</button>` : ''}
+        ${replaceableInSeason ? `<button type="button" class="btn btn-sm btn-tone-warn" data-media-action="replace-auto" data-media-id="${escapeHtml(item.id)}" data-season="${selectedSeason}" data-title="${escapeHtml(item.title + ' T.' + selectedSeason)}" title="Descartar la versión actual de toda la temporada y buscar la siguiente con audio verificado">🔄 Sustituir T.${selectedSeason}</button>` : ''}
+        <button type="button" class="btn btn-sm" data-media-action="season-only" data-media-id="${escapeHtml(item.id)}" data-season="${selectedSeason}" title="Omitir automáticamente el resto de temporadas y seguir solo la Temporada ${selectedSeason}">🎯 Solo seguir T.${selectedSeason}</button>
+        <button type="button" class="btn btn-sm" data-media-action="season-toggle" data-media-id="${escapeHtml(item.id)}" data-season="${selectedSeason}" data-monitored="${isSeasonMonitored ? '0' : '1'}" title="${isSeasonMonitored ? 'Omitir esta temporada para no descargarla automáticamente' : 'Volver a activar la descarga automática de esta temporada'}">
           ${isSeasonMonitored ? `👁️ Omitir T.${selectedSeason} (Ya vista)` : `🔔 Activar T.${selectedSeason}`}
         </button>
-        <button type="button" class="btn btn-sm" onclick="closeModal('modal-media-detail'); openSeasonReleaseSearch('${item.id}', '${safeSeriesTitle}', ${selectedSeason})" title="Buscar manualmente pack o episodios de la Temporada ${selectedSeason}">🔍 Pack / Fuentes T.${selectedSeason}</button>
+        <button type="button" class="btn btn-sm" data-media-action="season-releases" data-close-detail="1" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}" data-season="${selectedSeason}" title="Buscar manualmente pack o episodios de la Temporada ${selectedSeason}">🔍 Pack / Fuentes T.${selectedSeason}</button>
       </div>
     `;
   }
@@ -1490,7 +1508,7 @@ function renderCurrentSeriesSeason() {
       ? epProbe.audioLanguages.join(', ')
       : 'desconocido';
     const wrongLangEpBadge = (ep.status === 'completed' && epProbe && !epProbe.hasSpanishAudio)
-      ? `<span class="badge" style="background: rgba(248,81,73,0.18); color: #fca5a5; border: 1px solid rgba(248,81,73,0.4); font-size: 0.7rem; margin-right: 4px;" title="Audio real detectado: ${escapeHtml(epAudioLangs)}">⚠️ Sin audio ES</span>`
+      ? `<span class="badge badge-tone-danger" style="margin-right: 4px;" title="Audio real detectado: ${escapeHtml(epAudioLangs)}">⚠️ Sin audio ES</span>`
       : '';
 
     let statusBadge = '<span class="badge badge-wait">🟡 Buscado</span>';
@@ -1545,11 +1563,11 @@ function renderCurrentSeriesSeason() {
             </div>
 
             <div style="display: flex; gap: 6px; flex-shrink: 0; align-items: center;">
-              ${ep.status === 'completed' ? `<span class="badge badge-completed" style="font-size: 0.72rem; padding: 2px 7px;">✔ En disco</span>` : `<button class="btn btn-sm" style="background:rgba(56,189,248,0.16); color:#38bdf8; border-color:rgba(56,189,248,0.35);" onclick="triggerSingleAutoGrab('${item.id}', '${ep.id}', '${safeSeriesTitle} ${epCode}')" title="Auto-Grab automático para ${epCode}">⚡ Auto</button>`}
-              ${(ep.status === 'completed' || ep.status === 'downloading') ? `<button class="btn btn-sm" style="background:rgba(234,179,8,0.14); color:#fde047; border-color:rgba(234,179,8,0.35);" onclick="closeModal('modal-media-detail'); openCastilianReplacementModal('${item.id}', '${safeSeriesTitle} ${epCode}', false, '${ep.id}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Sustituir episodio: buscar siguiente versión con audio verificado">🔄</button>` : ''}
-              <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${item.id}', '${safeSeriesTitle}', ${ep.seasonNumber}, ${ep.episodeNumber}, '${ep.id}')" title="Buscar fuentes para ${epCode}">🔍 Fuentes</button>
-              ${ep.status === 'completed' && ep.filePath ? `<button class="btn btn-sm" onclick="openDestinationFolder({ path: '${safeFilePathAttr}', title: '${safeSeriesTitle} ${epCode}' })" title="Abrir carpeta de destino">📂</button>` : ''}
-              ${ep.status === 'completed' ? `<button class="btn btn-sm" onclick="openSubtitlesModal('${item.id}', '${safeSeriesTitle} ${epCode}', false, ${ep.seasonNumber}, ${ep.episodeNumber}, '${safeFilePathAttr}')" title="Subtítulos (Bazarr)">💬 Subs</button>` : ''}
+              ${ep.status === 'completed' ? `<span class="badge badge-completed" style="font-size: 0.72rem; padding: 2px 7px;">✔ En disco</span>` : `<button class="btn btn-sm btn-tone-info" data-media-action="single-autograb" data-media-id="${escapeHtml(item.id)}" data-episode-id="${escapeHtml(ep.id)}" data-title="${escapeHtml(item.title + ' ' + epCode)}" title="Auto-Grab automático para ${epCode}">⚡ Auto</button>`}
+              ${(ep.status === 'completed' || ep.status === 'downloading') ? `<button class="btn btn-sm btn-tone-warn" data-media-action="replace-modal" data-close-detail="1" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title + ' ' + epCode)}" data-is-movie="0" data-episode-id="${escapeHtml(ep.id)}" data-season="${ep.seasonNumber}" data-episode="${ep.episodeNumber}" title="Sustituir episodio: buscar siguiente versión con audio verificado">🔄</button>` : ''}
+              <button class="btn btn-sm" data-media-action="episode-releases" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}" data-season="${ep.seasonNumber}" data-episode="${ep.episodeNumber}" data-episode-id="${escapeHtml(ep.id)}" title="Buscar fuentes para ${epCode}">🔍 Fuentes</button>
+              ${ep.status === 'completed' && ep.filePath ? `<button class="btn btn-sm" data-media-action="open-folder" data-path="${escapeHtml(ep.filePath || '')}" data-title="${escapeHtml(item.title + ' ' + epCode)}" title="Abrir carpeta de destino">📂</button>` : ''}
+              ${ep.status === 'completed' ? `<button class="btn btn-sm" data-media-action="open-subtitles" data-media-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title + ' ' + epCode)}" data-is-movie="0" data-season="${ep.seasonNumber}" data-episode="${ep.episodeNumber}" data-path="${escapeHtml(ep.filePath || '')}" title="Subtítulos">💬 Subs</button>` : ''}
             </div>
           </div>
         </div>
@@ -1591,7 +1609,7 @@ async function loadIndexersList() {
           <div style="font-weight: 700; font-size: 0.9rem;">${escapeHtml(idx.name)} ${idx.enabled ? '🟢' : '⚪'}</div>
           <div style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(idx.baseUrl)}</div>
         </div>
-        <button class="btn btn-sm" style="color: #f85149;" onclick="deleteIndexer('${idx.id}', '${escapeHtml(idx.name)}')">🗑</button>
+        <button class="btn btn-sm btn-tone-danger" data-media-action="delete-indexer" data-indexer-id="${escapeHtml(idx.id)}" data-indexer-name="${escapeHtml(idx.name)}">🗑</button>
       </div>
     `).join('');
   } catch (e) {
@@ -1618,7 +1636,12 @@ async function addExternalIndexer() {
 }
 
 async function deleteIndexer(id, name) {
-  if (!confirm(`¿Eliminar indexador "${name}"?`)) return;
+  if (!(await appConfirm({
+    title: '⚠️ Eliminar indexador',
+    message: `¿Eliminar indexador "${name}"?`,
+    confirmText: 'Eliminar',
+    danger: true
+  }))) return;
   try {
     await client.call('indexer.delete', { id });
     showToastNotification(`Indexador "${name}" eliminado`, 'info', '🗑');
@@ -1641,7 +1664,7 @@ function closeModal(modalId) {
 window.closeModal = closeModal;
 
 // ==========================================
-// GESTIÓN DE SUBTÍTULOS (BAZARR NATIVO)
+// GESTIÓN NATIVA DE SUBTÍTULOS
 // ==========================================
 let currentSubtitleMediaId = null;
 let currentSubtitleContext = null;
@@ -1835,7 +1858,7 @@ async function triggerAutoSubtitles() {
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span>⏳</span> <span>Buscando subs...</span>'; }
 
-  startMediaOperation('Buscando subtítulos (Bazarr)...', 'Conectando con OpenSubtitles para pistas en español de vídeos sin subs...', '💬');
+  startMediaOperation('Buscando subtítulos...', 'Conectando con OpenSubtitles para pistas en español de vídeos sin subs...', '💬');
   updateMediaOperation(35, 'Comprobando películas y capítulos de series completados...');
 
   try {

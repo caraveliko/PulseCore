@@ -180,7 +180,7 @@ impl MediaAutomation {
                             }
                         }
 
-                        // 3. Obtener subtítulos faltantes mediante el motor Bazarr / OpenSubtitles si está habilitado
+                        // 3. Obtener subtítulos faltantes mediante el motor nativo de OpenSubtitles si está habilitado
                         let sub_cfg = SubtitleService::load_runtime_config(&state).await;
                         let sub_res = if sub_cfg.enabled {
                             SubtitleService::auto_fetch_all_missing(&state, &sub_cfg.language).await

@@ -41,7 +41,7 @@ document.getElementById('btn-confirm-remove').onclick = async () => {
     pendingRemoveId = null;
     refreshDownloads();
   } catch (e) {
-    alert('Error al eliminar descarga: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error al eliminar descarga: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 
@@ -67,7 +67,7 @@ if (btnActionResume) {
         const s = ((d.snapshot || d).status || '').toLowerCase();
         return s === 'paused';
       });
-      if (paused.length === 0) return alert('No hay descargas en pausa.');
+      if (paused.length === 0) return appNotify('No hay descargas en pausa.', 'info', '⏸️');
       btnActionResume.disabled = true;
       for (const item of paused) {
         const id = (item.snapshot || item).id || item.id;
@@ -96,7 +96,7 @@ if (btnActionPause) {
         const s = ((d.snapshot || d).status || '').toLowerCase();
         return s === 'downloading' || s === 'waiting';
       });
-      if (active.length === 0) return alert('No hay descargas activas para pausar.');
+      if (active.length === 0) return appNotify('No hay descargas activas para pausar.', 'info', 'ℹ️');
       btnActionPause.disabled = true;
       for (const item of active) {
         const id = (item.snapshot || item).id || item.id;
@@ -122,7 +122,7 @@ if (btnActionRestart) {
       refreshDownloads();
     } else {
       const list = cachedDownloads;
-      if (list.length === 0) return alert('No hay descargas en la lista.');
+      if (list.length === 0) return appNotify('No hay descargas en la lista.', 'info', 'ℹ️');
       btnActionRestart.disabled = true;
       for (const item of list) {
         const id = (item.snapshot || item).id || item.id;
@@ -139,7 +139,11 @@ if (btnActionDelete) {
   btnActionDelete.onclick = async () => {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
-    const delFiles = confirm(`¿Deseas eliminar las ${count} descargas seleccionadas?\n\nPulsa ACEPTAR para quitarlas de la cola.\n(Los archivos en disco permanecerán intactos).`);
+    const delFiles = await appConfirm({
+      title: 'Quitar descargas seleccionadas',
+      message: `¿Deseas eliminar las ${count} descargas seleccionadas de la cola?\n\n(Los archivos en disco permanecerán intactos).`,
+      confirmText: 'Quitar de la cola'
+    });
     if (!delFiles) return;
     for (const id of selectedIds) {
       try { await client.call('downloads.remove', { id, deleteFiles: false }); } catch (e) { console.warn('[PulseCore] error en acción en lote:', e); }
@@ -298,7 +302,11 @@ async function clearCompletedFromList() {
     return;
   }
 
-  const ok = confirm(`¿Deseas quitar de la lista las ${completed.length} descargas completadas?\n\n(Tus archivos descargados en el NAS o disco permanecerán intactos y a salvo; solo se quitan de la vista).`);
+  const ok = await appConfirm({
+    title: 'Limpiar descargas completadas',
+    message: `¿Deseas quitar de la lista las ${completed.length} descargas completadas?\n\n(Tus archivos descargados en el NAS o disco permanecerán intactos y a salvo; solo se quitan de la vista).`,
+    confirmText: 'Limpiar vista'
+  });
   if (!ok) return;
 
   addLog('info', `Quitando ${completed.length} descargas completadas de la lista (archivos conservados en el NAS)...`);
@@ -332,27 +340,36 @@ if (thSelectAll) {
 // === ACCIONES DIRECTAS EN PANEL INSPECTOR ===
 document.getElementById('btn-insp-remove-list').onclick = async () => {
   if (!selectedDownloadId) return;
-  if (!confirm('¿Quitar esta descarga de la cola?\nEl archivo descargado se mantendrá intacto en el disco.')) return;
+  if (!(await appConfirm({
+    title: 'Quitar de la cola',
+    message: '¿Quitar esta descarga de la cola?\nEl archivo descargado se mantendrá intacto en el disco.',
+    confirmText: 'Quitar'
+  }))) return;
   try {
     await client.call('downloads.remove', { id: selectedDownloadId, deleteFiles: false });
     addLog('info', 'Descarga quitada de la lista.');
     window.closeInspector();
     refreshDownloads();
   } catch (e) {
-    alert('Error: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 
 document.getElementById('btn-insp-delete-files').onclick = async () => {
   if (!selectedDownloadId) return;
-  if (!confirm('¿PELIGRO: Eliminar esta descarga Y BORRAR EL ARCHIVO del disco/NAS?\nEsta acción es irreversible.')) return;
+  if (!(await appConfirm({
+    title: '⚠️ Borrar descarga y archivo',
+    message: '¿PELIGRO: Eliminar esta descarga Y BORRAR EL ARCHIVO del disco/NAS?\nEsta acción es irreversible.',
+    confirmText: 'Borrar archivo',
+    danger: true
+  }))) return;
   try {
     await client.call('downloads.remove', { id: selectedDownloadId, deleteFiles: true });
     addLog('warn', 'Descarga y datos eliminados del disco.');
     window.closeInspector();
     refreshDownloads();
   } catch (e) {
-    alert('Error: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 
@@ -457,7 +474,11 @@ document.querySelectorAll('#context-menu .context-item').forEach(item => {
         break;
       }
       case 'remove-list':
-        if (confirm(`¿Quitar "${displayName}" de la cola de descargas?\nEl archivo en disco permanecerá intacto.`)) {
+        if (await appConfirm({
+          title: 'Quitar de la cola',
+          message: `¿Quitar "${displayName}" de la cola de descargas?\nEl archivo en disco permanecerá intacto.`,
+          confirmText: 'Quitar'
+        })) {
           await client.call('downloads.remove', { id, deleteFiles: false });
           addLog('info', `Descarga quitada de la lista: ${displayName}`);
           if (selectedDownloadId === id) window.closeInspector();
@@ -465,7 +486,12 @@ document.querySelectorAll('#context-menu .context-item').forEach(item => {
         }
         break;
       case 'delete-files':
-        if (confirm(`¿PELIGRO: Eliminar "${displayName}" Y BORRAR SU ARCHIVO DEL DISCO/NAS?\nAcción irreversible.`)) {
+        if (await appConfirm({
+          title: '⚠️ Borrar descarga y archivo',
+          message: `¿PELIGRO: Eliminar "${displayName}" Y BORRAR SU ARCHIVO DEL DISCO/NAS?\nAcción irreversible.`,
+          confirmText: 'Borrar archivo',
+          danger: true
+        })) {
           await client.call('downloads.remove', { id, deleteFiles: true });
           addLog('warn', `Eliminada descarga y datos: ${displayName}`);
           if (selectedDownloadId === id) window.closeInspector();
@@ -507,7 +533,7 @@ document.getElementById('btn-copy-logs').onclick = () => {
   const container = document.getElementById('log-console-container');
   if (container) {
     navigator.clipboard.writeText(container.innerText);
-    alert('Registro de logs copiado al portapapeles.');
+    appNotify('Registro de logs copiado al portapapeles.', 'success', '📋');
   }
 };
 
@@ -531,7 +557,7 @@ window.connectServer = async (address) => {
     await client.call('servers.connect', { address });
     refreshServers();
   } catch (e) {
-    alert('Error conectando con servidor: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error conectando con servidor: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 window.disconnectServer = async () => {
@@ -539,11 +565,11 @@ window.disconnectServer = async () => {
     await client.call('servers.disconnect');
     refreshServers();
   } catch (e) {
-    alert('Error desconectando: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error desconectando: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 document.getElementById('btn-connect-fastest').onclick = async () => {
-  if (cachedServers.length === 0) return alert('No hay servidores en la lista.');
+  if (cachedServers.length === 0) return appNotify('No hay servidores en la lista.', 'warning', '⚠️');
   const allowed = cachedServers.filter(s => s.filter_status === 'allowed' || !s.filter_status);
   const sorted = (allowed.length > 0 ? allowed : cachedServers).slice().sort((a, b) => (a.ping || 9999) - (b.ping || 9999));
   if (sorted.length > 0) {
@@ -557,10 +583,10 @@ document.getElementById('btn-update-servers-url').onclick = async () => {
   btn.textContent = 'Descargando server.met...';
   try {
     const res = await client.call('servers.updateFromUrl', { url: 'http://upd.emule-security.org/server.met' });
-    alert(`Servidores importados con éxito: ${res.imported || res.totalCount || 0}`);
+    appNotify(`Servidores importados con éxito: ${res.imported || res.totalCount || 0}`, 'success', '✅');
     refreshServers();
   } catch (e) {
-    alert('Error actualizando lista: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error actualizando lista: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   } finally {
     btn.disabled = false;
     btn.textContent = '🔄 Actualizar server.met desde URL';
@@ -571,10 +597,10 @@ document.getElementById('btn-import-amule-servers').onclick = async () => {
   if (!path) return;
   try {
     const res = await client.call('servers.importMet', { filePath: path });
-    alert(`Servidores importados: ${res.imported || res.totalCount || 0}`);
+    appNotify(`Servidores importados: ${res.imported || res.totalCount || 0}`, 'success', '✅');
     refreshServers();
   } catch (e) {
-    alert('Error al importar server.met: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error al importar server.met: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 
@@ -585,11 +611,11 @@ document.getElementById('btn-bootstrap-kad').onclick = async () => {
   btn.textContent = 'Descargando nodes.dat...';
   try {
     const res = await client.call('kad.bootstrapFromUrl', { url: 'http://upd.emule-security.org/nodes.dat' });
-    alert(`Bootstrap Kad iniciado. Contactos importados: ${res.importedCount || 0}`);
+    appNotify(`Bootstrap Kad iniciado. Contactos importados: ${res.importedCount || 0}`, 'success', '🚀');
     refreshKad();
     setTimeout(refreshKadContacts, 1500);
   } catch (e) {
-    alert('Error en bootstrap Kad: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error en bootstrap Kad: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   } finally {
     btn.disabled = false;
     btn.textContent = '🚀 Bootstrap Kad desde URL';
@@ -600,11 +626,11 @@ document.getElementById('btn-import-amule-kad').onclick = async () => {
   if (!path) return;
   try {
     const res = await client.call('kad.importNodesDat', { path });
-    alert(`Nodos importados: ${res.importedCount || 0}`);
+    appNotify(`Nodos importados: ${res.importedCount || 0}`, 'success', '✅');
     refreshKad();
     refreshKadContacts();
   } catch (e) {
-    alert('Error al importar nodes.dat: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error al importar nodes.dat: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 document.getElementById('btn-refresh-kad-contacts').onclick = refreshKadContacts;

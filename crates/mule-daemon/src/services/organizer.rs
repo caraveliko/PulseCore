@@ -908,7 +908,7 @@ impl MediaOrganizer {
                     series.title, ep.season_number, ep.episode_number, dest_str
                 );
 
-                // Obtener subtítulos en español en segundo plano automáticamente (funcionalidad de Bazarr)
+                // Obtener subtítulos en español en segundo plano automáticamente
                 let sub_target = dest_file.clone();
                 let sub_title = series.title.clone();
                 let sub_year = series.year;
@@ -994,7 +994,7 @@ impl MediaOrganizer {
             );
             write_nfo_and_artwork_if_enabled(state, &dest_dir, &item, true).await;
 
-            // Obtener subtítulos en español en segundo plano automáticamente (funcionalidad de Bazarr)
+            // Obtener subtítulos en español en segundo plano automáticamente
             let sub_target = dest_file.clone();
             let sub_title = item.title.clone();
             let sub_year = item.year;

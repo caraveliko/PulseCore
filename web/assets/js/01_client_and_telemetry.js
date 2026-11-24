@@ -167,7 +167,7 @@ function copyInput(id) {
   if (el) {
     el.select();
     navigator.clipboard.writeText(el.value);
-    alert('Copiado al portapapeles: ' + el.value);
+    appNotify('Copiado al portapapeles: ' + el.value, 'success', '📋');
   }
 }
 
@@ -243,7 +243,7 @@ function copyInspectorHash() {
   const h = document.getElementById('insp-hash').textContent;
   if (h && h !== '-') {
     navigator.clipboard.writeText(h);
-    alert('Hash copiado al portapapeles: ' + h);
+    appNotify('Hash copiado al portapapeles: ' + h, 'success', '📋');
   }
 }
 
@@ -580,4 +580,75 @@ async function refreshNasTelemetry(forceModalUpdate = false) {
     console.warn('Error consultando telemetría NAS:', e);
   }
 }
+
+function appNotify(message, type = 'info', icon = '') {
+  if (typeof window.showToastNotification === 'function') {
+    window.showToastNotification(message, type, icon);
+    return;
+  }
+  if (type === 'error') console.error(message);
+  else console.info(message);
+}
+window.appNotify = appNotify;
+
+function appConfirm(options) {
+  const opts = typeof options === 'string' ? { message: options } : (options || {});
+  const modal = document.getElementById('modal-app-confirm');
+  const titleEl = document.getElementById('app-confirm-title');
+  const msgEl = document.getElementById('app-confirm-message');
+  const btnCancel = document.getElementById('app-confirm-cancel');
+  const btnOk = document.getElementById('app-confirm-ok');
+
+  if (!modal || !titleEl || !msgEl || !btnCancel || !btnOk) {
+    return Promise.resolve(false);
+  }
+
+  titleEl.textContent = opts.title || (opts.danger ? '⚠️ Acción irreversible' : 'Confirmar acción');
+  msgEl.textContent = opts.message || '';
+  btnCancel.textContent = opts.cancelText || 'Cancelar';
+  btnOk.textContent = opts.confirmText || 'Aceptar';
+
+  btnOk.className = opts.danger ? 'btn btn-danger-solid' : 'btn btn-primary';
+  modal.classList.add('active');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = (result) => {
+      if (settled) return;
+      settled = true;
+      modal.classList.remove('active');
+      btnOk.removeEventListener('click', onOk);
+      btnCancel.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown, true);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onOverlayClick = (ev) => {
+      if (ev.target === modal) cleanup(false);
+    };
+    const onKeyDown = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        cleanup(false);
+      } else if (ev.key === 'Enter' && document.activeElement !== btnCancel) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        cleanup(true);
+      }
+    };
+
+    btnOk.addEventListener('click', onOk);
+    btnCancel.addEventListener('click', onCancel);
+    modal.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown, true);
+
+    setTimeout(() => {
+      (opts.danger ? btnCancel : btnOk).focus();
+    }, 10);
+  });
+}
+window.appConfirm = appConfirm;
 

@@ -152,8 +152,13 @@ function executeSpotlightItem(idx) {
   }
 }
 
-// Atajo global Ctrl+K / Cmd+K y navegación con flechas
+// Atajo global Ctrl+K / Cmd+K, '/' para búsqueda rápida, Escape para modales y navegación con flechas
 document.addEventListener('keydown', (e) => {
+  const confirmModal = document.getElementById('modal-app-confirm');
+  if (confirmModal && confirmModal.classList.contains('active')) {
+    return;
+  }
+
   if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
     const el = document.getElementById('spotlight-overlay');
@@ -163,6 +168,17 @@ document.addEventListener('keydown', (e) => {
       openSpotlight();
     }
     return;
+  }
+
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const t = e.target;
+    const isEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    const anyModalActive = document.querySelector('.modal-overlay.active, #spotlight-overlay.active');
+    if (!isEditable && !anyModalActive) {
+      e.preventDefault();
+      openSpotlight();
+      return;
+    }
   }
 
   const bwModal = document.getElementById('bandwidth-details-modal');
@@ -194,6 +210,16 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       executeSpotlightItem(spotlightSelectedIndex);
+    }
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    const activeModals = Array.from(document.querySelectorAll('.modal-overlay.active'))
+      .filter(m => m.id !== 'modal-webui-login' && m.id !== 'modal-app-confirm');
+    if (activeModals.length > 0) {
+      e.preventDefault();
+      activeModals[activeModals.length - 1].classList.remove('active');
     }
   }
 });
@@ -709,7 +735,12 @@ async function submitWebuiLogin() {
 }
 
 async function clearWebuiPassword() {
-  if (!confirm('¿Deseas quitar la contraseña de la WebUI para que la red local acceda sin login?')) {
+  if (!(await appConfirm({
+    title: '⚠️ Quitar contraseña WebUI',
+    message: '¿Deseas quitar la contraseña de la WebUI para que la red local acceda sin login?',
+    confirmText: 'Quitar contraseña',
+    danger: true
+  }))) {
     return;
   }
   try {
@@ -784,7 +815,11 @@ async function restoreFullBackupFromFile(inputEl) {
     inputEl.value = '';
     return;
   }
-  if (!confirm(`¿Restaurar la copia "${file.name}"? Se importará la identidad RSA, créditos de pares, amigos, categorías, servidores, nodos Kad y ajustes compatibles.`)) {
+  if (!(await appConfirm({
+    title: 'Restaurar copia de seguridad',
+    message: `¿Restaurar la copia "${file.name}"? Se importará la identidad RSA, créditos de pares, amigos, categorías, servidores, nodos Kad y ajustes compatibles.`,
+    confirmText: 'Restaurar copia'
+  }))) {
     inputEl.value = '';
     return;
   }

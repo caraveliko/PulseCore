@@ -1111,7 +1111,7 @@ async fn resolve_media_video_target(
     ))
 }
 
-/// Busca candidatos de subtítulos para un elemento multimedia (funcionalidad estilo Bazarr)
+/// Busca candidatos de subtítulos para un elemento multimedia
 pub async fn handle_subtitles_search(
     state: &AppState,
     params: Option<Value>,

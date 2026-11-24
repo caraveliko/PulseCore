@@ -227,7 +227,7 @@ document.getElementById('btn-save-insp-priority').onclick = async () => {
     addLog('info', `Prioridad cambiada a ${priority.toUpperCase()} para la descarga actual.`);
     refreshDownloads();
   } catch (e) {
-    alert('Error cambiando prioridad: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error cambiando prioridad: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 
@@ -241,7 +241,7 @@ document.getElementById('btn-add-manual-peer').onclick = async () => {
     addLog('success', `Fuente manual ${addr} añadida con éxito.`);
     refreshInspectorPeers(hash);
   } catch (e) {
-    alert('Error al añadir fuente: ' + (e.message || JSON.stringify(e)));
+    appNotify('Error al añadir fuente: ' + (e.message || JSON.stringify(e)), 'error', '❌');
   }
 };
 

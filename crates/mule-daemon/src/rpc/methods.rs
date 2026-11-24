@@ -105,7 +105,7 @@ pub async fn handle_request(
         "media.setSeasonMonitored" => handle_media_set_season_monitored(state, req.params).await,
         "media.organize" => handle_media_organize(state, req.params).await,
         "media.clean" => handle_media_clean(state, req.params).await,
-        // Automatización de subtítulos con Bazarr
+        // Automatización nativa de subtítulos
         "subtitles.search" => handle_subtitles_search(state, req.params).await,
         "subtitles.download" => handle_subtitles_download(state, req.params).await,
         "subtitles.check" => handle_subtitles_check(state, req.params).await,

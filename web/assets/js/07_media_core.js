@@ -196,7 +196,46 @@ function renderLiveDownloadsStrip(allDownloads) {
     return (db.downloadRateBps || db.download_rate_bps || 0) - (da.downloadRateBps || da.download_rate_bps || 0);
   });
 
-  grid.innerHTML = sorted.slice(0, 6).map(item => {
+  const topItems = sorted.slice(0, 6);
+  const nextIds = topItems.map(item => String((item.snapshot || item).id || item.id || ''));
+  const existingCards = Array.from(grid.querySelectorAll('.live-dl-card'));
+  const canPatchInPlace = existingCards.length === nextIds.length &&
+    existingCards.every((card, idx) => (card.dataset.downloadId || '') === nextIds[idx]);
+
+  if (canPatchInPlace) {
+    topItems.forEach((item, idx) => {
+      const dl = item.snapshot || item;
+      const card = existingCards[idx];
+      const rawName = dl.fileName || dl.file_name || 'Archivo';
+      const total = dl.totalBytes || dl.total_bytes || 0;
+      const received = dl.receivedBytes || dl.received_bytes || 0;
+      const pct = total > 0 ? Math.min(100, (received / total) * 100) : (dl.progress ? Math.min(100, dl.progress * 100) : 0);
+      const speed = dl.downloadRateBps || dl.download_rate_bps || 0;
+      const sources = dl.sourceCount || dl.source_count || 0;
+      const st = (dl.status || '').toLowerCase();
+      const stageMeta = typeof getDownloadCompletionStageMeta === 'function' ? getDownloadCompletionStageMeta(dl) : { active: false };
+      const leftStatusText = stageMeta.active
+        ? stageMeta.pipelineTitle.replace(/^Paso \d\/\d · /, '')
+        : (speed > 0 ? formatSpeed(speed) : (st === 'paused' ? 'En pausa' : 'Esperando fuentes'));
+
+      card.classList.toggle('is-paused', st === 'paused');
+      const pctEl = card.querySelector('.live-dl-pct');
+      if (pctEl) pctEl.textContent = `${pct.toFixed(1)}%`;
+      const barFill = card.querySelector('.live-dl-bar-fill');
+      if (barFill) {
+        barFill.style.width = `${pct.toFixed(1)}%`;
+        barFill.classList.toggle('completing', !!(stageMeta.active || st === 'completing'));
+        barFill.classList.toggle('paused', st === 'paused' && !stageMeta.active);
+      }
+      const statusEl = card.querySelector('.live-dl-status-text');
+      if (statusEl) statusEl.textContent = leftStatusText;
+      const sourcesEl = card.querySelector('.live-dl-sources-text');
+      if (sourcesEl) sourcesEl.textContent = `${sources} ${sources === 1 ? 'fuente' : 'fuentes'}`;
+    });
+    return;
+  }
+
+  grid.innerHTML = topItems.map(item => {
     const dl = item.snapshot || item;
     const id = dl.id || item.id || '';
     const rawName = dl.fileName || dl.file_name || 'Archivo';
@@ -215,7 +254,7 @@ function renderLiveDownloadsStrip(allDownloads) {
       : (speed > 0 ? formatSpeed(speed) : (st === 'paused' ? 'En pausa' : 'Esperando fuentes'));
 
     return `
-      <button type="button" class="live-dl-card ${st === 'paused' ? 'is-paused' : ''}" onclick="openDownloadInQueue('${escapeHtml(id)}')" title="${escapeHtml(displayName)}">
+      <button type="button" class="live-dl-card ${st === 'paused' ? 'is-paused' : ''}" data-media-action="open-download" data-download-id="${escapeHtml(id)}" title="${escapeHtml(displayName)}">
         <div class="live-dl-card-top">
           <span class="live-dl-proto ${isTorrent ? 'is-bt' : 'is-ed2k'}">${protoTag}</span>
           <span class="live-dl-name">${escapeHtml(displayName)}</span>
@@ -223,8 +262,8 @@ function renderLiveDownloadsStrip(allDownloads) {
         </div>
         <div class="live-dl-bar"><div class="live-dl-bar-fill ${stageMeta.active || st === 'completing' ? 'completing' : (st === 'paused' ? 'paused' : '')}" style="width: ${pct.toFixed(1)}%"></div></div>
         <div class="live-dl-card-meta tabular-nums">
-          <span>${escapeHtml(leftStatusText)}</span>
-          <span>${sources} ${sources === 1 ? 'fuente' : 'fuentes'}</span>
+          <span class="live-dl-status-text">${escapeHtml(leftStatusText)}</span>
+          <span class="live-dl-sources-text">${sources} ${sources === 1 ? 'fuente' : 'fuentes'}</span>
         </div>
       </button>
     `;
@@ -261,7 +300,14 @@ async function loadCalendarView() {
   const emptyMsg = document.getElementById('calendar-empty-msg');
   if (!container) return;
 
-  container.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:8px;">⏳</div>Cargando emisiones para ${MONTH_NAMES_ES[month]}...</div>`;
+  container.innerHTML = `
+    <div class="skeleton-stack">
+      <div class="skeleton-row"><div class="skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-line w-60"></div><div class="skeleton-line w-40"></div></div></div>
+      <div class="skeleton-row"><div class="skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-line w-80"></div><div class="skeleton-line w-40"></div></div></div>
+      <div class="skeleton-row"><div class="skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-line w-60"></div><div class="skeleton-line w-40"></div></div></div>
+      <div class="skeleton-caption">Cargando emisiones para ${MONTH_NAMES_ES[month]}...</div>
+    </div>
+  `;
 
   const endDay = new Date(year, month + 1, 0);
   const pad = (n) => String(n).padStart(2, '0');
@@ -339,8 +385,8 @@ async function loadCalendarView() {
             </div>
             <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
               ${badgeHtml}
-              <button class="btn btn-sm" onclick="openEpisodeReleaseSearch('${ep.mediaId}', '${escapeHtml(calItem.seriesTitle)}', ${ep.seasonNumber}, ${ep.episodeNumber})" title="Buscar fuentes">🔍 Fuentes</button>
-              ${ep.status === 'completed' ? `<button class="btn btn-sm" onclick="openSubtitlesModal('${ep.mediaId}', '${escapeHtml(calItem.seriesTitle)} ${epCode}', false, ${ep.seasonNumber}, ${ep.episodeNumber}, '${ep.filePath || ''}')" title="Subtítulos (Bazarr)">💬 Subs</button>` : ''}
+              <button class="btn btn-sm" data-media-action="episode-releases" data-media-id="${escapeHtml(ep.mediaId)}" data-title="${escapeHtml(calItem.seriesTitle)}" data-season="${ep.seasonNumber}" data-episode="${ep.episodeNumber}" title="Buscar fuentes">🔍 Fuentes</button>
+              ${ep.status === 'completed' ? `<button class="btn btn-sm" data-media-action="open-subtitles" data-media-id="${escapeHtml(ep.mediaId)}" data-title="${escapeHtml(calItem.seriesTitle + ' ' + epCode)}" data-is-movie="0" data-season="${ep.seasonNumber}" data-episode="${ep.episodeNumber}" data-path="${escapeHtml(ep.filePath || '')}" title="Subtítulos">💬 Subs</button>` : ''}
             </div>
           </div>
         `;
@@ -507,25 +553,26 @@ function renderCardQualityLogo(qualityProfile) {
       backStatusClass = 'is-wait';
     }
 
-    const safeTitleAttr = escapeHtml(item.title).replace(/'/g, "\\'");
-    const safeFilePathAttr = escapeHtml(item.filePath || '').replace(/'/g, "\\'");
+    const safeTitleData = escapeHtml(item.title);
+    const safeFilePathData = escapeHtml(item.filePath || '');
+    const isMovieFlag = isMovie ? '1' : '0';
 
     // 2. Botones de acción directos en la cara trasera (Ficha, Fuentes, Carpeta, Eliminar)
     const quickActions = `
-      <div class="media-flip-actions" onclick="event.stopPropagation()">
-        <button class="btn-icon-overlay" onclick="openMediaDetail('${item.id}')" title="Ver ficha técnica">
+      <div class="media-flip-actions">
+        <button class="btn-icon-overlay" data-media-action="open-detail" data-media-id="${escapeHtml(item.id)}" data-stop-prop="1" title="Ver ficha técnica">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
           <span>Ficha</span>
         </button>
-        <button class="btn-icon-overlay" onclick="openReleasesModal('${item.id}', '${safeTitleAttr}', ${isMovie})" title="Buscar fuentes en Kad y trackers">
+        <button class="btn-icon-overlay" data-media-action="open-releases" data-media-id="${escapeHtml(item.id)}" data-title="${safeTitleData}" data-is-movie="${isMovieFlag}" data-stop-prop="1" title="Buscar fuentes en Kad y trackers">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <span>Fuentes</span>
         </button>
-        <button class="btn-icon-overlay" onclick="openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Abrir carpeta de destino">
+        <button class="btn-icon-overlay" data-media-action="open-folder" data-media-id="${escapeHtml(item.id)}" data-path="${safeFilePathData}" data-title="${safeTitleData}" data-stop-prop="1" title="Abrir carpeta de destino">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           <span>Carpeta</span>
         </button>
-        <button class="btn-icon-overlay btn-danger-overlay" onclick="deleteMediaItem('${item.id}')" title="Eliminar de biblioteca">
+        <button class="btn-icon-overlay btn-danger-overlay" data-media-action="delete-media" data-media-id="${escapeHtml(item.id)}" data-stop-prop="1" title="Eliminar de biblioteca">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           <span>Eliminar</span>
         </button>
@@ -558,7 +605,7 @@ function renderCardQualityLogo(qualityProfile) {
       : '';
 
     return `
-      <div class="media-card movie-card" id="media-card-${item.id}" onclick="openMediaDetail('${item.id}')" onmouseenter="prefetchFlipCardMeta('${item.id}')" oncontextmenu="event.preventDefault(); openDestinationFolder({ mediaId: '${item.id}', path: '${safeFilePathAttr}', title: '${safeTitleAttr}' })" title="Clic para ver ficha · Clic derecho para abrir carpeta">
+      <div class="media-card movie-card" id="media-card-${escapeHtml(item.id)}" data-media-action="open-detail" data-media-id="${escapeHtml(item.id)}" data-media-context="folder" data-path="${safeFilePathData}" data-title="${safeTitleData}" onmouseenter="prefetchFlipCardMeta('${escapeHtml(item.id)}')" title="Clic para ver ficha · Clic derecho para abrir carpeta">
         <div class="media-poster-box movie-poster-box">
           <div class="media-flip-inner">
             <div class="media-flip-face media-flip-front">
@@ -595,4 +642,112 @@ function renderCardQualityLogo(qualityProfile) {
     `;
   }).join('');
 }
+
+// Delegación centralizada para acciones de biblioteca multimedia (evita escapes frágiles en onclick)
+document.addEventListener('click', (e) => {
+  const el = e.target && e.target.closest ? e.target.closest('[data-media-action]') : null;
+  if (!el) return;
+  if (el.dataset.stopProp === '1') {
+    e.stopPropagation();
+  }
+  if (el.dataset.closeDetail === '1' && typeof closeModal === 'function') {
+    closeModal('modal-media-detail');
+  }
+
+  const d = el.dataset;
+  switch (d.mediaAction) {
+    case 'open-download':
+      if (typeof openDownloadInQueue === 'function') openDownloadInQueue(d.downloadId);
+      break;
+    case 'open-detail':
+      if (typeof openMediaDetail === 'function') openMediaDetail(d.mediaId);
+      break;
+    case 'open-releases':
+      if (typeof openReleasesModal === 'function') openReleasesModal(d.mediaId, d.title || '', d.isMovie === '1');
+      break;
+    case 'open-folder':
+      if (typeof openDestinationFolder === 'function') {
+        openDestinationFolder({
+          mediaId: d.mediaId || undefined,
+          path: d.path || '',
+          title: d.title || ''
+        });
+      }
+      break;
+    case 'delete-media':
+      if (typeof deleteMediaItem === 'function') deleteMediaItem(d.mediaId);
+      break;
+    case 'single-autograb':
+      if (typeof triggerSingleAutoGrab === 'function') triggerSingleAutoGrab(d.mediaId, d.episodeId || null, d.title || '');
+      break;
+    case 'replace-modal':
+      if (typeof openCastilianReplacementModal === 'function') {
+        openCastilianReplacementModal(
+          d.mediaId,
+          d.title || '',
+          d.isMovie === '1',
+          d.episodeId || null,
+          d.season ? Number(d.season) : null,
+          d.episode ? Number(d.episode) : null
+        );
+      }
+      break;
+    case 'replace-auto':
+      if (typeof triggerReplaceWrongLanguage === 'function') {
+        triggerReplaceWrongLanguage(
+          d.mediaId,
+          d.episodeId || null,
+          d.season ? Number(d.season) : null,
+          d.title || '',
+          true
+        );
+      }
+      break;
+    case 'open-subtitles':
+      if (typeof openSubtitlesModal === 'function') {
+        openSubtitlesModal(
+          d.mediaId,
+          d.title || '',
+          d.isMovie === '1',
+          d.season ? Number(d.season) : undefined,
+          d.episode ? Number(d.episode) : undefined,
+          d.path || undefined
+        );
+      }
+      break;
+    case 'season-autograb':
+      if (typeof triggerSeasonAutoGrab === 'function') triggerSeasonAutoGrab(d.mediaId, Number(d.season), d.title || '');
+      break;
+    case 'season-only':
+      if (typeof setOnlySeasonMonitored === 'function') setOnlySeasonMonitored(d.mediaId, Number(d.season));
+      break;
+    case 'season-toggle':
+      if (typeof toggleSeasonMonitored === 'function') toggleSeasonMonitored(d.mediaId, Number(d.season), d.monitored === '1');
+      break;
+    case 'season-releases':
+      if (typeof openSeasonReleaseSearch === 'function') openSeasonReleaseSearch(d.mediaId, d.title || '', Number(d.season));
+      break;
+    case 'episode-releases':
+      if (typeof openEpisodeReleaseSearch === 'function') {
+        openEpisodeReleaseSearch(d.mediaId, d.title || '', Number(d.season), Number(d.episode), d.episodeId || undefined);
+      }
+      break;
+    case 'delete-indexer':
+      if (typeof deleteIndexer === 'function') deleteIndexer(d.indexerId, d.indexerName || '');
+      break;
+  }
+});
+
+document.addEventListener('contextmenu', (e) => {
+  const card = e.target && e.target.closest ? e.target.closest('[data-media-context="folder"]') : null;
+  if (!card) return;
+  e.preventDefault();
+  if (typeof openDestinationFolder === 'function') {
+    openDestinationFolder({
+      mediaId: card.dataset.mediaId || undefined,
+      path: card.dataset.path || '',
+      title: card.dataset.title || ''
+    });
+  }
+});
 
