@@ -1,0 +1,643 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Laurent Geynet "Loulach" & Antigravity
+
+use super::*;
+
+impl AutoGrabber {
+    /// Ejecuta la búsqueda y descarga automática para los episodios buscados de una serie de TV.
+    pub(super) async fn process_series_item(
+        state: &AppState,
+        aggregator: &IndexerAggregator,
+        item: &MediaItem,
+        only_episode_id: Option<&str>,
+        only_season: Option<u32>,
+        ag_state: &mut AutoGrabberState,
+        force: bool,
+    ) -> Vec<Value> {
+        let now = now_ms();
+        let mut grabbed_episodes = Vec::new();
+
+        let episodes = {
+            let dl_svc = state.downloads.lock().await;
+            if let Some(target_season) = only_season {
+                let _ = dl_svc
+                    .db()
+                    .set_season_monitored(&item.id, target_season, true, now);
+            }
+            dl_svc.db().get_episodes_for_media(&item.id).unwrap_or_default()
+        };
+
+        let today = time::OffsetDateTime::now_utc().date();
+        let today_str = format!("{today}");
+
+        let mut wanted_eps: Vec<EpisodeItem> = episodes
+            .iter()
+            .filter(|ep| {
+                if let Some(target_ep_id) = only_episode_id {
+                    return ep.id == target_ep_id;
+                }
+                if let Some(target_season) = only_season {
+                    if ep.season_number != target_season {
+                        return false;
+                    }
+                }
+                if !ep.monitored || ep.status != "wanted" {
+                    return false;
+                }
+                if let Some(ref d) = ep.air_date {
+                    if !d.is_empty() && d.as_str() > today_str.as_str() {
+                        return false;
+                    }
+                }
+                if !force {
+                    if let Some(diag) = ag_state.diagnostics.get(&ep.id) {
+                        if now < diag.next_eligible_search_ms {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        // Priorizar los episodios nunca buscados (`consecutive_empty_searches == 0`)
+        wanted_eps.sort_by_key(|ep| {
+            let attempts = ag_state
+                .diagnostics
+                .get(&ep.id)
+                .map(|d| d.consecutive_empty_searches)
+                .unwrap_or(0);
+            (attempts, ep.season_number, ep.episode_number)
+        });
+
+        let mut handled_ep_ids: HashSet<String> = HashSet::new();
+        let search_title = strip_trailing_year_suffix(&item.title);
+        let ext_details = state.media_metadata.get_extended_details(item).await;
+        let alt_refs: Vec<&str> = ext_details
+            .alternative_titles
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+
+        // 0. Búsqueda inteligente de paquetes de temporada completa si se buscan >= 3 episodios de una misma temporada
+        if only_episode_id.is_none() {
+            let mut eps_by_season: HashMap<u32, Vec<EpisodeItem>> = HashMap::new();
+            for ep in &wanted_eps {
+                eps_by_season.entry(ep.season_number).or_default().push(ep.clone());
+            }
+
+            let mut candidate_seasons: Vec<u32> = eps_by_season
+                .iter()
+                .filter(|(_, eps)| eps.len() >= MIN_WANTED_EPS_FOR_SEASON_PACK)
+                .map(|(&s, _)| s)
+                .collect();
+            candidate_seasons.sort_unstable();
+
+            for season_num in candidate_seasons {
+                let season_eps = match eps_by_season.get(&season_num) {
+                    Some(v) => v,
+                    None => continue,
+                };
+                let es_variants =
+                    spanish_title_search_variants(search_title, item.original_title.as_deref());
+                let mut pack_queries = vec![
+                    format!("{search_title} Temporada {season_num}"),
+                    format!("{search_title} S{season_num:02}"),
+                ];
+                if let Some(ref orig) = item.original_title {
+                    if !orig.is_empty() && !orig.eq_ignore_ascii_case(&item.title) {
+                        pack_queries.push(format!("{orig} S{season_num:02}"));
+                    }
+                }
+                for es_t in &es_variants {
+                    pack_queries.push(format!("{es_t} Temporada {season_num}"));
+                    pack_queries.push(format!("{es_t} S{season_num:02}"));
+                }
+
+                let pack_futs = pack_queries
+                    .iter()
+                    .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
+                let pack_batches = join_all(pack_futs).await;
+
+                let mut valid_packs = Vec::new();
+                let mut seen_pack_links = HashSet::new();
+                for rels in pack_batches {
+                    for r in rels {
+                        if !seen_pack_links.insert(r.link.clone()) {
+                            continue;
+                        }
+                        if r.is_rejected || r.score < MIN_SEASON_PACK_SCORE {
+                            continue;
+                        }
+                        if ag_state.is_release_blacklisted(&item.id, &r.hash, &r.title) {
+                            continue;
+                        }
+                        if matches_season_pack_release(
+                            &r.title,
+                            &item.title,
+                            item.original_title.as_deref(),
+                            item.year,
+                            season_num,
+                        ) {
+                            valid_packs.push(r);
+                        }
+                    }
+                }
+
+                valid_packs.sort_by(|a, b| {
+                    b.score
+                        .cmp(&a.score)
+                        .then_with(|| b.sources.cmp(&a.sources))
+                });
+
+                if let Some(best_pack) = valid_packs.into_iter().next() {
+                    let target_dest = {
+                        let dl_svc = state.downloads.lock().await;
+                        dl_svc
+                            .get_setting("default_download_directory")
+                            .ok()
+                            .flatten()
+                            .map(PathBuf::from)
+                            .unwrap_or_else(|| state.config.default_download_dir.clone())
+                    };
+
+                    let pack_dl_id = if best_pack.protocol == "ed2k" {
+                        let mut dl_svc = state.downloads.lock().await;
+                        dl_svc
+                            .add_ed2k_link(
+                                &best_pack.link,
+                                &target_dest,
+                                AllocationPolicy::SparseIfSupported,
+                                Some("tv".to_string()),
+                            )
+                            .ok()
+                            .map(|snap| snap.id.to_string())
+                    } else if let Ok(torrent_engine) = state.torrent_engine().await {
+                        torrent_engine
+                            .add_url(&best_pack.link, Some(target_dest), Some("tv".to_string()))
+                            .await
+                            .ok()
+                            .map(|snap| snap.info_hash)
+                    } else {
+                        None
+                    };
+
+                    if let Some(dl_id_str) = pack_dl_id {
+                        let covered_nums = extract_tv_episode_numbers(&best_pack.title, season_num);
+                        {
+                            let dl_svc = state.downloads.lock().await;
+                            for sep in season_eps {
+                                if covered_nums.is_empty() || covered_nums.contains(&sep.episode_number) {
+                                    let _ = dl_svc.db().update_episode_status(
+                                        &sep.id,
+                                        "downloading",
+                                        None,
+                                        Some(&dl_id_str),
+                                        now,
+                                    );
+                                    handled_ep_ids.insert(sep.id.clone());
+                                }
+                            }
+                            let _ = dl_svc.db().update_media_status(
+                                &item.id,
+                                "downloading",
+                                Some(&dl_id_str),
+                                now,
+                            );
+                        }
+
+                        info!(
+                            "[AUTO_GRAB] Grabbed Season Pack '{}' S{:02} ({} episodes linked) via {} (score: {})",
+                            item.title,
+                            season_num,
+                            handled_ep_ids.len(),
+                            best_pack.protocol,
+                            best_pack.score
+                        );
+
+                        let first_ep_id = season_eps
+                            .first()
+                            .map(|e| e.id.clone())
+                            .unwrap_or_else(|| item.id.clone());
+                        ag_state.active_grabs.insert(
+                            dl_id_str.clone(),
+                            ActiveGrabTracker {
+                                download_id: dl_id_str.clone(),
+                                target_id: first_ep_id,
+                                media_id: item.id.clone(),
+                                is_episode: true,
+                                hash: best_pack.hash.clone(),
+                                release_title: best_pack.title.clone(),
+                                protocol: best_pack.protocol.clone(),
+                                quality: best_pack.quality.clone(),
+                                language: best_pack.language.clone(),
+                                score: best_pack.score,
+                                started_at_ms: now,
+                                last_progress_bytes: 0,
+                                last_progress_at_ms: now,
+                                is_upgrade: false,
+                            },
+                        );
+
+                        let pack_msg = format!(
+                            "Pack Temporada {season_num:02}: '{}' [{} · {} · {} pts]",
+                            best_pack.title, best_pack.quality, best_pack.language, best_pack.score
+                        );
+                        let show_diag = ag_state.diagnostics.entry(item.id.clone()).or_default();
+                        show_diag.last_search_ms = now;
+                        show_diag.last_status = "grabbed".to_string();
+                        show_diag.summary_message = pack_msg.clone();
+
+                        for sep in season_eps {
+                            if handled_ep_ids.contains(&sep.id) {
+                                let ep_diag = ag_state.diagnostics.entry(sep.id.clone()).or_default();
+                                ep_diag.last_search_ms = now;
+                                ep_diag.consecutive_empty_searches = 0;
+                                ep_diag.next_eligible_search_ms = 0;
+                                ep_diag.last_status = "grabbed".to_string();
+                                ep_diag.summary_message = pack_msg.clone();
+                                ep_diag.grabbed_title = Some(best_pack.title.clone());
+                                ep_diag.grabbed_quality = Some(best_pack.quality.clone());
+                                ep_diag.grabbed_language = Some(best_pack.language.clone());
+                                ep_diag.grabbed_score = Some(best_pack.score);
+                            }
+                        }
+
+                        grabbed_episodes.push(json!({
+                            "series": item.title,
+                            "season": season_num,
+                            "episode": 0,
+                            "isSeasonPack": true,
+                            "release": best_pack.title,
+                            "quality": best_pack.quality,
+                            "language": best_pack.language,
+                            "score": best_pack.score,
+                            "protocol": best_pack.protocol,
+                            "downloadId": dl_id_str
+                        }));
+                    }
+                }
+            }
+        }
+
+        let batch_limit = if only_episode_id.is_some() || force { 24 } else { 8 };
+        let es_variants =
+            spanish_title_search_variants(search_title, item.original_title.as_deref());
+        let remaining_eps: Vec<EpisodeItem> = wanted_eps
+            .into_iter()
+            .filter(|e| !handled_ep_ids.contains(&e.id))
+            .take(batch_limit)
+            .collect();
+
+        // Precargar los resultados de Kad/Torznab a nivel de serie (y sus variantes en español)
+        // una sola vez para evitar N búsquedas redundantes sobre la misma palabra clave Kad de título.
+        let mut base_series_releases = Vec::new();
+        if !remaining_eps.is_empty() {
+            let mut base_queries = vec![search_title.to_string()];
+            if let Some(ref orig) = item.original_title {
+                let clean_orig = strip_trailing_year_suffix(orig);
+                if !clean_orig.is_empty() && !clean_orig.eq_ignore_ascii_case(search_title) {
+                    base_queries.push(clean_orig.to_string());
+                }
+            }
+            for es_t in &es_variants {
+                if !base_queries.iter().any(|q| q.eq_ignore_ascii_case(es_t)) {
+                    base_queries.push(es_t.clone());
+                }
+            }
+            for alt_title in ext_details.alternative_titles.iter().take(4) {
+                let clean_alt = strip_trailing_year_suffix(alt_title);
+                if !clean_alt.is_empty()
+                    && !base_queries.iter().any(|q| q.eq_ignore_ascii_case(clean_alt))
+                {
+                    base_queries.push(clean_alt.to_string());
+                }
+            }
+            let base_futs = base_queries
+                .iter()
+                .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
+            let base_batches = join_all(base_futs).await;
+            let mut seen_base_links = HashSet::new();
+            for rels in base_batches {
+                for r in rels {
+                    if seen_base_links.insert(r.link.clone()) {
+                        base_series_releases.push(r);
+                    }
+                }
+            }
+
+            // Si solo un subconjunto de pares de indexación Kad respondió en el primer intento,
+            // realizar una segunda pasada de fusión para maximizar la cobertura de episodios.
+            if base_series_releases.len() < 150 {
+                aggregator.invalidate_cache().await;
+                let retry_futs = base_queries
+                    .iter()
+                    .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
+                for rels in join_all(retry_futs).await {
+                    for r in rels {
+                        if seen_base_links.insert(r.link.clone()) {
+                            base_series_releases.push(r);
+                        }
+                    }
+                }
+            }
+        }
+
+        for ep in remaining_eps {
+            if handled_ep_ids.contains(&ep.id) {
+                continue;
+            }
+            let mut ep_queries = vec![
+                format!("{search_title} S{:02}E{:02}", ep.season_number, ep.episode_number),
+                format!("{search_title} {}x{:02}", ep.season_number, ep.episode_number),
+            ];
+            if ep.season_number >= 1 && ep.episode_number < 100 {
+                let cap_code = ep.season_number * 100 + ep.episode_number;
+                ep_queries.push(format!("{search_title} Cap.{cap_code}"));
+            }
+            for es_t in &es_variants {
+                ep_queries.push(format!(
+                    "{es_t} {}x{:02}",
+                    ep.season_number, ep.episode_number
+                ));
+                ep_queries.push(format!(
+                    "{es_t} S{:02}E{:02}",
+                    ep.season_number, ep.episode_number
+                ));
+            }
+
+            let ep_futs = ep_queries
+                .iter()
+                .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
+            let ep_batches = join_all(ep_futs).await;
+
+            let mut all_releases = Vec::new();
+            let mut seen_links = HashSet::new();
+            for r in &base_series_releases {
+                if seen_links.insert(r.link.clone()) {
+                    all_releases.push(r.clone());
+                }
+            }
+            for rels in ep_batches {
+                for r in rels {
+                    if seen_links.insert(r.link.clone()) {
+                        all_releases.push(r);
+                    }
+                }
+            }
+
+            let total_candidates = all_releases.len();
+            let mut rejection_counts: HashMap<String, usize> = HashMap::new();
+            let mut valid_releases = Vec::new();
+
+            for r in all_releases {
+                if ag_state.is_release_blacklisted(&ep.id, &r.hash, &r.title) {
+                    *rejection_counts
+                        .entry("En lista negra (descartada)".to_string())
+                        .or_insert(0) += 1;
+                    continue;
+                }
+                if r.is_rejected {
+                    let reason = r
+                        .rejection_reason
+                        .clone()
+                        .unwrap_or_else(|| "Calidad/idioma no válido".to_string());
+                    *rejection_counts.entry(reason).or_insert(0) += 1;
+                    continue;
+                }
+                if !matches_release_with_alts(
+                    &r.title,
+                    &item.title,
+                    item.original_title.as_deref(),
+                    &alt_refs,
+                    item.year,
+                    false,
+                    Some((ep.season_number, ep.episode_number)),
+                ) {
+                    *rejection_counts
+                        .entry("No coincide serie o número de episodio".to_string())
+                        .or_insert(0) += 1;
+                    continue;
+                }
+                if r.score < 15 {
+                    *rejection_counts
+                        .entry("Puntuación insuficiente".to_string())
+                        .or_insert(0) += 1;
+                    continue;
+                }
+                valid_releases.push(r);
+            }
+
+            valid_releases.sort_by(|a, b| {
+                b.score
+                    .cmp(&a.score)
+                    .then_with(|| b.sources.cmp(&a.sources))
+            });
+
+            let valid_count = valid_releases.len();
+            let mut top_reasons: Vec<(String, usize)> = rejection_counts.into_iter().collect();
+            top_reasons.sort_by_key(|a| std::cmp::Reverse(a.1));
+            let formatted_reasons: Vec<String> = top_reasons
+                .iter()
+                .take(3)
+                .map(|(r, c)| format!("{c}× {r}"))
+                .collect();
+
+            if let Some(best) = valid_releases.into_iter().next() {
+                let target_dest = {
+                    let dl_svc = state.downloads.lock().await;
+                    dl_svc
+                        .get_setting("default_download_directory")
+                        .ok()
+                        .flatten()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| state.config.default_download_dir.clone())
+                };
+
+                let grabbed_dl_id = if best.protocol == "ed2k" {
+                    let mut dl_svc = state.downloads.lock().await;
+                    match dl_svc.add_ed2k_link(
+                        &best.link,
+                        &target_dest,
+                        AllocationPolicy::SparseIfSupported,
+                        Some("tv".to_string()),
+                    ) {
+                        Ok(snap) => Some(snap.id.to_string()),
+                        Err(e) => {
+                            warn!(
+                                "[AUTO_GRAB] Failed to add eD2k link for '{}' S{:02}E{:02}: {e}",
+                                item.title, ep.season_number, ep.episode_number
+                            );
+                            None
+                        }
+                    }
+                } else if let Ok(torrent_engine) = state.torrent_engine().await {
+                    match torrent_engine
+                        .add_url(&best.link, Some(target_dest), Some("tv".to_string()))
+                        .await
+                    {
+                        Ok(snap) => Some(snap.info_hash),
+                        Err(e) => {
+                            warn!(
+                                "[AUTO_GRAB] Failed to add torrent for '{}' S{:02}E{:02}: {e}",
+                                item.title, ep.season_number, ep.episode_number
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(dl_id_str) = grabbed_dl_id {
+                    let covered_ep_nums =
+                        extract_tv_episode_numbers(&best.title, ep.season_number);
+                    {
+                        let dl_svc = state.downloads.lock().await;
+                        let _ = dl_svc.db().update_episode_status(
+                            &ep.id,
+                            "downloading",
+                            None,
+                            Some(&dl_id_str),
+                            now,
+                        );
+                        handled_ep_ids.insert(ep.id.clone());
+
+                        // Si la versión cubre múltiples episodios (ej.: S01E01-E03 o Cap.101_102), vincular todos los episodios cubiertos
+                        for covered_num in covered_ep_nums {
+                            if covered_num != ep.episode_number {
+                                if let Some(other_ep) = episodes.iter().find(|e| {
+                                    e.season_number == ep.season_number
+                                        && e.episode_number == covered_num
+                                        && e.status == "wanted"
+                                }) {
+                                    let _ = dl_svc.db().update_episode_status(
+                                        &other_ep.id,
+                                        "downloading",
+                                        None,
+                                        Some(&dl_id_str),
+                                        now,
+                                    );
+                                    handled_ep_ids.insert(other_ep.id.clone());
+                                }
+                            }
+                        }
+                        let _ = dl_svc.db().update_media_status(
+                            &item.id,
+                            "downloading",
+                            None,
+                            now,
+                        );
+                    }
+
+                    info!(
+                        "[AUTO_GRAB] Grabbed episode '{}' S{:02}E{:02} via {} (hash: {}, score: {})",
+                        item.title, ep.season_number, ep.episode_number, best.protocol, best.hash, best.score
+                    );
+
+                    ag_state.active_grabs.insert(
+                        dl_id_str.clone(),
+                        ActiveGrabTracker {
+                            download_id: dl_id_str.clone(),
+                            target_id: ep.id.clone(),
+                            media_id: item.id.clone(),
+                            is_episode: true,
+                            hash: best.hash.clone(),
+                            release_title: best.title.clone(),
+                            protocol: best.protocol.clone(),
+                            quality: best.quality.clone(),
+                            language: best.language.clone(),
+                            score: best.score,
+                            started_at_ms: now,
+                            last_progress_bytes: 0,
+                            last_progress_at_ms: now,
+                            is_upgrade: false,
+                        },
+                    );
+
+                    let msg = format!(
+                        "S{:02}E{:02}: Seleccionada '{}' [{} · {} · {} pts]",
+                        ep.season_number, ep.episode_number, best.title, best.quality, best.language, best.score
+                    );
+                    let ep_diag = ag_state.diagnostics.entry(ep.id.clone()).or_default();
+                    ep_diag.last_search_ms = now;
+                    ep_diag.consecutive_empty_searches = 0;
+                    ep_diag.next_eligible_search_ms = 0;
+                    ep_diag.total_candidates = total_candidates;
+                    ep_diag.valid_candidates = valid_count;
+                    ep_diag.last_status = "grabbed".to_string();
+                    ep_diag.summary_message = msg.clone();
+                    ep_diag.top_rejection_reasons = formatted_reasons;
+                    ep_diag.grabbed_title = Some(best.title.clone());
+                    ep_diag.grabbed_quality = Some(best.quality.clone());
+                    ep_diag.grabbed_language = Some(best.language.clone());
+                    ep_diag.grabbed_score = Some(best.score);
+
+                    let show_diag = ag_state.diagnostics.entry(item.id.clone()).or_default();
+                    show_diag.last_search_ms = now;
+                    show_diag.last_status = "grabbed".to_string();
+                    show_diag.summary_message = msg;
+
+                    grabbed_episodes.push(json!({
+                        "series": item.title,
+                        "season": ep.season_number,
+                        "episode": ep.episode_number,
+                        "release": best.title,
+                        "quality": best.quality,
+                        "language": best.language,
+                        "score": best.score,
+                        "protocol": best.protocol,
+                        "downloadId": dl_id_str
+                    }));
+                    continue;
+                }
+            }
+
+            // Ninguna versión encontrada para este episodio
+            let (ep_status, ep_msg) = {
+                let ep_diag = ag_state.diagnostics.entry(ep.id.clone()).or_default();
+                ep_diag.last_search_ms = now;
+                ep_diag.total_candidates = total_candidates;
+                ep_diag.valid_candidates = 0;
+                ep_diag.consecutive_empty_searches =
+                    ep_diag.consecutive_empty_searches.saturating_add(1);
+                ep_diag.next_eligible_search_ms =
+                    Self::compute_next_backoff_ms(now, ep_diag.consecutive_empty_searches);
+                ep_diag.top_rejection_reasons = formatted_reasons.clone();
+                ep_diag.last_status = if total_candidates == 0 {
+                    "no_results".to_string()
+                } else {
+                    "rejected_all".to_string()
+                };
+                ep_diag.summary_message = if total_candidates == 0 {
+                    format!(
+                        "S{:02}E{:02}: 0 resultados en la red (Backoff activo)",
+                        ep.season_number, ep.episode_number
+                    )
+                } else {
+                    format!(
+                        "S{:02}E{:02}: {} analizadas, todas descartadas ({})",
+                        ep.season_number,
+                        ep.episode_number,
+                        total_candidates,
+                        formatted_reasons.join(" · ")
+                    )
+                };
+                (ep_diag.last_status.clone(), ep_diag.summary_message.clone())
+            };
+
+            let show_diag = ag_state.diagnostics.entry(item.id.clone()).or_default();
+            show_diag.last_search_ms = now;
+            show_diag.total_candidates = total_candidates;
+            if show_diag.last_status != "grabbed" {
+                show_diag.last_status = ep_status;
+                show_diag.summary_message = ep_msg;
+                show_diag.top_rejection_reasons = formatted_reasons;
+            }
+        }
+
+        Self::save_state(state, ag_state).await;
+        grabbed_episodes
+    }
+}

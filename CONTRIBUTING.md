@@ -9,7 +9,6 @@ Gracias por tu interés en el proyecto. Este documento describe el flujo de cont
 | `master` | Producción — únicamente fusiones validadas desde `Beta`, etiquetadas como `v*` |
 | `Beta` | Prelanzamiento / QA — candidatos a lanzamiento (*release candidates*) |
 | `Dev` | Integración continua — destino por defecto de las *pull requests* |
-| `feature/*`, `Android`, `iptv` | Ramas de trabajo — fusionadas en `Dev` mediante PR |
 
 Flujo: `feature/*` → `Dev` → `Beta` (RC) → `master` (lanzamiento etiquetado).
 

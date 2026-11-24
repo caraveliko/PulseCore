@@ -607,19 +607,19 @@ async fn write_nfo_and_artwork_if_enabled(
     if !is_nfo_artwork_enabled(state).await {
         return;
     }
-    if let Err(e) = std::fs::create_dir_all(target_dir) {
+    if let Err(e) = tokio::fs::create_dir_all(target_dir).await {
         warn!("[ORGANIZER] Failed creating dir for NFO/artwork '{}': {e}", target_dir.display());
         return;
     }
     let nfo_name = if is_movie { "movie.nfo" } else { "tvshow.nfo" };
     let nfo_path = target_dir.join(nfo_name);
-    if !nfo_path.exists() {
+    if !tokio::fs::try_exists(&nfo_path).await.unwrap_or(false) {
         let xml = if is_movie {
             build_movie_nfo_xml(item)
         } else {
             build_tvshow_nfo_xml(item)
         };
-        let _ = std::fs::write(&nfo_path, xml);
+        let _ = tokio::fs::write(&nfo_path, xml).await;
     }
 
     if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
@@ -641,22 +641,22 @@ async fn write_nfo_and_artwork_if_enabled(
             return;
         };
         if let Some(url) = poster_url {
-            if !poster_dest.exists() {
+            if !tokio::fs::try_exists(&poster_dest).await.unwrap_or(false) {
                 if let Ok(resp) = client.get(&url).send().await {
                     if resp.status().is_success() {
                         if let Ok(bytes) = resp.bytes().await {
-                            let _ = std::fs::write(&poster_dest, &bytes);
+                            let _ = tokio::fs::write(&poster_dest, &bytes).await;
                         }
                     }
                 }
             }
         }
         if let Some(url) = fanart_url {
-            if !fanart_dest.exists() {
+            if !tokio::fs::try_exists(&fanart_dest).await.unwrap_or(false) {
                 if let Ok(resp) = client.get(&url).send().await {
                     if resp.status().is_success() {
                         if let Ok(bytes) = resp.bytes().await {
-                            let _ = std::fs::write(&fanart_dest, &bytes);
+                            let _ = tokio::fs::write(&fanart_dest, &bytes).await;
                         }
                     }
                 }
@@ -791,7 +791,7 @@ impl MediaOrganizer {
                 && size < MAX_SAMPLE_VIDEO_BYTES
                 && (lower.contains("sample") || lower.contains("trailer") || lower.contains("rarbg.com"))
             {
-                let _ = std::fs::remove_file(completed_file_path);
+                let _ = tokio::fs::remove_file(completed_file_path).await;
                 info!(
                     "[ORGANIZER] Removed sample/trailer video clip '{}' ({} bytes)",
                     completed_file_path.display(),
@@ -1363,39 +1363,47 @@ impl MediaOrganizer {
                             }));
                         }
                     } else if candidate.is_dir() {
-                        // Escanear directorio en busca de archivos de vídeo
-                        if let Ok(entries) = std::fs::read_dir(&candidate) {
-                            for entry in entries.flatten() {
-                                let p = entry.path();
-                                if p.is_file() {
-                                    let is_video = p
-                                        .file_name()
-                                        .and_then(|n| n.to_str())
-                                        .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename);
-                                    if is_video {
-                                        if let Ok(Some(dest)) = Self::organize_download(state, &tor.info_hash, &p).await {
-                                            torrent_organized_any = true;
-                                            organized_files.push(json!({
-                                                "protocol": "torrent",
-                                                "downloadId": tor.info_hash,
-                                                "source": p.to_string_lossy(),
-                                                "target": dest.to_string_lossy()
-                                            }));
-                                        }
+                        // Escanear directorio en busca de archivos de vídeo sin bloquear el hilo de Tokio
+                        let cand_clone = candidate.clone();
+                        let video_files = tokio::task::spawn_blocking(move || {
+                            let mut out = Vec::new();
+                            if let Ok(entries) = std::fs::read_dir(&cand_clone) {
+                                for entry in entries.flatten() {
+                                    let p = entry.path();
+                                    if p.is_file()
+                                        && p.file_name()
+                                            .and_then(|n| n.to_str())
+                                            .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename)
+                                    {
+                                        out.push(p);
                                     }
                                 }
+                            }
+                            out
+                        })
+                        .await
+                        .unwrap_or_default();
+                        for p in video_files {
+                            if let Ok(Some(dest)) = Self::organize_download(state, &tor.info_hash, &p).await {
+                                torrent_organized_any = true;
+                                organized_files.push(json!({
+                                    "protocol": "torrent",
+                                    "downloadId": tor.info_hash,
+                                    "source": p.to_string_lossy(),
+                                    "target": dest.to_string_lossy()
+                                }));
                             }
                         }
                     }
 
                     // Una vez que todos los archivos de vídeo en el torrent completado han sido organizados (o el candidato ya no existe),
                     // eliminar el torrent del motor y borrar cualquier archivo/carpeta restante en incoming.
-                    if torrent_organized_any || !candidate.exists() {
+                    if torrent_organized_any || !tokio::fs::try_exists(&candidate).await.unwrap_or(false) {
                         let _ = torrent_engine.delete(tor.id, true).await;
                         if candidate.is_dir() {
-                            let _ = std::fs::remove_dir_all(&candidate);
+                            let _ = tokio::fs::remove_dir_all(&candidate).await;
                         } else if candidate.is_file() {
-                            let _ = std::fs::remove_file(&candidate);
+                            let _ = tokio::fs::remove_file(&candidate).await;
                         }
                         info!(
                             "[ORGANIZER] Cleaned up completed torrent '{}' from incoming after organization",
@@ -1415,31 +1423,41 @@ impl MediaOrganizer {
         }
 
         for inc_dir in &incoming_dirs {
-            if inc_dir.is_dir() {
-                if let Ok(entries) = std::fs::read_dir(inc_dir) {
-                    for entry in entries.flatten() {
-                        let p = entry.path();
-                        if p.is_file() && !is_already_in_organized_library(state, &p).await {
-                            let size = p.metadata().map(|m| m.len()).unwrap_or(0);
-                            if size < MIN_STANDALONE_VIDEO_BYTES {
-                                continue;
+            let dir_clone = inc_dir.clone();
+            let standalone_candidates = tokio::task::spawn_blocking(move || {
+                let mut out = Vec::new();
+                if dir_clone.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(&dir_clone) {
+                        for entry in entries.flatten() {
+                            let p = entry.path();
+                            if p.is_file() {
+                                let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+                                if size >= MIN_STANDALONE_VIDEO_BYTES
+                                    && p.file_name()
+                                        .and_then(|n| n.to_str())
+                                        .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename)
+                                {
+                                    out.push(p);
+                                }
                             }
-                            let is_video = p
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .is_some_and(mule_network_policy::content_policy::is_allowed_video_filename);
-                            if is_video {
-                                let pseudo_id = format!("manual-{}", p.file_name().unwrap_or_default().to_string_lossy());
-                                if let Ok(Some(dest)) = Self::organize_download(state, &pseudo_id, &p).await {
-                                    organized_files.push(json!({
-                                        "protocol": "manual",
+                        }
+                    }
+                }
+                out
+            })
+            .await
+            .unwrap_or_default();
+
+            for p in standalone_candidates {
+                if !is_already_in_organized_library(state, &p).await {
+                    let pseudo_id = format!("manual-{}", p.file_name().unwrap_or_default().to_string_lossy());
+                    if let Ok(Some(dest)) = Self::organize_download(state, &pseudo_id, &p).await {
+                        organized_files.push(json!({
+                            "protocol": "manual",
                                         "downloadId": pseudo_id,
                                         "source": p.to_string_lossy(),
                                         "target": dest.to_string_lossy()
                                     }));
-                                }
-                            }
-                        }
                     }
                 }
             }

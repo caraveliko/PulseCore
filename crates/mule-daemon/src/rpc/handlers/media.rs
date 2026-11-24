@@ -176,23 +176,15 @@ pub async fn handle_media_get(
     };
 
     let episode_probes = if item.media_type == "tv" {
-        let probe_futs: Vec<_> = episodes
+        let targets: Vec<(String, std::path::PathBuf)> = episodes
             .iter()
             .filter_map(|ep| {
-                ep.file_path.as_deref().map(|fp| {
-                    let ep_id = ep.id.clone();
-                    let path = std::path::PathBuf::from(fp);
-                    async move {
-                        let probe = crate::services::media_probe::probe_video_file(&path).await;
-                        (ep_id, probe)
-                    }
-                })
+                ep.file_path
+                    .as_deref()
+                    .map(|fp| (ep.id.clone(), std::path::PathBuf::from(fp)))
             })
             .collect();
-        futures_util::future::join_all(probe_futs)
-            .await
-            .into_iter()
-            .collect::<std::collections::HashMap<_, _>>()
+        crate::services::media_probe::probe_video_files_bounded(targets).await
     } else {
         std::collections::HashMap::new()
     };

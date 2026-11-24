@@ -482,7 +482,7 @@ impl MediaCleaner {
                     report.bytes_freed += loser_size;
                     if !dry_run {
                         remove_companion_subtitles_sync(loser_path);
-                        let _ = std::fs::remove_file(loser_path);
+                        let _ = tokio::fs::remove_file(loser_path).await;
                         Self::purge_shared_file_by_path(state, &loser_str).await;
                         info!(
                             "[CLEANER] Deleted duplicate episode file: '{}' (kept '{}')",
@@ -670,7 +670,7 @@ impl MediaCleaner {
                 report.bytes_freed += loser_size;
                 if !dry_run {
                     remove_companion_subtitles_sync(loser_path);
-                    let _ = std::fs::remove_file(loser_path);
+                    let _ = tokio::fs::remove_file(loser_path).await;
                     Self::purge_shared_file_by_path(state, &loser_str).await;
                     info!(
                         "[CLEANER] Deleted duplicate movie file: '{}' (kept '{}')",
@@ -771,7 +771,7 @@ impl MediaCleaner {
                             report.incoming_cleaned.push(p.to_string_lossy().to_string());
                             report.bytes_freed += size;
                             if !dry_run {
-                                let _ = std::fs::remove_file(&p);
+                                let _ = tokio::fs::remove_file(&p).await;
                                 info!("[CLEANER] Removed orphaned temporary file: '{}' ({} bytes)", p.display(), size);
                             }
                         }

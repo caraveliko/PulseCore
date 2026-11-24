@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 const HEADER_PROBE_BYTES: usize = 256 * 1024;
 /// Número máximo de entradas en la caché de inspección de medios en memoria.
 const PROBE_CACHE_MAX_ENTRIES: usize = 1024;
+/// Límite máximo de sondas de vídeo concurrentes para no saturar CPU/NFS en Raspberry Pi.
+const MAX_CONCURRENT_MEDIA_PROBES: usize = 4;
 /// Umbrales de resolución de vídeo (ancho / alto).
 const UHD_MIN_WIDTH: u32 = 3200;
 const UHD_MIN_HEIGHT: u32 = 1800;
@@ -106,6 +108,26 @@ pub async fn probe_video_file(path: &Path) -> MediaProbeInfo {
     tokio::task::spawn_blocking(move || probe_video_file_sync(&path_buf))
         .await
         .unwrap_or_else(|_| fallback_from_filename(path))
+}
+
+/// Inspecciona un lote de archivos de vídeo limitando la concurrencia mediante un semáforo
+/// para evitar saturar el pool bloqueante o el montaje NFS en series con muchos episodios.
+pub async fn probe_video_files_bounded(
+    targets: Vec<(String, std::path::PathBuf)>,
+) -> HashMap<String, MediaProbeInfo> {
+    if targets.is_empty() {
+        return HashMap::new();
+    }
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_MEDIA_PROBES));
+    let futs = targets.into_iter().map(|(id, path)| {
+        let sem = std::sync::Arc::clone(&semaphore);
+        async move {
+            let _permit = sem.acquire_owned().await.ok();
+            let info = probe_video_file(&path).await;
+            (id, info)
+        }
+    });
+    futures_util::future::join_all(futs).await.into_iter().collect()
 }
 
 /// Versión síncrona de la inspección multimedia (utilizable directamente desde un contexto `spawn_blocking`).
@@ -591,6 +613,22 @@ mod tests {
         assert_eq!(parse_fps_milli("23.976"), Some(23_976));
         assert_eq!(parse_fps_milli("0/0"), None);
         assert_eq!(parse_fps_milli(""), None);
+    }
+
+    #[tokio::test]
+    async fn test_probe_video_files_bounded_returns_all_entries() {
+        let targets: Vec<(String, std::path::PathBuf)> = (1..=6)
+            .map(|idx| {
+                (
+                    format!("ep-{idx}"),
+                    std::path::PathBuf::from(format!("/nonexistent/Serie.S01E{idx:02}.1080p.Castellano.mkv")),
+                )
+            })
+            .collect();
+        let res = probe_video_files_bounded(targets).await;
+        assert_eq!(res.len(), 6);
+        assert_eq!(res["ep-1"].quality_tag, "1080p");
+        assert!(res["ep-6"].has_spanish_audio);
     }
 }
 
