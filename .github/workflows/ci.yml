@@ -7,7 +7,6 @@ on:
       - 'README.md'
       - 'docs/**'
       - 'wiki/**'
-      - 'Asset/**'
       - 'AGENTS.md'
       - 'GEMINI.md'
   pull_request:
@@ -16,7 +15,6 @@ on:
       - 'README.md'
       - 'docs/**'
       - 'wiki/**'
-      - 'Asset/**'
       - 'AGENTS.md'
       - 'GEMINI.md'
 

@@ -12,7 +12,6 @@ on:
       - 'README.md'
       - 'docs/**'
       - 'wiki/**'
-      - 'Asset/**'
       - 'AGENTS.md'
       - 'GEMINI.md'
   workflow_dispatch:

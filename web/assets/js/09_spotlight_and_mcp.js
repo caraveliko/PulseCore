@@ -289,7 +289,7 @@ function updateMcpSnippets() {
   if (!codeEl) return;
 
   const profile = profileEl ? profileEl.value : 'safe';
-  const host = window.location.hostname || '192.168.1.166';
+  const host = window.location.hostname || '127.0.0.1';
   const token = window.mcpAuthToken || 'TU_TOKEN_AUTH';
   const rpcUrl = `ws://${host}:4660/rpc`;
 
@@ -298,7 +298,7 @@ function updateMcpSnippets() {
     const cfg = {
       mcpServers: {
         emulerust: {
-          command: "/home/caraveliko/.local/bin/mule-mcp",
+          command: "~/.local/bin/mule-mcp",
           args: [
             "--url", rpcUrl,
             "--token", token,
@@ -313,7 +313,7 @@ function updateMcpSnippets() {
     const cfg = {
       mcpServers: {
         emulerust: {
-          command: "/home/caraveliko/.local/bin/mule-mcp",
+          command: "~/.local/bin/mule-mcp",
           args: [
             "--url", rpcUrl,
             "--token", token,
@@ -328,7 +328,7 @@ function updateMcpSnippets() {
     const cfg = {
       mcpServers: {
         emulerust: {
-          command: "/home/caraveliko/.local/bin/mule-mcp",
+          command: "~/.local/bin/mule-mcp",
           args: [
             "--url", rpcUrl,
             "--token", token,

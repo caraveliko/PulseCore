@@ -1389,7 +1389,7 @@ document.addEventListener('keydown', (ev) => {
 let schedulerSeconds = 0;
 
 client.on('connected', () => {
-  const host = window.location.hostname || '192.168.1.166';
+  const host = window.location.hostname || '127.0.0.1';
   if (document.getElementById('arr-host-input')) {
     document.getElementById('arr-host-input').value = host;
   }

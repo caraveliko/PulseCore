@@ -1,7 +1,7 @@
 # 📚 Wiki Oficial de Pulse Core — Manual de Usuario y Referencia Técnica
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/caraveliko/PulseCore/master/Asset/pulse-core-logo.svg" alt="Pulse Core logo" width="220"/>
+  <img src="https://raw.githubusercontent.com/caraveliko/PulseCore/master/docs/assets/pulse-core-logo.svg" alt="Pulse Core logo" width="220"/>
   <br/>
   <strong>Manual Integral de Usuario, Administración de Servidores y Referencia Protocolaria</strong>
 </div>

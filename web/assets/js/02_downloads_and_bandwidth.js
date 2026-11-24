@@ -1490,7 +1490,7 @@ function showSmartTooltip(targetEl, type, id) {
               <div class="stt-desc">Descarga completada y verificada al 100%. Para no saturar los discos ni la CPU del Synology DS212j, el gestor transfiere los archivos al NAS de uno en uno en cola FIFO secuencial.</div>
               <div class="stt-grid">
                 <span class="stt-lbl">Ubicación actual:</span><span class="stt-val">SSD Local rápido (/tmp/staging)</span>
-                <span class="stt-lbl">Destino NAS:</span><span class="stt-val">/home/caraveliko/amule/incoming</span>
+                <span class="stt-lbl">Destino NAS:</span><span class="stt-val">Carpeta de destino configurada</span>
                 <span class="stt-lbl">Política I/O:</span><span class="stt-val">FIFO secuencial (1 copia a la vez)</span>
                 <span class="stt-lbl">Turno:</span><span class="stt-val" style="color: #38bdf8;">Iniciará al terminar la transferencia actual</span>
               </div>
@@ -1500,7 +1500,7 @@ function showSmartTooltip(targetEl, type, id) {
               <div class="stt-header" style="color: #f59e0b;">⏳ Copiando a NAS (Transferencia NFS Activa)</div>
               <div class="stt-desc">Descarga completada y verificada al 100%. Transfiriendo archivo final al volumen del Synology DS212j a velocidad segura de ~8 MB/s.</div>
               <div class="stt-grid">
-                <span class="stt-lbl">Destino NFS:</span><span class="stt-val">/home/caraveliko/amule/incoming</span>
+                <span class="stt-lbl">Destino NFS:</span><span class="stt-val">Carpeta de destino configurada</span>
                 <span class="stt-lbl">Protocolo:</span><span class="stt-val">NFSv3 secuencial (seguro)</span>
                 <span class="stt-lbl">Protección:</span><span class="stt-val">~8 MB/s (CPU Marvell Kirkwood)</span>
                 <span class="stt-lbl">Estado slot:</span><span class="stt-val" style="color: #22c55e;">Ocupando slot exclusivo de escritura NAS</span>

@@ -784,8 +784,8 @@ async function refreshShares() {
 async function importNasShares() {
   try {
     const res = await client.call('shares.importKnownMet', {
-      metPath: '/home/caraveliko/.aMule/known.met',
-      directory: '/home/caraveliko/cineseries',
+      metPath: '~/.aMule/known.met',
+      directory: '~/media',
       verify: false
     });
     showToast(`NAS sincronizado: ${res.imported || 0} importados, ${res.enriched || 0} enriquecidos (${res.scanned_files || 0} archivos)`, 'success', '✅');

@@ -593,7 +593,7 @@ document.getElementById('btn-update-servers-url').onclick = async () => {
   }
 };
 document.getElementById('btn-import-amule-servers').onclick = async () => {
-  const path = prompt('Ruta al archivo server.met de aMule:', '/home/caraveliko/.aMule/server.met');
+  const path = prompt('Ruta al archivo server.met de aMule:', '~/.aMule/server.met');
   if (!path) return;
   try {
     const res = await client.call('servers.importMet', { filePath: path });
@@ -622,7 +622,7 @@ document.getElementById('btn-bootstrap-kad').onclick = async () => {
   }
 };
 document.getElementById('btn-import-amule-kad').onclick = async () => {
-  const path = prompt('Ruta al archivo nodes.dat de aMule:', '/home/caraveliko/.aMule/nodes.dat');
+  const path = prompt('Ruta al archivo nodes.dat de aMule:', '~/.aMule/nodes.dat');
   if (!path) return;
   try {
     const res = await client.call('kad.importNodesDat', { path });

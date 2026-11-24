@@ -15,7 +15,7 @@ SERVICE_TEMPLATE="${REPO_ROOT}/scripts/mule-daemon.service"
 MODE=""
 HOST="127.0.0.1"
 PORT="4660"
-SSH_USER="caraveliko"
+SSH_USER="${MULE_SSH_USER:-${USER:-usuario}}"
 BINARY_PATH=""
 AUTH_TOKEN="${MULE_AUTH_TOKEN:-}"
 USE_SSH=false
@@ -35,9 +35,9 @@ Modos de operación (elegir uno):
   --install-service     Sincroniza solo la unidad systemd de usuario (~/.config/systemd/user)
 
 Opciones:
-  --host <ip_o_host>    Dirección del demonio (por defecto: 127.0.0.1 en --local, 192.168.1.166 en --rpi)
+  --host <ip_o_host>    Dirección del demonio (por defecto: 127.0.0.1 en --local, o MULE_RPI_HOST en --rpi)
   --port <puerto>       Puerto HTTP del demonio (por defecto: 4660)
-  --user <usuario>      Usuario SSH en destino (por defecto: caraveliko)
+  --user <usuario>      Usuario SSH en destino (por defecto: MULE_SSH_USER o $USER)
   --token <token>       Token Bearer de autenticación (si se omite, lee ~/.mule/auth.token o MULE_AUTH_TOKEN)
   --ssh                 Despliegue/rollback por SSH (crea .old, sincroniza servicio systemd y reinicia)
   --no-restart          Instala o revierte sin reiniciar automáticamente el demonio
@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
     --rpi)
       MODE="rpi"
       if [[ "${HOST_EXPLICITO}" == false ]]; then
-        HOST="192.168.1.166"
+        HOST="${MULE_RPI_HOST:-}"
       fi
       shift
       ;;
@@ -277,6 +277,11 @@ fi
 if [[ -z "${MODE}" ]]; then
   echo "Error: debes indicar --local, --rpi, --binary <ruta>, --rollback o --install-service." >&2
   mostrar_ayuda
+  exit 1
+fi
+
+if [[ "${MODE}" == "rpi" && -z "${HOST}" ]]; then
+  echo "Error: en modo --rpi debes indicar --host <ip_o_host> o definir MULE_RPI_HOST." >&2
   exit 1
 fi
 

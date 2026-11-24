@@ -149,7 +149,7 @@ El daemon integra de forma nativa las funcionalidades de **Prowlarr**, **Radarr*
 - `mule-daemon::services::subtitles`: cliente REST de OpenSubtitles (VLSub), cálculo de hash de 64 bits (`first 64KB + last 64KB + size`), descompresión `.gz` y normalización UTF-8 de archivos acompañantes (`.es.srt`).
 
 ### Reglas de compilación cruzada (`aarch64` / Raspberry Pi)
-- **Directorio de ejecución**: ejecutar siempre `cargo` desde la raíz `/home/caraveliko/modern-mule/eMule-Rust` para cargar `.cargo/config.toml`.
+- **Directorio de ejecución**: ejecutar siempre `cargo` desde la raíz del repositorio para cargar `.cargo/config.toml`.
 - **Objetivo**: `--target aarch64-unknown-linux-gnu`.
-- **Destino de despliegue**: `caraveliko@192.168.1.166:~/.local/bin/mule-daemon`.
-- **Persistencia**: requiere `loginctl enable-linger caraveliko` para la persistencia de `systemd` tras cerrar sesión.
+- **Destino de despliegue**: `<usuario>@<ip-raspberry>:~/.local/bin/mule-daemon`.
+- **Persistencia**: requiere `loginctl enable-linger <usuario>` para la persistencia de `systemd` tras cerrar sesión.

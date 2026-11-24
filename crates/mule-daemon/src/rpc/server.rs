@@ -595,7 +595,7 @@ mod tests {
         assert!(is_trusted_lan_or_loopback_ip("127.0.0.1".parse().unwrap()));
         assert!(is_trusted_lan_or_loopback_ip("::1".parse().unwrap()));
         assert!(is_trusted_lan_or_loopback_ip(
-            "192.168.1.166".parse().unwrap()
+            "192.168.1.50".parse().unwrap()
         ));
         assert!(is_trusted_lan_or_loopback_ip("10.0.0.5".parse().unwrap()));
         assert!(is_trusted_lan_or_loopback_ip(
@@ -612,7 +612,7 @@ mod tests {
     fn test_dns_rebinding_host_guard() {
         assert!(is_allowed_host_header("localhost:4660"));
         assert!(is_allowed_host_header("127.0.0.1:4660"));
-        assert!(is_allowed_host_header("192.168.1.166:4660"));
+        assert!(is_allowed_host_header("192.168.1.50:4660"));
         assert!(is_allowed_host_header("raspberry:4660"));
         assert!(is_allowed_host_header("raspberry.local:4660"));
         // Los dominios externos de DNS Rebinding deben ser bloqueados
@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_csrf_origin_guard() {
-        assert!(is_allowed_origin_header("http://192.168.1.166:4660"));
+        assert!(is_allowed_origin_header("http://192.168.1.50:4660"));
         assert!(is_allowed_origin_header("http://localhost:4660"));
         assert!(is_allowed_origin_header("null"));
         assert!(!is_allowed_origin_header("https://malicious-site.com"));

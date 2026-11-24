@@ -35,7 +35,7 @@
 | `docker-compose.yml` | Orquestación Compose con volumen único para *hardlinks* y perfiles de red |
 | `docker/Dockerfile.ci` | Imagen runtime ligera para publicaciones multi-arquitectura en CI |
 | `docker/entrypoint.sh` | Punto de entrada del contenedor con soporte `PUID`/`PGID` |
-| `Asset/pulse-core-logo.svg` | Logotipo vectorial oficial de Pulse Core |
+| `docs/assets/pulse-core-logo.svg` | Logotipo vectorial oficial de Pulse Core |
 | `web/index.html` | Interfaz web integrada (WebUI) servida por `mule-daemon` |
 | `wiki/` | Documentación de usuario para la Wiki de GitHub |
 

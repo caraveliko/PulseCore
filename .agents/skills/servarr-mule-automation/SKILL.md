@@ -20,23 +20,23 @@ La cadena de herramientas de compilación cruzada para `aarch64-unknown-linux-gn
 
 ```bash
 # Cambiar SIEMPRE de directorio a la raíz del workspace antes de ejecutar comandos cargo:
-cd /home/caraveliko/modern-mule/eMule-Rust
+cd <ruta-del-repositorio>
 
 # Compilar binario de lanzamiento para Raspberry Pi (aarch64)
 cargo build -p mule-daemon --release --target aarch64-unknown-linux-gnu
 ```
 
 ### Despliegue remoto y gestión del servicio
-- **Host de destino**: Raspberry Pi (`192.168.1.166`, usuario `caraveliko`)
-- **Ruta de destino remota**: `/home/caraveliko/.local/bin/mule-daemon`
+- **Host de destino**: Raspberry Pi (`<ip-raspberry>`, usuario `<usuario>`)
+- **Ruta de destino remota**: `~/.local/bin/mule-daemon`
 - **Script de despliegue**:
 ```bash
-scp target/aarch64-unknown-linux-gnu/release/mule-daemon caraveliko@192.168.1.166:~/.local/bin/
-ssh caraveliko@192.168.1.166 "systemctl --user restart mule-daemon.service"
+scp target/aarch64-unknown-linux-gnu/release/mule-daemon <usuario>@<ip-raspberry>:~/.local/bin/
+ssh <usuario>@<ip-raspberry> "systemctl --user restart mule-daemon.service"
 ```
 - **Persistencia del servicio**:
   Asegurarse de que la persistencia de usuario (*linger*) esté habilitada para que `mule-daemon` siga ejecutándose tras cerrar la sesión SSH:
-  `loginctl enable-linger caraveliko`
+  `loginctl enable-linger <usuario>`
 
 ---
 
