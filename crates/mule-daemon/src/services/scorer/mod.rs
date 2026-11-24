@@ -532,7 +532,7 @@ pub fn apply_strict_castilian_filter(releases: &mut [ScoredRelease]) {
                 r.is_rejected = true;
                 r.score = STRICT_CASTILIAN_REJECTED_SCORE;
                 r.rejection_reason = Some(format!(
-                    "Descartado por filtro estricto de Castellano de España (idioma detectado: {})",
+                    "Descartado por filtro de audio verificado (idioma detectado: {})",
                     r.language
                 ));
             }

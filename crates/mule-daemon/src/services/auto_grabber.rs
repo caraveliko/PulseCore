@@ -2375,7 +2375,7 @@ impl AutoGrabber {
                 }
 
                 let pack_msg = format!(
-                    "Reemplazo Castellano T.{s_num:02}: '{}' [{} · {} · {} pts]",
+                    "Sustitución verificada T.{s_num:02}: '{}' [{} · {} · {} pts]",
                     best_pack.title, best_pack.quality, best_pack.language, best_pack.score
                 );
                 let show_diag = ag_state.diagnostics.entry(item.id.clone()).or_default();
@@ -2445,7 +2445,7 @@ impl AutoGrabber {
             return Ok(json!({
                 "success": false,
                 "mode": "auto",
-                "message": "No se encontró ninguna alternativa verificada en Castellano de España para esta temporada. Los archivos actuales se mantienen intactos.",
+                "message": "No se encontró ninguna alternativa con audio verificado para esta temporada. Los archivos actuales se mantienen intactos.",
                 "candidates": [],
                 "blacklistedCount": blacklisted_count,
             }));
@@ -2497,7 +2497,7 @@ impl AutoGrabber {
             if let Some(diag) = ag_state.diagnostics.get_mut(target_id) {
                 diag.last_status = "language_failover".to_string();
                 diag.summary_message = format!(
-                    "Cambio a Castellano: '{}' [{} · {} · {} pts]",
+                    "Sustitución verificada: '{}' [{} · {} · {} pts]",
                     best.title, best.quality, best.language, best.score
                 );
             }
@@ -2524,14 +2524,14 @@ impl AutoGrabber {
         diag.last_search_ms = now;
         diag.last_status = "no_castilian_alternative".to_string();
         diag.summary_message =
-            "Sin alternativa verificada en Castellano de España; se conserva el archivo actual."
+            "Sin alternativa con audio verificado; se conserva el archivo actual."
                 .to_string();
         Self::save_state(state, &ag_state).await;
 
         Ok(json!({
             "success": false,
             "mode": "auto",
-            "message": "No se encontró ninguna alternativa verificada en Castellano de España. El archivo actual se mantiene intacto.",
+            "message": "No se encontró ninguna alternativa con audio verificado. El archivo actual se mantiene intacto.",
             "candidates": [],
             "blacklistedCount": blacklisted_count,
         }))
