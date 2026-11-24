@@ -24,7 +24,7 @@
 
 > [![Aviso Importante](https://img.shields.io/badge/AVISO-IMPORTANTE-8a2be2.svg)](README.md)
 >
-> **Desarrollo técnico riguroso:** Pulse Core es una reimplementación limpia creada en simbiosis entre ingeniería humana experta y agentes de IA avanzados. La totalidad del código, los comentarios y la documentación están redactados en **español de España**, siguiendo estándares inflexibles de seguridad de memoria en Rust: sin pánicos en producción, sin advertencias del compilador (`-D warnings`), con fidelidad milimétrica a las fuentes de eMule 0.72a —complementada con la capa criptográfica moderna `PC26`— y suites de prueba consolidadas que se ejecutan 100 % sin conexión a Internet.
+> **Ingeniería dirigida por humano, asistida por IA:** Pulse Core es un proyecto concebido, diseñado, dirigido y validado en entornos reales por su autor, utilizando agentes de IA como herramienta de programación asistida bajo reglas estrictas ([`AGENTS.md`](AGENTS.md)) y registros de decisiones de arquitectura ([`docs/ed2k/decisions/`](docs/ed2k/decisions/)). Ningún cambio entra sin pasar revisión, pruebas reales en hardware y validación automatizada (`smart_test.py` + `clippy -D warnings`). Hello Khaler
 
 El cliente original de eMule nació en 2002 sobre C++ y MFC para Windows de 32 bits, sufriendo los bloqueos de interfaz y las fugas de memoria típicas de la época. **Pulse Core** traslada toda esa herencia a la era moderna: un único binario ligero y asíncrono (`mule-daemon`) basado en **Tokio** y **Axum** que unifica los protocolos **eD2K**, la red DHT **Kademlia de 128 bits** y enjambres **Torrent** en un mismo bucle de eventos sin bloqueo.
 
