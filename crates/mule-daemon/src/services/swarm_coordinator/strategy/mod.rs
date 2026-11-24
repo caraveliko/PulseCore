@@ -264,8 +264,9 @@ impl SwarmCoordinator {
                     );
                     let temp_path_for_hashing = temp_path.clone();
                     tokio::task::spawn_blocking(move || {
-                        let mut file = std::fs::File::open(&temp_path_for_hashing)?;
-                        mule_format::ed2k::hash_reader(&mut file)
+                        let file = std::fs::File::open(&temp_path_for_hashing)?;
+                        let mut reader = mule_core::EvictingFileReader::new(file);
+                        mule_format::ed2k::hash_reader(&mut reader)
                     })
                     .await
                 };

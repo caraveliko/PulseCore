@@ -130,6 +130,7 @@ impl PartFile {
     /// Vuelca los búferes no escritos al disco físico.
     pub fn flush(&mut self) -> Result<(), CoreError> {
         self.file.sync_data()?;
+        super::fadvise::advise_dontneed_all(&self.file);
         self.io_stats.sync_ops += 1;
         Ok(())
     }

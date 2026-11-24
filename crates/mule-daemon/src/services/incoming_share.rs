@@ -101,8 +101,9 @@ pub async fn scan_download_dir_shares(
         };
         let path_for_hash = path.clone();
         let hashed = match tokio::task::spawn_blocking(move || {
-            let mut f = std::fs::File::open(&path_for_hash)?;
-            mule_format::ed2k::hash_reader(&mut f)
+            let f = std::fs::File::open(&path_for_hash)?;
+            let mut reader = mule_core::EvictingFileReader::new(f);
+            mule_format::ed2k::hash_reader(&mut reader)
         })
         .await
         {

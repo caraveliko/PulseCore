@@ -205,8 +205,9 @@ pub async fn run_ed2k_download(
         state.broadcast_download_update(snap);
     }
 
-    let mut file = std::fs::File::open(&temp_path)?;
-    let computed_result = mule_format::ed2k::hash_reader(&mut file)?;
+    let file = std::fs::File::open(&temp_path)?;
+    let mut reader = mule_core::EvictingFileReader::new(file);
+    let computed_result = mule_format::ed2k::hash_reader(&mut reader)?;
 
     client.close().await;
 

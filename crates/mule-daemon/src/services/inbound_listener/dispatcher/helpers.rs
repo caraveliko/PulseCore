@@ -216,8 +216,9 @@ impl InboundListenerService {
             Some(sf) if sf.enabled && !sf.is_partial && !sf.file_path.is_empty() => {
                 let path = sf.file_path.clone();
                 let res = tokio::task::spawn_blocking(move || {
-                    let mut f = std::fs::File::open(&path)?;
-                    mule_format::ed2k::hash_reader(&mut f)
+                    let f = std::fs::File::open(&path)?;
+                    let mut reader = mule_core::EvictingFileReader::new(f);
+                    mule_format::ed2k::hash_reader(&mut reader)
                 })
                 .await;
                 match res {

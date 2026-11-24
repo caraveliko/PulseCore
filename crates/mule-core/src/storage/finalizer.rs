@@ -86,6 +86,7 @@ where
 {
     const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB alineados con el wsize de NFS
     let mut src = std::fs::File::open(src_path)?;
+    super::fadvise::advise_sequential(&src);
     let total_bytes = src.metadata().map(|m| m.len()).unwrap_or(0);
     let mut dst = std::fs::OpenOptions::new()
         .write(true)
@@ -95,6 +96,7 @@ where
 
     let mut buf = vec![0u8; CHUNK_SIZE];
     let mut total_copied = 0u64;
+    let mut last_evicted = 0u64;
     let mut last_notified = 0u64;
     on_progress(0, total_bytes);
 
@@ -105,6 +107,12 @@ where
         }
         std::io::Write::write_all(&mut dst, &buf[..n])?;
         total_copied += n as u64;
+        if total_copied.saturating_sub(last_evicted) >= super::fadvise::FADVISE_WINDOW_BYTES {
+            let evict_len = total_copied - last_evicted;
+            super::fadvise::advise_dontneed_range(&src, last_evicted, evict_len);
+            super::fadvise::advise_dontneed_range(&dst, last_evicted, evict_len);
+            last_evicted = total_copied;
+        }
         if total_copied.saturating_sub(last_notified) >= COPY_PROGRESS_NOTIFY_INTERVAL_BYTES {
             last_notified = total_copied;
             on_progress(total_copied, total_bytes);
@@ -112,6 +120,8 @@ where
     }
 
     dst.sync_data()?;
+    super::fadvise::advise_dontneed_all(&src);
+    super::fadvise::advise_dontneed_all(&dst);
     on_progress(total_copied, total_bytes);
     Ok(total_copied)
 }

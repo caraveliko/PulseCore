@@ -72,16 +72,7 @@ pub struct NasTransferProgress {
     pub fs_kind: String,
 }
 
-#[cfg(target_os = "linux")]
-mod fadvise {
-    use std::os::unix::io::RawFd;
-    pub const POSIX_FADV_SEQUENTIAL: i32 = 2;
-    pub const POSIX_FADV_DONTNEED: i32 = 4;
-
-    extern "C" {
-        pub fn posix_fadvise(fd: RawFd, offset: i64, len: i64, advice: i32) -> i32;
-    }
-}
+use mule_core::storage::fadvise;
 
 /// Transfiere un archivo hacia su destino final con calibración protocolaria:
 /// - Bloques de 128 KiB ajustados a `wsize` para NFS (evita la fragmentación RPC).
@@ -111,18 +102,7 @@ where
         .truncate(true)
         .open(tgt)?;
 
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        unsafe {
-            let _ = fadvise::posix_fadvise(
-                src_file.as_raw_fd(),
-                0,
-                0,
-                fadvise::POSIX_FADV_SEQUENTIAL,
-            );
-        }
-    }
+    fadvise::advise_sequential(&src_file);
 
     let chunk_size = if fs_kind.is_network() {
         NFS_CHUNK_SIZE
@@ -147,6 +127,7 @@ where
 
     let mut buf = vec![0u8; chunk_size];
     let mut transferred = 0u64;
+    let mut last_evicted = 0u64;
     let t_start = std::time::Instant::now();
     let mut last_progress_time = std::time::Instant::now();
 
@@ -157,6 +138,13 @@ where
         }
         std::io::Write::write_all(&mut tgt_file, &buf[..n])?;
         transferred += n as u64;
+
+        if transferred.saturating_sub(last_evicted) >= fadvise::FADVISE_WINDOW_BYTES {
+            let evict_len = transferred - last_evicted;
+            fadvise::advise_dontneed_range(&src_file, last_evicted, evict_len);
+            fadvise::advise_dontneed_range(&tgt_file, last_evicted, evict_len);
+            last_evicted = transferred;
+        }
 
         // Regulación de tasa (pacing)
         if target_rate_bps > 0 {
@@ -198,6 +186,8 @@ where
 
     // Persistencia física en los discos remotos o locales
     tgt_file.sync_data()?;
+    fadvise::advise_dontneed_all(&src_file);
+    fadvise::advise_dontneed_all(&tgt_file);
 
     if let Some(ref mut cb) = progress_cb {
         let elapsed_secs = t_start.elapsed().as_secs_f64();
@@ -213,19 +203,6 @@ where
             percent: 100.0,
             fs_kind: fs_kind.as_str().to_string(),
         });
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        unsafe {
-            let _ = fadvise::posix_fadvise(
-                src_file.as_raw_fd(),
-                0,
-                0,
-                fadvise::POSIX_FADV_DONTNEED,
-            );
-        }
     }
 
     debug!(

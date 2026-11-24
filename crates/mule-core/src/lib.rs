@@ -24,6 +24,7 @@ pub use persistence::{
 };
 pub use ranges::RangeSet;
 pub use storage::{
-    finalize_file, finalize_file_with_progress, AllocationPolicy, CollisionStrategy, PartFile,
+    finalize_file, finalize_file_with_progress, AllocationPolicy, CollisionStrategy,
+    EvictingFileReader, PartFile,
 };
 pub use verification::{verify_aich_block, verify_part_hash};
