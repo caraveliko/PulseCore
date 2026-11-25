@@ -151,7 +151,7 @@ pub fn get_download_detail(
     id: &Uuid,
 ) -> Option<DownloadDetail> {
     let act = active.get(id)?;
-    let snapshot = act.snapshot();
+    let snapshot = act.snapshot_brief();
 
     let verified_parts_set: std::collections::HashSet<u32> = db
         .get_verified_parts(id)

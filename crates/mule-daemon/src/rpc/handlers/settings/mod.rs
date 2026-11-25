@@ -105,136 +105,67 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
 ];
 
 pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError> {
-    let (
-        custom_dir,
-        retention_days,
-        max_global,
-        max_per_file,
-        min_per_file,
-        max_active_downloads,
-        share_dir,
-        nickname,
-        obf_enabled,
-        obf_required,
-        max_conn,
-        conn_per_min,
-        max_queue,
-    ) = {
-        let dls = state.downloads.lock().await;
-        let dir = dls.get_setting("default_download_directory")?;
-        let ret = dls
-            .get_setting("history_retention_days")?
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(30);
-        let max_g = dls
-            .get_setting("max_global_download_peers")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(state.config.max_global_download_peers);
-        let max_f = dls
-            .get_setting("max_peers_per_download")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(state.config.max_peers_per_download);
-        let min_f = dls
-            .get_setting("min_peers_per_download")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(state.config.min_peers_per_download);
-        let max_active_dls = dls
-            .get_setting("max_active_downloads")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(30);
-        let share = dls
-            .get_setting("share_download_dir")?
-            .map(|v| !matches!(v.as_str(), "0" | "false" | "off"))
-            .unwrap_or(true);
-        let nickname = dls
-            .get_setting("nickname")?
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| "eMuleRust".to_string());
-        let bool_setting = |key: &str, default: bool| {
-            dls.get_setting(key)
-                .ok()
-                .flatten()
-                .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "on"))
-                .unwrap_or(default)
-        };
-        let obf_enabled = bool_setting("obfuscation_enabled", state.config.obfuscation_enabled);
-        let obf_required = bool_setting("obfuscation_required", state.config.obfuscation_required);
-        let max_conn = dls
-            .get_setting("max_connections")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .map(|v| v.clamp(1, mule_network_policy::MAX_PEER_CONNECTIONS_CAP))
-            .unwrap_or(state.network_policy.budgets().max_active_peer_connections);
-        let conn_per_min = dls
-            .get_setting("max_conn_per_min")?
-            .and_then(|s| s.parse::<u32>().ok())
-            .map(|v| v.clamp(1, 1200))
-            .unwrap_or(state.network_policy.budgets().rate_limit_per_min);
-        let max_queue = dls
-            .get_setting("max_upload_queue")?
-            .and_then(|s| s.parse::<usize>().ok())
-            .map(|v| v.clamp(10, 5000))
-            .unwrap_or(crate::services::upload_queue::MAX_UPLOAD_QUEUE);
-        (
-            dir,
-            ret,
-            max_g,
-            max_f,
-            min_f,
-            max_active_dls,
-            share,
-            nickname,
-            obf_enabled,
-            obf_required,
-            max_conn,
-            conn_per_min,
-            max_queue,
-        )
+    let all_settings = state.downloads.lock().await.get_all_settings()?;
+    let get_str = |key: &str| -> Option<&str> { all_settings.get(key).map(|s| s.as_str()) };
+    let get_bool = |key: &str, default: bool| -> bool {
+        get_str(key)
+            .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "on"))
+            .unwrap_or(default)
     };
+    let get_u64 = |key: &str, default: u64| -> u64 {
+        get_str(key)
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .unwrap_or(default)
+    };
+    let get_usize = |key: &str| -> Option<usize> {
+        get_str(key).and_then(|s| s.trim().parse::<usize>().ok())
+    };
+
+    let custom_dir = get_str("default_download_directory").map(str::to_string);
+    let retention_days = get_str("history_retention_days")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(30);
+    let max_global = get_usize("max_global_download_peers")
+        .unwrap_or(state.config.max_global_download_peers);
+    let max_per_file = get_usize("max_peers_per_download")
+        .unwrap_or(state.config.max_peers_per_download);
+    let min_per_file = get_usize("min_peers_per_download")
+        .unwrap_or(state.config.min_peers_per_download);
+    let max_active_downloads = get_usize("max_active_downloads").unwrap_or(30);
+    let share_dir = get_str("share_download_dir")
+        .map(|v| !matches!(v, "0" | "false" | "off"))
+        .unwrap_or(true);
+    let nickname = get_str("nickname")
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("eMuleRust")
+        .to_string();
+    let obf_enabled = get_bool("obfuscation_enabled", state.config.obfuscation_enabled);
+    let obf_required = get_bool("obfuscation_required", state.config.obfuscation_required);
+    let max_conn = get_usize("max_connections")
+        .map(|v| v.clamp(1, mule_network_policy::MAX_PEER_CONNECTIONS_CAP))
+        .unwrap_or(state.network_policy.budgets().max_active_peer_connections);
+    let conn_per_min = get_str("max_conn_per_min")
+        .and_then(|s| s.parse::<u32>().ok())
+        .map(|v| v.clamp(1, 1200))
+        .unwrap_or(state.network_policy.budgets().rate_limit_per_min);
+    let max_queue = get_usize("max_upload_queue")
+        .map(|v| v.clamp(10, 5000))
+        .unwrap_or(crate::services::upload_queue::MAX_UPLOAD_QUEUE);
+
     let uss_enabled = state.uss.config().enabled;
     let upnp_enabled = state.upnp.snapshot().await.enabled;
-    let (cap_dl, cap_ul) = {
-        let dls = state.downloads.lock().await;
-        (
-            dls.get_setting("capacity_download_kbs")?
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0),
-            dls.get_setting("capacity_upload_kbs")?
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0),
-        )
-    };
+    let cap_dl = get_u64("capacity_download_kbs", 0);
+    let cap_ul = get_u64("capacity_upload_kbs", 0);
     let current_dir = custom_dir
         .as_ref()
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| state.config.default_download_dir.clone());
 
     let bools = {
-        let dls = state.downloads.lock().await;
-        let read = |key: &str, default: bool| {
-            dls.get_setting(key)
-                .ok()
-                .flatten()
-                .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "on"))
-                .unwrap_or(default)
-        };
-        let u64_setting = |key: &str| {
-            dls.get_setting(key)
-                .ok()
-                .flatten()
-                .and_then(|s| s.trim().parse::<u64>().ok())
-                .unwrap_or(0)
-        };
-        let min_up = dls
-            .get_setting("min_upload_kbs")?
-            .and_then(|s| s.parse::<u64>().ok())
-            // eMule 0.72a `MinUpload` default = 1 Ko/s (clamped >= 1).
-            .unwrap_or(1);
+        let min_up = get_u64("min_upload_kbs", 1);
 
         let default_local_media = state.config.default_download_dir.join("media");
-        let nas_root_persisted = dls
-            .get_setting("nas_root_dir")
-            .ok()
-            .flatten()
+        let nas_root_persisted = get_str("nas_root_dir")
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
         let env_nas = (state.config.nas_root_dir != default_local_media
@@ -248,12 +179,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         let nas_root_active = !nas_root_dir_out.is_empty();
 
         let custom_media_dir = |key: &str, subdir: &str, cfg_dir: &std::path::Path| -> String {
-            let persisted = dls
-                .get_setting(key)
-                .ok()
-                .flatten()
-                .map(|s| s.trim().to_string())
-                .unwrap_or_default();
+            let persisted = get_str(key).map(|s| s.trim().to_string()).unwrap_or_default();
             if !persisted.is_empty() {
                 if nas_root_active
                     && state.is_default_local_media_subdir(
@@ -275,127 +201,91 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             String::new()
         };
 
-    let mut base_settings = json!({
+        let mut base_settings = json!({
             "minUploadKbs": min_up,
-            "smartSlotTargetKbs": u64_setting("smart_slot_target_kbs"),
-            "ichEnabled": read("ich_enabled", true),
-            "rememberCancelled": read("remember_cancelled", true),
-            "rememberDownloaded": read("remember_downloaded", true),
-            "serverReconnect": read("server_reconnect", true),
-            "serverAutoconnect": read("server_autoconnect", false),
-            "serverAutoremoveDead": read("server_autoremove_dead", true),
-            "serverAutoupdateList": read("server_autoupdate_list", false),
-            "safeConnect": read("safe_connect", false),
+            "smartSlotTargetKbs": get_u64("smart_slot_target_kbs", 0),
+            "ichEnabled": get_bool("ich_enabled", true),
+            "rememberCancelled": get_bool("remember_cancelled", true),
+            "rememberDownloaded": get_bool("remember_downloaded", true),
+            "serverReconnect": get_bool("server_reconnect", true),
+            "serverAutoconnect": get_bool("server_autoconnect", false),
+            "serverAutoremoveDead": get_bool("server_autoremove_dead", true),
+            "serverAutoupdateList": get_bool("server_autoupdate_list", false),
+            "safeConnect": get_bool("safe_connect", false),
             // eMule `DAPPref`/`UAPPref` — por defecto `true` en ambos casos.
-            "autoPriorityNewDownloads": read("auto_priority_new_downloads", true),
-            "autoPriorityUploads": read("auto_priority_uploads", true),
+            "autoPriorityNewDownloads": get_bool("auto_priority_new_downloads", true),
+            "autoPriorityUploads": get_bool("auto_priority_uploads", true),
             // Opciones propias de eMuleRust (sin equivalente en eMule).
-            "identityRotationHours": u64_setting("identity_rotation_hours"),
-            "dailyUploadQuotaGb": u64_setting("daily_upload_quota_gb"),
-            "quotaEcoUploadKbs": u64_setting("quota_eco_upload_kbs"),
-            "uploadQuotaUsedBytes": u64_setting("upload_quota_used_bytes"),
-            "paranoidMode": read("paranoid_mode", false),
-            "swarmHealing": read("swarm_healing", true),
-            "serverAutoupdatePath": dls
-                .get_setting("server_autoupdate_path")
-                .ok()
-                .flatten()
-                .unwrap_or_default(),
-            "tempDir": dls
-                .get_setting("temp_dir")
-                .ok()
-                .flatten()
-                .unwrap_or_default(),
+            "identityRotationHours": get_u64("identity_rotation_hours", 0),
+            "dailyUploadQuotaGb": get_u64("daily_upload_quota_gb", 0),
+            "quotaEcoUploadKbs": get_u64("quota_eco_upload_kbs", 0),
+            "uploadQuotaUsedBytes": get_u64("upload_quota_used_bytes", 0),
+            "paranoidMode": get_bool("paranoid_mode", false),
+            "swarmHealing": get_bool("swarm_healing", true),
+            "serverAutoupdatePath": get_str("server_autoupdate_path").unwrap_or_default(),
+            "tempDir": get_str("temp_dir").unwrap_or_default(),
             "moviesDir": custom_media_dir("movies_dir", "Movies", &state.config.movies_dir),
             "seriesDir": custom_media_dir("series_dir", "Series", &state.config.series_dir),
             "nasRootDir": nas_root_dir_out,
-            "nasRequireNfs": read("nas_require_nfs", false),
-            "autoGrabberEnabled": read("auto_grabber_enabled", true),
-            "organizeEnabled": read("organize_enabled", true),
-            "mediaServerProfile": match dls
-                .get_setting("media_server_profile")
-                .ok()
-                .flatten()
-                .as_deref()
-            {
+            "nasRequireNfs": get_bool("nas_require_nfs", false),
+            "autoGrabberEnabled": get_bool("auto_grabber_enabled", true),
+            "organizeEnabled": get_bool("organize_enabled", true),
+            "mediaServerProfile": match get_str("media_server_profile") {
                 Some("kodi") => "kodi",
                 Some("local") => "local",
                 _ => "jellyfin",
             },
-            "generateNfoAndArtwork": read("generate_nfo_and_artwork", true),
-            "qualityUpgradeEnabled": read("quality_upgrade_enabled", true),
-            "qualityMaxResolution": dls
-                .get_setting("quality_max_resolution")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "1080p".to_string()),
-            "scorerAntiFake": read("scorer_anti_fake", true),
-            "subtitlesAutoDownload": read("subtitles_auto_download", true),
-            "subtitlesLanguage": dls
-                .get_setting("subtitles_language")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "spa".to_string()),
-            "cleanerEnabled": read("cleaner_enabled", true),
-            "legalDisclaimerAccepted": read("legal_disclaimer_accepted", false),
-            "mcpEnabled": read("mcp_enabled", true),
-            "mcpToolProfile": dls
-                .get_setting("mcp_tool_profile")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "safe".to_string()),
-            "ramProfile": dls
-                .get_setting("ram_profile")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "balanced".to_string()),
-            "sonarrUrl": dls.get_setting("sonarr_url").ok().flatten().unwrap_or_default(),
-            "radarrUrl": dls.get_setting("radarr_url").ok().flatten().unwrap_or_default(),
-            "jellyfinUrl": dls.get_setting("jellyfin_url").ok().flatten().unwrap_or_default(),
+            "generateNfoAndArtwork": get_bool("generate_nfo_and_artwork", true),
+            "qualityUpgradeEnabled": get_bool("quality_upgrade_enabled", true),
+            "qualityMaxResolution": get_str("quality_max_resolution").unwrap_or("1080p"),
+            "scorerAntiFake": get_bool("scorer_anti_fake", true),
+            "subtitlesAutoDownload": get_bool("subtitles_auto_download", true),
+            "subtitlesLanguage": get_str("subtitles_language").unwrap_or("spa"),
+            "cleanerEnabled": get_bool("cleaner_enabled", true),
+            "legalDisclaimerAccepted": get_bool("legal_disclaimer_accepted", false),
+            "mcpEnabled": get_bool("mcp_enabled", true),
+            "mcpToolProfile": get_str("mcp_tool_profile").unwrap_or("safe"),
+            "ramProfile": get_str("ram_profile").unwrap_or("balanced"),
+            "sonarrUrl": get_str("sonarr_url").unwrap_or_default(),
+            "radarrUrl": get_str("radarr_url").unwrap_or_default(),
+            "jellyfinUrl": get_str("jellyfin_url").unwrap_or_default(),
         });
         if let Some(obj) = base_settings.as_object_mut() {
-            obj.insert("jellyfinApiKey".to_string(), json!(dls.get_setting("jellyfin_api_key").ok().flatten().unwrap_or_default()));
-            obj.insert("kodiUrl".to_string(), json!(dls.get_setting("kodi_url").ok().flatten().unwrap_or_default()));
+            obj.insert("jellyfinApiKey".to_string(), json!(get_str("jellyfin_api_key").unwrap_or_default()));
+            obj.insert("kodiUrl".to_string(), json!(get_str("kodi_url").unwrap_or_default()));
             obj.insert(
                 "subtitlesVariant".to_string(),
-                json!(dls.get_setting("subtitles_variant").ok().flatten().unwrap_or_else(|| "es-ES".to_string())),
+                json!(get_str("subtitles_variant").unwrap_or("es-ES")),
             );
-            let persisted_usage_mode = dls
-                .get_setting("usage_mode")
-                .ok()
-                .flatten()
-                .filter(|m| matches!(m.as_str(), "direct" | "kodi" | "mediaserver" | "server247"));
+            let persisted_usage_mode = get_str("usage_mode")
+                .filter(|m| matches!(*m, "direct" | "kodi" | "mediaserver" | "server247"));
             let inferred_usage_mode = persisted_usage_mode.unwrap_or_else(|| {
-                if !read("organize_enabled", true) {
-                    "direct".to_string()
-                } else if read("nas_require_nfs", false) {
-                    "server247".to_string()
+                if !get_bool("organize_enabled", true) {
+                    "direct"
+                } else if get_bool("nas_require_nfs", false) {
+                    "server247"
                 } else {
-                    let ms_prof = dls
-                        .get_setting("media_server_profile")
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(|| "jellyfin".to_string());
-                    if matches!(ms_prof.as_str(), "kodi" | "local") {
-                        "kodi".to_string()
+                    let ms_prof = get_str("media_server_profile").unwrap_or("jellyfin");
+                    if matches!(ms_prof, "kodi" | "local") {
+                        "kodi"
                     } else {
-                        "mediaserver".to_string()
+                        "mediaserver"
                     }
                 }
             });
             obj.insert("usageMode".to_string(), json!(inferred_usage_mode));
-            obj.insert("subtitlesAllowHi".to_string(), json!(read("subtitles_allow_hi", false)));
+            obj.insert("subtitlesAllowHi".to_string(), json!(get_bool("subtitles_allow_hi", false)));
             obj.insert(
                 "subtitlesMinScore".to_string(),
-                json!(dls.get_setting("subtitles_min_score").ok().flatten().and_then(|s| s.parse::<u32>().ok()).unwrap_or(40)),
+                json!(get_u64("subtitles_min_score", 40) as u32),
             );
             obj.insert(
                 "subtitlesAutoSync".to_string(),
-                json!(dls.get_setting("subtitles_auto_sync").ok().flatten().unwrap_or_else(|| "embedded_sub".to_string())),
+                json!(get_str("subtitles_auto_sync").unwrap_or("embedded_sub")),
             );
             obj.insert(
                 "opensubtitlesApiKey".to_string(),
-                json!(dls.get_setting("opensubtitles_api_key").ok().flatten().unwrap_or_default()),
+                json!(get_str("opensubtitles_api_key").unwrap_or_default()),
             );
         }
         base_settings

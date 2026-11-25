@@ -152,29 +152,7 @@ impl DaemonEvent {
     /// Tema de suscripción para filtrado de `events.subscribe`; `None` marca
     /// eventos de control que omiten el filtro de temas.
     pub fn topic(&self) -> Option<&'static str> {
-        match self {
-            Self::DownloadUpdated { .. }
-            | Self::DownloadAdded { .. }
-            | Self::DownloadRemoved { .. }
-            | Self::DownloadCompleted { .. }
-            | Self::DownloadFailed { .. } => Some("downloads"),
-            Self::PeerSessionUpdated { .. } => Some("peers"),
-            Self::ServerSessionUpdated { .. } => Some("servers"),
-            Self::UploadsUpdated { .. } => Some("uploads"),
-            Self::StatsTick { .. } => Some("stats"),
-            Self::KadStatusChanged { .. } => Some("kad"),
-            Self::HistoryEntryAdded { .. } => Some("history"),
-            Self::SettingsChanged { .. } => Some("settings"),
-            Self::NetworkPolicyChanged { .. } | Self::UpnpStatusChanged { .. } => Some("network"),
-            Self::NotificationCreated { .. } => Some("notifications"),
-            Self::Custom { method, .. } => match method.as_str() {
-                "server.searchResult" | "server.foundSources" => Some("search"),
-                "upnp.statusChanged" => Some("network"),
-                "event.notificationCreated" => Some("notifications"),
-                "event.snapshotRequired" => None,
-                _ => Some("other"),
-            },
-        }
+        topic_for_method(self.method())
     }
 
     /// Serializa a la trama de notificación JSON-RPC enviada a través del socket.
@@ -249,9 +227,64 @@ impl DaemonEvent {
     /// Difunde el evento a todos los suscriptores de WebSocket. Devuelve el
     /// recuento de receptores (0 cuando nadie escucha — no es un error).
     pub fn send(self, event_tx: &broadcast::Sender<String>) -> usize {
+        if event_tx.receiver_count() == 0 {
+            return 0;
+        }
         match self.to_wire_json() {
             Some(json) => event_tx.send(json).unwrap_or(0),
             None => 0,
         }
+    }
+}
+
+/// Fuente única de verdad para asociar el nombre de método JSON-RPC de un evento
+/// con su tópico de suscripción en `events.subscribe`.
+pub fn topic_for_method(method: &str) -> Option<&'static str> {
+    match method {
+        "event.downloadUpdated"
+        | "event.downloadAdded"
+        | "event.downloadRemoved"
+        | "event.downloadCompleted"
+        | "event.downloadFailed" => Some("downloads"),
+        "event.peerSessionUpdated" => Some("peers"),
+        "server.sessionUpdated" => Some("servers"),
+        "upload.uploadsUpdated" => Some("uploads"),
+        "event.statsTick" => Some("stats"),
+        "kad.statusChanged" => Some("kad"),
+        "shares.changed" => Some("shares"),
+        "history.entryAdded" => Some("history"),
+        "settings.changed" => Some("settings"),
+        "network.policyChanged" | "upnp.statusChanged" => Some("network"),
+        "event.notificationCreated" => Some("notifications"),
+        "server.searchResult" | "server.foundSources" => Some("search"),
+        "event.snapshotRequired" => None,
+        _ => Some("other"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_topic_for_method_mapea_todos_los_eventos() {
+        assert_eq!(topic_for_method("event.downloadUpdated"), Some("downloads"));
+        assert_eq!(topic_for_method("event.peerSessionUpdated"), Some("peers"));
+        assert_eq!(topic_for_method("server.sessionUpdated"), Some("servers"));
+        assert_eq!(topic_for_method("upload.uploadsUpdated"), Some("uploads"));
+        assert_eq!(topic_for_method("event.statsTick"), Some("stats"));
+        assert_eq!(topic_for_method("kad.statusChanged"), Some("kad"));
+        assert_eq!(topic_for_method("shares.changed"), Some("shares"));
+        assert_eq!(topic_for_method("history.entryAdded"), Some("history"));
+        assert_eq!(topic_for_method("settings.changed"), Some("settings"));
+        assert_eq!(topic_for_method("network.policyChanged"), Some("network"));
+        assert_eq!(topic_for_method("upnp.statusChanged"), Some("network"));
+        assert_eq!(
+            topic_for_method("event.notificationCreated"),
+            Some("notifications")
+        );
+        assert_eq!(topic_for_method("server.searchResult"), Some("search"));
+        assert_eq!(topic_for_method("event.snapshotRequired"), None);
+        assert_eq!(topic_for_method("custom.unknown"), Some("other"));
     }
 }

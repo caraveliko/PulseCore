@@ -74,7 +74,7 @@ pub fn get_cached_nas_disk_space(nas_path: std::path::PathBuf) -> (Option<u64>, 
 }
 
 pub async fn handle_status(state: &AppState) -> Result<Value, JsonRpcError> {
-    let dl_count = state.downloads.lock().await.list_downloads().len();
+    let dl_count = state.downloads.lock().await.downloads_count();
     let capabilities = crate::rpc::capabilities::daemon_capabilities();
 
     let default_dl_dir = state

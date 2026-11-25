@@ -32,6 +32,15 @@ pub async fn fetch_url_bytes(
     state: &AppState,
     raw_url: &str,
 ) -> Result<(FetchUrl, Vec<u8>), JsonRpcError> {
+    if matches!(
+        state.network_policy.state(),
+        mule_network_policy::NetworkState::Disabled
+            | mule_network_policy::NetworkState::ShuttingDown
+    ) {
+        return Err(JsonRpcError::business(
+            "Red deshabilitada por política de red (kill switch)",
+        ));
+    }
     let target = parse_fetch_url(raw_url).map_err(|e| JsonRpcError::business(e.to_string()))?;
 
     // Resolución DNS si el host no es una IP literal — todas las

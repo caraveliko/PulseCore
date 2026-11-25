@@ -110,17 +110,17 @@ pub fn compute_opensubtitles_hash(path: &Path) -> std::io::Result<(String, u64)>
     }
 
     let mut hash = file_size;
-    let mut buf = [0u8; 8];
+    let mut chunk = [0u8; OPENSUBTITLES_CHUNK_WORDS * 8];
 
-    for _ in 0..OPENSUBTITLES_CHUNK_WORDS {
-        file.read_exact(&mut buf)?;
-        hash = hash.wrapping_add(u64::from_le_bytes(buf));
+    file.read_exact(&mut chunk)?;
+    for &w in chunk.as_chunks::<8>().0 {
+        hash = hash.wrapping_add(u64::from_le_bytes(w));
     }
 
     file.seek(SeekFrom::End(OPENSUBTITLES_END_OFFSET))?;
-    for _ in 0..OPENSUBTITLES_CHUNK_WORDS {
-        file.read_exact(&mut buf)?;
-        hash = hash.wrapping_add(u64::from_le_bytes(buf));
+    file.read_exact(&mut chunk)?;
+    for &w in chunk.as_chunks::<8>().0 {
+        hash = hash.wrapping_add(u64::from_le_bytes(w));
     }
 
     Ok((format!("{hash:016x}"), file_size))
@@ -392,13 +392,21 @@ impl SubtitleService {
         let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
 
         tokio::task::spawn_blocking(move || -> Result<String, String> {
+            const MAX_SUBTITLE_DECOMPRESSED_BYTES: u64 = 4 * 1024 * 1024;
             let raw_data = if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
-                let mut gz = GzDecoder::new(&bytes[..]);
+                let gz = GzDecoder::new(&bytes[..]);
                 let mut out = Vec::new();
-                gz.read_to_end(&mut out)
+                gz.take(MAX_SUBTITLE_DECOMPRESSED_BYTES + 1)
+                    .read_to_end(&mut out)
                     .map_err(|e| format!("Fallo descomprimiendo gzip: {e}"))?;
+                if out.len() as u64 > MAX_SUBTITLE_DECOMPRESSED_BYTES {
+                    return Err("Subtítulo gzip supera el límite de 4 MiB".to_string());
+                }
                 out
             } else {
+                if bytes.len() as u64 > MAX_SUBTITLE_DECOMPRESSED_BYTES {
+                    return Err("Subtítulo supera el límite de 4 MiB".to_string());
+                }
                 bytes.to_vec()
             };
             Ok(decode_subtitle_bytes(&raw_data))

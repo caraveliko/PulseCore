@@ -335,7 +335,7 @@ pub(crate) async fn perform_peer_handshake(
     out_wire.push(hello_pkt.opcode);
     out_wire.extend_from_slice(&hello_pkt.payload);
 
-    tracing::info!(
+    tracing::trace!(
         "Peer {peer}: sending OP_HELLO (client_id={client_id}, port={client_port}, server={server_ip}:{server_port}, len={}): {:02X?}",
         out_wire.len(),
         &out_wire[..]

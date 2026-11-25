@@ -297,7 +297,7 @@ pub fn remove_companion_subtitles_sync(video_path: &Path) {
     let Some(parent) = video_path.parent() else {
         return;
     };
-    for sub_ext in &["srt", "sub", "vtt"] {
+    for sub_ext in mule_network_policy::content_policy::COMPANION_SUBTITLE_EXTENSIONS {
         for pattern in &[
             format!("{stem}.{sub_ext}"),
             format!("{stem}.es.{sub_ext}"),
@@ -430,7 +430,7 @@ async fn copy_companion_subtitles(source_video: &Path, dest_video: &Path) {
         None => return,
     };
 
-    for sub_ext in &["srt", "sub", "vtt"] {
+    for sub_ext in mule_network_policy::content_policy::COMPANION_SUBTITLE_EXTENSIONS {
         for pattern in &[
             format!("{src_stem}.{sub_ext}"),
             format!("{src_stem}.es.{sub_ext}"),
@@ -736,6 +736,62 @@ impl MediaOrganizer {
         });
     }
 
+    /// Lanza en segundo plano la descarga de subtítulos respetando `SubtitleRuntimeConfig`,
+    /// el estado de red, `original_release_name` y `subtitle_blacklist`.
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_subtitle_auto_fetch(
+        state: &AppState,
+        video_path: PathBuf,
+        orig_release: Option<String>,
+        title: String,
+        year: Option<u32>,
+        imdb_id: Option<String>,
+        media_id: String,
+        is_movie: bool,
+        season_ep: Option<(u32, u32)>,
+    ) {
+        let state_cloned = state.clone();
+        tokio::spawn(async move {
+            if matches!(
+                state_cloned.network_policy.state(),
+                mule_network_policy::NetworkState::Disabled
+                    | mule_network_policy::NetworkState::ShuttingDown
+            ) || state_cloned.network_policy.profile().is_loopback_only()
+            {
+                return;
+            }
+            let cfg = crate::services::SubtitleService::load_runtime_config(&state_cloned).await;
+            if !cfg.enabled {
+                return;
+            }
+            let bl_key = match season_ep {
+                Some((s, e)) => format!("{media_id}:S{s:02}E{e:02}"),
+                None => media_id,
+            };
+            let blacklisted: std::collections::HashSet<(String, String)> = {
+                let dl_svc = state_cloned.downloads.lock().await;
+                dl_svc
+                    .db()
+                    .list_subtitle_blacklist(&bl_key)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect()
+            };
+            let _ = crate::services::SubtitleService::auto_fetch_for_video_with_config(
+                &video_path,
+                orig_release.as_deref(),
+                &title,
+                year,
+                imdb_id.as_deref(),
+                is_movie,
+                season_ep,
+                &cfg,
+                &blacklisted,
+            )
+            .await;
+        });
+    }
+
     /// Organiza un único archivo completado mediante su ID de descarga
     pub async fn organize_download(
         state: &AppState,
@@ -890,24 +946,21 @@ impl MediaOrganizer {
                     series.title, ep.season_number, ep.episode_number, dest_str
                 );
 
-                // Obtener subtítulos en español en segundo plano automáticamente
-                let sub_target = dest_file.clone();
-                let sub_title = series.title.clone();
-                let sub_year = series.year;
-                let sub_imdb = series.imdb_id.clone();
-                let s_num = ep.season_number;
-                let e_num = ep.episode_number;
-                tokio::spawn(async move {
-                    let _ = crate::services::SubtitleService::auto_fetch_for_video(
-                        &sub_target,
-                        &sub_title,
-                        sub_year,
-                        sub_imdb.as_deref(),
-                        false,
-                        Some((s_num, e_num)),
-                        "spa",
-                    ).await;
-                });
+                // Obtener subtítulos en segundo plano respetando configuración y lista negra
+                Self::spawn_subtitle_auto_fetch(
+                    state,
+                    dest_file.clone(),
+                    completed_file_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(str::to_string),
+                    series.title.clone(),
+                    series.year,
+                    series.imdb_id.clone(),
+                    series.id.clone(),
+                    false,
+                    Some((ep.season_number, ep.episode_number)),
+                );
 
                 Self::notify_media_servers(state);
                 let series_root_dir = active_series_root.join(&series_folder);
@@ -976,22 +1029,18 @@ impl MediaOrganizer {
             );
             write_nfo_and_artwork_if_enabled(state, &dest_dir, &item, true).await;
 
-            // Obtener subtítulos en español en segundo plano automáticamente
-            let sub_target = dest_file.clone();
-            let sub_title = item.title.clone();
-            let sub_year = item.year;
-            let sub_imdb = item.imdb_id.clone();
-            tokio::spawn(async move {
-                let _ = crate::services::SubtitleService::auto_fetch_for_video(
-                    &sub_target,
-                    &sub_title,
-                    sub_year,
-                    sub_imdb.as_deref(),
-                    true,
-                    None,
-                    "spa",
-                ).await;
-            });
+            // Obtener subtítulos en segundo plano respetando configuración y lista negra
+            Self::spawn_subtitle_auto_fetch(
+                state,
+                dest_file.clone(),
+                orig_release,
+                item.title.clone(),
+                item.year,
+                item.imdb_id.clone(),
+                item.id.clone(),
+                true,
+                None,
+            );
 
             Self::notify_media_servers(state);
             return Ok(Some(dest_file));
@@ -1117,15 +1166,20 @@ impl MediaOrganizer {
 
                     info!("[ORGANIZER] Auto-organized manual download episode '{} S{:02}E{:02}' -> '{}'", series.title, s_num, ep_num, dest_str);
 
-                    let sub_target = dest_file.clone();
-                    let sub_title = series.title.clone();
-                    let sub_year = series.year;
-                    let sub_imdb = series.imdb_id.clone();
-                    tokio::spawn(async move {
-                        let _ = crate::services::SubtitleService::auto_fetch_for_video(
-                            &sub_target, &sub_title, sub_year, sub_imdb.as_deref(), false, Some((s_num, ep_num)), "spa"
-                        ).await;
-                    });
+                    Self::spawn_subtitle_auto_fetch(
+                        state,
+                        dest_file.clone(),
+                        completed_file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .map(str::to_string),
+                        series.title.clone(),
+                        series.year,
+                        series.imdb_id.clone(),
+                        series.id.clone(),
+                        false,
+                        Some((s_num, ep_num)),
+                    );
 
                     Self::notify_media_servers(state);
                     return Ok(Some(dest_file));
@@ -1198,6 +1252,7 @@ impl MediaOrganizer {
             }
 
             let effective_movies_root = state.effective_movies_dir().await;
+            let was_new_movie = matched_movie.is_none();
             let final_movie = matched_movie.unwrap_or_else(|| {
                 MediaItem {
                     id: Uuid::new_v4().to_string(),
@@ -1268,6 +1323,9 @@ impl MediaOrganizer {
                 if let Ok(dl_uuid) = Uuid::parse_str(download_id) {
                     let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                 }
+                if was_new_movie {
+                    let _ = dl_svc.db().insert_media_item(&final_movie);
+                }
                 let _ = dl_svc.db().update_media_completed(&final_movie.id, &dest_str, now);
                 if let Some(ref rel) = orig_release {
                     let _ = dl_svc.db().set_media_original_release_name(&final_movie.id, rel, now);
@@ -1277,15 +1335,17 @@ impl MediaOrganizer {
             info!("[ORGANIZER] Auto-organized manual download movie '{}' -> '{}'", final_movie.title, dest_str);
             write_nfo_and_artwork_if_enabled(state, &dest_dir, &final_movie, true).await;
 
-            let sub_target = dest_file.clone();
-            let sub_title = final_movie.title.clone();
-            let sub_year = final_movie.year;
-            let sub_imdb = final_movie.imdb_id.clone();
-            tokio::spawn(async move {
-                let _ = crate::services::SubtitleService::auto_fetch_for_video(
-                    &sub_target, &sub_title, sub_year, sub_imdb.as_deref(), true, None, "spa"
-                ).await;
-            });
+            Self::spawn_subtitle_auto_fetch(
+                state,
+                dest_file.clone(),
+                orig_release,
+                final_movie.title.clone(),
+                final_movie.year,
+                final_movie.imdb_id.clone(),
+                final_movie.id.clone(),
+                true,
+                None,
+            );
 
             Self::notify_media_servers(state);
             return Ok(Some(dest_file));

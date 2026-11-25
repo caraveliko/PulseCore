@@ -31,12 +31,13 @@ La implementación inicial del motor de subtítulos en `mule-daemon` presentaba 
 - `embedded_text_sub_stream: Option<usize>`: índice relativo (`0:s:<idx>`) de una pista de subtítulos textual extraíble (`subrip`, `ass`, `ssa`, `mov_text`, `webvtt`) para usarla como referencia de sincronización.
 
 ### 2.3 Búsqueda multi-estrategia y extensible
-La búsqueda combina resultados de:
+La búsqueda combina resultados del proveedor OpenSubtitles legacy REST (con cálculo de hash de 64 bits mediante 2 lecturas secuenciales de 64 KiB):
 1. **Hash exacto**: `moviebytesize-{size}/moviehash-{hash}/sublanguageid-{lang}`.
 2. **IMDb ID**: `imdbid-{id}[/season-{s}/episode-{e}]/sublanguageid-{lang}`.
 3. **Consulta textual**: `query-{title}[/season-{s}/episode-{e}]/sublanguageid-{lang}`.
-4. **OpenSubtitles.com REST API v1** (opcional, si `opensubtitlesApiKey` está configurada).
+4. **OpenSubtitles.com REST API v1** *(extensión futura planificada usando `opensubtitlesApiKey`)*.
 
+`MediaOrganizer` invoca la descarga post-organización mediante `auto_fetch_for_video_with_config`, respetando `SubtitleRuntimeConfig`, `original_release_name` y `subtitle_blacklist`.
 Los resultados se deduplican por identificador de subtítulo conservando la mejor estrategia de coincidencia.
 
 ### 2.4 Motor de puntuación (*scoring*) y descartes duros
@@ -63,7 +64,7 @@ En descarga automática (`auto_fetch_for_video`), ningún candidato por debajo d
 
 ### 2.5 Validación sintáctica, saneamiento y lista negra
 Antes de guardar un `.srt` en disco (`subtitles::srt`):
-1. Descompresión gzip y normalización Windows-1252 / ISO-8859-1 a UTF-8 sin BOM.
+1. Descompresión gzip acotada a 4 MiB y normalización Windows-1252 / ISO-8859-1 a UTF-8 sin BOM.
 2. Análisis sintáctico SRT exigiendo al menos `MIN_VALID_SRT_CUES` (`10`) bloques válidos y rechazando HTML/JSON.
 3. Comprobación temporal frente a `duration_secs` del vídeo (si se conoce): se rechaza si el último *cue* supera la duración del vídeo + margen (`300 s`) o es inferior al `15 %` en vídeos de más de 10 minutos.
 4. Heurística ligera de idioma para evitar subtítulos mal etiquetados en otro idioma.
@@ -75,7 +76,7 @@ La tabla SQLite `subtitle_blacklist` persiste los pares `(media_key, provider, p
 Cuando el candidato elegido no proviene de una coincidencia exacta por `moviehash` y `subtitlesAutoSync != "off"`:
 1. **Reescalado determinista de FPS**: si el subtítulo declara un FPS distinto al `fps_milli` real del vídeo (p. ej. `25000` frente a `23976`), se reescalan todos los *timestamps* (`t' = t * sub_fps / video_fps`).
 2. **Alineación sub-a-sub contra pista embebida** (si `subtitlesAutoSync == "embedded_sub"` y `embedded_text_sub_stream` está disponible):
-   - Se extrae la pista textual embebida mediante `ffmpeg` bajo un semáforo global de concurrencia `1` (protección de CPU/RAM en Raspberry Pi `aarch64`).
+   - Se extrae la pista textual embebida mediante `ffmpeg` bajo un semáforo global de concurrencia `1` con límite de tiempo (`120 s`) y `kill_on_drop(true)` (protección de CPU/RAM en Raspberry Pi `aarch64`).
    - Se estima el desplazamiento óptimo (`offset_ms`) mediante histograma de diferencias de inicios de *cues* + refinamiento fino, y solo se aplica si la mejora de solapamiento supera el umbral mínimo configurado.
 3. **Ajuste manual**: el método RPC `subtitles.sync` permite aplicar desplazamientos puntuales (`offsetMs`) o conversiones de FPS sobre el archivo `.srt` existente desde la WebUI.
 

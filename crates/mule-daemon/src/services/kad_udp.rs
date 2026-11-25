@@ -445,6 +445,22 @@ impl KadUdpService {
                                         let mut decrypted = false;
                                         for key in keys {
                                             if let Some(dec) = decrypt_kad_udp_packet(&buf[..len], key) {
+                                                let cat = classify_ip(peer_addr.ip());
+                                                let policy_allowed = match policy_mgr_clone.profile() {
+                                                    NetworkProfile::LocalLab => cat == IpCategory::Loopback,
+                                                    NetworkProfile::PublicEd2kPreview | NetworkProfile::PublicEd2kKadPreview => {
+                                                        cat == IpCategory::PublicRoutable
+                                                    }
+                                                };
+                                                if !policy_allowed {
+                                                    break;
+                                                }
+                                                {
+                                                    let mut rl = rate_limiter_arc.lock().await;
+                                                    if !rl.check_and_record_opcode(peer_addr.ip(), 0xE3) {
+                                                        break;
+                                                    }
+                                                }
                                                 match KadCodec::decode(&dec.payload) {
                                                     Ok(msg) => {
                                                         tracing::debug!(
@@ -452,9 +468,9 @@ impl KadUdpService {
                                                             log_peer_addr(peer_addr), dec.receiver_key
                                                         );
                                                         let local_kad_id_bytes =
-                                                            local_id_arc.read().unwrap().0;
+                                                            local_id_arc.read().unwrap_or_else(|p| p.into_inner()).0;
                                                         let user_hash_bytes =
-                                                            *user_hash_arc.read().unwrap();
+                                                            *user_hash_arc.read().unwrap_or_else(|p| p.into_inner());
                                                         let routing_table = routing_arc
                                                             .read()
                                                             .ok()
@@ -587,9 +603,9 @@ impl KadUdpService {
                                 match decoded {
                                     Ok(msg) => {
                                         let local_kad_id_bytes =
-                                            local_id_arc.read().unwrap().0;
+                                            local_id_arc.read().unwrap_or_else(|p| p.into_inner()).0;
                                         let user_hash_bytes =
-                                            *user_hash_arc.read().unwrap();
+                                            *user_hash_arc.read().unwrap_or_else(|p| p.into_inner());
                                         let routing_table = routing_arc
                                             .read()
                                             .ok()

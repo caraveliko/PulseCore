@@ -314,7 +314,7 @@ impl InboundListenerService {
         };
 
         if state == 2 {
-            let my_pub = self.sui_pubkey_der.read().unwrap().clone();
+            let my_pub = self.sui_pubkey_der.read().unwrap_or_else(|p| p.into_inner()).clone();
             if let Some(my_pub) = my_pub {
                 if let Ok(pk_pkt) = encoder.encode_public_key(&Ed2kPublicKey {
                     key_bytes: Bytes::copy_from_slice(&my_pub),

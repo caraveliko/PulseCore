@@ -680,12 +680,12 @@ async fn handle_torrent_add(
     } else if filename.starts_with("ed2k://") {
         filename.to_string()
     } else if filename.starts_with("http://") || filename.starts_with("https://") {
-        match reqwest::get(filename).await {
-            Ok(resp) => {
-                let text = resp.text().await.unwrap_or_default();
+        match crate::net_fetch::fetch_url_bytes(state, filename).await {
+            Ok((_url, bytes)) => {
+                let text = String::from_utf8_lossy(&bytes);
                 if let Some(pos) = text.find("ed2k://|file|") {
                     #[allow(clippy::manual_pattern_char_comparison)]
-let end = text[pos..]
+                    let end = text[pos..]
                         .find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '<'))
                         .unwrap_or(text.len() - pos);
                     text[pos..pos + end].to_string()

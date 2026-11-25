@@ -35,11 +35,13 @@ pub fn export_ipfilter_to_librqbit_file(
     let tmp_path = abs_dir.join(format!("{LIBRQBIT_BLOCKLIST_FILENAME}.tmp"));
 
     {
-        let mut f = std::fs::File::create(&tmp_path)?;
+        let f = std::fs::File::create(&tmp_path)?;
+        let mut writer = std::io::BufWriter::new(f);
         for (start, end) in &ranges {
-            writeln!(f, "mule-filter:{start}-{end}")?;
+            writeln!(writer, "mule-filter:{start}-{end}")?;
         }
-        f.sync_all()?;
+        writer.flush()?;
+        writer.into_inner().map_err(|e| e.into_error())?.sync_all()?;
     }
     std::fs::rename(&tmp_path, &final_path)?;
 

@@ -145,7 +145,10 @@ impl OutboundSui {
             }
         }
         let state = if self.peer_pubkey_der.is_some() { 1 } else { 2 };
-        let challenge: u32 = rand::random::<u32>().wrapping_add(1);
+        let challenge: u32 = {
+            let c = rand::random::<u32>();
+            if c == 0 { 1 } else { c }
+        };
         match encoder.encode_secident_state(&Ed2kSecIdentState { state, challenge }) {
             Ok(pkt) => {
                 let mut out = Vec::with_capacity(6 + pkt.payload.len());
@@ -425,9 +428,27 @@ impl OutboundSui {
                 // Cable V2: [u8 siglen][sig][u8 kind].
                 let sig_len = packet.payload.first().copied().unwrap_or(0) as usize;
                 let kind = if packet.payload.len() == sig_len + 2 {
+                    if (self.peer_sec_ident & 0x02) == 0 {
+                        self.bump(|s| &s.malformed_packets);
+                        self.bump(|s| &s.signatures_rejected);
+                        tracing::warn!(
+                            "[SUI] Peer {peer} sent V2 signature without V2 capability",
+                            peer = log_peer_addr(target_addr)
+                        );
+                        return true;
+                    }
                     Some(packet.payload[sig_len + 1])
-                } else {
+                } else if packet.payload.len() == sig_len + 1 {
                     None
+                } else {
+                    self.bump(|s| &s.malformed_packets);
+                    self.bump(|s| &s.signatures_rejected);
+                    tracing::warn!(
+                        "[SUI] Peer {peer} sent OP_SIGNATURE with unexpected length {}",
+                        packet.payload.len(),
+                        peer = log_peer_addr(target_addr)
+                    );
+                    return true;
                 };
                 let peer_ip_u32 = match target_addr.ip() {
                     std::net::IpAddr::V4(v4) => u32::from_be_bytes(v4.octets()),

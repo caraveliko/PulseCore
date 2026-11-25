@@ -435,7 +435,7 @@ pub async fn handle_limits_set(
     if !state.uss.snapshot().enabled {
         state
             .uss
-            .apply_split_upload_limit(ul_cfg, &state.network_policy.rate_limiters())
+            .apply_split_upload_limit(cfg.upload_bytes_per_sec, &state.network_policy.rate_limiters())
             .await;
     }
     if let Some(engine) = state.torrent.get() {
@@ -673,7 +673,7 @@ pub async fn apply_capacity_clamp(state: &AppState) -> Result<(), JsonRpcError> 
     if !state.uss.snapshot().enabled {
         state
             .uss
-            .apply_split_upload_limit(ul_cfg, &state.network_policy.rate_limiters())
+            .apply_split_upload_limit(clamped_ul, &state.network_policy.rate_limiters())
             .await;
     }
     if let Some(engine) = state.torrent.get() {

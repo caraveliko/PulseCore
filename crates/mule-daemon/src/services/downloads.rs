@@ -472,6 +472,35 @@ impl DownloadService {
         self.active.values().map(|a| a.snapshot()).collect()
     }
 
+    /// Devuelve `(tasa_descarga_total_bps, descargas_activas)` sin construir instantáneas ni mapas de partes.
+    pub fn download_rates_and_active_count(&self) -> (u64, usize) {
+        let mut total_bps = 0u64;
+        let mut active_count = 0usize;
+        for act in self.active.values() {
+            if let Some(last) = act.last_rate_update {
+                if last.elapsed() <= std::time::Duration::from_secs(2) {
+                    total_bps = total_bps.saturating_add(act.current_rate_bps);
+                }
+            }
+            if act.download.status == DownloadStatus::Downloading {
+                active_count += 1;
+            }
+        }
+        (total_bps, active_count)
+    }
+
+    /// Número total de descargas activas/en cola en memoria.
+    pub fn downloads_count(&self) -> usize {
+        self.active.len()
+    }
+
+    /// Obtiene todos los ajustes persistidos en una única consulta SQLite.
+    pub fn get_all_settings(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, DaemonError> {
+        self.db.get_all_settings().map_err(DaemonError::from)
+    }
+
     /// Bytes útiles recibidos desde el inicio del daemon: suma, en todas
     /// las descargas activas, de `covered_len() - session_bytes_start`
     /// (el punto de partida se establece en la hidratación / al añadir).

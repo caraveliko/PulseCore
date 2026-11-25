@@ -111,14 +111,15 @@ Espacios de nombres estables (véase `methods.rs` para la lista exhaustiva mante
 
 | Espacio de nombres | Métodos representativos |
 |---|---|
-| `system.*` | `hello`, `status`, `stop`/`shutdown`, `checkUpdate`, `getUpdateStatus`, `applyUpdate`, `rollbackUpdate` (véase `adr_auto_update.md`) |
+| `system.*` | `hello`, `status`, `stop`/`shutdown`, `diskSpace`, `nasInfo`, `logs`, `checkUpdate`, `getUpdateStatus`, `applyUpdate`, `rollbackUpdate` (véase `adr_auto_update.md`) |
 | `notifications.*` | `list` (`{limit, unreadOnly, category}`), `markRead` (`{id}` o `{all: true}`), `clear`, `getConfig`, `setConfig`, `test` (`{channel}`) |
 | `downloads.*` | `list`, `get`, `addEd2kLink`, `pause`, `resume`, `remove`, `setDestination`, `rename` (`{id, newName}` — disco + `shared_files` si ha finalizado), `setCategory`, `getSources`, `inspectPartMet`, `importPartMet`, `retryConnection` |
+| `media.*` / `indexer.*` | Catálogo multimedia Servarr, búsqueda unificada Torznab/IMDb, automatización, limpieza y reemplazos (`media.*`, `indexer.*`) |
 | `servers.*` | `list`, `connect`, `disconnect`, `status`, `search`, `querySources`, `importMet`, `updateFromUrl`, `setEnabled`, `delete`, `clear` |
 | `sources.*` | `list`, `addManual`, `connect`, `disconnect`, `clear`, `status`/`swarmStatus` |
 | `kad.*` | `status`, `startUdp`, `stopUdp`, `bootstrap`, `findNode`, `searchSources`, `searchKeywords`, `searchNotes`, `publish*`, `listContacts`, `importNodesDat` |
 | `network.*` | `getPolicy`, `setProfile`, `enable`, `disconnectAll`, `getAuditLog`, `setBudgets` |
-| `settings.*` / `limits.*` | `get`, `set`, `setRetentionDays`, `resetDownloadDir` — véase `docs/SETTINGS.md` para todas las claves |
+| `settings.*` / `limits.*` | `get`, `set`, `setRetentionDays`, `resetDownloadDir`, `listDirs`, `pickFolder`, `openFolder`, `exportBackup`, `restoreBackup` — véase `docs/SETTINGS.md` para todas las claves |
 | `stats.*` | `resetLifetimeTotals` → `{reset: true}` — reinicia a cero los contadores acumulados «desde la instalación» (`lifetime_*_bytes`, memoria + SQLite); los totales de sesión se conservan |
 | `shares.*` | `list` → `{sharedFiles[]}` (incl. parciales `isPartial`/`completedParts` + estadísticas de subida por archivo `uploadRateBps`/`uploadedBytes` — caudal medido agregado en los slots activos, total persistido en `share_upload_stats` — y `categoryId`/`upPriority`), `add`, `remove`, `rename` (`{fileHash, newName}` — archivo en disco + entrada, delega en `downloads.rename` cuando el hash respalda una descarga), `setEnabled`, `setUploadPriority` (ambos rechazan los parciales), `setCategory` (`{fileHash, categoryId|null}` — aceptado en parciales: prevalece la categoría de la descarga subyacente), `rescan` |
 | `uploads.*` / `listener.*` | `list`, `status`, `cancel`; `start`, `stop`, `status` |
@@ -168,7 +169,7 @@ emisores pasan por `DaemonEvent::send`. Formato de red = método con punto:
 | `event.peerSessionUpdated` | `{sequence, session: PeerSessionSnapshot}` | `peers` | media |
 | `server.sessionUpdated` | `{sequence, session: ServerSessionSnapshot}` | `servers` | baja |
 | `upload.uploadsUpdated` | `{sequence, active: [UploadSessionSnapshot], queue: [UploadSessionSnapshot], uploadRateBps}` | `uploads` | por mutación + progreso limitado ~500 ms |
-| `event.statsTick` | `{sequence, stats: {downloadBps, uploadBps, downloadsActive, peersConnected, serverConnected, kadContacts, kadUdpBound, sessionDownloadedBytes, sessionUploadedBytes, lifetimeDownloadedBytes, lifetimeUploadedBytes}}` | `stats` | cadencia ~2 s, suspendido sin suscriptor |
+| `event.statsTick` | `{sequence, stats: {downloadBps, uploadBps, downloadsActive, peersConnected, serverConnected, kadContacts, kadUdpBound, sessionDownloadedBytes, sessionUploadedBytes, lifetimeDownloadedBytes, lifetimeUploadedBytes}}` | `stats` | cadencia ~2 s, suspendido sin clientes WS conectados (la persistencia de contadores acumulados continúa independientemente) |
 | `kad.statusChanged` | `{sequence}` (aviso → refrescar `kad.status`) | `kad` | por mutación (udp, bootstrap, contactos) + bucle de mantenimiento cuando `total_contacts` cambia realmente (≤30 s) |
 | `shares.changed` | `{sequence}` (aviso → refrescar `shares.list`) | `shares` | por `add`/`remove`/`rescan`/`setEnabled`/`setUploadPriority`/`setCategory` (cubre mutaciones RPC y MCP) |
 | `history.entryAdded` | `{sequence}` (aviso → refrescar `history.list`) | `history` | por entrada de historial |
@@ -214,8 +215,9 @@ intercepta en `handle_socket` (filtro por sesión, no por el demonio):
 - `topics: []` o lista → solo pasan los eventos cuyo `topic` está en la
   lista; `event.snapshotRequired` (sin tópico) pasa siempre.
 - La correspondencia método → tópico está definida en
-  `DaemonEvent::topic` (`services/events.rs`); los métodos `Custom`
-  no listados recaen en el tópico `other`.
+  `topic_for_method` (`services/events.rs`), reutilizada tanto por
+  `DaemonEvent::topic` como por el filtro WebSocket (`events.subscribe`);
+  los métodos `Custom` no listados recaen en el tópico `other`.
 
 **Resincronización** — cuando una sesión consume demasiado lento y el
 búfer de difusión descarta eventos (`RecvError::Lagged`), el demonio
@@ -241,13 +243,13 @@ confiar en el flujo incremental.
 **UI web servida por el demonio** — cuando `web_dir` está configurado
 (`--web-dir`, `MULE_WEB_DIR` o autodetección `<exe>/../web`,
 `<exe>/web`) o mediante recursos integrados (`rust-embed`), el mismo listener Axum sirve la
-interfaz estática (`ServeDir` + respaldo `index.html` para rutas SPA) y `GET /session-config.js`. Esta última ruta
-emite `window.MULE_SESSION = {endpoint, token}` permitiendo a la interfaz web
-conectarse sin introducir credenciales — **solo se monta si
-la dirección de escucha es loopback**, de modo que `auth_token` nunca
-se sirva en una interfaz no local. Fuera de loopback (o en
-ausencia del script), el formulario de acceso exige introducir el
-token (parámetro `?token=` o campo dedicado).
+interfaz estática (`ServeDir` + respaldo `index.html` para rutas SPA) y `GET /session-config.js`
+con cabeceras `Cross-Origin-Resource-Policy: same-origin` y `Cache-Control: no-cache, no-store, must-revalidate`.
+Esta última ruta emite `window.MULE_SESSION = {endpoint, token, instanceId, requiresPassword}`:
+cuando existe `webuiPassword` y la petición procede de LAN (no loopback), oculta `token` y activa
+`requiresPassword: true` hasta autenticarse en `POST /api/auth/login`. Todo el plano de control
+está protegido por `control_plane_security_guard` (aislamiento estricto a LAN/loopback, validación
+`Host` anti-DNS Rebinding y validación `Origin` anti-CSRF/CSWSH rechazando orígenes externos y `Origin: null`).
 
 - El endpoint no es TLS: en HTTPS se requerirá `wss://`
   (terminación TLS delante de Axum: proxy inverso, o `rustls` nativo).

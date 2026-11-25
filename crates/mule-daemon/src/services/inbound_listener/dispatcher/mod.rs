@@ -122,7 +122,7 @@ impl InboundListenerService {
             );
         }
         if let Some(uh) = peer_user_hash {
-            if (peer_sec_ident & 0x03) != 0 && self.sui_pubkey_der.read().unwrap().is_some() {
+            if (peer_sec_ident & 0x03) != 0 && self.sui_pubkey_der.read().unwrap_or_else(|p| p.into_inner()).is_some() {
                 let uh_hex = hex::encode(uh);
                 let cached = {
                     let dl_svc = self.downloads.lock().await;
@@ -133,7 +133,10 @@ impl InboundListenerService {
                         let hash_hex = hex::encode(Md4::digest(&cached_der));
                         remote_pubkey_hash = Some(hash_hex);
                         remote_pubkey_der = Some(cached_der);
-                        let challenge_val: u32 = rand::random();
+                        let challenge_val: u32 = {
+                            let c: u32 = rand::random();
+                            if c == 0 { 1 } else { c }
+                        };
                         active_challenge = Some(challenge_val);
                         let sec_state = Ed2kSecIdentState {
                             state: 1,
@@ -184,7 +187,7 @@ impl InboundListenerService {
         // el par está en línea — y su conexión de retorno será
         // adoptada vía `pending_kad_callbacks`.
         if let Some(ip) = peer_ip {
-            let mgr = { self.peer_session.read().unwrap().clone() };
+            let mgr = { self.peer_session.read().unwrap_or_else(|p| p.into_inner()).clone() };
             if let Some(mgr) = mgr {
                 if let Some(pending) = mgr.take_reask_pending(ip).await {
                     if let Some(udp_port) = peer_udp_port {
@@ -193,9 +196,9 @@ impl InboundListenerService {
                         let conn_opts = (obf as u8)
                             | ((obf as u8) << 1)
                             | ((self.obfuscation_required.load(Relaxed) as u8) << 2);
-                        let our_hash = *self.user_hash.read().unwrap();
+                        let our_hash = *self.user_hash.read().unwrap_or_else(|p| p.into_inner());
                         let our_tcp = self.listen_addr.lock().await.map(|a| a.port()).unwrap_or(0);
-                        let client_udp = { self.client_udp.read().unwrap().clone() };
+                        let client_udp = { self.client_udp.read().unwrap_or_else(|p| p.into_inner()).clone() };
                         if let Some(client_udp) = client_udp {
                             if client_udp
                                 .send_direct_callback_req(
@@ -324,7 +327,7 @@ impl InboundListenerService {
                                         // Solo emitir un desafío si disponemos de una identidad local utilizable:
                                         // el par firma *nuestra* clave pública, por lo que sin clave no hay SUI.
                                         let Some(my_pub) =
-                                            self.sui_pubkey_der.read().unwrap().clone()
+                                            self.sui_pubkey_der.read().unwrap_or_else(|p| p.into_inner()).clone()
                                         else {
                                             warn!(
                                                 "[SUI] No local identity key, not issuing challenge to {}",
@@ -334,7 +337,10 @@ impl InboundListenerService {
                                         };
                                         let _ = my_pub;
                                         if !same_cached_key {
-                                            let challenge_val: u32 = rand::random();
+                                            let challenge_val: u32 = {
+                            let c: u32 = rand::random();
+                            if c == 0 { 1 } else { c }
+                        };
                                             active_challenge = Some(challenge_val);
                                             let sec_state = Ed2kSecIdentState {
                                                 state: 1,
@@ -416,17 +422,23 @@ impl InboundListenerService {
                                         Some("signature flood (duplicate source IP)")
                                     } else {
                                         let local_pubkey =
-                                            self.sui_pubkey_der.read().unwrap().clone();
+                                            self.sui_pubkey_der.read().unwrap_or_else(|p| p.into_inner()).clone();
                                         match (challenge, local_pubkey, remote_pubkey_der.clone()) {
                                             (Some(ch), Some(my_pub), Some(peer_der)) => {
                                                 match decoder.decode_signature(pkt.protocol, pkt.opcode, &pkt.payload, 0) {
                                                     Ok(sig) => {
                                                         // V2 wire: [u8 siglen][sig][u8 kind].
                                                         let sig_len = pkt.payload.first().copied().unwrap_or(0) as usize;
-                                                        let kind = if pkt.payload.len() == sig_len + 2 {
-                                                            Some(pkt.payload[sig_len + 1])
+                                                        let (kind, valid_len) = if pkt.payload.len() == sig_len + 2 {
+                                                            if (peer_sec_ident & 0x02) == 0 {
+                                                                (None, false)
+                                                            } else {
+                                                                (Some(pkt.payload[sig_len + 1]), true)
+                                                            }
+                                                        } else if pkt.payload.len() == sig_len + 1 {
+                                                            (None, true)
                                                         } else {
-                                                            None
+                                                            (None, false)
                                                         };
                                                         let ip_u32 = match kind {
                                                             Some(20) => ip_to_u32(peer_ip),  // LOCALCLIENT: signer's IP
@@ -435,7 +447,9 @@ impl InboundListenerService {
                                                             Some(_) => { kind_invalid = true; 0 }
                                                             None => 0,                        // V1
                                                         };
-                                                        if kind_invalid {
+                                                        if !valid_len {
+                                                            Some("invalid signature payload length or V2 not negotiated")
+                                                        } else if kind_invalid {
                                                             Some("invalid IP-binding kind")
                                                         } else {
                                                             // La verificación está a punto de ejecutarse:
@@ -680,7 +694,7 @@ impl InboundListenerService {
                                         let extern_p = u16::from_le_bytes([pkt.payload[2], pkt.payload[3]]);
                                         if intern != 0 {
                                             let ku = {
-                                                self.kad_udp.read().unwrap().as_ref().cloned()
+                                                self.kad_udp.read().unwrap_or_else(|p| p.into_inner()).as_ref().cloned()
                                             };
                                             if let (Some(ip), Some(ku)) = (peer_ip, ku) {
                                                 // eMule marca los resultados como sesgados cuando
@@ -720,7 +734,7 @@ impl InboundListenerService {
                                     // de autenticación.
                                     let our_kad = {
                                         let kad =
-                                            self.kad.read().unwrap().as_ref().cloned();
+                                            self.kad.read().unwrap_or_else(|p| p.into_inner()).as_ref().cloned();
                                         kad.map(|k| k.local_id().0)
                                     };
                                     // eMule: `if (!CKademlia::IsRunning())
@@ -808,7 +822,7 @@ impl InboundListenerService {
                                     // solicitante original, no hacia el compañero.
                                     let is_buddy = {
                                         let svc =
-                                            self.kad_udp.read().unwrap().as_ref().cloned();
+                                            self.kad_udp.read().unwrap_or_else(|p| p.into_inner()).as_ref().cloned();
                                         match svc {
                                             Some(s) => s
                                                 .buddy_registry()
@@ -847,7 +861,7 @@ impl InboundListenerService {
                                         dest_port,
                                     );
                                     let client_udp =
-                                        self.client_udp.read().unwrap().clone();
+                                        self.client_udp.read().unwrap_or_else(|p| p.into_inner()).clone();
                                     let Some(client_udp) = client_udp else {
                                         continue;
                                     };
@@ -949,7 +963,7 @@ impl InboundListenerService {
                                                 let answer =
                                                     crate::services::peer_session::handshake::build_emule_info(
                                                         self.kad_udp_port,
-                                                        if self.sui_pubkey_der.read().unwrap().is_some() { 3 } else { 0 },
+                                                        if self.sui_pubkey_der.read().unwrap_or_else(|p| p.into_inner()).is_some() { 3 } else { 0 },
                                                     );
                                                 if let Ok(ans_pkt) =
                                                     encoder.encode_emule_info_answer(&answer)
@@ -1957,7 +1971,8 @@ impl InboundListenerService {
                                                      }
                                                  }
 
-                                                 if award_bytes > 0
+                                                 if sui_verified
+                                                     && award_bytes > 0
                                                      && shared_file.file_size > 0
                                                      && (start + length) <= shared_file.file_size
                                                  {

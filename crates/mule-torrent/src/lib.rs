@@ -240,6 +240,8 @@ impl TorrentEngine {
                 upnp_coordinated: false,
                 loopback_only: false,
                 mse_pe_supported: false,
+                bt_v2_supported: false,
+                holepunch_supported: false,
             },
         })
     }
@@ -272,6 +274,8 @@ impl TorrentEngine {
                 upnp_coordinated: false,
                 loopback_only: true,
                 mse_pe_supported: false,
+                bt_v2_supported: false,
+                holepunch_supported: false,
             },
         })
     }
@@ -299,11 +303,19 @@ impl TorrentEngine {
             ));
         }
 
-        let exported =
-            blocklist::export_ipfilter_to_librqbit_file(&policy.ip_filter(), &cfg.blocklist_dir)
-                .map_err(|e| {
-                    TorrentError::Session(format!("error exportando lista de bloqueo ipfilter: {e}"))
-                })?;
+        let filter_for_export = policy.ip_filter();
+        let blocklist_dir_for_export = cfg.blocklist_dir.clone();
+        let exported = tokio::task::spawn_blocking(move || {
+            blocklist::export_ipfilter_to_librqbit_file(
+                &filter_for_export,
+                &blocklist_dir_for_export,
+            )
+        })
+        .await
+        .map_err(|e| TorrentError::Session(format!("error en tarea blocklist: {e}")))?
+        .map_err(|e| {
+            TorrentError::Session(format!("error exportando lista de bloqueo ipfilter: {e}"))
+        })?;
         let (blocklist_url, ip_filter_entries) = match exported {
             Some((path, count)) => {
                 let url = url::Url::from_file_path(&path).map_err(|_| {
@@ -432,6 +444,46 @@ impl TorrentEngine {
                 }
             };
 
+        // Reactivar la vigilancia de cabeceras «Solo Vídeo» en torrents restaurados por `fastresume`.
+        let resumed_watchdogs: Vec<_> = session.with_torrents(|torrents| {
+                torrents
+                    .filter_map(|(id, handle)| {
+                        if handle.stats().finished {
+                            return None;
+                        }
+                        let video_indices: Vec<usize> = handle
+                            .with_metadata(|meta| {
+                                meta.file_infos
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(idx, fi)| {
+                                        let name = fi.relative_filename.to_string_lossy();
+                                        if mule_network_policy::content_policy::is_allowed_video_filename(&name) {
+                                            Some(idx)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect()
+                            })
+                            .ok()?;
+                        if video_indices.is_empty() {
+                            None
+                        } else {
+                            Some((id, handle.clone(), video_indices))
+                        }
+                    })
+                    .collect()
+            });
+        for (id, handle, video_indices) in resumed_watchdogs {
+            spawn_video_header_watchdog(
+                Arc::clone(&session),
+                id,
+                handle,
+                video_indices,
+            );
+        }
+
         Ok(Self {
             session,
             default_output_dir: cfg.default_output_dir,
@@ -446,6 +498,8 @@ impl TorrentEngine {
                 upnp_coordinated: effective_upnp,
                 loopback_only,
                 mse_pe_supported: false,
+                bt_v2_supported: false,
+                holepunch_supported: false,
             },
         })
     }
@@ -475,10 +529,13 @@ impl TorrentEngine {
         let parsed = url::Url::parse(raw_url)
             .map_err(|e| TorrentError::SsrfRejected(format!("URI inválida '{raw_url}': {e}")))?;
 
-        if parsed.scheme() != "http" && parsed.scheme() != "https" {
-            return Ok(());
+        match parsed.scheme() {
+            "magnet" => Ok(()),
+            "http" | "https" => Self::validate_http_url_against_policy(&parsed, policy).await,
+            other => Err(TorrentError::SsrfRejected(format!(
+                "esquema URI no permitido '{other}' (solo magnet/http/https)"
+            ))),
         }
-        Self::validate_http_url_against_policy(&parsed, policy).await
     }
 
     async fn validate_http_url_against_policy(
@@ -712,7 +769,7 @@ impl TorrentEngine {
                             .as_ref()
                             .map(|l| l.snapshot.peer_stats.live as usize)
                             .unwrap_or(0),
-                        output_dir: self.default_output_dir.to_string_lossy().to_string(),
+                        output_dir: handle.output_folder().to_string_lossy().to_string(),
                         category,
                     }
                 })
@@ -781,11 +838,21 @@ impl TorrentEngine {
 
     /// Devuelve las tasas agregadas actuales `(descarga_bps, subida_bps)` de los torrents activos.
     pub fn total_rates_bps(&self) -> (u64, u64) {
-        self.list().iter().fold((0u64, 0u64), |(dl, ul), snap| {
-            (
-                dl.saturating_add(snap.download_rate_bps),
-                ul.saturating_add(snap.upload_rate_bps),
-            )
+        self.session.with_torrents(|torrents| {
+            torrents.fold((0u64, 0u64), |(dl, ul), (_id, handle)| {
+                let stats = handle.stats();
+                let (d, u) = stats
+                    .live
+                    .as_ref()
+                    .map(|l| {
+                        (
+                            (l.download_speed.mbps * 125_000.0) as u64,
+                            (l.upload_speed.mbps * 125_000.0) as u64,
+                        )
+                    })
+                    .unwrap_or((0, 0));
+                (dl.saturating_add(d), ul.saturating_add(u))
+            })
         })
     }
 }

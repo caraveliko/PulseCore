@@ -77,7 +77,7 @@ pipeline anti-SSRF permanecen intactos.
 | `ed2kPort` | `ed2k_port` | u16 1–65535 | `39735` | **Rebind en caliente** del listener TCP + `kad.set_ed2k_tcp_port` + buddy connect-options + `upnp.set_ports` | Puerto TCP (eMule aleatoriza 4096–65095 en el 1.er arranque) |
 | `kadPort` | `kad_port` | u16 1–65535 | `39737` | Rebind en caliente del socket Kad UDP | Puerto UDP (ídem, aleatorizado por eMule). **Diferencia**: eMule acepta 0 = UDP desactivado; aquí se desactiva con `udpEnabled` |
 | `udpEnabled` | `udp_enabled` | bool | `true` | Detiene/inicia `kad_udp` + `server_udp` — equivalente a «puerto UDP = 0» en eMule | «UDP desactivado» |
-| `upnpEnabled` | `upnp_enabled` | bool | `false` | `map_ports`/`unmap_ports` inmediato | `EnableUPnP` (por defecto eMule: desactivado) |
+| `upnpEnabled` | `upnp_enabled` | bool | `true` (en arranque autónomo si no se especifica `--upnp`, `false` en `DaemonConfig::new`) | `map_ports`/`unmap_ports` inmediato | `EnableUPnP` |
 | `capacityDownloadKbs` | `capacity_download_kbs` | KiB/s | `0` | Capacidad de línea descendente — limita el DL al 90 % de la capacidad (clamp eMule `Preferences.cpp`), reaplicado en cada `limits.set` y normalizado al arrancar | Capacidad de recepción |
 | `capacityUploadKbs` | `capacity_upload_kbs` | KiB/s | `0` | Capacidad ascendente — limita el UL al 80 % de la capacidad; referencia USS (`note_manual_limit`) | Capacidad de emisión |
 | `obfuscationEnabled` | `obfuscation_enabled` | bool | config | Listener entrante en vivo (`AtomicBool`), conexiones salientes, byte buddy Kad | «Support obfuscated connections» |
@@ -97,9 +97,42 @@ pipeline anti-SSRF permanecen intactos.
 | `minPeersPerDownload` | `min_peers_per_download` | usize | `5` | Umbral de inanición que dispara un intercambio A4AF desde un archivo menos prioritario | — (extensión de eMuleRust) |
 | `maxUploadQueue` | `max_upload_queue` | usize 10–5000 | `5000` | `UploadManager.max_queue` (en vivo) | `QueueSize` (por defecto eMule 5000) |
 | `minUploadKbs` | `min_upload_kbs` | KiB/s 0–100000 | `1` | Mínimo por slot: no se abre nuevo slot si la media baja del umbral (en vivo). **0 = umbral desactivado** — los slots se abren mientras no se alcance `max_active` (extensión; eMule fuerza `MinUpload ≥ 1`) | `MinUpload` (por defecto eMule 1, mínimo obligatorio) |
-| `autoPriorityNewDownloads` | `auto_priority_new_downloads` | bool | `false` | Archivos ≥ 9 728 000 B creados con prioridad `high` | autoprioridad |
+| `autoPriorityNewDownloads` | `auto_priority_new_downloads` | bool | `true` | Archivos ≥ 9 728 000 B creados con prioridad `high` | autoprioridad (`DAPPref`) |
+| `autoPriorityUploads` | `auto_priority_uploads` | bool | `true` | Prioridad automática de subida en compartidos | autoprioridad (`UAPPref`) |
 | `dailyUploadQuotaGb` | `daily_upload_quota_gb` | GiB 0–1048576 | `0` | Cuota volumétrica/día: al alcanzarse → no se conceden nuevas peticiones de slot (vigilante 30 s). Contador persistido `upload_quota_used_bytes`, reinicio al cambiar de día UTC (`upload_quota_day`) | — (específico de eMuleRust, sin equivalente en eMule) |
-| `swarmHealing` | `swarm_healing` | bool | `false` | Sesga la selección de parte hacia las **partes más escasas del swarm** (contador de fuentes conocidas por parte) — el cliente actúa como fuente de respaldo antes de que desaparezca una parte. Desempate: bytes recibidos | — (específico de eMuleRust; eD2K es pull-only, no permite push) |
+| `quotaEcoUploadKbs` | `quota_eco_upload_kbs` | KiB/s | `0` | Tope de subida en modo ahorro tras superar la cuota diaria | — |
+| `smartSlotTargetKbs` | `smart_slot_target_kbs` | KiB/s | `0` | Objetivo de ancho de banda por ranura inteligente de subida | — |
+| `idleUploadCapKbs` | `idle_upload_cap_kbs` | KiB/s | `0` | Tope de subida cuando el demonio está en reposo | — |
+| `streamingUploadCapKbs` | `streaming_upload_cap_kbs` | KiB/s | `0` | Tope de subida mientras hay reproducción/streaming activo | — |
+| `maxActiveDownloads` | `max_active_downloads` | usize | `30` | Número máximo de descargas activas simultáneas | — |
+| `swarmHealing` | `swarm_healing` | bool | `true` | Sesga la selección de parte hacia las **partes más escasas del swarm** (contador de fuentes conocidas por parte) — el cliente actúa como fuente de respaldo antes de que desaparezca una parte. Desempate: bytes recibidos | — (específico de eMuleRust; eD2K es pull-only, no permite push) |
+
+### Biblioteca multimedia, NAS, MCP y sistema
+
+| Clave `settings.set` | Clave persistida | Tipo | Por defecto | Efecto |
+|---|---|---|---|---|
+| `usageMode` | `usage_mode` | `"direct"` \| `"kodi"` \| `"mediaserver"` \| `"server247"` | inferido | Perfil operativo de la aplicación |
+| `nasRootDir` | `nas_root_dir` | path | `""` | Carpeta raíz del almacenamiento NAS |
+| `nasRequireNfs` | `nas_require_nfs` | bool | `false` | Exige montaje NFS activo antes de escribir en biblioteca |
+| `moviesDir` | `movies_dir` | path | `""` | Carpeta personalizada de películas (anula `<nasRootDir>/Movies`) |
+| `seriesDir` | `series_dir` | path | `""` | Carpeta personalizada de series (anula `<nasRootDir>/Series`) |
+| `autoGrabberEnabled` | `auto_grabber_enabled` | bool | `true` | Captura automática periódica en indexadores Torznab |
+| `organizeEnabled` | `organize_enabled` | bool | `true` | Organización automática hacia la mediateca al completar descargas |
+| `mediaServerProfile` | `media_server_profile` | `"jellyfin"` \| `"kodi"` \| `"local"` | `"jellyfin"` | Convención de carpetas y metadatos |
+| `generateNfoAndArtwork` | `generate_nfo_and_artwork` | bool | `true` | Genera archivos `.nfo` y descarga carátulas al organizar |
+| `qualityUpgradeEnabled` | `quality_upgrade_enabled` | bool | `true` | Permite mejoras automáticas de calidad en biblioteca |
+| `qualityMaxResolution` | `quality_max_resolution` | string | `"1080p"` | Resolución máxima objetivo (`720p`, `1080p`, `2160p`) |
+| `scorerAntiFake` | `scorer_anti_fake` | bool | `true` | Filtrado estricto anti-falsos positivos en lanzamientos |
+| `cleanerEnabled` | `cleaner_enabled` | bool | `true` | Limpieza y deduplicación automática de archivos |
+| `sonarrUrl` / `radarrUrl` / `jellyfinUrl` / `kodiUrl` | `*_url` | url | `""` | Endpoints de integración multimedia local |
+| `jellyfinApiKey` | `jellyfin_api_key` | string | `""` | Clave API para refresco de biblioteca en Jellyfin |
+| `viewSharedFiles` | `view_shared_files` | `"public"` \| `"friends"` \| `"none"` | `"public"` | Visibilidad de archivos compartidos (`OP_ASKSHAREDFILES`) |
+| `mcpEnabled` | `mcp_enabled` | bool | `true` | Habilita herramientas MCP para agentes de IA |
+| `mcpToolProfile` | `mcp_tool_profile` | `"read"` \| `"safe"` \| `"full"` | `"safe"` | Perfil de riesgo permitido en herramientas MCP |
+| `ramProfile` | `ram_profile` | `"eco"` \| `"balanced"` \| `"performance"` | `"balanced"` | Perfil de presupuesto de memoria |
+| `autoUpdateEnabled` | `auto_update_enabled` | bool | `false` | Descarga/aplicación automática de actualizaciones |
+| `webuiPassword` | `webui_password_hash` | string | `""` | Contraseña opcional para acceso LAN a la WebUI (almacenada como hash SHA-256) |
+| `legalDisclaimerAccepted` | `legal_disclaimer_accepted` | bool | `false` | Aceptación del aviso legal inicial en la WebUI |
 
 ### Límites de velocidad (RPC `limits.set`, sección Seguridad)
 

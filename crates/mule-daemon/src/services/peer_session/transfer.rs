@@ -318,7 +318,8 @@ async fn apply_corruption_bans(
     let mut self_banned = false;
     for addr in banned {
         tracing::warn!(
-            "[CORRUPTION_BLACKBOX] Banning {addr} for file {file_hash_str} (>32% corrupted data, eMule CBB_BANTHRESHOLD)"
+            "[CORRUPTION_BLACKBOX] Banning {} for file {file_hash_str} (>32% corrupted data, eMule CBB_BANTHRESHOLD)",
+            crate::services::peer_session::log_addr_str(&addr)
         );
         {
             let mut dl_svc = downloads.lock().await;
@@ -852,6 +853,8 @@ pub(crate) async fn run_transfer_loop(
         file_status_fallback: &file_status_fallback,
     };
 
+    let mut decomp_out = vec![0u8; 65536];
+
     'transfer_loop: loop {
         // DOWNLOADTIMEOUT (100 s) de eMule: sin datos de bloque desde el último envío
         // de petición o paquete recibido → SendCancelTransfer + regreso a la cola en el
@@ -1252,14 +1255,13 @@ pub(crate) async fn run_transfer_loop(
                                     .remove(&range_key)
                                     .unwrap_or_else(|| Decompress::new(true));
                                 let mut zstream_alive = true;
-                                let mut out = vec![0u8; 65536];
                                 let mut input_slice = chunk;
 
                                 while !input_slice.is_empty() {
                                     let before_in = decomp.total_in();
                                     let before_out = decomp.total_out();
                                     let res = decomp
-                                        .decompress(input_slice, &mut out, FlushDecompress::Sync);
+                                        .decompress(input_slice, &mut decomp_out, FlushDecompress::Sync);
                                     let produced = (decomp.total_out() - before_out) as usize;
                                     let consumed = (decomp.total_in() - before_in) as usize;
                                     input_slice = &input_slice[consumed..];
@@ -1281,24 +1283,34 @@ pub(crate) async fn run_transfer_loop(
                                         }
                                     }
 
-                                    if produced > 0 {
+                                    let remaining = range_end.saturating_sub(pending[pi].recv_to) as usize;
+                                    if produced > remaining {
+                                        tracing::warn!(
+                                            "Peer {peer}: OP_COMPRESSEDPART exceeded requested range ({produced} > {remaining}) — discarding stream",
+                                            peer = log_peer_addr(target_addr)
+                                        );
+                                        zstream_alive = false;
+                                    }
+                                    let usable = produced.min(remaining);
+
+                                    if usable > 0 {
                                         record_chunk_rtt(&mut rtt_tracker, uss);
-                                        total_received += produced as u64;
-                                        bytes_since_rate_check += produced as u64;
-                                        credit_pending_bytes += produced as u64;
+                                        total_received += usable as u64;
+                                        bytes_since_rate_check += usable as u64;
+                                        credit_pending_bytes += usable as u64;
                                         if credit_pending_bytes >= CREDIT_FLUSH_BYTES {
                                             flush_download_credit(downloads, sui, &mut credit_pending_bytes).await;
                                         }
                                         let write_at = pending[pi].recv_to;
                                         // Mismo desvío que en la ruta no
                                         // comprimida: E/S síncronas en el
-                                        // grupo bloqueante de Tokio (`out` se
+                                        // grupo bloqueante de Tokio (`decomp_out` se
                                         // copia — búfer zlib reutilizado).
                                         let (is_complete, injected_dl) = {
                                             let downloads = Arc::clone(downloads);
                                             let file_hash = file_hash_str.to_string();
                                             let sender = address_str.to_string();
-                                            let chunk = out[..produced].to_vec();
+                                            let chunk = decomp_out[..usable].to_vec();
                                             tokio::task::spawn_blocking(move || {
                                                 let mut dl_svc = downloads.blocking_lock();
                                                 let Some(dl_id) =
@@ -1344,7 +1356,7 @@ pub(crate) async fn run_transfer_loop(
                                                 break 'transfer_loop;
                                             }
                                         }
-                                        pending[pi].recv_to += produced as u64;
+                                        pending[pi].recv_to += usable as u64;
 
                                         let elapsed = last_rate_check.elapsed();
                                         if elapsed >= Duration::from_millis(500) || is_complete {
@@ -1367,6 +1379,10 @@ pub(crate) async fn run_transfer_loop(
                                                 total_received,
                                             ).await;
                                         }
+                                    }
+
+                                    if !zstream_alive {
+                                        break;
                                     }
 
                                     match res {
@@ -1408,6 +1424,7 @@ pub(crate) async fn run_transfer_loop(
                                         Ok(Status::BufError) => break,
                                         Err(e) => {
                                             tracing::warn!("Peer {peer}: Zlib decompression error: {e}", peer = log_peer_addr(target_addr));
+                                            zstream_alive = false;
                                             break;
                                         }
                                     }

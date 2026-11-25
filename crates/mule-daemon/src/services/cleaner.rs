@@ -8,7 +8,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::services::downloads::now_ms;
-use crate::services::media_probe::probe_video_file_sync;
+use crate::services::media_probe::{probe_video_file, MediaProbeInfo};
 use crate::services::organizer::{clean_movie_title, remove_companion_subtitles_sync};
 use crate::state::AppState;
 
@@ -133,9 +133,8 @@ impl CleanReport {
 pub struct MediaCleaner;
 
 impl MediaCleaner {
-    /// Puntúa un archivo de vídeo existente para elegir el mejor candidato cuando existen duplicados
-    fn score_candidate(path: &Path, file_size: u64) -> i32 {
-        let probe = probe_video_file_sync(path);
+    /// Puntúa un archivo de vídeo existente a partir de su sonda `ffprobe`.
+    fn score_candidate_from_probe(path: &Path, file_size: u64, probe: MediaProbeInfo) -> i32 {
         let mut score: i32 = 0;
 
         // 1. Puntuación de idioma
@@ -179,6 +178,22 @@ impl MediaCleaner {
         score += size_mb.min(50);
 
         score
+    }
+
+    /// Puntúa un archivo de vídeo existente de forma síncrona (tests).
+    #[cfg(test)]
+    fn score_candidate(path: &Path, file_size: u64) -> i32 {
+        Self::score_candidate_from_probe(
+            path,
+            file_size,
+            crate::services::media_probe::probe_video_file_sync(path),
+        )
+    }
+
+    /// Puntúa un archivo de vídeo existente de forma asíncrona sin bloquear el ejecutor Tokio.
+    async fn score_candidate_async(path: &Path, file_size: u64) -> i32 {
+        let probe = probe_video_file(path).await;
+        Self::score_candidate_from_probe(path, file_size, probe)
     }
 
     /// Comprueba si un archivo es un vídeo de muestra / tráiler
@@ -451,14 +466,12 @@ impl MediaCleaner {
                     ep_num
                 );
 
-                // Puntuar candidatos
-                let mut scored: Vec<(i32, PathBuf, u64)> = files
-                    .into_iter()
-                    .map(|(p, sz)| {
-                        let sc = Self::score_candidate(&p, sz);
-                        (sc, p, sz)
-                    })
-                    .collect();
+                // Puntuar candidatos de forma asíncrona
+                let mut scored: Vec<(i32, PathBuf, u64)> = Vec::with_capacity(files.len());
+                for (p, sz) in files {
+                    let sc = Self::score_candidate_async(&p, sz).await;
+                    scored.push((sc, p, sz));
+                }
 
                 // Mayor puntuación primero; en caso de empate, mayor tamaño de archivo primero
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
@@ -641,13 +654,11 @@ impl MediaCleaner {
                 key
             );
 
-            let mut scored: Vec<(i32, PathBuf, u64)> = video_files
-                .into_iter()
-                .map(|(p, sz)| {
-                    let sc = Self::score_candidate(&p, sz);
-                    (sc, p, sz)
-                })
-                .collect();
+            let mut scored: Vec<(i32, PathBuf, u64)> = Vec::with_capacity(video_files.len());
+            for (p, sz) in video_files {
+                let sc = Self::score_candidate_async(&p, sz).await;
+                scored.push((sc, p, sz));
+            }
 
             scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
 
@@ -713,14 +724,14 @@ impl MediaCleaner {
         // Identificadores de descargas activas y archivos temporales
         let active_temp_paths = {
             let dl_svc = state.downloads.lock().await;
-            let details = dl_svc.list_download_details();
-            let mut temps = Vec::new();
-            for d in details {
+            let downloads = dl_svc.list_downloads();
+            let mut temps = Vec::with_capacity(downloads.len() * 4);
+            for d in downloads {
                 // Ruta temporal basada en UUID
-                temps.push(format!("{}.part", d.snapshot.id));
-                temps.push(format!("{}.part.met", d.snapshot.id));
-                temps.push(format!("{}.part.met.bak", d.snapshot.id));
-                temps.push(format!("{}.part.met.keep", d.snapshot.id));
+                temps.push(format!("{}.part", d.id));
+                temps.push(format!("{}.part.met", d.id));
+                temps.push(format!("{}.part.met.bak", d.id));
+                temps.push(format!("{}.part.met.keep", d.id));
             }
             temps
         };

@@ -101,7 +101,7 @@ impl KadService {
 
         let local_id = self.local_id();
         let buddy_id = compute_buddy_id(&local_id);
-        let user_hash = *self.fw_user_hash.read().unwrap();
+        let user_hash = *self.fw_user_hash.read().unwrap_or_else(|p| p.into_inner());
         let wire_user_id = if user_hash != [0u8; 16] {
             KadId::from_hash_be(&user_hash).0
         } else {
@@ -238,7 +238,7 @@ impl KadService {
             .map_err(|e| format!("Error enviando OP_BUDDYPING inicial a {buddy_tcp_addr}: {e}"))?;
 
         let state_arc = Arc::clone(&self.outgoing_buddy);
-        let inbound_arc = self.inbound_listener.read().unwrap().clone();
+        let inbound_arc = self.inbound_listener.read().unwrap_or_else(|p| p.into_inner()).clone();
         let policy_cancel = permit.cancellation_token().clone();
 
         {
@@ -353,7 +353,7 @@ impl KadService {
     /// Si este nodo está tras cortafuegos TCP (sin IP pública HighID) y no posee compañero activo,
     /// intenta negociar `KADEMLIA_FINDBUDDY_REQ` con contactos verificados adecuados.
     pub async fn ensure_outgoing_buddy(&self, cancel_token: CancellationToken) {
-        if self.public_ipv4.read().unwrap().is_some() {
+        if self.public_ipv4.read().unwrap_or_else(|p| p.into_inner()).is_some() {
             return;
         }
         let tcp_firewalled = {

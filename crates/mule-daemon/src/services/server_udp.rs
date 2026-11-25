@@ -38,6 +38,8 @@ struct ServerUdpInner {
     socket: Option<Arc<UdpSocket>>,
     bind_addr: Option<SocketAddr>,
     listen_task: Option<JoinHandle<()>>,
+    /// Permiso de escucha retenido mientras el socket UDP esté activo.
+    _listen_permit: Option<mule_network_policy::ListenPermit>,
     /// Capacidades UDP por servidor aprendidas de `OP_GLOBSERVSTATRES`,
     /// indexadas por la dirección UDP del servidor (IP + TCP+4). Refleja el
     /// almacenamiento `CServer::GetUDPFlags()` de eMule.
@@ -84,6 +86,7 @@ impl ServerUdpService {
                 socket: None,
                 bind_addr: None,
                 listen_task: None,
+                _listen_permit: None,
                 server_udp_flags: std::collections::HashMap::new(),
                 pending_statreq: std::collections::HashMap::new(),
                 desc_ping_counts: std::collections::HashMap::new(),
@@ -94,7 +97,7 @@ impl ServerUdpService {
 
     /// Inyecta el servicio de descargas (ingesta de fuentes).
     pub fn set_downloads(&self, downloads: Arc<Mutex<DownloadService>>) {
-        *self.downloads.write().unwrap() = Some(downloads);
+        *self.downloads.write().unwrap_or_else(|p| p.into_inner()) = Some(downloads);
     }
 
     /// Inyecta el canal de eventos del daemon para que las respuestas `OP_GLOBSEARCHRES` puedan
@@ -104,7 +107,7 @@ impl ServerUdpService {
         event_tx: tokio::sync::broadcast::Sender<String>,
         sequence: Arc<std::sync::atomic::AtomicU64>,
     ) {
-        *self.event_channel.write().unwrap() = Some((event_tx, sequence));
+        *self.event_channel.write().unwrap_or_else(|p| p.into_inner()) = Some((event_tx, sequence));
     }
 
     /// Inicia el socket UDP de servidor en un puerto efímero de `bind_ip`.
@@ -117,7 +120,7 @@ impl ServerUdpService {
         }
 
         let bind_addr = SocketAddr::new(bind_ip, 0);
-        let _permit = self
+        let permit = self
             .policy_mgr
             .request_tcp_listen(bind_addr, ConnectionPurpose::KadNode)
             .map_err(|e| format!("Policy denied server UDP bind on {bind_addr}: {e}"))?;
@@ -132,19 +135,32 @@ impl ServerUdpService {
         let socket_arc = Arc::new(socket);
         inner.socket = Some(socket_arc.clone());
         inner.bind_addr = Some(local_addr);
+        inner._listen_permit = Some(permit);
 
         let downloads_arc = self.downloads.clone();
         let event_channel = self.event_channel.clone();
         let policy_mgr_clone = self.policy_mgr.clone();
+        let cancel_token = self.policy_mgr.cancellation_token();
         let socket_for_task = socket_arc.clone();
         let inner_for_task = self.inner.clone();
 
         inner.listen_task = Some(tokio::spawn(async move {
             let mut buf = vec![0u8; 65536];
             loop {
-                match socket_for_task.recv_from(&mut buf).await {
+                let recv_res = tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    res = socket_for_task.recv_from(&mut buf) => res,
+                };
+                match recv_res {
                     Ok((len, peer_addr)) => {
                         if len < 2 {
+                            continue;
+                        }
+                        if policy_mgr_clone
+                            .ip_filter()
+                            .check_ip(peer_addr.ip())
+                            .is_some()
+                        {
                             continue;
                         }
                         // Clasificación de IP basada en políticas (mismas reglas que Kad UDP).
@@ -224,9 +240,9 @@ impl ServerUdpService {
                                             sr.files.len(),
                                             server = log_server_addr(peer_addr)
                                         );
-                                        let chan = event_channel.read().unwrap().clone();
+                                        let chan = event_channel.read().unwrap_or_else(|p| p.into_inner()).clone();
                                         if let Some((tx, seq)) = chan {
-                                            let dl = downloads_arc.read().unwrap().clone();
+                                            let dl = downloads_arc.read().unwrap_or_else(|p| p.into_inner()).clone();
                                             let cancelled = super::server_session::events::search_result_cancelled_flags(&dl, &sr).await;
                                             super::server_session::events::emit_search_results(
                                                 &tx, &seq, &sr, &cancelled,
@@ -492,7 +508,7 @@ async fn handle_server_desc_res(
         }
     }
 
-    let downloads = downloads.read().unwrap().clone();
+    let downloads = downloads.read().unwrap_or_else(|p| p.into_inner()).clone();
     let Some(dl_service) = downloads else {
         return;
     };
@@ -546,7 +562,7 @@ async fn handle_glob_found_sources(
     entries: Vec<server_udp::GlobFoundSourcesEntry>,
     responder_ip: u32,
 ) {
-    let downloads = downloads.read().unwrap().clone();
+    let downloads = downloads.read().unwrap_or_else(|p| p.into_inner()).clone();
     let Some(dl_service) = downloads else {
         return;
     };

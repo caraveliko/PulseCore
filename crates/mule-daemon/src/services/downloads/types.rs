@@ -308,24 +308,32 @@ pub fn compute_part_summaries<'a>(
         .map(|s| &s.mask)
         .collect();
     let mut parts = Vec::with_capacity(part_count as usize);
+    let mut range_idx = 0usize;
 
     for i in 0..part_count {
         let start_offset = i as u64 * part_size_const;
         let end_offset = ((i as u64 + 1) * part_size_const).min(total_size);
         let size = end_offset.saturating_sub(start_offset);
 
-        let received_in_part: u64 = all_ranges
-            .iter()
-            .filter_map(|r| {
-                let s = r.start.max(start_offset);
-                let e = r.end.min(end_offset);
-                if s < e {
-                    Some(e - s)
-                } else {
-                    None
-                }
-            })
-            .sum();
+        // Avanzar el puntero deslizante sobre los rangos ordenados y disjuntos de `RangeSet` — O(P + R).
+        while range_idx < all_ranges.len() && all_ranges[range_idx].end <= start_offset {
+            range_idx += 1;
+        }
+        let first_overlapping_idx = range_idx;
+        let mut received_in_part = 0u64;
+        let mut scan_idx = first_overlapping_idx;
+        while scan_idx < all_ranges.len() && all_ranges[scan_idx].start < end_offset {
+            let r = &all_ranges[scan_idx];
+            let s = r.start.max(start_offset);
+            let e = r.end.min(end_offset);
+            if s < e {
+                received_in_part += e - s;
+            }
+            if r.end <= end_offset {
+                range_idx = scan_idx + 1;
+            }
+            scan_idx += 1;
+        }
 
         let is_verified = verified_parts.contains(&i);
         let state = if is_verified {
@@ -355,11 +363,20 @@ pub fn compute_part_summaries<'a>(
         } else {
             let cell = size.div_ceil(PART_MASK_CELLS);
             let mut mask = 0u64;
+            let mut cell_r_idx = first_overlapping_idx;
             for bit in 0..PART_MASK_CELLS {
                 let cs = start_offset + bit * cell;
                 let ce = (cs + cell).min(end_offset);
-                if cs < ce && ranges.contains(cs..ce) {
-                    mask |= 1 << bit;
+                if cs < ce {
+                    while cell_r_idx < all_ranges.len() && all_ranges[cell_r_idx].end <= cs {
+                        cell_r_idx += 1;
+                    }
+                    if cell_r_idx < all_ranges.len()
+                        && all_ranges[cell_r_idx].start <= cs
+                        && all_ranges[cell_r_idx].end >= ce
+                    {
+                        mask |= 1 << bit;
+                    }
                 }
             }
             mask

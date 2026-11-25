@@ -53,7 +53,7 @@ const FW_OVERALL_TIMEOUT: Duration = Duration::from_secs(360);
 impl KadService {
     /// Establece el hash de usuario local empleado en los saludos de conexiones de prueba.
     pub fn set_fw_check_identity(&self, user_hash: [u8; 16]) {
-        *self.fw_user_hash.write().unwrap() = user_hash;
+        *self.fw_user_hash.write().unwrap_or_else(|p| p.into_inner()) = user_hash;
     }
 
     /// Estado actual del cortafuegos UDP (Unverified/Testing/Open/Firewalled).
@@ -317,7 +317,7 @@ impl KadService {
     /// (los pares remotos rechazan OP_FWCHECKUDPREQ procedente de clientes más antiguos).
     fn build_fw_hello(&self, intern_port: u16) -> Ed2kHello {
         use mule_protocol::ed2k::tags::*;
-        let user_hash = *self.fw_user_hash.read().unwrap();
+        let user_hash = *self.fw_user_hash.read().unwrap_or_else(|p| p.into_inner());
         let ed2k_tcp_port = self
             .ed2k_tcp_port
             .load(std::sync::atomic::Ordering::Relaxed);

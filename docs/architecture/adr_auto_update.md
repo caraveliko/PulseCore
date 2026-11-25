@@ -98,8 +98,8 @@ El servidor de versiones expone un archivo JSON estático firmado:
 
 ### Reglas de validación criptográfica
 1. **Clave pública maestra**: La clave pública de verificación Ed25519 de eMuleRust se compila dentro del binario como constante inmutable (`RELEASE_PUBLIC_KEY_ED25519`).
-2. **Cálculo de firma**: La firma Ed25519 cubre el hash SHA-256 binario del archivo empaquetado para evitar maleabilidad del transporte.
-3. **Límites de tamaño**: El cliente aborta inmediatamente la conexión si la cabecera `Content-Length` o el cuerpo recibido excede el límite máximo presupuestado (`MAX_UPDATE_PAYLOAD_BYTES`, p. ej. 64 MiB).
+2. **Cálculo de firma**: La firma Ed25519 se verifica sobre el payload del paquete descargado (tras validar también la huella SHA-256 declarada en el manifiesto y la cabecera binaria ELF64/PE).
+3. **Límites de tamaño**: El cliente aborta inmediatamente la conexión si la cabecera `Content-Length` o el cuerpo recibido excede el límite máximo presupuestado (`MAX_UPDATE_PAYLOAD_BYTES`, 64 MiB).
 
 ---
 
@@ -107,13 +107,13 @@ El servidor de versiones expone un archivo JSON estático firmado:
 
 ### Métodos RPC
 - **`system.checkUpdate`**:
-  - Parámetros: `{ "force": bool }` (opcional, por defecto `false`).
+  - Parámetros: `{}` (opcional).
   - Resultado:
     ```jsonc
     {
       "status": "update_available", // "idle" | "checking" | "update_available" | "up_to_date" | "downloading" | "ready_to_install" | "error"
-      "currentVersion": "0.3.0-beta.2",
-      "latestVersion": "0.3.1",
+      "currentVersion": "0.4.8",
+      "version": "0.4.9",
       "releaseDate": "2026-11-20T12:00:00Z",
       "changelogUrl": "https://...",
       "summary": "...",
@@ -122,26 +122,24 @@ El servidor de versiones expone un archivo JSON estático firmado:
     ```
 - **`system.getUpdateStatus`**: Devuelve la instantánea de estado del servicio actual.
 - **`system.applyUpdate`**:
-  - Parámetros: `{ "autoRestart": bool }` (si es `true`, tras verificar y preparar el reemplazo, inicia el apagado y relanzamiento).
-  - Resultado: `{ "accepted": true, "stage": "downloading" }`.
+  - Parámetros: `{ "autoRestart": bool }`.
+  - Ejecuta la descarga/verificación/preparación y devuelve la instantánea actualizada (`stage: "restarting" | "ready_to_install"`).
 
-### Eventos WebSocket emitidos
-- `event.updateStatusChanged`: Notifica cambios de fase (`checking`, `downloading`, `ready_to_install`, `error`).
-- `event.updateProgress`: `{ "downloadedBytes": 5242880, "totalBytes": 15728640, "percentage": 33.3 }`.
+### Eventos WebSocket (extensión planificada)
+- `event.updateStatusChanged` y `event.updateProgress` quedan reservados como extensión futura en `DaemonEvent`; actualmente la WebUI consulta el estado mediante `system.getUpdateStatus` / `system.checkUpdate`.
 
 ---
 
-## 5. Configuración y persistencia (`DaemonConfig`)
+## 5. Configuración y persistencia (`DaemonConfig` y SQLite)
 
-Se incorporan en `crates/mule-daemon/src/config.rs`:
+En `crates/mule-daemon/src/config.rs` y la tabla `settings`:
 
 | Parámetro | Tipo | Valor predeterminado | Descripción |
 | :--- | :--- | :--- | :--- |
-| `update_check_enabled` | `bool` | `true` | Habilita la comprobación periódica en segundo plano |
+| `update_check_enabled` | `bool` | `true` | Habilita la comprobación periódica en segundo plano (`AUTO_UPDATE_CHECK_INTERVAL` = 6 h) |
 | `update_channel` | `String` | `"stable"` | Canal de distribución (`"stable"`, `"beta"`) |
-| `update_check_interval_secs`| `u64` | `86400` (24 h) | Intervalo entre comprobaciones automáticas |
 | `update_manifest_url` | `String` | URL oficial | Endpoint HTTPS del manifiesto |
-| `update_auto_download` | `bool` | `false` | Si descarga automáticamente en segundo plano o espera aprobación |
+| `auto_update_enabled` | `bool` (SQLite) | `false` | Si descarga/aplica automáticamente o espera aprobación manual |
 
 ---
 

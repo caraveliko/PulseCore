@@ -105,7 +105,7 @@ impl ServerSessionManager {
         &self,
         svc: crate::services::inbound_listener::InboundListenerService,
     ) {
-        *self.inbound.write().unwrap() = Some(svc);
+        *self.inbound.write().unwrap_or_else(|p| p.into_inner()) = Some(svc);
     }
 
     /// Establece la referencia al servicio de descargas para la incorporación automática de fuentes encontradas.

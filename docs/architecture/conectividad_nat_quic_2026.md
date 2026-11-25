@@ -11,9 +11,9 @@ Este documento detalla la pila de conectividad moderna diseñada para redes dom�
 El servicio `UpnpService` (`crates/mule-daemon/src/services/upnp`) amplía el mapeo de puertos con una cascada automática:
 
 1. **UPnP IGD (IPv4)**: mantiene la inspección segura e idempotente (`ExactMatch`, `StaleLease`, `ForeignConflict`) y detección de CGNAT (`100.64.0.0/10`, RFC 6598).
-2. **PCP (Port Control Protocol, RFC 6887) sobre UDP `:5351`**:
+2. **PCP (Port Control Protocol, RFC 6887) sobre UDP `:5351`** *(actualmente detección automática de puerta de enlace implementada en Linux)*:
    - Si UPnP IGD falla o el router no responde SSDP, se consulta la puerta de enlace LAN predeterminada mediante paquetes PCP v2 `MAP` (60 bytes) con `nonce` aleatorio de 96 bits y dirección IPv4 mapeada en formato IPv6 (`::ffff:a.b.c.d`).
-   - Se valida que la puerta de enlace sea una dirección LAN/loopback válida (`is_valid_gateway_addr`) y se aplica *timeout* de `2 s` por intento.
+   - Se valida que la puerta de enlace sea una dirección LAN/loopback válida (`is_valid_gateway_addr`) y se aplica *timeout* de `1200 ms` por intento (`GATEWAY_UDP_TIMEOUT`).
 3. **NAT-PMP (RFC 6886) sobre UDP `:5351`**:
    - Si el router responde `UNSUPP_VERSION` (`result_code = 1`) o no soporta PCP, la cascada degrada automáticamente a NAT-PMP v0 (`PUBLIC_ADDR` + `MAP_TCP` / `MAP_UDP`).
 4. **UPnP IGDv2 IPv6 Firewall Pinhole (`WANIPv6FirewallControl:1`)**:
@@ -34,19 +34,19 @@ Cuando un par anuncia tanto un punto de enlace IPv6 (`"pc26_ipv6"`) como IPv4:
 
 ---
 
-## 3. Transporte QUIC P2P (RFC 9000)
+## 3. Transporte QUIC P2P (RFC 9000) — *Módulo base implementado, pendiente de cableado en despachador*
 
 El módulo `quic_transport.rs` levanta un extremo `quinn::Endpoint` sobre UDP (bajo permiso explícito de `NetworkPolicyManager`):
 
 - **ALPN**: `"pulse-ed2k-2026"`.
-- **Autenticación mutua sin CA externa (P2P)**:
+- **Autenticación de servidor sin CA externa (P2P)**:
   - Cada nodo genera en memoria un certificado X.509 autofirmado a partir de su clave persistente Ed25519 (`ModernIdentityKey`) mediante `rcgen`.
   - El verificador personalizado de `rustls` comprueba la firma TLS 1.3 del apretón de manos y verifica que la clave pública `SubjectPublicKeyInfo` del certificado remoto coincide exactamente con los 32 bytes Ed25519 anunciados por el par (`"pc26_ed25519"`), eliminando cualquier dependencia de autoridades certificadoras y neutralizando ataques *MitM*.
-- **Multiplexación**: permite abrir múltiples flujos bidireccionales independientes por conexión sin *Head-of-Line blocking*, conservando intacto el entramado eD2K/PC26 y el *kill switch* atómico.
+- **Estado de integración**: `QuicPeerTransport` está implementado y probado unitariamente, pero el bucle `accept()` y la etiqueta `pc26_quic` no se anuncian ni despachan todavía en producción hasta completar la integración con `peer_session` e `inbound_listener` (junto con la autenticación mutua de certificado cliente).
 
 ---
 
-## 4. Coordinación de perforación simultánea UDP (*UDP Hole Punching*)
+## 4. Coordinación de perforación simultánea UDP (*UDP Hole Punching*) — *Módulo base implementado*
 
 Para conectar pares tras NAT simétrico ligero o NAT de cono completo donde el callback TCP es imposible:
 

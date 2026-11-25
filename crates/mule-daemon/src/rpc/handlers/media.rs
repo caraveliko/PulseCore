@@ -401,17 +401,23 @@ pub async fn handle_media_delete(
     }
 
     if delete_files {
-        if let Some((_, ref title, _, _, ref root_folder)) = item_info {
+        if let Some((_, ref title, year, _, ref root_folder)) = item_info {
             let root_p = std::path::PathBuf::from(root_folder);
+            let title_norm = title.trim().to_lowercase();
+            let title_year_norm = year.map(|y| format!("{title_norm} ({y})"));
             if root_p.is_dir() {
                 if let Ok(entries) = std::fs::read_dir(&root_p) {
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if path.is_dir() {
-                            let name = path.file_name().unwrap_or_default().to_string_lossy();
-                            if name.to_lowercase().contains(&title.to_lowercase())
-                                || title.to_lowercase().contains(&name.to_lowercase())
-                            {
+                            let name = path.file_name().unwrap_or_default().to_string_lossy().trim().to_lowercase();
+                            let exact_match = name == title_norm
+                                || title_year_norm.as_deref() == Some(name.as_str())
+                                || name.starts_with(&format!("{title_norm} ["))
+                                || title_year_norm
+                                    .as_deref()
+                                    .is_some_and(|ty| name.starts_with(&format!("{ty} [")));
+                            if exact_match {
                                 files_to_delete.push(path);
                             }
                         }
@@ -603,12 +609,16 @@ pub async fn handle_media_search_releases(
     let episode_number = params["episodeNumber"].as_u64().map(|n| n as u32);
 
     let (mut queries, is_movie, quality_profile, item_ctx) = if !media_id.is_empty() {
-        let dl_svc = state.downloads.lock().await;
-        let item = dl_svc
-            .db()
-            .get_media_item(media_id)
-            .map_err(|e| JsonRpcError::business(e.to_string()))?
-            .ok_or_else(|| JsonRpcError::business(format!("Media item '{media_id}' not found")))?;
+        let item = {
+            let dl_svc = state.downloads.lock().await;
+            dl_svc
+                .db()
+                .get_media_item(media_id)
+                .map_err(|e| JsonRpcError::business(e.to_string()))?
+                .ok_or_else(|| {
+                    JsonRpcError::business(format!("Media item '{media_id}' not found"))
+                })?
+        };
 
         let ext_details = state.media_metadata.get_extended_details(&item).await;
 

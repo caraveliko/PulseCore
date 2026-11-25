@@ -102,6 +102,18 @@ pub struct SearchMediaResult {
     pub rating: Option<f64>,
 }
 
+/// Tope máximo de entradas por caché en memoria para evitar crecimiento ilimitado en 24/7.
+const MAX_METADATA_CACHE_ENTRIES: usize = 256;
+
+fn bounded_cache_insert<V>(map: &mut HashMap<String, V>, key: String, value: V) {
+    if map.len() >= MAX_METADATA_CACHE_ENTRIES && !map.contains_key(&key) {
+        if let Some(evict_key) = map.keys().next().cloned() {
+            map.remove(&evict_key);
+        }
+    }
+    map.insert(key, value);
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MediaMetadataService {
     client: Client,
@@ -242,10 +254,8 @@ impl MediaMetadataService {
             return Some(cached);
         }
         if let Some(translated) = self.translate_en_to_es_mymemory(&trimmed).await {
-            self.es_overview_cache
-                .write()
-                .await
-                .insert(cache_key.to_string(), translated.clone());
+            let mut cache = self.es_overview_cache.write().await;
+            bounded_cache_insert(&mut cache, cache_key.to_string(), translated.clone());
             return Some(translated);
         }
         Some(trimmed)
@@ -840,10 +850,10 @@ impl MediaMetadataService {
             self.fetch_movie_extended_details(item).await
         };
 
-        self.details_cache
-            .write()
-            .await
-            .insert(item.id.clone(), details.clone());
+        {
+            let mut cache = self.details_cache.write().await;
+            bounded_cache_insert(&mut cache, item.id.clone(), details.clone());
+        }
         details
     }
 
@@ -1339,10 +1349,10 @@ impl MediaMetadataService {
             _ => None,
         };
 
-        self.person_photo_cache
-            .write()
-            .await
-            .insert(name.to_string(), photo.clone());
+        {
+            let mut cache = self.person_photo_cache.write().await;
+            bounded_cache_insert(&mut cache, name.to_string(), photo.clone());
+        }
         photo
     }
 }

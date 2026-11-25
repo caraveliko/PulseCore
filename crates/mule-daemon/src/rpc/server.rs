@@ -158,8 +158,11 @@ pub fn is_allowed_host_header(host_header: &str) -> bool {
 /// provenga de la interfaz local/LAN y no de un sitio web externo malicioso (CSRF / CSWSH).
 pub fn is_allowed_origin_header(origin_header: &str) -> bool {
     let origin = origin_header.trim();
-    if origin.is_empty() || origin == "null" || origin.starts_with("file://") {
+    if origin.is_empty() || origin.starts_with("file://") {
         return true;
+    }
+    if origin == "null" {
+        return false;
     }
     let without_scheme = origin
         .strip_prefix("http://")
@@ -411,10 +414,17 @@ async fn session_config_js(State(state): State<AppState>, req: Request) -> impl 
         "requiresPassword": requires_password,
     });
     (
-        [(
-            header::CONTENT_TYPE,
-            "application/javascript; charset=utf-8",
-        )],
+        [
+            (
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
+            (
+                header::HeaderName::from_static("cross-origin-resource-policy"),
+                "same-origin",
+            ),
+            (header::CACHE_CONTROL, NO_CACHE_CONTROL),
+        ],
         format!("window.MULE_SESSION={session};"),
     )
         .into_response()
@@ -429,14 +439,22 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
 /// `None` = evento sin tema que siempre se retransmite (ej.: snapshotRequired).
 /// Delega en `DaemonEvent::topic` — la única fuente de verdad.
 fn event_topic(method: &str) -> Option<&'static str> {
-    crate::services::DaemonEvent::Custom {
-        method: method.to_string(),
-        payload: serde_json::Value::Null,
+    crate::services::events::topic_for_method(method)
+}
+
+struct WsClientCountGuard(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for WsClientCountGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
-    .topic()
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
+    state
+        .ws_client_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let _ws_guard = WsClientCountGuard(std::sync::Arc::clone(&state.ws_client_count));
     let (mut sender, mut receiver) = socket.split();
     let mut rx_events = state.event_tx.subscribe();
     let is_authenticated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
@@ -516,7 +534,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                     tracing::debug!("RPC incoming request: method={}, id={:?}", req.method, req.id);
                                     let mut auth_val = auth_clone.load(std::sync::atomic::Ordering::SeqCst);
                                     if let Some(resp) = handle_request(&state_clone, req, &mut auth_val).await {
-                                        auth_clone.store(auth_val, std::sync::atomic::Ordering::SeqCst);
+                                        if auth_val {
+                                            auth_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+                                        }
                                         if let Some(ref err) = resp.error {
                                             tracing::warn!("RPC response error: id={:?}, code={}, msg={}", resp.id, err.code, err.message);
                                         } else {
@@ -624,7 +644,7 @@ mod tests {
     fn test_csrf_origin_guard() {
         assert!(is_allowed_origin_header("http://192.168.1.50:4660"));
         assert!(is_allowed_origin_header("http://localhost:4660"));
-        assert!(is_allowed_origin_header("null"));
+        assert!(!is_allowed_origin_header("null"));
         assert!(!is_allowed_origin_header("https://malicious-site.com"));
         assert!(!is_allowed_origin_header("http://8.8.8.8:4660"));
     }

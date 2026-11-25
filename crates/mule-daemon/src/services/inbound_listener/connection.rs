@@ -179,9 +179,9 @@ impl InboundListenerService {
                 warn!("Rejected obfuscated inbound connection from {} because obfuscation is disabled", log_addr_str(&remote_str));
                 return;
             }
-            let local_user_hash = *self.user_hash.read().unwrap();
+            let local_user_hash = *self.user_hash.read().unwrap_or_else(|p| p.into_inner());
             let mut fallback_hashes = vec![mule_core::kad::KadId(local_user_hash).to_hash_be()];
-            if let Some(kad_svc) = self.kad.read().unwrap().as_ref() {
+            if let Some(kad_svc) = self.kad.read().unwrap_or_else(|p| p.into_inner()).as_ref() {
                 let kad_id = kad_svc.local_id();
                 fallback_hashes.push(kad_id.to_hash_be());
                 fallback_hashes.push(kad_id.0);
@@ -337,7 +337,7 @@ impl InboundListenerService {
                 // `GetUserIDHybrid()` y `GetCurrentServer()`; 0 si no
                 // está conectado.
                 let ans = Ed2kHelloAnswer {
-                    user_hash: *self.user_hash.read().unwrap(),
+                    user_hash: *self.user_hash.read().unwrap_or_else(|p| p.into_inner()),
                     client_id: ids.client_id,
                     tcp_port: actual_listen_addr.port(),
                     tags,
@@ -395,7 +395,7 @@ impl InboundListenerService {
                             let kad_version =
                                 mule_protocol::ed2k::Ed2kPeerInfo::from_hello(hello).kad_version();
                             if let IpAddr::V4(ip4) = remote_addr.ip() {
-                                let kad_svc = self.kad.read().unwrap().clone();
+                                let kad_svc = self.kad.read().unwrap_or_else(|p| p.into_inner()).clone();
                                 if let Some(k) = kad_svc {
                                     tokio::spawn(async move {
                                         k.maybe_bootstrap_from_peer(
@@ -420,7 +420,7 @@ impl InboundListenerService {
         // OP_REASKCALLBACKTCP de los solicitantes (`IncomingBuddy` +
         // `KS_CONNECTED_BUDDY` de eMule).
         let pending_buddy = {
-            let kad_udp = self.kad_udp.read().unwrap().clone();
+            let kad_udp = self.kad_udp.read().unwrap_or_else(|p| p.into_inner()).clone();
             match kad_udp {
                 Some(k) => k
                     .buddy_registry()
@@ -447,7 +447,7 @@ impl InboundListenerService {
             if hello.client_id == 0 || hello.client_id >= 16_777_216 {
                 return None;
             }
-            let ps = self.peer_session.read().unwrap().clone()?;
+            let ps = self.peer_session.read().unwrap_or_else(|p| p.into_inner()).clone()?;
             ps.take_pending_callback(hello.client_id)
                 .map(|file_hash| (ps, file_hash, hello.client_id))
         });
@@ -497,7 +497,7 @@ impl InboundListenerService {
         // Adopción de devolución de compañero Kad: una fuente Kad LowID a la que hicimos
         // ping vía KADEMLIA_CALLBACK_REQ se conecta entrante; asociada por IP remota.
         let pending_kad_cb = {
-            let ps = self.peer_session.read().unwrap().clone();
+            let ps = self.peer_session.read().unwrap_or_else(|p| p.into_inner()).clone();
             ps.and_then(|ps| {
                 ps.take_pending_kad_callback(remote_addr.ip())
                     .map(|file_hash| (ps, file_hash))
@@ -561,7 +561,7 @@ impl InboundListenerService {
         // coincidan con la semántica de su GetUDPVersion() (estado de partes solo para ver > 3).
         if let Some(hello) = callback_hello.as_ref() {
             let peer_info = mule_protocol::ed2k::Ed2kPeerInfo::from_hello(hello);
-            let svc = self.client_udp.read().unwrap().clone();
+            let svc = self.client_udp.read().unwrap_or_else(|p| p.into_inner()).clone();
             if let Some(svc) = svc {
                 svc.note_client_udp_version(remote_addr.ip(), peer_info.udp_version())
                     .await;
@@ -681,7 +681,7 @@ impl InboundListenerService {
         let (tags, sec_ident) = self
             .build_hello_tags(our_tcp_port, our_client_id < 0x0100_0000)
             .await;
-        let local_user_hash = *self.user_hash.read().unwrap();
+        let local_user_hash = *self.user_hash.read().unwrap_or_else(|p| p.into_inner());
         let hello = mule_protocol::ed2k::Ed2kHello {
             user_hash: local_user_hash,
             client_id: our_client_id,
@@ -797,7 +797,7 @@ impl InboundListenerService {
         pending: crate::services::kad_udp::PendingBuddy,
         cancel_token: mule_network_policy::CancellationToken,
     ) {
-        let Some(kad_udp) = self.kad_udp.read().unwrap().clone() else {
+        let Some(kad_udp) = self.kad_udp.read().unwrap_or_else(|p| p.into_inner()).clone() else {
             return;
         };
         let registry = kad_udp.buddy_registry();

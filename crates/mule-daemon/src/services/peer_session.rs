@@ -178,7 +178,7 @@ impl PeerSessionManager {
     /// Inyecta los limitadores de tasa de política de red compartidos (planificador
     /// global de ancho de banda de descarga para bucles de transferencia de pares).
     pub fn set_rate_limiters(&self, limiters: Arc<mule_network_policy::PolicyRateLimiters>) {
-        *self.rate_limiters.write().unwrap() = Some(limiters);
+        *self.rate_limiters.write().unwrap_or_else(|p| p.into_inner()) = Some(limiters);
     }
 
     /// Devuelve el seguidor compartido de reputación y puntuación de pares.
@@ -187,7 +187,7 @@ impl PeerSessionManager {
     }
 
     fn rate_limiters(&self) -> Option<Arc<mule_network_policy::PolicyRateLimiters>> {
-        self.rate_limiters.read().unwrap().clone()
+        self.rate_limiters.read().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
     /// Registra una devolución de llamada LowID pendiente: tras enviar `OP_CALLBACKREQUEST`
@@ -200,7 +200,7 @@ impl PeerSessionManager {
             .unwrap_or_default()
             .as_millis() as i64
             + ttl_ms;
-        let mut map = self.pending_callbacks.lock().unwrap();
+        let mut map = self.pending_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > expiry - ttl_ms);
         map.insert(lowid, (file_hash, expiry));
     }
@@ -212,7 +212,7 @@ impl PeerSessionManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        let mut map = self.pending_callbacks.lock().unwrap();
+        let mut map = self.pending_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > now);
         map.remove(&lowid).map(|(h, _)| h)
     }
@@ -223,7 +223,7 @@ impl PeerSessionManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        let mut map = self.pending_callbacks.lock().unwrap();
+        let mut map = self.pending_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > now);
         map.contains_key(&lowid)
     }
@@ -242,7 +242,7 @@ impl PeerSessionManager {
             .unwrap_or_default()
             .as_millis() as i64
             + ttl_ms;
-        let mut map = self.pending_kad_callbacks.lock().unwrap();
+        let mut map = self.pending_kad_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > expiry - ttl_ms);
         map.insert(ip, (file_hash, expiry));
     }
@@ -253,7 +253,7 @@ impl PeerSessionManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        let mut map = self.pending_kad_callbacks.lock().unwrap();
+        let mut map = self.pending_kad_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > now);
         map.remove(&ip).map(|(h, _)| h)
     }
@@ -264,24 +264,24 @@ impl PeerSessionManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        let mut map = self.pending_kad_callbacks.lock().unwrap();
+        let mut map = self.pending_kad_callbacks.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, (_, exp)| *exp > now);
         map.contains_key(&ip)
     }
 
     /// Establece los contadores de anomalías SUI compartidos (objeto `sui` de identity.status).
     pub fn set_sui_stats(&self, stats: Arc<crate::services::identity::SuiStats>) {
-        *self.sui_stats.write().unwrap() = stats;
+        *self.sui_stats.write().unwrap_or_else(|p| p.into_inner()) = stats;
     }
 
     /// Establece el servicio de identidad utilizado para la Identificación Segura
     /// de Usuario (SUI) saliente de eMule (firma RSA-384 de desafíos de pares).
     pub fn set_identity(&self, identity: Arc<Mutex<crate::services::IdentityService>>) {
-        *self.identity.write().unwrap() = Some(identity);
+        *self.identity.write().unwrap_or_else(|p| p.into_inner()) = Some(identity);
     }
 
     fn identity(&self) -> Option<Arc<Mutex<crate::services::IdentityService>>> {
-        self.identity.read().unwrap().clone()
+        self.identity.read().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
     pub fn with_limits(mut self, max_peers_per_download: usize, max_global_peers: usize) -> Self {
@@ -299,7 +299,7 @@ impl PeerSessionManager {
     }
 
     pub fn set_kad_service(&self, kad: Arc<crate::services::KadService>) {
-        let mut g = self.kad.write().unwrap();
+        let mut g = self.kad.write().unwrap_or_else(|p| p.into_inner());
         *g = Some(kad);
     }
 
@@ -314,7 +314,7 @@ impl PeerSessionManager {
     }
 
     pub fn kad_service(&self) -> Option<Arc<crate::services::KadService>> {
-        let g = self.kad.read().unwrap();
+        let g = self.kad.read().unwrap_or_else(|p| p.into_inner());
         g.clone()
     }
 
@@ -425,19 +425,33 @@ impl PeerSessionManager {
         found
     }
 
+    fn addr_matches_ip(addr: &str, ip: &std::net::IpAddr) -> bool {
+        addr.parse::<std::net::SocketAddr>()
+            .ok()
+            .map(|sa| sa.ip())
+            == Some(*ip)
+    }
+
     /// Aplica una posición en cola aprendida mediante `OP_REASKACK` a la
     /// sesión en cola de ese par (emparejada por IP, como
     /// `GetDownloadClientByIP_UDP`).
     pub async fn apply_udp_queue_rank(&self, ip: &std::net::IpAddr, rank: u32) {
-        let ip_str = ip.to_string();
         let mut g = self.inner.lock().await;
+        for (addr, q) in g.queued_peers.iter_mut() {
+            if Self::addr_matches_ip(addr, ip) {
+                q.next_tcp_reask_unix_ms = Some(
+                    crate::services::downloads::now_ms()
+                        + crate::services::peer_session::status_query::FILE_REASK_INTERVAL
+                            .as_millis() as i64,
+                );
+            }
+        }
         for s in g.sessions.values_mut() {
             let matches = s
                 .snapshot
                 .peer_address
-                .as_ref()
-                .and_then(|a| a.rsplit_once(':'))
-                .map(|(host, _)| host == ip_str)
+                .as_deref()
+                .map(|a| Self::addr_matches_ip(a, ip))
                 .unwrap_or(false);
             if matches && s.snapshot.status == PeerConnectionStatus::Queued {
                 s.snapshot.queue_rank = Some(rank);
@@ -455,15 +469,13 @@ impl PeerSessionManager {
     /// Aplica `OP_QUEUEFULL` a la sesión en cola de ese par — `SetRemoteQueueFull(true)`
     /// + `UDPReaskACK(0)` de eMule (posición restablecida a 0).
     pub async fn apply_udp_queue_full(&self, ip: &std::net::IpAddr) {
-        let ip_str = ip.to_string();
         let mut g = self.inner.lock().await;
         for s in g.sessions.values_mut() {
             let matches = s
                 .snapshot
                 .peer_address
-                .as_ref()
-                .and_then(|a| a.rsplit_once(':'))
-                .map(|(host, _)| host == ip_str)
+                .as_deref()
+                .map(|a| Self::addr_matches_ip(a, ip))
                 .unwrap_or(false);
             if matches && s.snapshot.status == PeerConnectionStatus::Queued {
                 s.snapshot.remote_queue_full = true;
@@ -480,15 +492,14 @@ impl PeerSessionManager {
     /// Aplica `OP_FILENOTFOUND` a la sesión en cola de ese par —
     /// `UDPReaskFNF` de eMule elimina el cliente de descarga para ese archivo.
     pub async fn apply_udp_file_not_found(&self, ip: &std::net::IpAddr) {
-        let ip_str = ip.to_string();
         let mut g = self.inner.lock().await;
+        g.queued_peers.retain(|addr, _| !Self::addr_matches_ip(addr, ip));
         for s in g.sessions.values_mut() {
             let matches = s
                 .snapshot
                 .peer_address
-                .as_ref()
-                .and_then(|a| a.rsplit_once(':'))
-                .map(|(host, _)| host == ip_str)
+                .as_deref()
+                .map(|a| Self::addr_matches_ip(a, ip))
                 .unwrap_or(false);
             if matches && s.snapshot.status == PeerConnectionStatus::Queued {
                 s.snapshot.status = PeerConnectionStatus::Disconnected;
@@ -587,7 +598,7 @@ impl PeerSessionManager {
         let timeouts = self.timeouts;
         let kad_svc_opt = self.kad_service();
         let identity_opt = self.identity();
-        let sui_stats = self.sui_stats.read().unwrap().clone();
+        let sui_stats = self.sui_stats.read().unwrap_or_else(|p| p.into_inner()).clone();
         let rate_limiters_opt = self.rate_limiters();
         let score_tracker_clone = self.score_tracker();
         let uss_opt = self.uss();
@@ -871,7 +882,7 @@ impl PeerSessionManager {
         let file_hash_str = file_hash.to_string();
         let timeouts = self.timeouts;
         let identity_opt = self.identity();
-        let sui_stats = self.sui_stats.read().unwrap().clone();
+        let sui_stats = self.sui_stats.read().unwrap_or_else(|p| p.into_inner()).clone();
         let rate_limiters_opt = self.rate_limiters();
         let score_tracker_clone = self.score_tracker();
         let uss_opt = self.uss();

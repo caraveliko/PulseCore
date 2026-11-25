@@ -621,12 +621,20 @@ pub fn validate_video_file(
     })?;
 
     let mut buf = vec![0u8; FILE_HEADER_INSPECT_BYTES];
-    let n = file
-        .read(&mut buf)
-        .map_err(|e| ContentPolicyError::HeaderReadError {
-            file_name: display_name.to_string(),
-            reason: e.to_string(),
-        })?;
+    let mut n = 0usize;
+    while n < buf.len() {
+        match file.read(&mut buf[n..]) {
+            Ok(0) => break,
+            Ok(read_bytes) => n += read_bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                return Err(ContentPolicyError::HeaderReadError {
+                    file_name: display_name.to_string(),
+                    reason: e.to_string(),
+                });
+            }
+        }
+    }
 
     validate_video_header(&buf[..n], display_name)
 }

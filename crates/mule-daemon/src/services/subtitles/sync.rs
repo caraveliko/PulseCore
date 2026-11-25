@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
@@ -181,6 +180,9 @@ pub fn align_cues_to_reference(
     }
 }
 
+/// Límite de tiempo para la extracción de subtítulos embebidos con `ffmpeg`.
+const FFMPEG_SYNC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// Extrae una pista de subtítulos textual embebida usando `ffmpeg` bajo semáforo de concurrencia.
 pub async fn extract_embedded_srt_via_ffmpeg(
     video_path: &Path,
@@ -190,22 +192,21 @@ pub async fn extract_embedded_srt_via_ffmpeg(
     let path_buf = video_path.to_path_buf();
     let map_arg = format!("0:s:{sub_stream_idx}");
 
-    tokio::task::spawn_blocking(move || {
-        let output = Command::new("ffmpeg")
-            .args(["-v", "quiet", "-i"])
-            .arg(&path_buf)
-            .args(["-map", &map_arg, "-f", "srt", "pipe:1"])
-            .output()
-            .ok()?;
-        if !output.status.success() || output.stdout.is_empty() {
-            return None;
-        }
-        let text = String::from_utf8_lossy(&output.stdout);
-        parse_srt(&text).ok()
-    })
-    .await
-    .ok()
-    .flatten()
+    let mut cmd = tokio::process::Command::new("ffmpeg");
+    cmd.args(["-v", "quiet", "-i"])
+        .arg(&path_buf)
+        .args(["-map", &map_arg, "-f", "srt", "pipe:1"])
+        .kill_on_drop(true);
+
+    let output = tokio::time::timeout(FFMPEG_SYNC_TIMEOUT, cmd.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_srt(&text).ok()
 }
 
 #[cfg(test)]

@@ -190,6 +190,8 @@ pub struct AppState {
     /// Transporte QUIC P2P autenticado por Ed25519 (gestionado con el ciclo de vida UDP).
     pub quic_transport:
         Arc<tokio::sync::RwLock<Option<Arc<crate::services::quic_transport::QuicPeerTransport>>>>,
+    /// Número de clientes WebSocket conectados actualmente (suspende `StatsTick` cuando es 0).
+    pub ws_client_count: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl AppState {
@@ -603,7 +605,8 @@ impl AppState {
         });
 
         // Pulso periódico de estadísticas agregadas (event.statsTick, tema `stats`).
-        // Se omite por completo mientras no haya clientes WebSocket suscritos.
+        // La persistencia de contadores acumulados se ejecuta siempre; la emisión WS se omite si no hay clientes conectados.
+        let ws_client_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         {
             let stats_downloads = Arc::clone(&dl_arc);
             let stats_uploads = inbound_listener.upload_manager().clone();
@@ -614,6 +617,7 @@ impl AppState {
             let stats_seq = Arc::clone(&sequence);
             let stats_lifetime_dl = Arc::clone(&lifetime_downloaded_bytes);
             let stats_lifetime_ul = Arc::clone(&lifetime_uploaded_bytes);
+            let stats_ws_clients = Arc::clone(&ws_client_count);
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -624,11 +628,9 @@ impl AppState {
                 let mut last_file_totals = stats_uploads.per_file_uploaded_bytes();
                 loop {
                     interval.tick().await;
-                    if stats_tx.receiver_count() == 0 {
-                        continue;
-                    }
+                    let has_ws_clients = stats_ws_clients.load(Ordering::Relaxed) > 0;
                     let session_uploaded_bytes = stats_uploads.total_uploaded_bytes();
-                    let (downloads, session_downloaded_bytes) = {
+                    let (download_bps, downloads_active, session_downloaded_bytes) = {
                         let mut dl = stats_downloads.lock().await;
                         // Acumulado «desde la instalación»: sumamos el delta
                         // de sesión transcurrido desde el último pulso (solo cuentan
@@ -658,13 +660,12 @@ impl AppState {
                             }
                         }
                         last_file_totals = file_totals;
-                        (dl.list_downloads(), session_dl)
+                        if !has_ws_clients {
+                            continue;
+                        }
+                        let (dl_bps, active_cnt) = dl.download_rates_and_active_count();
+                        (dl_bps, active_cnt, session_dl)
                     };
-                    let download_bps: u64 = downloads.iter().map(|d| d.download_rate_bps).sum();
-                    let downloads_active = downloads
-                        .iter()
-                        .filter(|d| d.status == "downloading")
-                        .count();
                     let upload_bps: u64 = stats_uploads
                         .active_snapshots()
                         .await
@@ -763,6 +764,7 @@ impl AppState {
             updater,
             notifications,
             quic_transport: Arc::new(tokio::sync::RwLock::new(None)),
+            ws_client_count,
         }
     }
 
@@ -800,7 +802,8 @@ impl AppState {
                         return Some(existing.local_addr());
                     }
                     let addr = qt.local_addr();
-                    self.inbound_listener.set_quic_port(addr.port());
+                    // No anunciar `pc26_quic` hasta que el bucle `accept()` despache flujos eD2K/PC26.
+                    self.inbound_listener.set_quic_port(0);
                     *slot = Some(Arc::new(qt));
                     tracing::info!("[QUIC] Transporte P2P Ed25519 enlazado en {addr}");
                     return Some(addr);

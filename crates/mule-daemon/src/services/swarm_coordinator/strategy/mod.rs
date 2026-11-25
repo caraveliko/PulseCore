@@ -526,7 +526,8 @@ impl SwarmCoordinator {
                                 drop(dl_guard);
                                 for addr in banned {
                                     tracing::warn!(
-                                        "[CORRUPTION_BLACKBOX] Banning {addr} for download {id} (>32% corrupted data)"
+                                        "[CORRUPTION_BLACKBOX] Banning {} for download {id} (>32% corrupted data)",
+                                        log_addr_str(&addr)
                                     );
                                     let mut dl_guard = state_clone.downloads.lock().await;
                                     let now_ms = std::time::SystemTime::now()

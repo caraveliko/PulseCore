@@ -94,4 +94,8 @@ pub struct TorrentCapabilitiesSnapshot {
     pub loopback_only: bool,
     /// Cifrado clásico de flujo MSE/PE (BEP 8) — `false` de forma explícita porque `librqbit 9.0.1` no lo implementa.
     pub mse_pe_supported: bool,
+    /// BitTorrent v2 (BEP 52) — `false` de forma explícita porque `librqbit 9.0.1` no lo implementa.
+    pub bt_v2_supported: bool,
+    /// Perforación UDP (BEP 55) — `false` de forma explícita porque `librqbit 9.0.1` no lo implementa.
+    pub holepunch_supported: bool,
 }

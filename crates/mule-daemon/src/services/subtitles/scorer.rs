@@ -239,6 +239,18 @@ pub fn score_candidate(
         };
     }
 
+    let check_name = cand.release_name.unwrap_or(cand.title).trim().to_ascii_lowercase();
+    if check_name.ends_with(".sub")
+        || check_name.ends_with(".idx")
+        || check_name.ends_with(".sup")
+    {
+        return CandidateScore {
+            accepted: false,
+            score: i32::MIN,
+            reasons: vec!["descartado: formato no textual (.sub/.idx/.sup)".to_string()],
+        };
+    }
+
     if cand.is_hi && !prefs.allow_hi {
         return CandidateScore {
             accepted: false,

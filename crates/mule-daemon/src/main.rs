@@ -269,7 +269,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // 3. Resolver dirección de enlace (bind) del socket con alternativa efímera automática si el puerto está ocupado
-    let default_bind: std::net::SocketAddr = "127.0.0.1:4660".parse().unwrap();
+    let default_bind = std::net::SocketAddr::from(([127, 0, 0, 1], 4660));
     let requested_bind = bind_addr_arg
         .or_else(|| {
             std::env::var("MULE_BIND_ADDR")
@@ -284,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::warn!(
                 "==> Port {requested_bind} is in use. Falling back to ephemeral port..."
             );
-            let fallback_addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
+            let fallback_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
             tokio::net::TcpListener::bind(fallback_addr).await?
         }
         Err(e) => return Err(e.into()),
@@ -419,12 +419,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let kad_svc = state.kad.clone();
         let kad_cancel = state.network_policy.cancellation_token();
         let kad_bind_ip = if network_profile.is_loopback_only() {
-            "127.0.0.1"
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
         } else {
-            "0.0.0.0"
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
         };
-        let kad_bind_addr: std::net::SocketAddr =
-            format!("{kad_bind_ip}:{eff_kad_port}").parse().unwrap();
+        let kad_bind_addr = std::net::SocketAddr::new(kad_bind_ip, eff_kad_port);
         let nodes_dat_path = state.config.data_dir.join("nodes.dat");
         tokio::spawn(async move {
             kad_svc.init_from_db().await;
@@ -445,7 +444,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Socket UDP de servidor (OP_GLOBGETSOURCES2 / OP_GLOBFOUNDSOURCES) —
         // socket efímero separado como el `UDPSocket` de eMule.
         let server_udp_svc = state.server_udp.clone();
-        let server_udp_bind_ip: std::net::IpAddr = kad_bind_ip.parse().unwrap();
+        let server_udp_bind_ip = kad_bind_ip;
         tokio::spawn(async move {
             match server_udp_svc.start(server_udp_bind_ip).await {
                 Ok(bound) => tracing::info!("Server UDP socket auto-started on {bound}"),
@@ -464,13 +463,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if network_profile.is_preview() || network_profile.is_loopback_only() {
         let listener_svc = state.inbound_listener.clone();
         let inbound_bind_ip = if network_profile.is_loopback_only() {
-            "127.0.0.1"
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
         } else {
-            "0.0.0.0"
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
         };
-        let inbound_bind_addr: std::net::SocketAddr = format!("{inbound_bind_ip}:{eff_ed2k_port}")
-            .parse()
-            .unwrap();
+        let inbound_bind_addr = std::net::SocketAddr::new(inbound_bind_ip, eff_ed2k_port);
         tokio::spawn(async move {
             match listener_svc.start(inbound_bind_addr).await {
                 Ok(bound) => {

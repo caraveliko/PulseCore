@@ -16,7 +16,10 @@ Este documento especifica cómo el motor BitTorrent integrado (`crates/mule-torr
 3. **Filtro IP unificado (`ipfilter.dat`)**:
    - Los rangos cargados en `mule_filter::IpFilter` se exportan atómicamente en formato `nombre:inicio-fin` y se inyectan mediante `SessionOptions.blocklist_url` (`file://...`) para que los pares bloqueados en eD2K queden también excluidos en BitTorrent.
 4. **Protección anti-SSRF en `add_url`**:
-   - Las URLs `http://` y `https://` pasan primero por validación de host/IP de `NetworkPolicyManager` antes de delegar la descarga del `.torrent` a `librqbit`, rechazando direcciones loopback, privadas o de metadatos cloud (`169.254.169.254`) cuando el perfil no las autoriza. Los enlaces `magnet:` continúan su flujo habitual.
+   - `validate_torrent_url` restringe explícitamente los esquemas admitidos a `magnet:`, `http://` y `https://`, rechazando cualquier otro esquema (como `file://`).
+   - Las URLs `http://` y `https://` pasan por validación de host/IP de `NetworkPolicyManager` antes de delegar en `librqbit`, rechazando direcciones loopback, privadas o de metadatos cloud (`169.254.169.254`) cuando el perfil no las autoriza. Los enlaces `magnet:` continúan su flujo habitual.
+5. **Vigilancia «Solo Vídeo» en `fastresume`**:
+   - Al restaurar torrents incompletos desde `bt_session`, `TorrentEngine::new_with_policy` reactiva automáticamente `spawn_video_header_watchdog` para verificar las cabeceras binarias de los archivos de vídeo en curso.
 
 ---
 
@@ -31,9 +34,9 @@ Este documento especifica cómo el motor BitTorrent integrado (`crates/mule-torr
 | **UPnP coordinado** | **Sincronizado con DaemonConfig/BD** | `ListenerOptions.enable_upnp_port_forwarding` ligado al ajuste `upnp_enabled` |
 | **Filtro IP (`ipfilter.dat`)** | **Activo** | Exportación atómica → `blocklist_url` |
 | **Kill Switch y Anti-SSRF** | **Activo** | Enlazado a `NetworkPolicyManager` |
-| **MSE/PE (cifrado RC4 BT)** | *No soportado por `librqbit 9.0.1`* | Expuesto en `TorrentCapabilitiesSnapshot` como `false` |
-| **BitTorrent v2 (BEP 52)** | *No soportado por `librqbit 9.0.1`* | Árbol Merkle SHA-256 ya disponible en `mule-crypto::merkle_blake3`; expuesto como `false` |
-| **Holepunching (BEP 55)** | *No soportado por `librqbit 9.0.1`* | Expuesto en `TorrentCapabilitiesSnapshot` como `false` |
+| **MSE/PE (cifrado RC4 BT)** | *No soportado por `librqbit 9.0.1`* | Expuesto en `TorrentCapabilitiesSnapshot.mse_pe_supported` como `false` |
+| **BitTorrent v2 (BEP 52)** | *No soportado por `librqbit 9.0.1`* | Árbol Merkle BLAKE3/SHA-256 ya disponible en `mule-crypto::merkle_blake3`; expuesto en `TorrentCapabilitiesSnapshot.bt_v2_supported` como `false` |
+| **Holepunching (BEP 55)** | *No soportado por `librqbit 9.0.1`* | Expuesto en `TorrentCapabilitiesSnapshot.holepunch_supported` como `false` |
 
 > [!NOTE]
 > `TorrentCapabilitiesSnapshot` reporta de manera honesta qué capacidades están activas en tiempo de ejecución y cuáles esperan una versión posterior del motor subyacente, evitando ocultar limitaciones de la librería.

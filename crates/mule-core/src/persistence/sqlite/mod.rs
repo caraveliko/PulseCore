@@ -104,6 +104,19 @@ impl Database {
         }
     }
 
+    /// Obtiene todos los ajustes persistidos en una única consulta.
+    pub fn get_all_settings(&self) -> Result<std::collections::HashMap<String, String>, CoreError> {
+        let mut stmt = self.conn.prepare("SELECT key, value FROM settings")?;
+        let mut rows = stmt.query([])?;
+        let mut map = std::collections::HashMap::new();
+        while let Some(row) = rows.next()? {
+            let k: String = row.get(0)?;
+            let v: String = row.get(1)?;
+            map.insert(k, v);
+        }
+        Ok(map)
+    }
+
     /// Establece o sustituye el valor de un ajuste.
     pub fn set_setting(&mut self, key: &str, value: &str) -> Result<(), CoreError> {
         self.conn.execute(

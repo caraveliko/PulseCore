@@ -67,7 +67,7 @@ impl TokenBucket {
     pub fn set_rate(&self, rate_per_sec: u64, burst_capacity: u64) {
         self.rate_per_sec.store(rate_per_sec, Ordering::Relaxed);
         self.burst_capacity.store(burst_capacity, Ordering::Relaxed);
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         state.last_update = Instant::now();
         if state.tokens > burst_capacity as f64 {
             state.tokens = burst_capacity as f64;
@@ -91,7 +91,7 @@ impl TokenBucket {
             return true;
         }
 
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         let now = Instant::now();
         let elapsed = now.duration_since(state.last_update).as_secs_f64();
         let burst = self.burst_capacity.load(Ordering::Relaxed) as f64;
@@ -128,7 +128,7 @@ impl TokenBucket {
             }
 
             let wait_duration = {
-                let mut state = self.state.lock().unwrap();
+                let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
                 let now = Instant::now();
                 let elapsed = now.duration_since(state.last_update).as_secs_f64();
                 let burst = self.burst_capacity.load(Ordering::Relaxed) as f64;

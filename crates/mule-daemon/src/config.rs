@@ -133,7 +133,7 @@ impl DaemonConfig {
             .unwrap_or_else(|| DEFAULT_UPDATE_CHANNEL.to_string());
 
         Self {
-            bind_addr: "127.0.0.1:4660".parse().unwrap(),
+            bind_addr: std::net::SocketAddr::from(([127, 0, 0, 1], 4660)),
             data_dir,
             default_download_dir,
             auth_token: auth_token.into(),

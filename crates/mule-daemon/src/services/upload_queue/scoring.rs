@@ -50,11 +50,11 @@ impl UploadManager {
         file_hash: &str,
     ) -> u32 {
         let key = file_hash.to_lowercase();
-        if let Some(&v) = self.auto_up_prio.read().unwrap().get(&key) {
+        if let Some(&v) = self.auto_up_prio.read().unwrap_or_else(|p| p.into_inner()).get(&key) {
             return v;
         }
         let v = Self::compute_auto_up_prio(active, &key);
-        self.auto_up_prio.write().unwrap().insert(key, v);
+        self.auto_up_prio.write().unwrap_or_else(|p| p.into_inner()).insert(key, v);
         v
     }
 
@@ -67,11 +67,11 @@ impl UploadManager {
         file_hash: &str,
     ) {
         let key = file_hash.to_lowercase();
-        if !self.auto_up_prio.read().unwrap().contains_key(&key) {
+        if !self.auto_up_prio.read().unwrap_or_else(|p| p.into_inner()).contains_key(&key) {
             return;
         }
         let v = Self::compute_auto_up_prio(active, &key);
-        self.auto_up_prio.write().unwrap().insert(key, v);
+        self.auto_up_prio.write().unwrap_or_else(|p| p.into_inner()).insert(key, v);
     }
 
     /// El archivo vuelve a prioridad manual: sale del registro automático y
@@ -80,7 +80,7 @@ impl UploadManager {
     /// a todos los clientes que lo solicitan).
     pub(super) fn clear_auto_file(&self, q: &mut VecDeque<QueuedUpload>, file_hash: &str, manual_num: u32) {
         let key = file_hash.to_lowercase();
-        if self.auto_up_prio.write().unwrap().remove(&key).is_none()
+        if self.auto_up_prio.write().unwrap_or_else(|p| p.into_inner()).remove(&key).is_none()
             && !q.iter().any(|e| e.auto_prio && e.file_hash.eq_ignore_ascii_case(file_hash))
         {
             return;
@@ -116,7 +116,7 @@ impl UploadManager {
     /// `auto_up_prio`, al igual que eMule lee `GetFilePrioAsNumber()` directamente.
     pub(super) fn sort_queue_by_score(&self, q: &mut VecDeque<QueuedUpload>, now_ms: i64) {
         {
-            let auto_map = self.auto_up_prio.read().unwrap();
+            let auto_map = self.auto_up_prio.read().unwrap_or_else(|p| p.into_inner());
             for e in q.iter_mut() {
                 if e.auto_prio {
                     if let Some(&v) = auto_map.get(&e.file_hash.to_lowercase()) {
@@ -181,7 +181,7 @@ impl UploadManager {
         active: &std::collections::HashMap<String, UploadSessionSnapshot>,
         now: i64,
     ) -> bool {
-        if !self.uss_gate.read().unwrap().load(Ordering::SeqCst) {
+        if !self.uss_gate.read().unwrap_or_else(|p| p.into_inner()).load(Ordering::SeqCst) {
             return false;
         }
         let uploading = Self::uploading_count(active);

@@ -30,7 +30,7 @@ impl SessionPseudonymizer {
     /// Ejemplo: `peer-01:39735`.
     pub fn pseudonymize_peer(&self, addr: SocketAddr) -> String {
         let ip_str = addr.ip().to_string();
-        let mut map = self.peer_map.write().unwrap();
+        let mut map = self.peer_map.write().unwrap_or_else(|p| p.into_inner());
         let next_id = map.len() + 1;
         let prefix = map
             .entry(ip_str)
@@ -44,7 +44,7 @@ impl SessionPseudonymizer {
     /// Ejemplo: `peer-01`.
     pub fn pseudonymize_ip(&self, ip: std::net::IpAddr) -> String {
         let ip_str = ip.to_string();
-        let mut map = self.peer_map.write().unwrap();
+        let mut map = self.peer_map.write().unwrap_or_else(|p| p.into_inner());
         let next_id = map.len() + 1;
         map.entry(ip_str)
             .or_insert_with(|| format!("peer-{:02}", next_id))
@@ -55,7 +55,7 @@ impl SessionPseudonymizer {
     /// Ejemplo: `server-01:49661`.
     pub fn pseudonymize_server(&self, addr: SocketAddr) -> String {
         let ip_str = addr.ip().to_string();
-        let mut map = self.server_map.write().unwrap();
+        let mut map = self.server_map.write().unwrap_or_else(|p| p.into_inner());
         let next_id = map.len() + 1;
         let prefix = map
             .entry(ip_str)
@@ -64,7 +64,7 @@ impl SessionPseudonymizer {
     }
 
     pub fn clear(&self) {
-        self.peer_map.write().unwrap().clear();
-        self.server_map.write().unwrap().clear();
+        self.peer_map.write().unwrap_or_else(|p| p.into_inner()).clear();
+        self.server_map.write().unwrap_or_else(|p| p.into_inner()).clear();
     }
 }

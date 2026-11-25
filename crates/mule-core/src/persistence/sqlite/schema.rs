@@ -172,7 +172,6 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             PRIMARY KEY(file_hash, source_kad_id, ip, tcp_port)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_kad_sources_file_hash ON kad_sources_index(file_hash);
         CREATE INDEX IF NOT EXISTS idx_kad_sources_expires ON kad_sources_index(expires_at_unix_ms);
 
         CREATE TABLE IF NOT EXISTS kad_keywords_index (
@@ -186,7 +185,6 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             PRIMARY KEY(keyword_hash, file_hash)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_kad_keywords_lookup ON kad_keywords_index(keyword_hash);
         CREATE INDEX IF NOT EXISTS idx_kad_keywords_expires ON kad_keywords_index(expires_at_unix_ms);
 
         CREATE TABLE IF NOT EXISTS kad_notes_index (
@@ -200,8 +198,12 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             PRIMARY KEY(file_hash, source_id)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_kad_notes_lookup ON kad_notes_index(file_hash);
         CREATE INDEX IF NOT EXISTS idx_kad_notes_expires ON kad_notes_index(expires_at_unix_ms);
+        CREATE INDEX IF NOT EXISTS idx_shared_files_path ON shared_files(file_path);
+
+        DROP INDEX IF EXISTS idx_kad_sources_file_hash;
+        DROP INDEX IF EXISTS idx_kad_keywords_lookup;
+        DROP INDEX IF EXISTS idx_kad_notes_lookup;
 
         CREATE TABLE IF NOT EXISTS friends (
             user_hash TEXT PRIMARY KEY,
