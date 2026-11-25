@@ -1579,7 +1579,7 @@ impl AppState {
             .ok();
     }
 
-    /// Inicia el vigilante periódico de reproducciones activas en Jellyfin/Plex.
+    /// Inicia el vigilante periódico de reproducciones activas en Jellyfin y Kodi.
     pub fn spawn_streaming_watcher(&self) {
         crate::services::streaming_watcher::spawn_streaming_watcher(Arc::new(self.clone()));
     }

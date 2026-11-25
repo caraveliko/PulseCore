@@ -21,6 +21,12 @@ const PHOTO_FALLBACK_TIMEOUT_SECS: u64 = 4;
 const TRANSLATION_FALLBACK_TIMEOUT_SECS: u64 = 4;
 /// Longitud máxima de cada fragmento enviado al traductor de respaldo.
 const MAX_TRANSLATION_CHUNK_CHARS: usize = 450;
+/// Número máximo de intentos ante errores transitorios al consultar proveedores de metadatos.
+const METADATA_SEARCH_MAX_ATTEMPTS: usize = 2;
+/// Pausa (en milisegundos) entre reintentos de búsqueda de metadatos.
+const METADATA_RETRY_BACKOFF_MS: u64 = 350;
+/// Tiempo máximo de espera (en segundos) para el proveedor de respaldo de IMDb.
+const IMDB_FALLBACK_TIMEOUT_SECS: u64 = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -301,158 +307,359 @@ impl MediaMetadataService {
         }
     }
 
-    /// Busca películas a través del proxy de metadatos abierto y en caché de Cloudflare de Radarr
-    pub async fn search_movies(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
-        let encoded_q: String =
-            url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let url = format!("https://api.radarr.video/v1/search?q={encoded_q}");
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("Search failed with status: {}", resp.status()));
-        }
-        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-        let json_val: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        let mut results = Vec::new();
-        if let Some(arr) = json_val.as_array() {
-            for item in arr {
-                let tmdb_id = item["TmdbId"].as_u64();
-                let imdb_id = item["ImdbId"].as_str().map(String::from);
-                let (es_title, es_overview) = Self::extract_spanish_translation(item);
-                let default_title = item["Title"].as_str().unwrap_or("").to_string();
-                let title = es_title.unwrap_or_else(|| default_title.clone());
-                let original_title = item["OriginalTitle"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-                    .or_else(|| {
-                        if !default_title.is_empty() && !default_title.eq_ignore_ascii_case(&title) {
-                            Some(default_title)
-                        } else {
-                            None
-                        }
-                    });
-                let year = item["Year"].as_u64().map(|y| y as u32);
-                let overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
-                let mut poster_url = None;
-                let mut backdrop_url = None;
-
-                if let Some(images) = item["Images"].as_array() {
-                    for img in images {
-                        let ctype = img["CoverType"].as_str().unwrap_or("");
-                        let u = img["Url"].as_str().map(String::from);
-                        if ctype == "Poster" && poster_url.is_none() {
-                            poster_url = u;
-                        } else if (ctype == "Fanart" || ctype == "Backdrop")
-                            && backdrop_url.is_none()
-                        {
-                            backdrop_url = u;
-                        }
+    /// Ejecuta una petición GET devolviendo el cuerpo en bytes con reintento breve ante errores
+    /// transitorios de red o respuestas HTTP `429`/`5xx`.
+    async fn get_bytes_with_retry(&self, url: &str) -> Result<Vec<u8>, String> {
+        let mut last_err = String::new();
+        for attempt in 1..=METADATA_SEARCH_MAX_ATTEMPTS {
+            match self.client.get(url).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return resp
+                            .bytes()
+                            .await
+                            .map(|b| b.to_vec())
+                            .map_err(|e| e.to_string());
+                    }
+                    last_err = format!("HTTP {status}");
+                    let retryable =
+                        status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error();
+                    if !retryable || attempt == METADATA_SEARCH_MAX_ATTEMPTS {
+                        return Err(last_err);
                     }
                 }
-
-                let rating = item["Ratings"]
-                    .as_array()
-                    .and_then(|rats| rats.first().and_then(|r| r["Value"].as_f64()));
-
-                if !title.is_empty() {
-                    results.push(SearchMediaResult {
-                        id: tmdb_id
-                            .map(|n| n.to_string())
-                            .unwrap_or_else(|| title.clone()),
-                        tmdb_id,
-                        tvdb_id: None,
-                        imdb_id,
-                        media_type: "movie".to_string(),
-                        title,
-                        original_title,
-                        year,
-                        overview,
-                        poster_url,
-                        backdrop_url,
-                        rating,
-                    });
+                Err(e) => {
+                    last_err = e.to_string();
+                    if attempt == METADATA_SEARCH_MAX_ATTEMPTS {
+                        return Err(last_err);
+                    }
                 }
             }
+            tokio::time::sleep(Duration::from_millis(METADATA_RETRY_BACKOFF_MS)).await;
         }
-        Ok(results)
+        Err(last_err)
     }
 
-    /// Busca series de TV mediante el servicio de metadatos Skyhook de Sonarr
-    pub async fn search_shows(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
-        let encoded_q: String =
-            url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let url = format!("https://skyhook.sonarr.tv/v1/tvdb/search/en/?term={encoded_q}");
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("Show search failed with status: {}", resp.status()));
+    /// Convierte un objeto JSON de película de la API de Radarr/TMDB en `SearchMediaResult`.
+    fn parse_radarr_movie_item(item: &serde_json::Value) -> Option<SearchMediaResult> {
+        let tmdb_id = item["TmdbId"].as_u64();
+        let imdb_id = item["ImdbId"].as_str().map(String::from);
+        let (es_title, es_overview) = Self::extract_spanish_translation(item);
+        let default_title = item["Title"].as_str().unwrap_or("").to_string();
+        let title = es_title.unwrap_or_else(|| default_title.clone());
+        if title.is_empty() {
+            return None;
         }
-        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-        let json_val: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        let mut results = Vec::new();
-        if let Some(arr) = json_val.as_array() {
-            for item in arr {
-                let tvdb_id = item["tvdbId"].as_u64();
-                let tmdb_id = item["tmdbId"].as_u64();
-                let imdb_id = item["imdbId"].as_str().map(String::from);
-                let raw_title = item["title"].as_str().unwrap_or("");
-                let title = crate::services::scorer::strip_trailing_year_suffix(raw_title).to_string();
-                let year = item["firstAired"]
-                    .as_str()
-                    .and_then(|d| d.get(0..4))
-                    .and_then(|y| y.parse::<u32>().ok());
-                let overview = item["overview"].as_str().map(String::from);
-                let mut poster_url = None;
-                let mut backdrop_url = None;
 
-                if let Some(images) = item["images"].as_array() {
-                    for img in images {
-                        let ctype = img["coverType"].as_str().unwrap_or("");
-                        let u = img["url"].as_str().map(String::from);
-                        if ctype == "Poster" && poster_url.is_none() {
-                            poster_url = u;
-                        } else if ctype == "Fanart" && backdrop_url.is_none() {
-                            backdrop_url = u;
-                        }
-                    }
+        let original_title = item["OriginalTitle"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                if !default_title.is_empty() && !default_title.eq_ignore_ascii_case(&title) {
+                    Some(default_title)
+                } else {
+                    None
                 }
+            });
+        let year = item["Year"].as_u64().map(|y| y as u32);
+        let overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
+        let mut poster_url = None;
+        let mut backdrop_url = None;
 
-                let rating = item["rating"]["value"]
-                    .as_str()
-                    .and_then(|v| v.parse::<f64>().ok());
-
-                if !title.is_empty() {
-                    results.push(SearchMediaResult {
-                        id: tvdb_id
-                            .map(|n| n.to_string())
-                            .unwrap_or_else(|| title.clone()),
-                        tmdb_id,
-                        tvdb_id,
-                        imdb_id,
-                        media_type: "tv".to_string(),
-                        title,
-                        original_title: None,
-                        year,
-                        overview,
-                        poster_url,
-                        backdrop_url,
-                        rating,
-                    });
+        if let Some(images) = item["Images"].as_array() {
+            for img in images {
+                let ctype = img["CoverType"].as_str().unwrap_or("");
+                let u = img["Url"].as_str().map(String::from);
+                if ctype == "Poster" && poster_url.is_none() {
+                    poster_url = u;
+                } else if (ctype == "Fanart" || ctype == "Backdrop") && backdrop_url.is_none() {
+                    backdrop_url = u;
                 }
             }
         }
-        Ok(results)
+
+        let rating = item["Ratings"]
+            .as_array()
+            .and_then(|rats| rats.first().and_then(|r| r["Value"].as_f64()));
+
+        Some(SearchMediaResult {
+            id: tmdb_id
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| title.clone()),
+            tmdb_id,
+            tvdb_id: None,
+            imdb_id,
+            media_type: "movie".to_string(),
+            title,
+            original_title,
+            year,
+            overview,
+            poster_url,
+            backdrop_url,
+            rating,
+        })
+    }
+
+    /// Obtiene una película por su ID de IMDb (`tt...`) a través del proxy de Radarr.
+    async fn get_movie_by_imdb(&self, imdb_id: &str) -> Result<Option<SearchMediaResult>, String> {
+        let encoded_id: String =
+            url::form_urlencoded::byte_serialize(imdb_id.as_bytes()).collect();
+        let url = format!("https://api.radarr.video/v1/movie/imdb/{encoded_id}");
+        let bytes = self.get_bytes_with_retry(&url).await?;
+        let json_val: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if let Some(arr) = json_val.as_array() {
+            Ok(arr.iter().find_map(Self::parse_radarr_movie_item))
+        } else {
+            Ok(Self::parse_radarr_movie_item(&json_val))
+        }
+    }
+
+    /// Proveedor de respaldo independiente de Cloudflare mediante la API pública de sugerencias de IMDb.
+    async fn search_imdb_suggestions(
+        &self,
+        query: &str,
+        want_movie: bool,
+        year_hint: Option<u32>,
+    ) -> Result<Vec<SearchMediaResult>, String> {
+        let encoded_q: String = url::form_urlencoded::byte_serialize(query.trim().as_bytes())
+            .collect::<String>()
+            .replace('+', "%20");
+        let url = format!("https://v3.sg.media-imdb.com/suggestion/x/{encoded_q}.json");
+        let resp = tokio::time::timeout(
+            Duration::from_secs(IMDB_FALLBACK_TIMEOUT_SECS),
+            self.client.get(&url).send(),
+        )
+        .await
+        .map_err(|_| "Timeout consultando el respaldo de IMDb".to_string())?
+        .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("IMDb fallback failed with status: {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        let val: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        Ok(crate::services::media_search_query::parse_imdb_suggestions(
+            &val,
+            want_movie,
+            year_hint,
+        ))
+    }
+
+    /// Busca películas a través del proxy de Radarr/TMDB con soporte para IDs/URLs y respaldo IMDb.
+    pub async fn search_movies(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
+        use crate::services::media_search_query::{
+            parse_media_query, sort_results_by_year_hint, ParsedMediaQuery,
+        };
+
+        let (clean_q, year_hint) = match parse_media_query(query) {
+            ParsedMediaQuery::TmdbMovie(tid) => return self.get_movie(tid).await.map(|m| vec![m]),
+            ParsedMediaQuery::ImdbId(imdb) => match self.get_movie_by_imdb(&imdb).await {
+                Ok(Some(movie)) => return Ok(vec![movie]),
+                Ok(None) => {
+                    tracing::warn!(
+                        imdb_id = %imdb,
+                        "api.radarr.video no devolvió resultados para el IMDb ID; usando respaldo IMDb"
+                    );
+                    return self.search_imdb_suggestions(&imdb, true, None).await;
+                }
+                Err(radarr_err) => {
+                    tracing::warn!(
+                        imdb_id = %imdb,
+                        error = %radarr_err,
+                        "Fallo consultando api.radarr.video por IMDb ID; usando respaldo IMDb"
+                    );
+                    return self
+                        .search_imdb_suggestions(&imdb, true, None)
+                        .await
+                        .map_err(|fb_err| format!("{radarr_err} (respaldo IMDb: {fb_err})"));
+                }
+            },
+            ParsedMediaQuery::Text {
+                query, year_hint, ..
+            } => (query, year_hint),
+        };
+
+        let encoded_q: String =
+            url::form_urlencoded::byte_serialize(clean_q.as_bytes()).collect();
+        let url = format!("https://api.radarr.video/v1/search?q={encoded_q}");
+        let radarr_res = match self.get_bytes_with_retry(&url).await {
+            Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                Ok(json_val) => {
+                    let mut results: Vec<SearchMediaResult> = json_val
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(Self::parse_radarr_movie_item)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    sort_results_by_year_hint(&mut results, year_hint);
+                    Ok(results)
+                }
+                Err(e) => Err(e.to_string()),
+            },
+            Err(e) => Err(e),
+        };
+
+        match radarr_res {
+            Ok(results) if !results.is_empty() => Ok(results),
+            Ok(_) => {
+                tracing::warn!(
+                    query = %clean_q,
+                    "api.radarr.video devolvió 0 resultados; consultando respaldo IMDb"
+                );
+                self.search_imdb_suggestions(&clean_q, true, year_hint)
+                    .await
+                    .or_else(|fb_err| {
+                        tracing::warn!(
+                            query = %clean_q,
+                            error = %fb_err,
+                            "Fallo en el respaldo IMDb tras búsqueda vacía en Radarr"
+                        );
+                        Ok(Vec::new())
+                    })
+            }
+            Err(radarr_err) => {
+                tracing::warn!(
+                    query = %clean_q,
+                    error = %radarr_err,
+                    "Fallo consultando api.radarr.video; intentando respaldo IMDb"
+                );
+                match self
+                    .search_imdb_suggestions(&clean_q, true, year_hint)
+                    .await
+                {
+                    Ok(fb_results) if !fb_results.is_empty() => Ok(fb_results),
+                    Ok(_) => Err(format!("api.radarr.video: {radarr_err}")),
+                    Err(fb_err) => Err(format!(
+                        "api.radarr.video: {radarr_err}; respaldo IMDb: {fb_err}"
+                    )),
+                }
+            }
+        }
+    }
+
+    /// Busca series de TV mediante Skyhook de Sonarr con soporte para URLs y respaldo IMDb.
+    pub async fn search_shows(&self, query: &str) -> Result<Vec<SearchMediaResult>, String> {
+        use crate::services::media_search_query::{
+            parse_media_query, sort_results_by_year_hint, ParsedMediaQuery,
+        };
+
+        let (clean_q, year_hint) = match parse_media_query(query) {
+            ParsedMediaQuery::ImdbId(imdb) => (imdb, None),
+            ParsedMediaQuery::TmdbMovie(tid) => (tid.to_string(), None),
+            ParsedMediaQuery::Text {
+                query, year_hint, ..
+            } => (query, year_hint),
+        };
+
+        let encoded_q: String =
+            url::form_urlencoded::byte_serialize(clean_q.as_bytes()).collect();
+        let url = format!("https://skyhook.sonarr.tv/v1/tvdb/search/en/?term={encoded_q}");
+        let skyhook_res = match self.get_bytes_with_retry(&url).await {
+            Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                Ok(json_val) => {
+                    let mut results = Vec::new();
+                    if let Some(arr) = json_val.as_array() {
+                        for item in arr {
+                            let tvdb_id = item["tvdbId"].as_u64();
+                            let tmdb_id = item["tmdbId"].as_u64();
+                            let imdb_id = item["imdbId"].as_str().map(String::from);
+                            let raw_title = item["title"].as_str().unwrap_or("");
+                            let title =
+                                crate::services::scorer::strip_trailing_year_suffix(raw_title)
+                                    .to_string();
+                            let year = item["firstAired"]
+                                .as_str()
+                                .and_then(|d| d.get(0..4))
+                                .and_then(|y| y.parse::<u32>().ok());
+                            let overview = item["overview"].as_str().map(String::from);
+                            let mut poster_url = None;
+                            let mut backdrop_url = None;
+
+                            if let Some(images) = item["images"].as_array() {
+                                for img in images {
+                                    let ctype = img["coverType"].as_str().unwrap_or("");
+                                    let u = img["url"].as_str().map(String::from);
+                                    if ctype == "Poster" && poster_url.is_none() {
+                                        poster_url = u;
+                                    } else if ctype == "Fanart" && backdrop_url.is_none() {
+                                        backdrop_url = u;
+                                    }
+                                }
+                            }
+
+                            let rating = item["rating"]["value"]
+                                .as_str()
+                                .and_then(|v| v.parse::<f64>().ok());
+
+                            if !title.is_empty() {
+                                results.push(SearchMediaResult {
+                                    id: tvdb_id
+                                        .map(|n| n.to_string())
+                                        .unwrap_or_else(|| title.clone()),
+                                    tmdb_id,
+                                    tvdb_id,
+                                    imdb_id,
+                                    media_type: "tv".to_string(),
+                                    title,
+                                    original_title: None,
+                                    year,
+                                    overview,
+                                    poster_url,
+                                    backdrop_url,
+                                    rating,
+                                });
+                            }
+                        }
+                    }
+                    sort_results_by_year_hint(&mut results, year_hint);
+                    Ok(results)
+                }
+                Err(e) => Err(e.to_string()),
+            },
+            Err(e) => Err(e),
+        };
+
+        match skyhook_res {
+            Ok(results) if !results.is_empty() => Ok(results),
+            Ok(_) => {
+                tracing::warn!(
+                    query = %clean_q,
+                    "skyhook.sonarr.tv devolvió 0 resultados; consultando respaldo IMDb"
+                );
+                self.search_imdb_suggestions(&clean_q, false, year_hint)
+                    .await
+                    .or_else(|fb_err| {
+                        tracing::warn!(
+                            query = %clean_q,
+                            error = %fb_err,
+                            "Fallo en el respaldo IMDb tras búsqueda vacía en Skyhook"
+                        );
+                        Ok(Vec::new())
+                    })
+            }
+            Err(skyhook_err) => {
+                tracing::warn!(
+                    query = %clean_q,
+                    error = %skyhook_err,
+                    "Fallo consultando skyhook.sonarr.tv; intentando respaldo IMDb"
+                );
+                match self
+                    .search_imdb_suggestions(&clean_q, false, year_hint)
+                    .await
+                {
+                    Ok(fb_results) if !fb_results.is_empty() => Ok(fb_results),
+                    Ok(_) => Err(format!("skyhook.sonarr.tv: {skyhook_err}")),
+                    Err(fb_err) => Err(format!(
+                        "skyhook.sonarr.tv: {skyhook_err}; respaldo IMDb: {fb_err}"
+                    )),
+                }
+            }
+        }
     }
 
     /// Obtiene metadatos e imágenes completas de películas por ID de TMDB a través del proxy de la API de Radarr

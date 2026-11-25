@@ -9,46 +9,46 @@ use crate::error::JsonRpcError;
 use crate::services::downloads::now_ms;
 use crate::state::AppState;
 
-/// Busca películas o series de TV en los proveedores de metadatos (proxies Radarr/Sonarr/TMDB)
+/// Busca películas o series de TV en los proveedores de metadatos (Radarr/TMDB, Skyhook e IMDb)
 pub async fn handle_media_search(
     state: &AppState,
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
+    use crate::services::media_search_query::{parse_media_query, ParsedMediaQuery};
+
     let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing params object"))?;
     let query = params["query"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing 'query' parameter"))?;
-    let media_type = params["type"].as_str().unwrap_or("movie");
+    let requested_type = params["type"].as_str().unwrap_or("movie");
 
-    let results = match media_type {
-        "tv" | "series" | "show" => {
-            let mut res = state.media_metadata.search_shows(query).await;
-            if res.as_ref().map(|v| v.is_empty()).unwrap_or(true) {
-                if let Ok(movies) = state.media_metadata.search_movies(query).await {
-                    if !movies.is_empty() {
-                        res = Ok(movies);
-                    }
-                }
-            }
-            res
-        }
-        _ => {
-            let mut res = state.media_metadata.search_movies(query).await;
-            if res.as_ref().map(|v| v.is_empty()).unwrap_or(true) {
-                if let Ok(shows) = state.media_metadata.search_shows(query).await {
-                    if !shows.is_empty() {
-                        res = Ok(shows);
-                    }
-                }
-            }
-            res
-        }
+    // Si el usuario pega una URL de Trakt/TMDB que determina el tipo, se respeta automáticamente.
+    let effective_type = match parse_media_query(query) {
+        ParsedMediaQuery::TmdbMovie(_) => "movie",
+        ParsedMediaQuery::Text {
+            inferred_media_type: Some(inferred),
+            ..
+        } => inferred,
+        _ => requested_type,
+    };
+
+    let results = match effective_type {
+        "tv" | "series" | "show" => state.media_metadata.search_shows(query).await,
+        _ => state.media_metadata.search_movies(query).await,
     };
 
     match results {
         Ok(items) => serde_json::to_value(items)
             .map_err(|e| JsonRpcError::business(format!("Serialization error: {e}"))),
-        Err(e) => Err(JsonRpcError::business(format!("Metadata search error: {e}"))),
+        Err(e) => {
+            tracing::warn!(
+                query = %query,
+                media_type = %effective_type,
+                error = %e,
+                "Error en la búsqueda de metadatos multimedia"
+            );
+            Err(JsonRpcError::business(format!("Error buscando metadatos: {e}")))
+        }
     }
 }
 

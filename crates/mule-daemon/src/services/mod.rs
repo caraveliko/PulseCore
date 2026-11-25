@@ -20,6 +20,7 @@ pub mod known_met_import;
 pub mod media_automation;
 pub mod media_metadata;
 pub mod media_probe;
+pub(crate) mod media_search_query;
 pub mod nas_transfer;
 pub mod nfs_mount;
 pub mod notifications;

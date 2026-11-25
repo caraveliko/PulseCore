@@ -104,19 +104,19 @@ pub fn sanitize_name(name: &str) -> String {
         .to_string()
 }
 
-/// Perfil de compatibilidad de nombres de carpetas y metadatos para servidores multimedia.
+/// Perfil de compatibilidad de nombres de carpetas y metadatos para reproductores libres.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaServerProfile {
     Jellyfin,
-    Plex,
     Kodi,
+    Local,
 }
 
 impl MediaServerProfile {
     pub fn from_str_lossy(raw: &str) -> Self {
         match raw.trim().to_lowercase().as_str() {
-            "plex" => Self::Plex,
-            "kodi" | "infuse" | "universal" => Self::Kodi,
+            "kodi" | "infuse" => Self::Kodi,
+            "local" | "dlna" | "vlc" | "universal" => Self::Local,
             _ => Self::Jellyfin,
         }
     }
@@ -133,7 +133,6 @@ pub fn format_movie_folder_name(
     let year_part = year.map(|y| format!(" ({y})")).unwrap_or_default();
     match (profile, tmdb_id) {
         (MediaServerProfile::Jellyfin, Some(tid)) => format!("{title_clean}{year_part} [tmdbid-{tid}]"),
-        (MediaServerProfile::Plex, Some(tid)) => format!("{title_clean}{year_part} {{tmdb-{tid}}}"),
         _ => format!("{title_clean}{year_part}"),
     }
 }
@@ -149,7 +148,6 @@ pub fn format_series_folder_name(
     let year_str = year.map(|y| format!(" ({y})")).unwrap_or_default();
     match (profile, tvdb_id) {
         (MediaServerProfile::Jellyfin, Some(tid)) => format!("{sanitized_title}{year_str} [tvdbid-{tid}]"),
-        (MediaServerProfile::Plex, Some(tid)) => format!("{sanitized_title}{year_str} {{tvdb-{tid}}}"),
         _ => format!("{sanitized_title}{year_str}"),
     }
 }
@@ -509,7 +507,7 @@ fn xml_escape(input: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-/// Genera un archivo `movie.nfo` XML compatible con Kodi, Jellyfin, Emby e Infuse.
+/// Genera un archivo `movie.nfo` XML compatible con Kodi y Jellyfin.
 pub fn build_movie_nfo_xml(item: &MediaItem) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<movie>\n");
     xml.push_str(&format!("  <title>{}</title>\n", xml_escape(&item.title)));
@@ -532,7 +530,7 @@ pub fn build_movie_nfo_xml(item: &MediaItem) -> String {
     xml
 }
 
-/// Genera un archivo `tvshow.nfo` XML compatible con Kodi, Jellyfin, Emby e Infuse.
+/// Genera un archivo `tvshow.nfo` XML compatible con Kodi y Jellyfin.
 pub fn build_tvshow_nfo_xml(item: &MediaItem) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<tvshow>\n");
     xml.push_str(&format!("  <title>{}</title>\n", xml_escape(&item.title)));
@@ -604,7 +602,9 @@ async fn write_nfo_and_artwork_if_enabled(
     item: &MediaItem,
     is_movie: bool,
 ) {
-    if !is_nfo_artwork_enabled(state).await {
+    if active_media_server_profile(state).await == MediaServerProfile::Local
+        || !is_nfo_artwork_enabled(state).await
+    {
         return;
     }
     if let Err(e) = tokio::fs::create_dir_all(target_dir).await {
@@ -668,7 +668,7 @@ async fn write_nfo_and_artwork_if_enabled(
 pub struct MediaOrganizer;
 
 impl MediaOrganizer {
-    /// Notifica a los servidores de medios locales (Jellyfin/Emby, Plex, Kodi) para refrescar sus bibliotecas
+    /// Notifica a los servidores de medios libres configurados (Jellyfin y Kodi) para refrescar sus bibliotecas.
     pub fn notify_media_servers(state: &AppState) {
         if state.network_policy.state() == mule_network_policy::NetworkState::Disabled {
             return;
@@ -676,12 +676,12 @@ impl MediaOrganizer {
         let downloads = state.downloads.clone();
         let cfg_jf_url = state.config.jellyfin_url.clone();
         let cfg_jf_key = state.config.jellyfin_api_key.clone();
-        let cfg_plex_url = state.config.plex_url.clone();
 
         tokio::spawn(async move {
-            let (jf_url, jf_key, plex_url, plex_token, kodi_url) = {
+            let (profile, jf_url, jf_key, kodi_url) = {
                 let dls = downloads.lock().await;
                 let read_s = |k: &str| dls.get_setting(k).ok().flatten().unwrap_or_default().trim().to_string();
+                let prof = MediaServerProfile::from_str_lossy(&read_s("media_server_profile"));
                 let j_u = {
                     let s = read_s("jellyfin_url");
                     if s.is_empty() { cfg_jf_url } else { s }
@@ -690,14 +690,13 @@ impl MediaOrganizer {
                     let s = read_s("jellyfin_api_key");
                     if s.is_empty() { cfg_jf_key.unwrap_or_default() } else { s }
                 };
-                let p_u = {
-                    let s = read_s("plex_url");
-                    if s.is_empty() { cfg_plex_url.unwrap_or_default() } else { s }
-                };
-                let p_t = read_s("plex_token");
                 let k_u = read_s("kodi_url");
-                (j_u, j_k, p_u, p_t, k_u)
+                (prof, j_u, j_k, k_u)
             };
+
+            if profile == MediaServerProfile::Local {
+                return;
+            }
 
             let Ok(client) = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(5))
@@ -706,7 +705,7 @@ impl MediaOrganizer {
                 return;
             };
 
-            // 1. Jellyfin / Emby
+            // 1. Jellyfin
             if !jf_url.is_empty() {
                 let url = format!("{}/Library/Refresh", jf_url.trim_end_matches('/'));
                 let mut req = client.post(&url);
@@ -716,24 +715,7 @@ impl MediaOrganizer {
                 let _ = req.send().await;
             }
 
-            // 2. Plex Media Server
-            if !plex_url.is_empty() {
-                let base = plex_url.trim_end_matches('/');
-                let refresh_url = if base.contains("/library/") {
-                    base.to_string()
-                } else {
-                    format!("{base}/library/sections/all/refresh")
-                };
-                let final_url = if !plex_token.is_empty() && !refresh_url.contains("X-Plex-Token=") {
-                    let sep = if refresh_url.contains('?') { '&' } else { '?' };
-                    format!("{refresh_url}{sep}X-Plex-Token={plex_token}")
-                } else {
-                    refresh_url
-                };
-                let _ = client.get(&final_url).send().await;
-            }
-
-            // 3. Kodi JSON-RPC
+            // 2. Kodi JSON-RPC
             if !kodi_url.is_empty() {
                 let url = format!("{}/jsonrpc", kodi_url.trim_end_matches('/'));
                 let payload = serde_json::json!({
@@ -1626,17 +1608,23 @@ mod tests {
             "Matrix (1999) [tmdbid-603]"
         );
         assert_eq!(
-            format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Plex),
-            "Matrix (1999) {tmdb-603}"
-        );
-        assert_eq!(
             format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Kodi),
             "Matrix (1999)"
         );
         assert_eq!(
-            format_series_folder_name("Band of Brothers", Some(2001), Some(74205), MediaServerProfile::Plex),
-            "Band of Brothers (2001) {tvdb-74205}"
+            format_movie_folder_name("Matrix", Some(1999), Some(603), MediaServerProfile::Local),
+            "Matrix (1999)"
         );
+        assert_eq!(
+            format_series_folder_name("Band of Brothers", Some(2001), Some(74205), MediaServerProfile::Jellyfin),
+            "Band of Brothers (2001) [tvdbid-74205]"
+        );
+        assert_eq!(
+            format_series_folder_name("Band of Brothers", Some(2001), Some(74205), MediaServerProfile::Local),
+            "Band of Brothers (2001)"
+        );
+        assert_eq!(MediaServerProfile::from_str_lossy("plex"), MediaServerProfile::Jellyfin);
+        assert_eq!(MediaServerProfile::from_str_lossy("dlna"), MediaServerProfile::Local);
     }
 
     #[test]

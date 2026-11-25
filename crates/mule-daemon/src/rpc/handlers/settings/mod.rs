@@ -77,8 +77,6 @@ const KNOWN_SETTINGS_KEYS: &[&str] = &[
     "radarrUrl",
     "jellyfinUrl",
     "jellyfinApiKey",
-    "plexUrl",
-    "plexToken",
     "kodiUrl",
     "autoGrabberEnabled",
     "organizeEnabled",
@@ -314,11 +312,16 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
             "nasRequireNfs": read("nas_require_nfs", false),
             "autoGrabberEnabled": read("auto_grabber_enabled", true),
             "organizeEnabled": read("organize_enabled", true),
-            "mediaServerProfile": dls
+            "mediaServerProfile": match dls
                 .get_setting("media_server_profile")
                 .ok()
                 .flatten()
-                .unwrap_or_else(|| "jellyfin".to_string()),
+                .as_deref()
+            {
+                Some("kodi") => "kodi",
+                Some("local") => "local",
+                _ => "jellyfin",
+            },
             "generateNfoAndArtwork": read("generate_nfo_and_artwork", true),
             "qualityUpgradeEnabled": read("quality_upgrade_enabled", true),
             "qualityMaxResolution": dls
@@ -352,8 +355,6 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
         });
         if let Some(obj) = base_settings.as_object_mut() {
             obj.insert("jellyfinApiKey".to_string(), json!(dls.get_setting("jellyfin_api_key").ok().flatten().unwrap_or_default()));
-            obj.insert("plexUrl".to_string(), json!(dls.get_setting("plex_url").ok().flatten().unwrap_or_default()));
-            obj.insert("plexToken".to_string(), json!(dls.get_setting("plex_token").ok().flatten().unwrap_or_default()));
             obj.insert("kodiUrl".to_string(), json!(dls.get_setting("kodi_url").ok().flatten().unwrap_or_default()));
             obj.insert(
                 "subtitlesVariant".to_string(),
@@ -375,7 +376,7 @@ pub async fn handle_settings_get(state: &AppState) -> Result<Value, JsonRpcError
                         .ok()
                         .flatten()
                         .unwrap_or_else(|| "jellyfin".to_string());
-                    if ms_prof == "kodi" {
+                    if matches!(ms_prof.as_str(), "kodi" | "local") {
                         "kodi".to_string()
                     } else {
                         "mediaserver".to_string()
@@ -1200,9 +1201,9 @@ pub async fn handle_settings_set(
             .ok_or_else(|| JsonRpcError::invalid_params("Invalid 'mediaServerProfile'"))?
             .trim()
             .to_lowercase();
-        if !["jellyfin", "plex", "kodi"].contains(&profile.as_str()) {
+        if !["jellyfin", "kodi", "local"].contains(&profile.as_str()) {
             return Err(JsonRpcError::invalid_params(
-                "'mediaServerProfile' must be 'jellyfin', 'plex' or 'kodi'",
+                "'mediaServerProfile' must be 'jellyfin', 'kodi' or 'local'",
             ));
         }
         state
@@ -1429,8 +1430,6 @@ pub async fn handle_settings_set(
         ("radarrUrl", "radarr_url"),
         ("jellyfinUrl", "jellyfin_url"),
         ("jellyfinApiKey", "jellyfin_api_key"),
-        ("plexUrl", "plex_url"),
-        ("plexToken", "plex_token"),
         ("kodiUrl", "kodi_url"),
     ] {
         if let Some(val) = params.get(camel) {

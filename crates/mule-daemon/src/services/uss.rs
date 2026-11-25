@@ -124,7 +124,7 @@ pub struct UssConfig {
     /// Techo de subida en reposo cuando no hay descargas activas (bytes/s; 0 = desactivado).
     #[serde(default)]
     pub idle_upload_cap_bps: u64,
-    /// Techo de subida durante reproducciones activas en Jellyfin/Plex (bytes/s; 0 = desactivado).
+    /// Techo de subida durante reproducciones activas en Jellyfin/Kodi (bytes/s; 0 = desactivado).
     #[serde(default)]
     pub streaming_upload_cap_bps: u64,
 }
@@ -168,9 +168,9 @@ pub struct UssSnapshot {
     pub reason: &'static str,
     /// `true` cuando está aplicado el techo en reposo por ausencia de descargas activas.
     pub idle_cap_active: bool,
-    /// `true` cuando el techo temporal por streaming (Jellyfin/Plex) está activo.
+    /// `true` cuando el techo temporal por streaming (Jellyfin/Kodi) está activo.
     pub streaming_cap_active: bool,
-    /// Número de reproducciones activas detectadas en Jellyfin/Plex.
+    /// Número de reproducciones activas detectadas en Jellyfin/Kodi.
     pub active_streams: usize,
     /// `true` cuando está activo el modo eco por cuota diaria agotada.
     pub quota_eco_active: bool,
@@ -278,7 +278,7 @@ impl UssService {
         *self.torrent.write().unwrap_or_else(|e| e.into_inner()) = Some(cell);
     }
 
-    /// Actualiza el estado de reproducciones activas detectadas en Jellyfin/Plex.
+    /// Actualiza el estado de reproducciones activas detectadas en Jellyfin/Kodi.
     pub fn set_streaming_active(&self, active: bool, streams: usize) {
         let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.streaming_active = active;

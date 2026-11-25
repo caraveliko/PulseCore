@@ -816,8 +816,6 @@ async function loadPreferences() {
     setChk('pref-generate-nfo-artwork', s.generateNfoAndArtwork !== false);
     setVal('pref-jellyfin-url', s.jellyfinUrl || '');
     setVal('pref-jellyfin-apikey', s.jellyfinApiKey || '');
-    setVal('pref-plex-url', s.plexUrl || '');
-    setVal('pref-plex-token', s.plexToken || '');
     setVal('pref-kodi-url', s.kodiUrl || '');
     setChk('pref-auto-grabber-enabled', s.autoGrabberEnabled !== false);
     setChk('pref-quality-upgrade-enabled', s.qualityUpgradeEnabled !== false);
@@ -886,24 +884,28 @@ function selectOrganizeMode(enabled) {
 window.selectOrganizeMode = selectOrganizeMode;
 
 function selectPlayerProfile(profile, applyPreset = false) {
-  const normalized = ['jellyfin', 'plex', 'kodi'].includes(profile) ? profile : 'jellyfin';
+  const normalized = ['jellyfin', 'kodi', 'local'].includes(profile) ? profile : 'jellyfin';
   const sel = document.getElementById('pref-media-server-profile');
   if (sel) sel.value = normalized;
 
-  ['jellyfin', 'plex', 'kodi'].forEach(p => {
+  ['jellyfin', 'kodi', 'local'].forEach(p => {
     document.getElementById(`usage-player-${p}`)?.classList.toggle('active', p === normalized);
     const fields = document.getElementById(`player-fields-${p}`);
     if (fields) {
-      fields.style.display = p === normalized ? 'grid' : 'none';
+      fields.style.display = p === normalized ? (p === 'local' ? 'block' : 'grid') : 'none';
     }
   });
 
   if (applyPreset) {
+    const nfoEl = document.getElementById('pref-generate-nfo-artwork');
+    if (nfoEl) {
+      nfoEl.checked = normalized !== 'local';
+    }
     const modeEl = document.getElementById('pref-usage-mode');
     const curMode = modeEl ? modeEl.value : 'mediaserver';
-    if (normalized === 'kodi' && curMode !== 'server247') {
+    if ((normalized === 'kodi' || normalized === 'local') && curMode !== 'server247') {
       selectUsageMode('kodi', false);
-    } else if (normalized !== 'kodi' && curMode === 'kodi') {
+    } else if (normalized === 'jellyfin' && curMode === 'kodi') {
       selectUsageMode('mediaserver', false);
     }
     if (typeof markOptionsDirty === 'function') markOptionsDirty();
@@ -943,7 +945,7 @@ function selectUsageMode(mode, applyPresets = false) {
 
   const streamRow = document.getElementById('opt-row-streaming-cap');
   if (streamRow) {
-    streamRow.style.display = (isMediaServer || isServer247) ? 'flex' : 'none';
+    streamRow.style.display = (isKodi || isMediaServer || isServer247) ? 'flex' : 'none';
   }
 
   const playerPills = document.getElementById('usage-player-pills');
@@ -964,8 +966,8 @@ function selectUsageMode(mode, applyPresets = false) {
   if (summaryEl) {
     const summaries = {
       direct: '📥 Modo Descarga Directa: solo ves carpetas de descarga, velocidad, red P2P y privacidad. Los vídeos se guardan tal cual sin renombrar.',
-      kodi: '🛋️ Modo Kodi / Local: prioriza organización limpia, ficheros .nfo + carátulas locales, subtítulos .es.srt y conexión Kodi JSON-RPC.',
-      mediaserver: '🍿 Modo Servidor Multimedia: adaptado a Plex / Jellyfin / Emby con etiquetas TMDB, Auto-Grabber y recorte de subida en streaming.',
+      kodi: '🛋️ Modo Kodi / Local / DLNA: prioriza carpetas limpias, ficheros .nfo opcionales, subtítulos .es.srt y reproducción local o por Kodi JSON-RPC.',
+      mediaserver: '🍿 Modo Servidor Multimedia: adaptado a Jellyfin (100 % libre) con etiquetas TMDB, Auto-Grabber y recorte de subida en streaming.',
       server247: '🖥️ Modo Servidor 24/7 / NAS: muestra todo el panel completo (protección NFS, autoactualización, integraciones *Arr, MCP y cuotas).'
     };
     summaryEl.textContent = summaries[validMode] || '';
@@ -1093,10 +1095,6 @@ async function savePreferences() {
     if (jfUrl !== null) payload.jellyfinUrl = jfUrl;
     const jfKey = getStr('pref-jellyfin-apikey');
     if (jfKey !== null) payload.jellyfinApiKey = jfKey;
-    const pxUrl = getStr('pref-plex-url');
-    if (pxUrl !== null) payload.plexUrl = pxUrl;
-    const pxTok = getStr('pref-plex-token');
-    if (pxTok !== null) payload.plexToken = pxTok;
     const kdUrl = getStr('pref-kodi-url');
     if (kdUrl !== null) payload.kodiUrl = kdUrl;
     const autoGrab = getBool('pref-auto-grabber-enabled');
@@ -1273,7 +1271,7 @@ function buildSmartSpeedProfiles(ctx) {
       icon: '🎬',
       title: 'Prioridad Streaming',
       tag: 'Latencia cero',
-      desc: 'Recorta la subida automáticamente al reproducir en Jellyfin, Plex o Kodi.',
+      desc: 'Recorta la subida automáticamente al reproducir en Jellyfin o Kodi.',
       capDownKbs,
       capUpKbs,
       dlLimitKbs: Math.max(1024, Math.round(capDownKbs * 0.85)),

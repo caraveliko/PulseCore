@@ -2333,7 +2333,7 @@ main {
   font-size: 0.85rem;
   background: linear-gradient(135deg, #1e293b, #0f172a);
 }
-/* Hover Overlay al estilo Jellyfin / Plex */
+/* Hover Overlay al estilo Jellyfin */
 .media-card-overlay {
   position: absolute;
   inset: 0;

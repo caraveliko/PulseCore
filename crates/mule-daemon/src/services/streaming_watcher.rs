@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Laurent Geynet "Loulach"
 
-//! Vigilante ligero de reproducciones activas en Jellyfin y Plex para modular la subida.
+//! Vigilante ligero de reproducciones activas en Jellyfin y Kodi para modular la subida.
 
 use std::sync::Arc;
 
 use crate::state::AppState;
 
-/// Intervalo de sondeo a Jellyfin / Plex cuando el recorte por streaming está activado (s).
+/// Intervalo de sondeo a Jellyfin / Kodi cuando el recorte por streaming está activado (s).
 pub const STREAMING_POLL_INTERVAL_SECS: u64 = 15;
-/// Tiempo máximo de espera por petición HTTP a los servidores multimedia locales (s).
+/// Tiempo máximo de espera por petición HTTP a los reproductores multimedia locales (s).
 pub const STREAMING_HTTP_TIMEOUT_SECS: u64 = 4;
 
 /// Cuenta las sesiones activas (no pausadas) en la respuesta JSON de `/Sessions` de Jellyfin.
@@ -32,49 +32,23 @@ pub fn parse_jellyfin_sessions_active(body: &str) -> usize {
         .count()
 }
 
-/// Cuenta las sesiones activas en la respuesta JSON o XML de `/status/sessions` de Plex.
-pub fn parse_plex_sessions_active(body: &str) -> usize {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
+/// Cuenta los reproductores activos en la respuesta JSON-RPC de `Player.GetActivePlayers` de Kodi.
+pub fn parse_kodi_active_players(body: &str) -> usize {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(body) else {
         return 0;
-    }
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(trimmed) {
-        if let Some(mc) = json.get("MediaContainer") {
-            if let Some(meta) = mc.get("Metadata").and_then(|m| m.as_array()) {
-                return meta
-                    .iter()
-                    .filter(|entry| {
-                        entry
-                            .get("Player")
-                            .and_then(|p| p.get("state"))
-                            .and_then(|s| s.as_str())
-                            != Some("paused")
-                    })
-                    .count();
-            }
-            return mc.get("size").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        }
-        return 0;
-    }
-    // Respaldo XML (`<MediaContainer size="N">`) cuando Plex no responde JSON.
-    if trimmed.starts_with('<') {
-        if let Some(pos) = trimmed.find("size=\"") {
-            let rest = &trimmed[pos + 6..];
-            if let Some(end) = rest.find('"') {
-                return rest[..end].parse::<usize>().unwrap_or(0);
-            }
-        }
-    }
-    0
+    };
+    val.get("result")
+        .and_then(|r| r.as_array())
+        .map(Vec::len)
+        .unwrap_or(0)
 }
 
-/// Consulta Jellyfin y/o Plex y devuelve el total de reproducciones activas detectadas.
+/// Consulta Jellyfin y/o Kodi y devuelve el total de reproducciones activas detectadas.
 pub async fn probe_active_streams(
     client: &reqwest::Client,
     jf_url: &str,
     jf_key: &str,
-    plex_url: &str,
-    plex_token: &str,
+    kodi_url: &str,
 ) -> usize {
     let mut total = 0usize;
 
@@ -100,28 +74,31 @@ pub async fn probe_active_streams(
         }
     }
 
-    if !plex_url.is_empty() {
-        let base = plex_url.trim_end_matches('/');
-        let mut url = format!("{base}/status/sessions");
-        if !plex_token.is_empty() {
-            url.push_str(&format!("?X-Plex-Token={plex_token}"));
-        }
+    if !kodi_url.is_empty() {
+        let url = format!("{}/jsonrpc", kodi_url.trim_end_matches('/'));
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "Player.GetActivePlayers",
+            "id": 1
+        })
+        .to_string();
         match client
-            .get(&url)
-            .header("Accept", "application/json")
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(payload)
             .send()
             .await
         {
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(text) = resp.text().await {
-                    total = total.saturating_add(parse_plex_sessions_active(&text));
+                    total = total.saturating_add(parse_kodi_active_players(&text));
                 }
             }
             Ok(resp) => {
-                tracing::debug!(status = %resp.status(), "Plex /status/sessions devolvió estado no exitoso");
+                tracing::debug!(status = %resp.status(), "Kodi Player.GetActivePlayers devolvió estado no exitoso");
             }
             Err(err) => {
-                tracing::debug!(error = %err, "No se pudo consultar Plex /status/sessions");
+                tracing::debug!(error = %err, "No se pudo consultar Kodi Player.GetActivePlayers");
             }
         }
     }
@@ -129,7 +106,7 @@ pub async fn probe_active_streams(
     total
 }
 
-/// Inicia la tarea periódica que detecta reproducciones en Jellyfin/Plex cuando está activado
+/// Inicia la tarea periódica que detecta reproducciones en Jellyfin y Kodi cuando está activado
 /// `streamingUploadCapKbs`.
 pub fn spawn_streaming_watcher(state: Arc<AppState>) {
     let task_state = Arc::clone(&state);
@@ -152,7 +129,7 @@ pub fn spawn_streaming_watcher(state: Arc<AppState>) {
                 continue;
             }
 
-            let (jf_url, jf_key, plex_url, plex_token) = {
+            let (profile, jf_url, jf_key, kodi_url) = {
                 let dls = state.downloads.lock().await;
                 let read_s = |k: &str| {
                     dls.get_setting(k)
@@ -162,6 +139,7 @@ pub fn spawn_streaming_watcher(state: Arc<AppState>) {
                         .trim()
                         .to_string()
                 };
+                let prof = read_s("media_server_profile").to_lowercase();
                 let j_u = {
                     let s = read_s("jellyfin_url");
                     if s.is_empty() {
@@ -178,19 +156,16 @@ pub fn spawn_streaming_watcher(state: Arc<AppState>) {
                         s
                     }
                 };
-                let p_u = {
-                    let s = read_s("plex_url");
-                    if s.is_empty() {
-                        state.config.plex_url.clone().unwrap_or_default()
-                    } else {
-                        s
-                    }
-                };
-                let p_t = read_s("plex_token");
-                (j_u, j_k, p_u, p_t)
+                let k_u = read_s("kodi_url");
+                (prof, j_u, j_k, k_u)
             };
 
-            let count = probe_active_streams(&client, &jf_url, &jf_key, &plex_url, &plex_token).await;
+            if profile == "local" {
+                state.uss.set_streaming_active(false, 0);
+                continue;
+            }
+
+            let count = probe_active_streams(&client, &jf_url, &jf_key, &kodi_url).await;
             state.uss.set_streaming_active(count > 0, count);
         }
     });
@@ -219,10 +194,11 @@ mod tests {
     }
 
     #[test]
-    fn plex_parses_json_and_xml_sessions() {
-        let json = r#"{"MediaContainer":{"size":2,"Metadata":[{"Player":{"state":"playing"}},{"Player":{"state":"paused"}}]}}"#;
-        assert_eq!(parse_plex_sessions_active(json), 1);
-        let xml = r#"<?xml version="1.0"?><MediaContainer size="2"></MediaContainer>"#;
-        assert_eq!(parse_plex_sessions_active(xml), 2);
+    fn kodi_counts_active_players_from_jsonrpc() {
+        let playing = r#"{"id":1,"jsonrpc":"2.0","result":[{"playerid":1,"playertype":"internal","type":"video"}]}"#;
+        assert_eq!(parse_kodi_active_players(playing), 1);
+        let idle = r#"{"id":1,"jsonrpc":"2.0","result":[]}"#;
+        assert_eq!(parse_kodi_active_players(idle), 0);
+        assert_eq!(parse_kodi_active_players("invalid"), 0);
     }
 }

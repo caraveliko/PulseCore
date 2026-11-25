@@ -46,8 +46,6 @@ pub struct DaemonConfig {
     pub jellyfin_url: String,
     /// Optional Jellyfin API token (`EMULERUST_JELLYFIN_API_KEY`).
     pub jellyfin_api_key: Option<String>,
-    /// Optional Plex refresh URL (`EMULERUST_PLEX_URL`).
-    pub plex_url: Option<String>,
     /// Optional SSH target (`user@host`) for NAS hardware telemetry (`EMULERUST_NAS_SSH_TARGET`).
     pub nas_ssh_target: Option<String>,
     /// SSH port for NAS hardware telemetry (`EMULERUST_NAS_SSH_PORT`).
@@ -115,9 +113,6 @@ impl DaemonConfig {
         let jellyfin_api_key = std::env::var("EMULERUST_JELLYFIN_API_KEY")
             .ok()
             .filter(|s| !s.trim().is_empty());
-        let plex_url = std::env::var("EMULERUST_PLEX_URL")
-            .ok()
-            .filter(|s| !s.trim().is_empty());
         let nas_ssh_target = std::env::var("EMULERUST_NAS_SSH_TARGET")
             .ok()
             .filter(|s| !s.trim().is_empty());
@@ -165,7 +160,6 @@ impl DaemonConfig {
             radarr_api_key,
             jellyfin_url,
             jellyfin_api_key,
-            plex_url,
             nas_ssh_target,
             nas_ssh_port,
             update_check_enabled,

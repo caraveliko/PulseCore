@@ -13,13 +13,13 @@ use crate::services::organizer::{clean_movie_title, remove_companion_subtitles_s
 use crate::state::AppState;
 
 /// Extensiones de archivos residuales o no deseados a eliminar en las carpetas de descargas entrantes.
-/// NOTA: "nfo", las imágenes y los subtítulos NUNCA están en esta lista porque son datos legítimos de Jellyfin/Plex.
+/// NOTA: "nfo", las imágenes y los subtítulos NUNCA están en esta lista porque son datos legítimos de Jellyfin/Kodi.
 pub const JUNK_EXTENSIONS: &[&str] = &[
     "url", "html", "htm", "exe", "bat", "cmd", "scr", "lnk",
     "sfv", "md5", "srr", "srs", "nzb", "torrent", "ds_store", "db",
 ];
 
-/// Nombres de imágenes de carátula estándar de Jellyfin/Plex a preservar en las carpetas raíz de títulos.
+/// Nombres de imágenes de carátula estándar de Jellyfin/Kodi a preservar en las carpetas raíz de títulos.
 const PRESERVED_ARTWORK_STEMS: &[&str] = &[
     "poster", "fanart", "backdrop", "banner", "clearlogo", "landscape", "logo",
     "season-specials-poster",
@@ -245,7 +245,7 @@ impl MediaCleaner {
 
     /// Escanea el directorio y elimina archivos basura y subtítulos complementarios huérfanos.
     /// En las carpetas de biblioteca (movies_dir / series_dir), las imágenes de portada (.jpg, .png...), metadatos (.nfo, .xml)
-    /// y subtítulos (.srt, .vtt) NUNCA se eliminan porque pertenecen a Jellyfin/Plex.
+    /// y subtítulos (.srt, .vtt) NUNCA se eliminan porque pertenecen a Jellyfin/Kodi.
     fn clean_junk_and_orphan_subtitles(
         dir: &Path,
         is_library_folder: bool,
@@ -275,7 +275,7 @@ impl MediaCleaner {
 
             // En las carpetas de biblioteca (movies_dir y series_dir), nunca eliminar archivos de portada o metadatos:
             // .nfo, .xml, .json, .jpg, .jpeg, .png, .webp, .tbn, .gif, .bif, .srt, .sub, .vtt, .ass, .ssa, .idx
-            // y archivos de puntos (.plexmatch, .ignore) son recursos oficiales de Jellyfin/Plex.
+            // y archivos de puntos (.ignore) son recursos oficiales de Jellyfin/Kodi.
             let is_artwork_or_meta = matches!(
                 ext.as_str(),
                 "nfo" | "xml" | "json" | "jpg" | "jpeg" | "png" | "webp" | "tbn" | "gif" | "bif" | "srt" | "sub" | "vtt" | "ass" | "ssa" | "idx"

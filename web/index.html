@@ -1143,10 +1143,10 @@
             <div class="usage-mode-heading">Adapta las opciones a tu forma de ver contenido</div>
           </div>
           <div class="usage-player-pills" id="usage-player-pills">
-            <span class="usage-player-label">Reproductor:</span>
-            <button type="button" class="usage-player-pill active" id="usage-player-jellyfin" onclick="selectPlayerProfile('jellyfin', true)">🟣 Jellyfin / Emby</button>
-            <button type="button" class="usage-player-pill" id="usage-player-plex" onclick="selectPlayerProfile('plex', true)">🟠 Plex</button>
-            <button type="button" class="usage-player-pill" id="usage-player-kodi" onclick="selectPlayerProfile('kodi', true)">🔵 Kodi / Infuse</button>
+            <span class="usage-player-label">Reproductor libre:</span>
+            <button type="button" class="usage-player-pill active" id="usage-player-jellyfin" onclick="selectPlayerProfile('jellyfin', true)">🟣 Jellyfin</button>
+            <button type="button" class="usage-player-pill" id="usage-player-kodi" onclick="selectPlayerProfile('kodi', true)">🔵 Kodi</button>
+            <button type="button" class="usage-player-pill" id="usage-player-local" onclick="selectPlayerProfile('local', true)">📂 Local / DLNA</button>
           </div>
         </div>
         <div class="usage-mode-grid">
@@ -1160,15 +1160,15 @@
           <button type="button" class="usage-mode-card" id="usage-card-kodi" onclick="selectUsageMode('kodi', true)">
             <span class="usage-mode-icon">🛋️</span>
             <div>
-              <div class="usage-mode-title">Kodi / Reproductor Local</div>
-              <div class="usage-mode-sub">Carpetas limpias, .nfo + carátulas y subtítulos listos para Kodi, Infuse o VLC.</div>
+              <div class="usage-mode-title">Kodi / Local / DLNA</div>
+              <div class="usage-mode-sub">Carpetas limpias, .nfo + carátulas opcionales y subtítulos para Kodi, VLC, mpv o MiniDLNA.</div>
             </div>
           </button>
           <button type="button" class="usage-mode-card active" id="usage-card-mediaserver" onclick="selectUsageMode('mediaserver', true)">
             <span class="usage-mode-icon">🍿</span>
             <div>
-              <div class="usage-mode-title">Servidor Plex / Jellyfin</div>
-              <div class="usage-mode-sub">Experiencia tipo Netflix: etiquetas TMDB, Auto-Grabber y recorte en streaming.</div>
+              <div class="usage-mode-title">Servidor Jellyfin</div>
+              <div class="usage-mode-sub">Experiencia tipo Netflix 100 % libre: etiquetas TMDB, Auto-Grabber y recorte en streaming.</div>
             </div>
           </button>
           <button type="button" class="usage-mode-card" id="usage-card-server247" onclick="selectUsageMode('server247', true)">
@@ -1180,7 +1180,7 @@
           </button>
         </div>
         <div class="usage-mode-context-bar" id="usage-mode-context-bar">
-          <span id="usage-mode-summary-text">Mostrando opciones de Servidor Multimedia (Plex / Jellyfin / Emby) y automatización de Filmoteca.</span>
+          <span id="usage-mode-summary-text">Mostrando opciones de Servidor Multimedia (Jellyfin) y automatización de Filmoteca.</span>
         </div>
       </div>
 
@@ -1385,7 +1385,7 @@
               </div>
               <div class="opt-row opt-advanced-only" id="opt-row-streaming-cap">
                 <div class="opt-row-info">
-                  <div class="opt-row-title">Techo durante streaming Jellyfin / Plex (KB/s)</div>
+                  <div class="opt-row-title">Techo durante streaming Jellyfin / Kodi (KB/s)</div>
                   <div class="opt-row-desc">Recorta temporalmente la subida cuando hay una reproducción activa en tu servidor multimedia (<code>0</code> = desactivado).</div>
                 </div>
                 <div class="opt-row-ctrl">
@@ -1604,7 +1604,7 @@
                   <span class="storage-mode-icon">🎬</span>
                   <div>
                     <div class="storage-mode-title">Modo Media Center (Automático)</div>
-                    <div class="storage-mode-sub">Organiza por carpetas, renombra para Jellyfin / Plex / Kodi, descarga subtítulos y refresca tu servidor.</div>
+                    <div class="storage-mode-sub">Organiza por carpetas, renombra para Jellyfin, Kodi o reproductores locales, descarga subtítulos y refresca tu servidor.</div>
                   </div>
                 </button>
                 <button type="button" class="storage-mode-card" id="organize-mode-card-simple" onclick="selectOrganizeMode(false)">
@@ -1620,38 +1620,37 @@
                 <div class="opt-row">
                   <div class="opt-row-info">
                     <div class="opt-row-title">Formato compatible con</div>
-                    <div class="opt-row-desc">Adapta las etiquetas de carpeta (<code>[tmdbid]</code>, <code>{tmdb}</code> o limpio) a tu reproductor favorito.</div>
+                    <div class="opt-row-desc">Adapta las etiquetas de carpeta (<code>[tmdbid]</code> o limpio) a tu reproductor libre favorito.</div>
                   </div>
                   <div class="opt-row-ctrl">
                     <select class="form-control opt-select" id="pref-media-server-profile" onchange="selectPlayerProfile(this.value, false)">
-                      <option value="jellyfin">Jellyfin / Emby ([tmdbid-...])</option>
-                      <option value="plex">Plex ({tmdb-...})</option>
-                      <option value="kodi">Kodi / Infuse / Universal (limpio)</option>
+                      <option value="jellyfin">Jellyfin ([tmdbid-...])</option>
+                      <option value="kodi">Kodi (limpio + .nfo y carátulas)</option>
+                      <option value="local">Local / DLNA — VLC, mpv, Nova, MiniDLNA (solo carpetas limpias)</option>
                     </select>
                   </div>
                 </div>
                 <div class="opt-row">
                   <div class="opt-row-info">
                     <div class="opt-row-title">Generar metadatos locales (<code>.nfo</code> + carátulas)</div>
-                    <div class="opt-row-desc">Escribe <code>movie.nfo</code> / <code>tvshow.nfo</code>, <code>poster.jpg</code> y <code>fanart.jpg</code> para reconocimiento instantáneo sin scraping.</div>
+                    <div class="opt-row-desc">Escribe <code>movie.nfo</code> / <code>tvshow.nfo</code>, <code>poster.jpg</code> y <code>fanart.jpg</code> para reconocimiento instantáneo sin scraping (omitido en perfil Local / DLNA).</div>
                   </div>
                   <div class="opt-row-ctrl">
                     <input type="checkbox" class="opt-switch" id="pref-generate-nfo-artwork">
                   </div>
                 </div>
                 <div class="opt-row-stack opt-advanced-only" id="opt-row-media-notify">
-                  <div class="opt-row-title">Notificación automática a tu servidor multimedia (opcional)</div>
-                  <div class="opt-row-desc">Envía una señal de escaneo al terminar una descarga organizada.</div>
+                  <div class="opt-row-title">Notificación automática a tu reproductor libre (opcional)</div>
+                  <div class="opt-row-desc">Envía una señal de escaneo al terminar una descarga organizada. Pulse Core apuesta por software 100 % libre y gratuito: <a href="https://jellyfin.org" target="_blank" rel="noopener noreferrer">Jellyfin</a> y <a href="https://kodi.tv" target="_blank" rel="noopener noreferrer">Kodi</a>.</div>
                   <div id="player-fields-jellyfin" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
-                    <input type="text" class="form-control" id="pref-jellyfin-url" placeholder="Jellyfin / Emby URL (http://127.0.0.1:8096)">
+                    <input type="text" class="form-control" id="pref-jellyfin-url" placeholder="Jellyfin URL (http://127.0.0.1:8096)">
                     <input type="password" class="form-control" id="pref-jellyfin-apikey" autocomplete="off" placeholder="Jellyfin API Key">
-                  </div>
-                  <div id="player-fields-plex" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
-                    <input type="text" class="form-control" id="pref-plex-url" placeholder="Plex URL (http://127.0.0.1:32400)">
-                    <input type="password" class="form-control" id="pref-plex-token" autocomplete="off" placeholder="Plex X-Plex-Token">
                   </div>
                   <div id="player-fields-kodi" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 6px;">
                     <input type="text" class="form-control" id="pref-kodi-url" placeholder="Kodi JSON-RPC URL (http://127.0.0.1:8080)">
+                  </div>
+                  <div id="player-fields-local" style="display: none; margin-top: 6px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); font-size: 0.78rem; color: var(--text-muted);">
+                    📂 El perfil <strong>Local / DLNA</strong> no requiere servidor externo ni configuración: organiza únicamente carpetas limpias (<code>Título (Año)/Título (Año).mkv</code>) y subtítulos <code>.es.srt</code> para VLC, mpv, Nova Video Player, MiniDLNA o Gerbera.
                   </div>
                 </div>
               </div>
@@ -2711,7 +2710,7 @@
               <span>Reposo ↑ (KB/s)</span>
               <input type="number" class="form-control" id="bw-smart-idle-cap" min="0" placeholder="0">
             </label>
-            <label class="bw-smart-field" title="Techo de subida durante streaming activo en Jellyfin/Plex (KB/s; 0 = desactivado)">
+            <label class="bw-smart-field" title="Techo de subida durante streaming activo en Jellyfin/Kodi (KB/s; 0 = desactivado)">
               <span>Streaming ↑ (KB/s)</span>
               <input type="number" class="form-control" id="bw-smart-streaming-cap" min="0" placeholder="0">
             </label>
@@ -2923,7 +2922,7 @@
       </div>
 
       <form onsubmit="event.preventDefault(); execMediaSearch();" style="display: flex; gap: 10px; margin-bottom: 14px;">
-        <input type="text" id="media-search-input" class="form-control" placeholder="Buscar título en TMDB / Skyhook (ej: Alien, Breaking Bad...)" required style="flex: 1;">
+        <input type="text" id="media-search-input" class="form-control" placeholder="Buscar título, ID (tt..., tmdb:...) o URL de Trakt/IMDb/TMDB..." required style="flex: 1;">
         <select id="media-search-type" class="form-control" style="width: 140px;">
           <option value="movie">Película</option>
           <option value="tv">Serie TV</option>
