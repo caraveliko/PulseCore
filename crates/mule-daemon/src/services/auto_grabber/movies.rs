@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// Intervalo mínimo (en milisegundos) entre refrescos de fechas de estreno para películas pendientes (12 horas).
+const UNRELEASED_METADATA_REFRESH_MS: i64 = 12 * 60 * 60 * 1000;
+
 impl AutoGrabber {
     /// Ejecuta la búsqueda, el filtrado, el diagnóstico y la descarga automática para una película dada.
     pub(super) async fn process_movie_item(
@@ -13,6 +16,102 @@ impl AutoGrabber {
         force: bool,
     ) -> Option<Value> {
         let now = now_ms();
+        let mut effective_item = item.clone();
+
+        // Comprobación inteligente de estreno: evitar buscar películas aún no estrenadas o sin lanzamiento disponible
+        if effective_item.status == "wanted" || effective_item.status == "unreleased" {
+            let today = time::OffsetDateTime::now_utc().date();
+            let today_str = format!("{today}");
+            let current_year = today.year() as u32;
+
+            let needs_refresh = effective_item.tmdb_id.is_some()
+                && ((effective_item.status == "unreleased"
+                    && now.saturating_sub(effective_item.updated_at) >= UNRELEASED_METADATA_REFRESH_MS)
+                    || (effective_item.release_date.is_none()
+                        && effective_item.digital_release_date.is_none()
+                        && effective_item.year.is_none_or(|y| y >= current_year)));
+
+            let mut metadata_updated = false;
+            if needs_refresh {
+                if let Some(tid) = effective_item.tmdb_id {
+                    if let Ok(meta) = state.media_metadata.get_movie(tid).await {
+                        if effective_item.year.is_none() {
+                            effective_item.year = meta.year;
+                        }
+                        if meta.release_date.is_some() {
+                            effective_item.release_date = meta.release_date;
+                        }
+                        if meta.digital_release_date.is_some() {
+                            effective_item.digital_release_date = meta.digital_release_date;
+                        }
+                        if meta.release_status.is_some() {
+                            effective_item.release_status = meta.release_status;
+                        }
+                        metadata_updated = true;
+                    }
+                }
+            }
+
+            let avail = crate::services::media_metadata::evaluate_movie_availability(
+                effective_item.year,
+                effective_item.release_date.as_deref(),
+                effective_item.digital_release_date.as_deref(),
+                effective_item.release_status.as_deref(),
+                &today_str,
+            );
+
+            if !avail.is_released {
+                if effective_item.status != "unreleased" || metadata_updated {
+                    effective_item.status = "unreleased".to_string();
+                    let dl_svc = state.downloads.lock().await;
+                    let _ = dl_svc.db().update_media_release_info(
+                        &effective_item.id,
+                        effective_item.year,
+                        effective_item.release_date.as_deref(),
+                        effective_item.digital_release_date.as_deref(),
+                        effective_item.release_status.as_deref(),
+                        Some("unreleased"),
+                        now,
+                    );
+                }
+
+                let diag = ag_state
+                    .diagnostics
+                    .entry(effective_item.id.clone())
+                    .or_default();
+                diag.last_search_ms = now;
+                diag.last_status = "unreleased".to_string();
+                diag.summary_message = match avail.available_from {
+                    Some(ref dt) => format!("{} · Disponible aprox.: {dt}", avail.reason),
+                    None => avail.reason,
+                };
+                let reason_log = diag.summary_message.clone();
+                Self::save_state(state, ag_state).await;
+                tracing::debug!(
+                    title = %effective_item.title,
+                    reason = %reason_log,
+                    "AutoGrabber omite película por estrenar"
+                );
+                return None;
+            } else if effective_item.status == "unreleased" {
+                effective_item.status = "wanted".to_string();
+                let dl_svc = state.downloads.lock().await;
+                let _ = dl_svc.db().update_media_release_info(
+                    &effective_item.id,
+                    effective_item.year,
+                    effective_item.release_date.as_deref(),
+                    effective_item.digital_release_date.as_deref(),
+                    effective_item.release_status.as_deref(),
+                    Some("wanted"),
+                    now,
+                );
+                tracing::info!(
+                    title = %effective_item.title,
+                    "Película estrenada: promocionada automáticamente de 'unreleased' a 'wanted'"
+                );
+            }
+        }
+        let item = &effective_item;
         let (upgrade_enabled, max_res) = {
             let dl_svc = state.downloads.lock().await;
             let upg = dl_svc

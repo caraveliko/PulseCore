@@ -687,3 +687,34 @@ fn test_strict_castilian_confidence_and_filter() {
     assert!(batch[2].is_rejected);
     assert!(batch[3].is_rejected);
 }
+
+#[test]
+fn test_sequel_three_never_matches_first_installment() {
+    assert!(!matches_release_with_alts(
+        "Dune.2021.1080p.Castellano.BluRay.x264.mkv",
+        "Dune: Part Three",
+        Some("Dune: Part Three"),
+        &["Dune", "Dune 3"],
+        None,
+        true,
+        None,
+    ));
+    assert!(!matches_release_with_alts(
+        "Dune.1.1080p.Castellano.mkv",
+        "Dune 3",
+        None,
+        &["Dune"],
+        None,
+        true,
+        None,
+    ));
+    assert!(matches_release_with_alts(
+        "Dune.Parte.Tres.2026.1080p.Castellano.mkv",
+        "Dune: Part Three",
+        Some("Dune: Part Three"),
+        &["Dune 3"],
+        Some(2026),
+        true,
+        None,
+    ));
+}

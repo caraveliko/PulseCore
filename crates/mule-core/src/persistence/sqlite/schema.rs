@@ -418,6 +418,10 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             quality_profile TEXT NOT NULL DEFAULT '1080p-es',
             root_folder TEXT NOT NULL DEFAULT '/media/movies',
             file_path TEXT,
+            original_release_name TEXT,
+            release_date TEXT,
+            digital_release_date TEXT,
+            release_status TEXT,
             download_id TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -438,6 +442,10 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
             status TEXT NOT NULL DEFAULT 'wanted',
             monitored INTEGER NOT NULL DEFAULT 1,
             file_path TEXT,
+            original_release_name TEXT,
+            release_date TEXT,
+            digital_release_date TEXT,
+            release_status TEXT,
             download_id TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -513,17 +521,26 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         conn.execute_batch("ALTER TABLE peer_sources ADD COLUMN quic_port INTEGER DEFAULT 0;")?;
     }
 
-    // Migración: file_path y original_release_name en media_library y media_episodes
+    // Migración: file_path, original_release_name y fechas de estreno en media_library y media_episodes
     let mut stmt_ml = conn.prepare("PRAGMA table_info(media_library)")?;
     let mut rows_ml = stmt_ml.query([])?;
     let mut has_ml_file_path = false;
     let mut has_ml_release_name = false;
+    let mut has_ml_release_date = false;
+    let mut has_ml_digital_release_date = false;
+    let mut has_ml_release_status = false;
     while let Some(row) = rows_ml.next()? {
         let col_name: String = row.get(1)?;
         if col_name == "file_path" {
             has_ml_file_path = true;
         } else if col_name == "original_release_name" {
             has_ml_release_name = true;
+        } else if col_name == "release_date" {
+            has_ml_release_date = true;
+        } else if col_name == "digital_release_date" {
+            has_ml_digital_release_date = true;
+        } else if col_name == "release_status" {
+            has_ml_release_status = true;
         }
     }
     drop(rows_ml);
@@ -533,6 +550,15 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
     }
     if !has_ml_release_name {
         let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN original_release_name TEXT;");
+    }
+    if !has_ml_release_date {
+        let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN release_date TEXT;");
+    }
+    if !has_ml_digital_release_date {
+        let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN digital_release_date TEXT;");
+    }
+    if !has_ml_release_status {
+        let _ = conn.execute_batch("ALTER TABLE media_library ADD COLUMN release_status TEXT;");
     }
 
     let mut stmt_ep = conn.prepare("PRAGMA table_info(media_episodes)")?;

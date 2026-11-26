@@ -1107,6 +1107,29 @@ impl Database {
         media::set_media_original_release_name(&self.conn, id, release_name, now_ms)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_media_release_info(
+        &self,
+        id: &str,
+        year: Option<u32>,
+        release_date: Option<&str>,
+        digital_release_date: Option<&str>,
+        release_status: Option<&str>,
+        status: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), CoreError> {
+        media::update_media_release_info(
+            &self.conn,
+            id,
+            year,
+            release_date,
+            digital_release_date,
+            release_status,
+            status,
+            now_ms,
+        )
+    }
+
     pub fn set_episode_original_release_name(
         &self,
         id: &str,

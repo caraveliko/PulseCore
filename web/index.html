@@ -559,6 +559,7 @@
               <button class="filter-btn" data-mstatus="completed" onclick="filterMediaByStatus('completed')">En biblioteca <span id="count-media-completed">(0)</span></button>
               <button class="filter-btn" data-mstatus="downloading" onclick="filterMediaByStatus('downloading')">Descargando <span id="count-media-downloading">(0)</span></button>
               <button class="filter-btn" data-mstatus="wanted" onclick="filterMediaByStatus('wanted')">Buscadas <span id="count-media-wanted">(0)</span></button>
+              <button class="filter-btn" data-mstatus="unreleased" onclick="filterMediaByStatus('unreleased')">Por estrenar <span id="count-media-unreleased">(0)</span></button>
             </div>
           </div>
 
@@ -902,48 +903,69 @@
         </div>
         <span class="net-subview-hint">Topología P2P unificada</span>
       </div>
-      <!-- Banner Servidor Conectado -->
-      <div id="connected-server-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(15, 22, 38, 0.85)); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <span class="badge badge-completed" style="font-size: 0.8rem;">🟢 Conectado</span>
-              <h3 id="cs-name" style="margin: 0; font-size: 1.1rem; color: #fff;">Servidor</h3>
+      <!-- Banner Servidor Conectado (Hero KPI) -->
+      <div id="connected-server-card" class="srv-hero-card" style="display: none;">
+        <div class="srv-hero-main">
+          <div class="srv-hero-left">
+            <div class="srv-hero-title-row">
+              <span class="srv-live-dot"></span>
+              <span class="badge badge-completed" style="font-size: 0.76rem;">Conectado</span>
+              <h3 id="cs-name" class="srv-hero-name">Servidor</h3>
               <span id="cs-highid-badge" class="badge badge-completed">HighID ✔</span>
             </div>
-            <div style="font-size: 0.82rem; color: var(--text-muted);" id="cs-desc">Dirección: 0.0.0.0:0</div>
+            <div class="srv-hero-sub" id="cs-desc">Dirección: 0.0.0.0:0</div>
           </div>
-          <div style="display: flex; gap: 16px; align-items: center;">
-            <div style="text-align: right;">
-              <div style="font-size: 0.8rem; color: var(--text-muted);">Usuarios / Archivos</div>
-              <strong id="cs-stats" style="font-size: 0.95rem;">- / -</strong>
+          <div class="srv-hero-kpis">
+            <div class="srv-kpi-pill">
+              <span class="srv-kpi-lbl">Usuarios / Archivos</span>
+              <strong id="cs-stats" class="srv-kpi-val">- / -</strong>
             </div>
             <button class="btn btn-danger btn-sm" id="btn-disconnect-server">🔌 Desconectar</button>
           </div>
         </div>
       </div>
 
-      <div class="action-bar">
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <div class="srv-toolbar">
+        <div class="srv-toolbar-actions">
           <button class="btn btn-primary" id="btn-connect-fastest">⚡ Conectar al más rápido</button>
           <button class="btn" id="btn-update-servers-url">🔄 Actualizar server.met desde URL</button>
           <button class="btn" id="btn-import-amule-servers">📥 Importar server.met de aMule</button>
+          <button class="btn btn-sm" id="btn-clear-servers" onclick="clearAllServers()" title="Vaciar lista de servidores" style="color: #fca5a5;">🗑 Limpiar</button>
         </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted);" id="servers-summary">
-          0 servidores disponibles
+        <div class="srv-toolbar-meta">
+          <span id="servers-summary" class="srv-summary-pill">0 servidores disponibles</span>
         </div>
       </div>
 
-      <div class="table-container">
-        <table>
+      <div class="srv-filter-bar">
+        <div class="filter-group" id="servers-filter-pills">
+          <button type="button" class="filter-btn active" data-sfilter="all" onclick="setServersFilter('all')">Todos <span id="cnt-srv-all">(0)</span></button>
+          <button type="button" class="filter-btn" data-sfilter="ping" onclick="setServersFilter('ping')">Con ping <span id="cnt-srv-ping">(0)</span></button>
+          <button type="button" class="filter-btn" data-sfilter="enabled" onclick="setServersFilter('enabled')">Habilitados <span id="cnt-srv-enabled">(0)</span></button>
+          <button type="button" class="filter-btn" data-sfilter="disabled" onclick="setServersFilter('disabled')">Deshabilitados <span id="cnt-srv-disabled">(0)</span></button>
+        </div>
+        <div class="srv-filter-right">
+          <div class="srv-search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="srv-search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="servers-search-input" class="form-control srv-search-input" placeholder="Filtrar servidor, IP o descripción..." oninput="renderServersView()">
+          </div>
+          <div class="filter-group" id="servers-view-toggle">
+            <button type="button" class="filter-btn active" data-sview="table" onclick="setServersViewMode('table')" title="Vista tabla">☰ Tabla</button>
+            <button type="button" class="filter-btn" data-sview="cards" onclick="setServersViewMode('cards')" title="Vista tarjetas">▦ Tarjetas</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-container" id="servers-table-wrap">
+        <table class="srv-table">
           <thead>
             <tr>
-              <th style="width: 30%;">Nombre del Servidor</th>
+              <th class="srv-th-sort" onclick="sortServersBy('name')">Servidor <span id="srv-sort-name"></span></th>
               <th>Dirección IP:Puerto</th>
               <th>Descripción</th>
-              <th>Ping</th>
-              <th>Estado</th>
-              <th style="text-align: right;">Acción</th>
+              <th class="srv-th-sort" onclick="sortServersBy('ping')">Ping <span id="srv-sort-ping"></span></th>
+              <th class="srv-th-sort" onclick="sortServersBy('status')">Estado <span id="srv-sort-status"></span></th>
+              <th style="text-align: right;">Acciones</th>
             </tr>
           </thead>
           <tbody id="servers-list">
@@ -951,6 +973,7 @@
           </tbody>
         </table>
       </div>
+      <div id="servers-cards-grid" class="srv-cards-grid" style="display: none;"></div>
     </section>
 
     <!-- VISTA: KADEMLIA DHT -->

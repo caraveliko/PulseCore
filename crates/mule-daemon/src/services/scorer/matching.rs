@@ -539,6 +539,39 @@ fn matches_series_or_movie_title_tokens(
         .filter(|v| !v.is_empty())
         .collect();
 
+    // Si el título principal u original tiene un número de secuela (p. ej. 2, 3, 4),
+    // filtrar títulos alternativos que hayan perdido ese marcador (p. ej. "Dune" para "Dune 3").
+    let extract_sequel_num = |tokens: &[String]| -> Option<u32> {
+        for t in tokens {
+            match t.as_str() {
+                "1" | "one" | "i" | "uno" => return Some(1),
+                "2" | "two" | "ii" | "dos" => return Some(2),
+                "3" | "three" | "iii" | "tres" => return Some(3),
+                "4" | "four" | "iv" | "cuatro" => return Some(4),
+                _ => {}
+            }
+        }
+        None
+    };
+    let expected_sequel = extract_sequel_num(&exp_tokens).or_else(|| extract_sequel_num(&orig_tokens));
+    let alt_token_groups: Vec<Vec<String>> = alt_token_groups
+        .into_iter()
+        .filter(|at| {
+            if let Some(exp_seq) = expected_sequel {
+                if exp_seq >= 2 {
+                    if let Some(alt_seq) = extract_sequel_num(at) {
+                        return alt_seq == exp_seq;
+                    }
+                    // Si el título alternativo no tiene número de secuela y todos sus tokens ya están
+                    // contenidos en el título esperado (p. ej. "Dune" frente a "Dune: Part Three"), descartarlo.
+                    let is_subset = at.iter().all(|tok| exp_tokens.contains(tok) || orig_tokens.contains(tok));
+                    return !is_subset;
+                }
+            }
+            true
+        })
+        .collect();
+
     // Comprobación estricta de año para películas y protección frente a series homónimas antiguas
     if is_movie {
         if let Some(year) = expected_year {
@@ -652,6 +685,12 @@ fn matches_series_or_movie_title_tokens(
                     }
                     // Equivalencias numéricas
                     if matches!(t.as_str(), "2" | "two" | "ii" | "dos") && matches!(cw.as_str(), "2" | "two" | "ii" | "dos") {
+                        return true;
+                    }
+                    if matches!(t.as_str(), "3" | "three" | "iii" | "tres") && matches!(cw.as_str(), "3" | "three" | "iii" | "tres") {
+                        return true;
+                    }
+                    if matches!(t.as_str(), "4" | "four" | "iv" | "cuatro") && matches!(cw.as_str(), "4" | "four" | "iv" | "cuatro") {
                         return true;
                     }
                     if matches!(t.as_str(), "part" | "parte") && matches!(cw.as_str(), "part" | "parte") {

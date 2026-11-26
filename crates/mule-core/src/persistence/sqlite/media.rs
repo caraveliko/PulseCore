@@ -11,8 +11,10 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
         "INSERT INTO media_library (
             id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
             overview, poster_path, backdrop_path, status, monitored,
-            quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+            quality_profile, root_folder, file_path, original_release_name,
+            release_date, digital_release_date, release_status,
+            download_id, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             original_title=excluded.original_title,
@@ -26,6 +28,9 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
             root_folder=excluded.root_folder,
             file_path=COALESCE(excluded.file_path, media_library.file_path),
             original_release_name=COALESCE(excluded.original_release_name, media_library.original_release_name),
+            release_date=COALESCE(excluded.release_date, media_library.release_date),
+            digital_release_date=COALESCE(excluded.digital_release_date, media_library.digital_release_date),
+            release_status=COALESCE(excluded.release_status, media_library.release_status),
             download_id=excluded.download_id,
             updated_at=excluded.updated_at",
         params![
@@ -46,6 +51,9 @@ pub fn insert_media_item(conn: &Connection, item: &MediaItem) -> Result<(), Core
             item.root_folder,
             item.file_path,
             item.original_release_name,
+            item.release_date,
+            item.digital_release_date,
+            item.release_status,
             item.download_id,
             item.created_at,
             item.updated_at,
@@ -88,7 +96,9 @@ pub fn find_media_by_download_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name,
+                release_date, digital_release_date, release_status,
+                download_id, created_at, updated_at
          FROM media_library WHERE download_id = ?1",
     )?;
     let mut rows = stmt.query(params![download_id])?;
@@ -140,7 +150,9 @@ pub fn get_media_item(conn: &Connection, id: &str) -> Result<Option<MediaItem>, 
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name,
+                release_date, digital_release_date, release_status,
+                download_id, created_at, updated_at
          FROM media_library WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -158,7 +170,9 @@ pub fn get_media_by_tmdb_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name,
+                release_date, digital_release_date, release_status,
+                download_id, created_at, updated_at
          FROM media_library WHERE tmdb_id = ?1",
     )?;
     let mut rows = stmt.query(params![tmdb_id as i64])?;
@@ -176,7 +190,9 @@ pub fn get_media_by_tvdb_id(
     let mut stmt = conn.prepare(
         "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                 overview, poster_path, backdrop_path, status, monitored,
-                quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+                quality_profile, root_folder, file_path, original_release_name,
+                release_date, digital_release_date, release_status,
+                download_id, created_at, updated_at
          FROM media_library WHERE tvdb_id = ?1",
     )?;
     let mut rows = stmt.query(params![tvdb_id as i64])?;
@@ -194,7 +210,9 @@ pub fn list_media_items(
 ) -> Result<Vec<MediaItem>, CoreError> {
     let mut sql = "SELECT id, tmdb_id, imdb_id, tvdb_id, media_type, title, original_title, year,
                           overview, poster_path, backdrop_path, status, monitored,
-                          quality_profile, root_folder, file_path, original_release_name, download_id, created_at, updated_at
+                          quality_profile, root_folder, file_path, original_release_name,
+                          release_date, digital_release_date, release_status,
+                          download_id, created_at, updated_at
                    FROM media_library WHERE 1=1".to_string();
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -524,10 +542,47 @@ fn row_to_media(row: &rusqlite::Row) -> Result<MediaItem, rusqlite::Error> {
         root_folder: row.get(14)?,
         file_path: row.get(15)?,
         original_release_name: row.get(16)?,
-        download_id: row.get(17)?,
-        created_at: row.get(18)?,
-        updated_at: row.get(19)?,
+        release_date: row.get(17)?,
+        digital_release_date: row.get(18)?,
+        release_status: row.get(19)?,
+        download_id: row.get(20)?,
+        created_at: row.get(21)?,
+        updated_at: row.get(22)?,
     })
+}
+
+/// Actualiza las fechas de estreno, estado de lanzamiento y opcionalmente el estado en biblioteca de una película.
+#[allow(clippy::too_many_arguments)]
+pub fn update_media_release_info(
+    conn: &Connection,
+    id: &str,
+    year: Option<u32>,
+    release_date: Option<&str>,
+    digital_release_date: Option<&str>,
+    release_status: Option<&str>,
+    status: Option<&str>,
+    now_ms: i64,
+) -> Result<(), CoreError> {
+    conn.execute(
+        "UPDATE media_library SET
+            year = COALESCE(?1, year),
+            release_date = COALESCE(?2, release_date),
+            digital_release_date = COALESCE(?3, digital_release_date),
+            release_status = COALESCE(?4, release_status),
+            status = COALESCE(?5, status),
+            updated_at = ?6
+         WHERE id = ?7",
+        params![
+            year,
+            release_date,
+            digital_release_date,
+            release_status,
+            status,
+            now_ms,
+            id,
+        ],
+    )?;
+    Ok(())
 }
 
 fn set_table_original_release_name(

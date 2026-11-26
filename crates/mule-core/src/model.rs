@@ -750,13 +750,19 @@ pub struct MediaItem {
     pub overview: Option<String>,
     pub poster_path: Option<String>,
     pub backdrop_path: Option<String>,
-    pub status: String, // "wanted" | "downloading" | "completed" | "unmonitored"
+    pub status: String, // "wanted" | "unreleased" | "downloading" | "completed" | "unmonitored"
     pub monitored: bool,
     pub quality_profile: String,
     pub root_folder: String,
     pub file_path: Option<String>,
     #[serde(default)]
     pub original_release_name: Option<String>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub digital_release_date: Option<String>,
+    #[serde(default)]
+    pub release_status: Option<String>,
     pub download_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,

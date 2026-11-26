@@ -247,6 +247,227 @@ document.getElementById('btn-add-manual-peer').onclick = async () => {
 
 // === SERVIDORES ED2K ===
 let cachedServers = [];
+let cachedServerStatus = null;
+let currentServerFilter = 'all';
+let currentServerViewMode = 'table';
+let currentServerSort = { key: 'ping', asc: true };
+
+function setServersFilter(filter) {
+  currentServerFilter = filter;
+  document.querySelectorAll('#servers-filter-pills button').forEach(b => {
+    b.classList.toggle('active', b.dataset.sfilter === filter);
+  });
+  renderServersView();
+}
+
+function setServersViewMode(mode) {
+  currentServerViewMode = mode;
+  document.querySelectorAll('#servers-view-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.sview === mode);
+  });
+  renderServersView();
+}
+
+function sortServersBy(key) {
+  if (currentServerSort.key === key) {
+    currentServerSort.asc = !currentServerSort.asc;
+  } else {
+    currentServerSort = { key, asc: true };
+  }
+  renderServersView();
+}
+
+function formatServerPingBadge(ping) {
+  const p = Number(ping) || 0;
+  if (p <= 0) return '<span class="srv-ping-none">—</span>';
+  if (p < 50) return `<span class="srv-ping-badge srv-ping-good">● ${p} ms</span>`;
+  if (p <= 120) return `<span class="srv-ping-badge srv-ping-med">● ${p} ms</span>`;
+  return `<span class="srv-ping-badge srv-ping-bad">● ${p} ms</span>`;
+}
+
+function isServerEnabledFlag(s) {
+  return s && s.enabled !== false;
+}
+
+async function toggleServerEnabled(address, enabled) {
+  try {
+    await client.call('servers.setEnabled', { address, enabled });
+    showToast(enabled ? `Servidor ${address} habilitado` : `Servidor ${address} deshabilitado`, 'info', enabled ? '✅' : '⏸️');
+    await refreshServers();
+  } catch (e) {
+    showToast(`Error al actualizar servidor: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+async function deleteServerEntry(address, name) {
+  try {
+    await client.call('servers.delete', { address });
+    showToast(`Servidor eliminado: ${name || address}`, 'info', '🗑');
+    await refreshServers();
+  } catch (e) {
+    showToast(`Error al eliminar servidor: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+async function clearAllServers() {
+  if (!confirm('¿Seguro que deseas vaciar toda la lista de servidores eD2K?')) return;
+  try {
+    const res = await client.call('servers.clear', {});
+    showToast(`Lista vaciada (${res.deletedCount || 0} servidores eliminados)`, 'info', '🧹');
+    await refreshServers();
+  } catch (e) {
+    showToast(`Error al vaciar servidores: ${e.message || e}`, 'error', '❌');
+  }
+}
+
+function renderServersView() {
+  const tbody = document.getElementById('servers-list');
+  const tableWrap = document.getElementById('servers-table-wrap');
+  const cardsGrid = document.getElementById('servers-cards-grid');
+  if (!tbody) return;
+
+  const sStatus = cachedServerStatus;
+  const statusStr = (sStatus && sStatus.status ? sStatus.status : '').toLowerCase();
+  const query = (document.getElementById('servers-search-input')?.value || '').trim().toLowerCase();
+
+  // Contadores de píldoras
+  const totalCount = cachedServers.length;
+  const pingCount = cachedServers.filter(s => (Number(s.ping) || 0) > 0).length;
+  const enabledCount = cachedServers.filter(isServerEnabledFlag).length;
+  const disabledCount = totalCount - enabledCount;
+  const setCnt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = `(${v})`; };
+  setCnt('cnt-srv-all', totalCount);
+  setCnt('cnt-srv-ping', pingCount);
+  setCnt('cnt-srv-enabled', enabledCount);
+  setCnt('cnt-srv-disabled', disabledCount);
+
+  // Actualizar indicadores de ordenación en cabecera
+  ['name', 'ping', 'status'].forEach(k => {
+    const el = document.getElementById(`srv-sort-${k}`);
+    if (el) el.textContent = currentServerSort.key === k ? (currentServerSort.asc ? '▲' : '▼') : '';
+  });
+
+  let filtered = cachedServers.filter(s => {
+    if (currentServerFilter === 'ping' && !(Number(s.ping) > 0)) return false;
+    if (currentServerFilter === 'enabled' && !isServerEnabledFlag(s)) return false;
+    if (currentServerFilter === 'disabled' && isServerEnabledFlag(s)) return false;
+    if (query) {
+      const hay = `${s.name || ''} ${s.address || ''} ${s.description || ''}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    return true;
+  });
+
+  // Ordenar: servidor conectado siempre primero
+  filtered.sort((a, b) => {
+    const aConn = statusStr === 'connected' && sStatus.serverAddress === a.address ? 1 : 0;
+    const bConn = statusStr === 'connected' && sStatus.serverAddress === b.address ? 1 : 0;
+    if (aConn !== bConn) return bConn - aConn;
+
+    const dir = currentServerSort.asc ? 1 : -1;
+    if (currentServerSort.key === 'ping') {
+      const pa = Number(a.ping) > 0 ? Number(a.ping) : 999999;
+      const pb = Number(b.ping) > 0 ? Number(b.ping) : 999999;
+      if (pa !== pb) return (pa - pb) * dir;
+    } else if (currentServerSort.key === 'status') {
+      const ea = isServerEnabledFlag(a) ? 1 : 0;
+      const eb = isServerEnabledFlag(b) ? 1 : 0;
+      if (ea !== eb) return (eb - ea) * dir;
+    }
+    return (a.name || '').localeCompare(b.name || '') * dir;
+  });
+
+  if (tableWrap && cardsGrid) {
+    tableWrap.style.display = currentServerViewMode === 'table' ? 'block' : 'none';
+    cardsGrid.style.display = currentServerViewMode === 'cards' ? 'grid' : 'none';
+  }
+
+  if (filtered.length === 0) {
+    const emptyMsg = cachedServers.length === 0
+      ? 'No hay servidores en la lista. Pulsa "Actualizar server.met desde URL" o "Importar server.met de aMule".'
+      : 'Ningún servidor coincide con el filtro actual.';
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    if (cardsGrid) {
+      cardsGrid.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding: 25px; color: var(--text-muted);">${emptyMsg}</div>`;
+    }
+    return;
+  }
+
+  if (currentServerViewMode === 'cards' && cardsGrid) {
+    cardsGrid.innerHTML = filtered.map(s => {
+      const isConnected = statusStr === 'connected' && sStatus.serverAddress === s.address;
+      const enabled = isServerEnabledFlag(s);
+      const pingHtml = formatServerPingBadge(s.ping);
+      const safeAddr = escapeHtml(s.address || '');
+      const safeName = escapeHtml(s.name || 'Servidor eD2k');
+      const safeDesc = escapeHtml(s.description || 'Sin descripción');
+      const isIpv6 = (s.address || '').includes('[') || (s.description || '').toLowerCase().includes('ipv6');
+      const ipv6Chip = isIpv6 ? '<span class="srv-chip-ipv6">IPv6</span>' : '';
+      const statusBadge = isConnected
+        ? '<span class="badge badge-completed">🟢 Conectado</span>'
+        : (enabled ? '<span class="badge badge-wait">⚪ Disponible</span>' : '<span class="badge" style="background: rgba(100,116,139,0.2); color: #94a3b8;">⏸ Deshabilitado</span>');
+
+      return `
+        <div class="srv-card-item ${isConnected ? 'is-connected' : ''} ${!enabled ? 'is-disabled' : ''}">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: #fff; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeName}${ipv6Chip}</div>
+              <code style="font-size: 0.76rem; color: var(--text-muted);">${safeAddr}</code>
+            </div>
+            ${pingHtml}
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeDesc}">${safeDesc}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+            ${statusBadge}
+            <div class="srv-row-actions">
+              <button type="button" class="srv-icon-btn" onclick="toggleServerEnabled('${safeAddr}', ${!enabled})" title="${enabled ? 'Deshabilitar' : 'Habilitar'}">${enabled ? '⏸' : '▶'}</button>
+              <button type="button" class="srv-icon-btn is-danger" onclick="deleteServerEntry('${safeAddr}', '${safeName}')" title="Eliminar">🗑</button>
+              ${isConnected
+                ? `<button type="button" class="btn btn-sm btn-danger" onclick="disconnectServer()">Desconectar</button>`
+                : `<button type="button" class="btn btn-sm btn-primary" onclick="connectServer('${safeAddr}')" ${!enabled ? 'disabled' : ''}>Conectar</button>`}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(s => {
+    const isConnected = statusStr === 'connected' && sStatus.serverAddress === s.address;
+    const enabled = isServerEnabledFlag(s);
+    const safeAddr = escapeHtml(s.address || '');
+    const safeName = escapeHtml(s.name || 'Servidor eD2k');
+    const safeDesc = escapeHtml(s.description || '—');
+    const isIpv6 = (s.address || '').includes('[') || (s.description || '').toLowerCase().includes('ipv6');
+    const ipv6Chip = isIpv6 ? '<span class="srv-chip-ipv6">IPv6</span>' : '';
+    const statusBadge = isConnected
+      ? '<span class="badge badge-completed">🟢 Conectado</span>'
+      : (enabled ? '<span class="badge badge-wait">⚪ Disponible</span>' : '<span class="badge" style="background: rgba(100,116,139,0.2); color: #94a3b8;">⏸ Deshabilitado</span>');
+
+    html += `
+      <tr class="${isConnected ? 'srv-row-connected' : ''} ${!enabled ? 'srv-row-disabled' : ''}">
+        <td><strong style="color: #fff;">${safeName}</strong>${ipv6Chip}</td>
+        <td><code>${safeAddr}</code></td>
+        <td style="color: var(--text-muted); font-size: 0.8rem; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeDesc}">${safeDesc}</td>
+        <td>${formatServerPingBadge(s.ping)}</td>
+        <td>${statusBadge}</td>
+        <td style="text-align: right;">
+          <div class="srv-row-actions">
+            <button type="button" class="srv-icon-btn" onclick="toggleServerEnabled('${safeAddr}', ${!enabled})" title="${enabled ? 'Deshabilitar servidor' : 'Habilitar servidor'}">${enabled ? '⏸' : '▶'}</button>
+            <button type="button" class="srv-icon-btn is-danger" onclick="deleteServerEntry('${safeAddr}', '${safeName}')" title="Eliminar servidor">🗑</button>
+            ${isConnected
+              ? `<button type="button" class="btn btn-sm btn-danger" onclick="disconnectServer()">Desconectar</button>`
+              : `<button type="button" class="btn btn-sm btn-primary" onclick="connectServer('${safeAddr}')" ${!enabled ? 'disabled' : ''}>Conectar</button>`}
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+}
+
 async function refreshServers() {
   try {
     const res = await client.call('servers.list');
@@ -255,6 +476,7 @@ async function refreshServers() {
     document.getElementById('servers-summary').textContent = `${servers.length} servidores configurados`;
 
     const sStatus = await client.call('servers.status');
+    cachedServerStatus = sStatus;
     const connCard = document.getElementById('connected-server-card');
     const headerEd2k = document.getElementById('ed2k-status');
 
@@ -262,10 +484,10 @@ async function refreshServers() {
     if (statusStr === 'connected') {
       connCard.style.display = 'block';
       document.getElementById('cs-name').textContent = sStatus.serverName || sStatus.serverAddress || 'Servidor';
-      document.getElementById('cs-desc').textContent = `Dirección: ${sStatus.serverAddress || '-'} | ${sStatus.serverDesc || ''}`;
+      document.getElementById('cs-desc').textContent = `Dirección: ${sStatus.serverAddress || '-'}${sStatus.serverDesc ? ` · ${sStatus.serverDesc}` : ''}`;
       document.getElementById('cs-highid-badge').textContent = sStatus.isHighId ? 'HighID ✔' : 'LowID ⚠';
       document.getElementById('cs-highid-badge').className = sStatus.isHighId ? 'badge badge-completed' : 'badge badge-completing';
-      document.getElementById('cs-stats').textContent = `${(sStatus.currentUsers || 0).toLocaleString()} users / ${(sStatus.currentFiles || 0).toLocaleString()} files`;
+      document.getElementById('cs-stats').textContent = `${(sStatus.currentUsers || 0).toLocaleString('es-ES')} users · ${(sStatus.currentFiles || 0).toLocaleString('es-ES')} files`;
 
       headerEd2k.innerHTML = `<span class="sb-lbl">eD2k</span> <span style="color: ${sStatus.isHighId ? '#34d399' : '#fbbf24'};">${sStatus.isHighId ? 'HighID' : 'LowID'}</span>`;
       headerEd2k.style.color = '';
@@ -300,33 +522,7 @@ async function refreshServers() {
       }
     }
 
-    const tbody = document.getElementById('servers-list');
-    if (servers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: var(--text-muted);">No hay servidores en la lista. Pulsa "Actualizar server.met desde URL" o "Importar server.met de aMule".</td></tr>`;
-      return;
-    }
-
-    let html = '';
-    servers.forEach(s => {
-      const isConnected = statusStr === 'connected' && sStatus.serverAddress === s.address;
-      const statusBadge = isConnected ? '<span class="badge badge-completed">🟢 Conectado</span>' : '<span class="badge badge-wait">⚪ Disponible</span>';
-
-      html += `
-        <tr>
-          <td><strong style="color: #fff;">${s.name || 'Servidor eD2k'}</strong></td>
-          <td><code>${s.address}</code></td>
-          <td style="color: var(--text-muted); font-size: 0.8rem;">${s.description || '-'}</td>
-          <td>${s.ping > 0 ? s.ping + ' ms' : '-'}</td>
-          <td>${statusBadge}</td>
-          <td style="text-align: right;">
-            ${isConnected ? 
-              `<button class="btn btn-sm btn-danger" onclick="disconnectServer()">Desconectar</button>` : 
-              `<button class="btn btn-sm btn-primary" onclick="connectServer('${s.address}')">Conectar</button>`}
-          </td>
-        </tr>
-      `;
-    });
-    tbody.innerHTML = html;
+    renderServersView();
   } catch (e) {
     console.error('Error refreshing servers:', e);
   }

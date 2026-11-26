@@ -128,6 +128,9 @@ pub fn parse_imdb_suggestions(
             poster_url,
             backdrop_url: None,
             rating: None,
+            release_date: None,
+            digital_release_date: None,
+            release_status: None,
         });
     }
 

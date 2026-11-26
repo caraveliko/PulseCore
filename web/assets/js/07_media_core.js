@@ -53,6 +53,7 @@ function updateMediaCounters() {
   const completed = mediaLibraryItems.filter(i => i.status === 'completed').length;
   const downloading = mediaLibraryItems.filter(i => i.status === 'downloading').length;
   const wanted = mediaLibraryItems.filter(i => i.status === 'wanted').length;
+  const unreleased = mediaLibraryItems.filter(i => i.status === 'unreleased').length;
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = `(${val})`; };
   const setBadge = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
@@ -62,6 +63,7 @@ function updateMediaCounters() {
   setEl('count-media-completed', completed);
   setEl('count-media-downloading', downloading);
   setEl('count-media-wanted', wanted);
+  setEl('count-media-unreleased', unreleased);
 }
 
 function filterMediaByType(type) {
@@ -550,6 +552,12 @@ function renderCardQualityLogo(qualityProfile) {
     } else if (item.status === 'wanted') {
       statusBadge = `<span class="badge badge-wait media-exception-badge">🟡 Buscada</span>`;
       backStatusLabel = '🟡 Buscada';
+      backStatusClass = 'is-wait';
+    } else if (item.status === 'unreleased') {
+      statusBadge = `<span class="badge badge-ed2k media-exception-badge">🗓 Por estrenar</span>`;
+      backStatusLabel = item.digitalReleaseDate
+        ? `🗓 Disp. ${item.digitalReleaseDate}`
+        : (item.releaseDate ? `🗓 Estreno ${item.releaseDate}` : '🗓 Por estrenar');
       backStatusClass = 'is-wait';
     }
 

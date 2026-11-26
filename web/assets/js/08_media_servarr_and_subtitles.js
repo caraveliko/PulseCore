@@ -938,8 +938,18 @@ async function openMediaDetail(mediaId) {
           ? '<span class="badge badge-dl" style="font-size:0.78rem; padding:4px 10px;">🟢 En Biblioteca</span>'
           : (item.status === 'downloading'
             ? '<span class="badge badge-ed2k" style="font-size:0.78rem; padding:4px 10px;">⬇ Descargando</span>'
-            : '<span class="badge badge-wait" style="font-size:0.78rem; padding:4px 10px;">🟡 Buscada</span>');
+            : (item.status === 'unreleased'
+              ? '<span class="badge badge-ed2k" style="font-size:0.78rem; padding:4px 10px;">🗓 Por estrenar</span>'
+              : '<span class="badge badge-wait" style="font-size:0.78rem; padding:4px 10px;">🟡 Buscada</span>'));
         badges.push(stBadge);
+        const relDate = item.releaseDate || details.releaseDate;
+        const digDate = item.digitalReleaseDate || details.digitalReleaseDate;
+        if (relDate) {
+          badges.push(`<span class="media-meta-chip">🎬 Estreno: ${escapeHtml(relDate)}</span>`);
+        }
+        if (digDate) {
+          badges.push(`<span class="media-meta-chip">💿 Disponible: ${escapeHtml(digDate)}</span>`);
+        }
       } else {
         badges.push(`<span class="media-meta-chip">${item.monitored ? '🔔 Monitoreada' : '🔕 No monitoreada'}</span>`);
       }
@@ -1155,6 +1165,10 @@ function renderAutoGrabDiagnosticBanner(mediaId, autoGrab) {
       statusLabel = '🛡️ Auto-Curación (Failover Aplicado)';
       borderCol = 'rgba(251, 191, 36, 0.45)';
       textCol = '#fde047';
+    } else if (diag.lastStatus === 'unreleased') {
+      statusLabel = '🗓 Por estrenar · AutoGrabber en espera';
+      borderCol = 'rgba(56, 189, 248, 0.4)';
+      textCol = '#7dd3fc';
     } else if (diag.lastStatus === 'rejected_all' || diag.lastStatus === 'no_results') {
       statusLabel = '⏳ Smart Backoff (Esperando Release Válida)';
       borderCol = 'rgba(248, 113, 113, 0.35)';

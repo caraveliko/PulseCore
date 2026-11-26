@@ -1557,6 +1557,50 @@ client.on('event.downloadFailed', (d) => {
   refreshDownloads();
 });
 
+client.on('event.downloadRemoved', () => {
+  refreshDownloads();
+});
+
+client.on('upload.uploadsUpdated', (d) => {
+  if (!d) return;
+  if (Array.isArray(d.active)) cachedUploadsActive = d.active;
+  if (Array.isArray(d.queue)) cachedUploadsQueued = d.queue;
+  const modal = document.getElementById('bandwidth-details-modal');
+  if (modal && modal.classList.contains('active') && typeof renderBandwidthModal === 'function') {
+    renderBandwidthModal();
+  }
+});
+
+client.on('kad.statusChanged', () => {
+  if (typeof refreshKad === 'function') {
+    refreshKad();
+  }
+});
+
+client.on('shares.changed', () => {
+  if (typeof refreshShares === 'function') {
+    refreshShares();
+  }
+});
+
+client.on('history.entryAdded', () => {
+  if (typeof refreshHistory === 'function') {
+    refreshHistory();
+  }
+});
+
+client.on('settings.changed', () => {
+  if (typeof loadSettings === 'function') {
+    loadSettings();
+  }
+});
+
+client.on('network.policyChanged', () => {
+  if (typeof refreshNetworkPolicy === 'function') {
+    refreshNetworkPolicy();
+  }
+});
+
 client.on('event.notificationCreated', (d) => {
   const item = d && d.notification ? d.notification : d;
   if (!item || !item.title) return;

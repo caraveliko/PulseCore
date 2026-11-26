@@ -27,6 +27,8 @@ const METADATA_SEARCH_MAX_ATTEMPTS: usize = 2;
 const METADATA_RETRY_BACKOFF_MS: u64 = 350;
 /// Tiempo máximo de espera (en segundos) para el proveedor de respaldo de IMDb.
 const IMDB_FALLBACK_TIMEOUT_SECS: u64 = 8;
+/// Ventana estimada (en días) desde el estreno en cines hasta la disponibilidad digital/física cuando no hay fecha digital confirmada.
+pub const DEFAULT_CINEMA_TO_DIGITAL_WINDOW_DAYS: i64 = 45;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +85,12 @@ pub struct MediaExtendedDetails {
     pub spanish_title: Option<String>,
     #[serde(default)]
     pub spanish_overview: Option<String>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub digital_release_date: Option<String>,
+    #[serde(default)]
+    pub release_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +108,185 @@ pub struct SearchMediaResult {
     pub poster_url: Option<String>,
     pub backdrop_url: Option<String>,
     pub rating: Option<f64>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub digital_release_date: Option<String>,
+    #[serde(default)]
+    pub release_status: Option<String>,
+}
+
+/// Resultado de la evaluación inteligente de disponibilidad de una película.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MovieAvailability {
+    /// `true` cuando la película ya es elegible para búsqueda automática (`wanted`).
+    pub is_released: bool,
+    /// `true` cuando ya se estrenó en cines pero aún espera lanzamiento digital/físico.
+    pub is_in_cinemas_only: bool,
+    /// Estado inicial recomendado en biblioteca (`"wanted"` o `"unreleased"`).
+    pub recommended_status: &'static str,
+    /// Fecha confirmada o estimada (`YYYY-MM-DD`) en la que estará disponible para descargar.
+    pub available_from: Option<String>,
+    /// Motivo legible en español de la decisión.
+    pub reason: String,
+}
+
+/// Normaliza una fecha ISO-8601 (p. ej. `"2026-12-18T00:00:00Z"`) a `"YYYY-MM-DD"`.
+pub fn normalize_iso_date(raw: Option<&str>) -> Option<String> {
+    let s = raw?.trim();
+    if s.len() < 10 {
+        return None;
+    }
+    let date_part = &s[..10];
+    let bytes = date_part.as_bytes();
+    if bytes[4] != b'-' || bytes[7] != b'-' {
+        return None;
+    }
+    let year: u32 = date_part[..4].parse().ok()?;
+    let month: u32 = date_part[5..7].parse().ok()?;
+    let day: u32 = date_part[8..10].parse().ok()?;
+    if year < 1900 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    Some(date_part.to_string())
+}
+
+/// Suma `days` días a una fecha `"YYYY-MM-DD"`.
+pub fn add_days_to_iso_date(date_str: &str, days: i64) -> Option<String> {
+    let norm = normalize_iso_date(Some(date_str))?;
+    let year: i32 = norm[..4].parse().ok()?;
+    let month_u8: u8 = norm[5..7].parse().ok()?;
+    let day: u8 = norm[8..10].parse().ok()?;
+    let month = time::Month::try_from(month_u8).ok()?;
+    let parsed = time::Date::from_calendar_date(year, month, day).ok()?;
+    let shifted = parsed.checked_add(time::Duration::days(days))?;
+    Some(format!(
+        "{:04}-{:02}-{:02}",
+        shifted.year(),
+        u8::from(shifted.month()),
+        shifted.day()
+    ))
+}
+
+/// Extrae `(release_date_cinemas, digital_release_date, release_status)` de un JSON de Radarr/TMDB.
+pub fn extract_radarr_release_info(
+    item: &serde_json::Value,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let in_cinemas = normalize_iso_date(item["InCinemas"].as_str());
+    let digital = normalize_iso_date(item["DigitalRelease"].as_str());
+    let physical = normalize_iso_date(item["PhysicalRelease"].as_str());
+    let digital_release_date = match (digital, physical) {
+        (Some(d), Some(p)) => Some(if d <= p { d } else { p }),
+        (Some(d), None) => Some(d),
+        (None, Some(p)) => Some(p),
+        (None, None) => None,
+    };
+    let release_status = item["Status"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    (in_cinemas, digital_release_date, release_status)
+}
+
+/// Evalúa de forma inteligente si una película ya está estrenada y disponible para descarga automática.
+pub fn evaluate_movie_availability(
+    year: Option<u32>,
+    release_date: Option<&str>,
+    digital_release_date: Option<&str>,
+    release_status: Option<&str>,
+    today_str: &str,
+) -> MovieAvailability {
+    let current_year = today_str.get(..4).and_then(|y| y.parse::<u32>().ok());
+    let status_lower = release_status.unwrap_or("").trim().to_ascii_lowercase();
+    let norm_cinema = normalize_iso_date(release_date);
+    let norm_digital = normalize_iso_date(digital_release_date);
+
+    // 1. Si aún no se ha estrenado en cines (fecha de cine futura)
+    if let Some(ref cinema_date) = norm_cinema {
+        if cinema_date.as_str() > today_str {
+            let est_avail = norm_digital
+                .clone()
+                .or_else(|| add_days_to_iso_date(cinema_date, DEFAULT_CINEMA_TO_DIGITAL_WINDOW_DAYS));
+            return MovieAvailability {
+                is_released: false,
+                is_in_cinemas_only: false,
+                recommended_status: "unreleased",
+                available_from: est_avail,
+                reason: format!("Pendiente de estreno en cines ({cinema_date})"),
+            };
+        }
+    }
+
+    // 2. Si hay fecha digital/física confirmada y todavía es futura
+    if let Some(ref dig_date) = norm_digital {
+        if dig_date.as_str() > today_str {
+            let in_cinemas_now = norm_cinema
+                .as_deref()
+                .is_some_and(|c| c <= today_str);
+            return MovieAvailability {
+                is_released: false,
+                is_in_cinemas_only: in_cinemas_now,
+                recommended_status: "unreleased",
+                available_from: Some(dig_date.clone()),
+                reason: if in_cinemas_now {
+                    format!("En cines; lanzamiento digital/físico previsto el {dig_date}")
+                } else {
+                    format!("Lanzamiento digital/físico previsto el {dig_date}")
+                },
+            };
+        }
+    }
+
+    // 3. Sin fechas concretas: comprobar estado oficial de TMDB/Radarr y año futuro
+    if norm_cinema.is_none() && norm_digital.is_none() {
+        if matches!(
+            status_lower.as_str(),
+            "announced" | "rumored" | "planned" | "inproduction" | "in_production" | "postproduction" | "post_production" | "upcoming"
+        ) {
+            return MovieAvailability {
+                is_released: false,
+                is_in_cinemas_only: false,
+                recommended_status: "unreleased",
+                available_from: None,
+                reason: format!("Título en fase '{status_lower}' sin fecha de estreno confirmada"),
+            };
+        }
+        if let (Some(y), Some(cy)) = (year, current_year) {
+            if y > cy {
+                return MovieAvailability {
+                    is_released: false,
+                    is_in_cinemas_only: false,
+                    recommended_status: "unreleased",
+                    available_from: None,
+                    reason: format!("Año de estreno futuro ({y})"),
+                };
+            }
+        }
+    }
+
+    let avail = norm_digital.or(norm_cinema);
+    MovieAvailability {
+        is_released: true,
+        is_in_cinemas_only: false,
+        recommended_status: "wanted",
+        available_from: avail,
+        reason: "Película estrenada y elegible para descarga".to_string(),
+    }
+}
+
+/// Atajo para evaluar la disponibilidad de un `MediaItem` respecto a la fecha actual UTC.
+pub fn evaluate_media_item_availability(item: &MediaItem) -> MovieAvailability {
+    let today = time::OffsetDateTime::now_utc().date();
+    let today_str = format!("{today}");
+    evaluate_movie_availability(
+        item.year,
+        item.release_date.as_deref(),
+        item.digital_release_date.as_deref(),
+        item.release_status.as_deref(),
+        &today_str,
+    )
 }
 
 /// Tope máximo de entradas por caché en memoria para evitar crecimiento ilimitado en 24/7.
@@ -373,7 +560,9 @@ impl MediaMetadataService {
                     None
                 }
             });
-        let year = item["Year"].as_u64().map(|y| y as u32);
+        let year = item["Year"].as_u64().filter(|&y| y > 0).map(|y| y as u32);
+        let (release_date, digital_release_date, release_status) =
+            extract_radarr_release_info(item);
         let overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
         let mut poster_url = None;
         let mut backdrop_url = None;
@@ -409,6 +598,9 @@ impl MediaMetadataService {
             poster_url,
             backdrop_url,
             rating,
+            release_date,
+            digital_release_date,
+            release_status,
         })
     }
 
@@ -622,6 +814,9 @@ impl MediaMetadataService {
                                     poster_url,
                                     backdrop_url,
                                     rating,
+                                    release_date: None,
+                                    digital_release_date: None,
+                                    release_status: None,
                                 });
                             }
                         }
@@ -702,7 +897,9 @@ impl MediaMetadataService {
                     None
                 }
             });
-        let year = item["Year"].as_u64().map(|y| y as u32);
+        let year = item["Year"].as_u64().filter(|&y| y > 0).map(|y| y as u32);
+        let (release_date, digital_release_date, release_status) =
+            extract_radarr_release_info(&item);
         let raw_overview = es_overview.or_else(|| item["Overview"].as_str().map(String::from));
         let overview = self
             .ensure_spanish_overview(&format!("movie:{tmdb_id}"), raw_overview)
@@ -737,6 +934,9 @@ impl MediaMetadataService {
             poster_url,
             backdrop_url,
             rating,
+            release_date,
+            digital_release_date,
+            release_status,
         })
     }
 
@@ -799,6 +999,9 @@ impl MediaMetadataService {
             poster_url,
             backdrop_url,
             rating,
+            release_date: None,
+            digital_release_date: None,
+            release_status: None,
         })
     }
 
@@ -915,6 +1118,10 @@ impl MediaMetadataService {
             .as_str()
             .filter(|s| !s.is_empty())
             .map(String::from);
+        let (rel_date, dig_date, rel_status) = extract_radarr_release_info(&val);
+        details.release_date = rel_date;
+        details.digital_release_date = dig_date;
+        details.release_status = rel_status;
 
         // Extraer títulos alternativos y traducciones oficiales (especialmente español 'es-ES', 'es', etc.)
         if let Some(translations) = val["Translations"].as_array() {
@@ -1373,5 +1580,60 @@ fn optimize_tmdb_image_url(url: &str, size: &str) -> String {
         url.replace("image.tmdb.org/t/p/original/", &format!("image.tmdb.org/t/p/{size}/"))
     } else {
         url.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evaluate_movie_availability_distinguishes_unreleased_and_released() {
+        // Caso 1: Dune 3 con estreno futuro en cines
+        let dune3 = evaluate_movie_availability(
+            Some(2026),
+            Some("2026-12-18"),
+            None,
+            Some("announced"),
+            "2026-11-26",
+        );
+        assert!(!dune3.is_released);
+        assert_eq!(dune3.recommended_status, "unreleased");
+        assert_eq!(dune3.available_from.as_deref(), Some("2027-02-01"));
+
+        // Caso 2: En cines, pero con fecha digital futura
+        let in_cinemas = evaluate_movie_availability(
+            Some(2026),
+            Some("2026-11-10"),
+            Some("2027-01-15"),
+            Some("inCinemas"),
+            "2026-11-26",
+        );
+        assert!(!in_cinemas.is_released);
+        assert!(in_cinemas.is_in_cinemas_only);
+        assert_eq!(in_cinemas.recommended_status, "unreleased");
+        assert_eq!(in_cinemas.available_from.as_deref(), Some("2027-01-15"));
+
+        // Caso 3: Sin fechas pero estado 'announced' o año futuro
+        let announced = evaluate_movie_availability(
+            Some(2027),
+            None,
+            None,
+            Some("announced"),
+            "2026-11-26",
+        );
+        assert!(!announced.is_released);
+        assert_eq!(announced.recommended_status, "unreleased");
+
+        // Caso 4: Película ya estrenada en digital
+        let released = evaluate_movie_availability(
+            Some(2024),
+            Some("2024-03-01"),
+            Some("2024-04-16"),
+            Some("released"),
+            "2026-11-26",
+        );
+        assert!(released.is_released);
+        assert_eq!(released.recommended_status, "wanted");
     }
 }

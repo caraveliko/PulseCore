@@ -221,7 +221,18 @@ pub async fn handle_media_add(
     let tvdb_id = params["tvdbId"].as_u64();
     let imdb_id = params["imdbId"].as_str().map(String::from);
     let original_title = params["originalTitle"].as_str().map(String::from);
-    let year = params["year"].as_u64().map(|y| y as u32);
+    let mut year = params["year"].as_u64().filter(|&y| y > 0).map(|y| y as u32);
+    let mut release_date = crate::services::media_metadata::normalize_iso_date(
+        params["releaseDate"].as_str(),
+    );
+    let mut digital_release_date = crate::services::media_metadata::normalize_iso_date(
+        params["digitalReleaseDate"].as_str(),
+    );
+    let mut release_status = params["releaseStatus"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
     let overview = params["overview"].as_str().map(String::from);
     let poster_path = params["posterPath"]
         .as_str()
@@ -260,6 +271,42 @@ pub async fn handle_media_add(
         None
     };
 
+    // Si es una película y faltan fechas de estreno, consultar metadatos para detectar títulos aún no estrenados
+    if media_type == "movie" && (release_date.is_none() || digital_release_date.is_none() || release_status.is_none()) {
+        if let Some(tid) = tmdb_id {
+            if let Ok(meta) = state.media_metadata.get_movie(tid).await {
+                if year.is_none() {
+                    year = meta.year;
+                }
+                if release_date.is_none() {
+                    release_date = meta.release_date;
+                }
+                if digital_release_date.is_none() {
+                    digital_release_date = meta.digital_release_date;
+                }
+                if release_status.is_none() {
+                    release_status = meta.release_status;
+                }
+            }
+        }
+    }
+
+    let initial_status = if media_type == "movie" {
+        let today = time::OffsetDateTime::now_utc().date();
+        let today_str = format!("{today}");
+        crate::services::media_metadata::evaluate_movie_availability(
+            year,
+            release_date.as_deref(),
+            digital_release_date.as_deref(),
+            release_status.as_deref(),
+            &today_str,
+        )
+        .recommended_status
+        .to_string()
+    } else {
+        "wanted".to_string()
+    };
+
     let item = MediaItem {
         id: id.clone(),
         tmdb_id,
@@ -272,12 +319,15 @@ pub async fn handle_media_add(
         overview,
         poster_path,
         backdrop_path,
-        status: "wanted".to_string(),
+        status: initial_status,
         monitored: params["monitored"].as_bool().unwrap_or(true),
         quality_profile,
         root_folder,
         file_path: None,
         original_release_name: None,
+        release_date,
+        digital_release_date,
+        release_status,
         download_id: None,
         created_at: now,
         updated_at: now,
@@ -336,6 +386,39 @@ pub async fn handle_media_add(
             })
             .collect();
         let _ = dl_svc.insert_episodes_batch(&ep_items);
+    }
+    drop(dl_svc);
+
+    // Disparar AutoGrabber la primera vez automáticamente en segundo plano si el título está monitorizado y buscado
+    // (las películas en estado 'unreleased' / por estrenar quedan excluidas hasta su fecha de disponibilidad)
+    if item.monitored && item.status == "wanted" {
+        let state_bg = state.clone();
+        let media_id_bg = item.id.clone();
+        let title_bg = item.title.clone();
+        tokio::spawn(async move {
+            let aggregator = crate::services::IndexerAggregator::new();
+            match crate::services::AutoGrabber::grab_for_media_id(
+                &state_bg,
+                &aggregator,
+                &media_id_bg,
+                None,
+                None,
+            )
+            .await
+            {
+                Ok(_) => tracing::info!(
+                    media_id = %media_id_bg,
+                    title = %title_bg,
+                    "AutoGrabber inicial completado tras añadir título a la biblioteca"
+                ),
+                Err(e) => tracing::warn!(
+                    media_id = %media_id_bg,
+                    title = %title_bg,
+                    error = %e,
+                    "AutoGrabber inicial falló tras añadir título"
+                ),
+            }
+        });
     }
 
     serde_json::to_value(&item)

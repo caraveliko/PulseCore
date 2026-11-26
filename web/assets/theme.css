@@ -1637,6 +1637,294 @@ select option {
     0 24px 60px rgba(0, 0, 0, 0.76) !important;
 }
 
+#clean-dropdown-menu .dropdown-item,
+#media-tools-dropdown-menu .dropdown-item {
+  width: calc(100% - 12px) !important;
+  margin: 2px 6px;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+#clean-dropdown-menu .dropdown-item:hover,
+#clean-dropdown-menu .dropdown-item:focus-visible,
+#media-tools-dropdown-menu .dropdown-item:hover,
+#media-tools-dropdown-menu .dropdown-item:focus-visible {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+  outline: none;
+}
+
+#media-tools-dropdown-menu #btn-media-clean:hover,
+#media-tools-dropdown-menu #btn-media-clean:focus-visible {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #fca5a5 !important;
+}
+
+/* === Rediseño pestaña Servidores eD2K === */
+.srv-hero-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(14, 21, 38, 0.9));
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.srv-hero-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.srv-hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.srv-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.85);
+}
+
+.srv-hero-name {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.srv-hero-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.srv-hero-kpis {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.srv-kpi-pill {
+  background: rgba(8, 12, 24, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.srv-kpi-lbl {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.srv-kpi-val {
+  font-size: 0.9rem;
+  color: #f8fafc;
+}
+
+.srv-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.srv-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.srv-summary-pill {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 4px 11px;
+}
+
+.srv-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.srv-filter-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.srv-search-wrap {
+  position: relative;
+  min-width: 220px;
+}
+
+.srv-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.srv-search-input {
+  padding: 6px 12px 6px 32px !important;
+  font-size: 0.8rem !important;
+  width: 100%;
+}
+
+.srv-th-sort {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.srv-th-sort:hover {
+  color: #ffffff;
+}
+
+.srv-row-connected {
+  background: rgba(16, 185, 129, 0.08) !important;
+  box-shadow: inset 3px 0 0 #34d399;
+}
+
+.srv-row-disabled {
+  opacity: 0.52;
+}
+
+.srv-ping-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.srv-ping-good {
+  background: rgba(52, 211, 153, 0.14);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.srv-ping-med {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.srv-ping-bad {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+.srv-ping-none {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.srv-chip-ipv6 {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.srv-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.srv-icon-btn {
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.76rem;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.srv-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.srv-icon-btn.is-danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.srv-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+}
+
+.srv-card-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.srv-card-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.srv-card-item.is-connected {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(255, 255, 255, 0.03));
+}
+
+.srv-card-item.is-disabled {
+  opacity: 0.55;
+}
+
 .inspector-header,
 .assistant-header,
 .notif-popover-header,
