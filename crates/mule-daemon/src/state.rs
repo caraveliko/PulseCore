@@ -192,6 +192,8 @@ pub struct AppState {
         Arc<tokio::sync::RwLock<Option<Arc<crate::services::quic_transport::QuicPeerTransport>>>>,
     /// Número de clientes WebSocket conectados actualmente (suspende `StatsTick` cuando es 0).
     pub ws_client_count: Arc<std::sync::atomic::AtomicUsize>,
+    /// Motor híbrido autónomo eD2K ⇄ Kad ⇄ BitTorrent sin indexadores (Sabueso DHT + fusión real).
+    pub hybrid: crate::services::HybridSwarmService,
 }
 
 impl AppState {
@@ -765,6 +767,7 @@ impl AppState {
             notifications,
             quic_transport: Arc::new(tokio::sync::RwLock::new(None)),
             ws_client_count,
+            hybrid: crate::services::HybridSwarmService::new(),
         }
     }
 

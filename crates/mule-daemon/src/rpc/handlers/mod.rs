@@ -5,6 +5,7 @@ pub mod categories;
 pub mod downloads;
 pub mod friends;
 pub mod history;
+pub mod hybrid;
 pub mod kad;
 pub mod lab;
 pub mod media;

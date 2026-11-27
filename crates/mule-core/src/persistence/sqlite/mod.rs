@@ -8,9 +8,10 @@ use uuid::Uuid;
 use crate::error::CoreError;
 use crate::kad::{KadContact, KadIndexedNote, KadIndexedSource, KadKeywordEntry};
 use crate::model::{
-    CalendarEpisode, Download, DownloadCategory, DownloadStatus, Ed2kServer, EpisodeItem, ExternalIndexer, Friend,
-    HistoryEntry, HistoryFilter, HistoryStats, MediaItem, NotificationFilter, NotificationRecord,
-    PeerCredit, PeerSource, PeerSourceStatus, SharedFile,
+    CalendarEpisode, DhtTorrentCatalogEntry, DhtTorrentFileEntry, Download, DownloadCategory,
+    DownloadStatus, Ed2kServer, EpisodeItem, ExternalIndexer, Friend, HistoryEntry, HistoryFilter,
+    HistoryStats, HybridBridgeRecord, HybridBridgeStatus, HybridCatalogStats, MediaItem,
+    NotificationFilter, NotificationRecord, PeerCredit, PeerSource, PeerSourceStatus, SharedFile,
 };
 use crate::persistence::traits::{
     DownloadRepository, KadRepository, PeerSourceRepository, ServerRepository,
@@ -24,6 +25,7 @@ pub mod credits;
 pub mod downloads;
 pub mod friends;
 pub mod history;
+pub mod hybrid_index;
 pub mod kad;
 pub mod media;
 pub mod notifications;
@@ -1207,5 +1209,131 @@ impl Database {
     /// Poda notificaciones antiguas manteniendo las `max_keep` más recientes.
     pub fn prune_old_notifications(&mut self, max_keep: usize) -> Result<usize, CoreError> {
         notifications::prune_old_notifications(&mut self.conn, max_keep)
+    }
+
+    // ── Catálogo DHT sin indexadores y puentes híbridos eD2K ⇄ BitTorrent ──
+
+    /// Inserta o actualiza un torrent de vídeo descubierto en la DHT local.
+    pub fn upsert_dht_catalog_entry(
+        &mut self,
+        entry: &DhtTorrentCatalogEntry,
+    ) -> Result<(), CoreError> {
+        hybrid_index::upsert_dht_catalog_entry(&mut self.conn, entry)
+    }
+
+    /// Almacena metadatos `.torrent` comprimidos (`zstd`) y pares vistos para arranque instantáneo.
+    pub fn store_dht_torrent_meta(
+        &mut self,
+        info_hash: &str,
+        torrent_meta_zstd: &[u8],
+        known_peers_json: &str,
+    ) -> Result<(), CoreError> {
+        hybrid_index::store_dht_torrent_meta(
+            &mut self.conn,
+            info_hash,
+            torrent_meta_zstd,
+            known_peers_json,
+        )
+    }
+
+    /// Recupera metadatos `.torrent` comprimidos y pares vistos para un `info_hash` del catálogo DHT.
+    pub fn load_dht_torrent_meta(
+        &self,
+        info_hash: &str,
+    ) -> Result<Option<hybrid_index::CachedDhtTorrentMeta>, CoreError> {
+        hybrid_index::load_dht_torrent_meta(&self.conn, info_hash)
+    }
+
+    /// Indexa todos los archivos de vídeo contenidos en un pack multifichero de la DHT local.
+    pub fn upsert_dht_catalog_files(
+        &mut self,
+        info_hash: &str,
+        torrent_name: &str,
+        files: &[DhtTorrentFileEntry],
+    ) -> Result<(), CoreError> {
+        hybrid_index::upsert_dht_catalog_files(&mut self.conn, info_hash, torrent_name, files)
+    }
+
+    /// Poda las entradas menos recientes del catálogo DHT por encima de `max_entries`.
+    pub fn prune_dht_catalog(&mut self, max_entries: usize) -> Result<usize, CoreError> {
+        hybrid_index::prune_dht_catalog(&mut self.conn, max_entries)
+    }
+
+    /// Busca torrents en el catálogo DHT local cuyo archivo de vídeo coincida exactamente al byte.
+    pub fn find_dht_catalog_by_exact_video_size(
+        &self,
+        video_file_size: u64,
+        limit: usize,
+    ) -> Result<Vec<DhtTorrentCatalogEntry>, CoreError> {
+        hybrid_index::find_dht_catalog_by_exact_video_size(&self.conn, video_file_size, limit)
+    }
+
+    /// Busca torrents en el catálogo DHT local por palabras clave normalizadas.
+    pub fn search_dht_catalog_by_tokens(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<DhtTorrentCatalogEntry>, CoreError> {
+        hybrid_index::search_dht_catalog_by_tokens(&self.conn, query, limit)
+    }
+
+    /// Inserta o actualiza un puente híbrido respetando los estados `verified` y `rejected`.
+    pub fn upsert_hybrid_bridge(&mut self, record: &HybridBridgeRecord) -> Result<(), CoreError> {
+        hybrid_index::upsert_hybrid_bridge(&mut self.conn, record)
+    }
+
+    /// Actualiza el estado de verificación criptográfica de un puente híbrido.
+    pub fn update_hybrid_bridge_status(
+        &mut self,
+        ed2k_hash: &str,
+        bt_info_hash: &str,
+        status: HybridBridgeStatus,
+        verified_chunks: u32,
+        updated_at_ms: i64,
+    ) -> Result<bool, CoreError> {
+        hybrid_index::update_hybrid_bridge_status(
+            &mut self.conn,
+            ed2k_hash,
+            bt_info_hash,
+            status,
+            verified_chunks,
+            updated_at_ms,
+        )
+    }
+
+    /// Marca cuándo se sembró por última vez un puente híbrido en notas Kad.
+    pub fn mark_hybrid_bridge_kad_published(
+        &mut self,
+        ed2k_hash: &str,
+        bt_info_hash: &str,
+        published_at_ms: i64,
+    ) -> Result<bool, CoreError> {
+        hybrid_index::mark_hybrid_bridge_kad_published(
+            &mut self.conn,
+            ed2k_hash,
+            bt_info_hash,
+            published_at_ms,
+        )
+    }
+
+    /// Lista los puentes híbridos asociados a un `ed2k_hash`.
+    pub fn list_hybrid_bridges_for_ed2k(
+        &self,
+        ed2k_hash: &str,
+    ) -> Result<Vec<HybridBridgeRecord>, CoreError> {
+        hybrid_index::list_hybrid_bridges_for_ed2k(&self.conn, ed2k_hash)
+    }
+
+    /// Lista los puentes híbridos más recientes.
+    pub fn list_all_hybrid_bridges(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<HybridBridgeRecord>, CoreError> {
+        hybrid_index::list_all_hybrid_bridges(&self.conn, limit)
+    }
+
+    /// Devuelve contadores globales del catálogo DHT local y los puentes híbridos.
+    pub fn get_hybrid_catalog_stats(&self) -> Result<HybridCatalogStats, CoreError> {
+        hybrid_index::get_hybrid_catalog_stats(&self.conn)
     }
 }

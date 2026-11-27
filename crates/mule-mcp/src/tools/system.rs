@@ -133,6 +133,11 @@ pub fn list_tools() -> Vec<ToolDefinition> {
                 "extension": prop("string", "Optional file extension filter")
             }), &["term"]),
         },
+        ToolDefinition {
+            name: "emule_hybrid_status".to_string(),
+            description: "Get real-time status of the hybrid BT <-> eD2K engine (DHT harvester, catalog stats, active fusions, and per-download discovery telemetry).".to_string(),
+            input_schema: obj_schema(json!({}), &[]),
+        },
     ]
 }
 
@@ -409,6 +414,12 @@ pub async fn handle_tool(
                 ))),
             }
         }
+        "emule_hybrid_status" => match client.call("hybrid.status", json!({})).await {
+            Ok(res) => Some(ToolCallResult::json(&res)),
+            Err(e) => Some(ToolCallResult::error(format!(
+                "Failed to query hybrid swarm status: {e}"
+            ))),
+        },
         _ => None,
     }
 }

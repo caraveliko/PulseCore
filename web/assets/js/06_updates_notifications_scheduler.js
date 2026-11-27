@@ -1449,7 +1449,17 @@ client.on('connected', () => {
         refreshKad().catch(e => console.error('Scheduler refreshKad error:', e));
         refreshKadContacts().catch(e => console.error('Scheduler refreshKadContacts error:', e));
       } else if (activeTab === 'tab-servers') {
-        refreshServers().catch(e => console.error('Scheduler refreshServers error:', e));
+        const activePanel = document.querySelector('.view-panel.active');
+        if (activePanel && activePanel.id === 'tab-hybrid') {
+          if (typeof refreshHybridView === 'function') {
+            refreshHybridView().catch(e => console.error('Scheduler refreshHybridView error:', e));
+          }
+        } else if (activePanel && activePanel.id === 'tab-kad') {
+          refreshKad().catch(e => console.error('Scheduler refreshKad error:', e));
+          refreshKadContacts().catch(e => console.error('Scheduler refreshKadContacts error:', e));
+        } else {
+          refreshServers().catch(e => console.error('Scheduler refreshServers error:', e));
+        }
       } else if (activeTab === 'tab-shares') {
         refreshShares().catch(e => console.error('Scheduler refreshShares error:', e));
       } else if (activeTab === 'tab-logs') {
@@ -1538,6 +1548,12 @@ client.on('event.downloadUpdated', (d) => {
   const status = (d.download.status || '').toLowerCase();
   if (status === 'completed') {
     refreshDownloads();
+  }
+});
+
+client.on('autograb.progress', (params) => {
+  if (typeof window.handleAutoGrabProgressEvent === 'function') {
+    window.handleAutoGrabProgressEvent(params || {});
   }
 });
 

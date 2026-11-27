@@ -833,3 +833,115 @@ pub struct NotificationFilter {
     pub unread_only: bool,
     pub limit: Option<usize>,
 }
+
+/// Estado de verificación criptográfica de un puente híbrido eD2K ⇄ BitTorrent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HybridBridgeStatus {
+    /// Candidato descubierto (por tamaño exacto DHT o nota Kad), aún sin verificación MD4.
+    Candidate,
+    /// Verificado criptográficamente (al menos una parte MD4 o raíz eD2K coincide byte a byte).
+    Verified,
+    /// Rechazado por discrepancia criptográfica o de política; no vuelve a intentarse.
+    Rejected,
+}
+
+impl HybridBridgeStatus {
+    /// Representación textual estable almacenada en SQLite.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Candidate => "candidate",
+            Self::Verified => "verified",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    /// Analiza el texto persistido en SQLite; cualquier valor desconocido cae en `Candidate`.
+    pub fn parse_str(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "verified" => Self::Verified,
+            "rejected" => Self::Rejected,
+            _ => Self::Candidate,
+        }
+    }
+}
+
+/// Registro del catálogo local de torrents de vídeo descubiertos en Mainline DHT sin indexadores.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DhtTorrentCatalogEntry {
+    /// Infohash SHA-1 en hexadecimal minúsculas (40 caracteres).
+    pub info_hash: String,
+    /// Nombre del torrent anunciado en el diccionario `info`.
+    pub name: String,
+    /// Tamaño agregado total del torrent en bytes.
+    pub total_bytes: u64,
+    /// Nombre relativo del archivo de vídeo principal seleccionado.
+    pub video_file_name: String,
+    /// Tamaño exacto en bytes del archivo de vídeo principal (clave de cruce eD2K).
+    pub video_file_size: u64,
+    /// Índice del archivo de vídeo dentro del torrent (0 para torrents monofichero).
+    pub video_file_index: usize,
+    /// Desplazamiento en bytes del archivo de vídeo dentro del flujo lineal del torrent.
+    pub video_file_offset: u64,
+    /// Lista serializada en JSON de los archivos de vídeo contenidos en el torrent.
+    pub files_json: String,
+    /// Número estimado de pares observados en la DHT para este infohash.
+    pub estimated_peers: u32,
+    /// Origen del descubrimiento (`dht_bep51`, `dht_passive`, `kad_note`, `local_completed`).
+    pub source: String,
+    /// Marca temporal de primer avistamiento (ms Unix).
+    pub first_seen_ms: i64,
+    /// Marca temporal del último avistamiento (ms Unix).
+    pub last_seen_ms: i64,
+}
+
+/// Archivo de vídeo individual indexado dentro de un torrent multifichero (p. ej. packs de series/anime).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DhtTorrentFileEntry {
+    pub info_hash: String,
+    pub file_index: usize,
+    pub file_path: String,
+    pub file_size: u64,
+    pub file_offset: u64,
+}
+
+/// Vínculo persistido entre un archivo eD2K y un enjambre BitTorrent equivalente.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridBridgeRecord {
+    /// Hash eD2K en hexadecimal minúsculas (32 caracteres).
+    pub ed2k_hash: String,
+    /// Infohash BitTorrent en hexadecimal minúsculas (40 caracteres).
+    pub bt_info_hash: String,
+    /// Tamaño exacto compartido por ambos archivos en bytes.
+    pub file_size: u64,
+    /// Índice del archivo coincidente dentro del torrent.
+    pub bt_file_index: usize,
+    /// Desplazamiento en bytes dentro del torrent.
+    pub bt_file_offset: u64,
+    /// Estado de verificación criptográfica.
+    pub status: HybridBridgeStatus,
+    /// Origen del vínculo (`dht_exact_size`, `kad_note`, `local_hash`, `manual`).
+    pub origin: String,
+    /// Número de partes eD2K (de 9,28 MiB) verificadas criptográficamente desde este puente.
+    pub verified_chunks: u32,
+    /// Última publicación del vínculo como nota Kad (ms Unix), si se ha sembrado.
+    pub published_kad_at_ms: Option<i64>,
+    /// Marca temporal de creación (ms Unix).
+    pub created_at_ms: i64,
+    /// Marca temporal de última actualización (ms Unix).
+    pub updated_at_ms: i64,
+}
+
+/// Resumen agregado del catálogo DHT local y los puentes híbridos en base de datos.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridCatalogStats {
+    pub catalog_entries: usize,
+    pub bridges_total: usize,
+    pub bridges_verified: usize,
+    pub bridges_candidate: usize,
+    pub bridges_rejected: usize,
+}

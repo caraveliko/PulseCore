@@ -7,6 +7,20 @@ use super::dictionaries::{
 };
 use super::MAX_EPISODE_RANGE_SPAN;
 
+/// Extensiones de archivos de vídeo individuales que en eD2K corresponden a un único episodio o película.
+const SINGLE_VIDEO_EXTENSIONS: &[&str] = &[
+    ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".m4v", ".mpg", ".mpeg", ".ts", ".webm",
+];
+
+/// Indica si una versión eD2K corresponde a un único archivo de vídeo (no puede ser un paquete de temporada completa).
+pub fn is_single_video_file_ed2k(title: &str, protocol: &str) -> bool {
+    if !protocol.eq_ignore_ascii_case("ed2k") {
+        return false;
+    }
+    let lower = title.trim().to_ascii_lowercase();
+    SINGLE_VIDEO_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+}
+
 /// Elimina un sufijo redundante de año entre paréntesis al final de un título
 /// (p. ej. `"The Body (2026)"` -> `"The Body"`), preservando títulos que son
 /// únicamente un año (p. ej. `"1923"` o `"(2026)"`).
@@ -323,9 +337,12 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
 
     for (idx, &w) in words.iter().enumerate() {
         // 1. Formato SxxExx (simple, consecutivo S01E01E02E03 o rango S01E01-E04 / S01E01 al E04)
-        if (w.starts_with(&s_pad) || w.starts_with(&s_raw)) && w.contains('e') {
-            let s_len = if w.starts_with(&s_pad) { s_pad.len() } else { s_raw.len() };
-            let ep_part = &w[s_len..];
+        // Comprobamos que tras el número de temporada venga exactamente 'e' para no confundir S10E11 con S1.
+        let ep_part_opt = w
+            .strip_prefix(&s_pad)
+            .or_else(|| w.strip_prefix(&s_raw))
+            .filter(|rest| rest.starts_with('e'));
+        if let Some(ep_part) = ep_part_opt {
             let ep_nums: Vec<u32> = ep_part
                 .split('e')
                 .filter(|s| !s.is_empty())
@@ -351,11 +368,15 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
                 };
 
                 if let Some(next_raw) = next_candidates {
-                    let trimmed_next = next_raw
-                        .strip_prefix(&s_pad)
-                        .or_else(|| next_raw.strip_prefix(&s_raw))
-                        .unwrap_or(next_raw)
-                        .trim_start_matches('e');
+                    let trimmed_next = if next_raw.starts_with('s') {
+                        next_raw
+                            .strip_prefix(&s_pad)
+                            .or_else(|| next_raw.strip_prefix(&s_raw))
+                            .and_then(|rest| rest.strip_prefix('e'))
+                            .unwrap_or("")
+                    } else {
+                        next_raw.trim_start_matches('e')
+                    };
                     if !trimmed_next.is_empty()
                         && trimmed_next.len() <= 3
                         && trimmed_next.chars().all(|c| c.is_ascii_digit())
@@ -365,6 +386,55 @@ pub fn extract_tv_episode_numbers(candidate_title: &str, season: u32) -> Vec<u32
                                 for ep in first_ep..=end_ep {
                                     if !out.contains(&ep) {
                                         out.push(ep);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (w == s_pad || w == s_raw) && idx + 1 < words.len() {
+            // 1b. Formato separado por espacio/punto/guion: `S01 E05`, `S1 E5`, `S01 E01-E04`
+            let next_w = words[idx + 1];
+            if let Some(ep_part) = next_w.strip_prefix('e') {
+                let ep_nums: Vec<u32> = ep_part
+                    .split('e')
+                    .filter(|s| !s.is_empty() && s.len() <= 3 && s.chars().all(|c| c.is_ascii_digit()))
+                    .filter_map(|s| s.parse::<u32>().ok())
+                    .collect();
+
+                for &ep in &ep_nums {
+                    if !out.contains(&ep) {
+                        out.push(ep);
+                    }
+                }
+
+                if let Some(&first_ep) = ep_nums.first() {
+                    let range_candidate = if idx + 3 < words.len()
+                        && matches!(words[idx + 2], "al" | "a" | "to")
+                    {
+                        Some(words[idx + 3])
+                    } else if idx + 2 < words.len() {
+                        Some(words[idx + 2])
+                    } else {
+                        None
+                    };
+                    if let Some(next_raw) = range_candidate {
+                        let trimmed_next = next_raw
+                            .strip_prefix(&s_pad)
+                            .or_else(|| next_raw.strip_prefix(&s_raw))
+                            .unwrap_or(next_raw)
+                            .trim_start_matches('e');
+                        if !trimmed_next.is_empty()
+                            && trimmed_next.len() <= 3
+                            && trimmed_next.chars().all(|c| c.is_ascii_digit())
+                        {
+                            if let Ok(end_ep) = trimmed_next.parse::<u32>() {
+                                if end_ep > first_ep && (end_ep - first_ep) <= MAX_EPISODE_RANGE_SPAN {
+                                    for ep in first_ep..=end_ep {
+                                        if !out.contains(&ep) {
+                                            out.push(ep);
+                                        }
                                     }
                                 }
                             }

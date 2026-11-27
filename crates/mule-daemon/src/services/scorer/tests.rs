@@ -836,3 +836,134 @@ fn test_ed2k_healthy_sources_outscore_single_source_ghost() {
     );
     assert!(healthy_1080p.score > healthy_720p.score);
 }
+
+#[test]
+fn test_spaced_episode_synthetic_emule_qt_and_dual_lat_rejected() {
+    let title = "El señor de los anillos Los anillos de poder (2022) S01 E05 1080p.mp4";
+    assert_eq!(extract_tv_episode_numbers(title, 1), vec![5]);
+    assert!(!matches_season_pack_release(
+        title,
+        "The Lord of the Rings: The Rings of Power",
+        Some("The Lord of the Rings: The Rings of Power"),
+        Some(2022),
+        1,
+    ));
+
+    assert!(is_single_video_file_ed2k(title, "ed2k"));
+    assert!(is_single_video_file_ed2k("serie.s01.1080p.mkv", "ed2k"));
+    assert!(!is_single_video_file_ed2k("serie.s01.1080p.mkv", "torrent"));
+    assert!(!is_single_video_file_ed2k("serie.s01.1080p.rar", "ed2k"));
+
+    let syn_torrent = evaluate_release(
+        "[torrent emule-qt.org] El señor de los anillos Los anillos de poder (2022) S01 E05 1080p.dual-lat.cinecalidad.run.mp4",
+        "ed2k",
+        "ed2k://|file|a|1945517076|ed2b0112000099b507b934ed56e09e8d|/",
+        "ed2b0112000099b507b934ed56e09e8d",
+        1_945_517_076,
+        10,
+        "eD2k/Server",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(syn_torrent.is_rejected);
+
+    let syn_kad = evaluate_release(
+        "[kad emule-qt.org] naruto.(2002).s02e26.1080p.esp.mkv",
+        "ed2k",
+        "ed2k://|file|b|1248840079|6155eb4b6f79f57661cf644533ba7eea|/",
+        "6155eb4b6f79f57661cf644533ba7eea",
+        1_248_840_079,
+        5,
+        "eD2k/Kad",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(syn_kad.is_rejected);
+
+    let syn_hash = evaluate_release(
+        "El señor de los anillos S01E05 1080p Castellano.mkv",
+        "ed2k",
+        "ed2k://|file|c|1200000000|ed2b0112000099b507b934ed56e09e8d|/",
+        "ed2b0112000099b507b934ed56e09e8d",
+        1_200_000_000,
+        5,
+        "eD2k/Server",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(syn_hash.is_rejected);
+
+    let dual_lat = evaluate_release(
+        "El señor de los anillos Los anillos de poder (2022) S01 E05 1080p.dual-lat.cinecalidad.run.mp4",
+        "ed2k",
+        "ed2k://|file|d|1945517076|1234567890abcdef1234567890abcdef|/",
+        "1234567890abcdef1234567890abcdef",
+        1_945_517_076,
+        10,
+        "eD2k/Server",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(dual_lat.is_rejected);
+    assert_eq!(dual_lat.language, "Latino");
+}
+
+#[test]
+fn rejects_s10e11_as_s01e11_and_s20e05_as_s02e05() {
+    use super::matching::{extract_tv_episode_numbers, matches_release_with_options};
+
+    assert!(extract_tv_episode_numbers("South.Park.S10E11.El.infierno.en.la.tierra.2006.mkv", 1).is_empty());
+    assert!(!matches_release_with_options(
+        "South.Park.S10E11.El.infierno.en.la.tierra.2006.mkv",
+        "South Park",
+        None,
+        &[],
+        Some(1997),
+        false,
+        Some((1, 11)),
+        None,
+    ));
+    assert!(matches_release_with_options(
+        "South.Park.S10E11.El.infierno.en.la.tierra.2006.mkv",
+        "South Park",
+        None,
+        &[],
+        Some(1997),
+        false,
+        Some((10, 11)),
+        None,
+    ));
+    assert!(extract_tv_episode_numbers("Serie.S20E05.1080p.mkv", 2).is_empty());
+}
+
+#[test]
+fn accepts_spanish_t1_complete_season_pack_for_south_park() {
+    use super::matching::matches_season_pack_release;
+
+    assert!(matches_season_pack_release(
+        "South Park T1 completa castellano",
+        "South Park",
+        None,
+        Some(1997),
+        1,
+    ));
+
+    let res = evaluate_release(
+        "South Park T1 completa castellano",
+        "torrent",
+        "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+        "0123456789abcdef0123456789abcdef01234567",
+        2_500_000_000,
+        2,
+        "BT/apibay",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(!res.is_rejected, "pack rechazado: {:?}", res.rejection_reason);
+    assert!(res.score >= 25, "puntuación insuficiente: {}", res.score);
+}

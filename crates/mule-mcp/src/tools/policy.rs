@@ -74,6 +74,7 @@ const READ_TOOLS: &[&str] = &[
     "emule_system_logs",
     "emule_media_list",
     "emule_search_all",
+    "emule_hybrid_status",
     // servers
     "emule_list_servers",
     "emule_inspect_server_met",

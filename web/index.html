@@ -492,6 +492,10 @@
         <div style="background: #1e293b; border-radius: 9999px; height: 7px; width: 100%; overflow: hidden; position: relative;">
           <div id="media-op-progressbar" style="height: 100%; width: 20%; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.3s ease; border-radius: 9999px;"></div>
         </div>
+        <div id="media-op-details" style="display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(148, 163, 184, 0.16);">
+          <div id="media-op-sources-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;"></div>
+          <div id="media-op-log" style="max-height: 150px; overflow-y: auto; font-size: 0.78rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 3px;"></div>
+        </div>
       </div>
 
       <!-- SUB-VISTA: BIBLIOTECA DE TÍTULOS -->
@@ -705,6 +709,7 @@
 
       <!-- PANEL INSPECTOR INFERIOR (Estilo qBittorrent / eMule) -->
       <div id="download-inspector" class="inspector-panel">
+        <div id="inspector-resize-handle" class="inspector-resize-handle" title="Arrastra para ajustar la altura del inspector"></div>
         <div class="inspector-header">
           <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; min-width: 180px;">
             <span class="badge badge-ed2k" id="insp-proto-badge">eD2k</span>
@@ -729,9 +734,10 @@
             </button>
           </div>
           <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+            <button class="btn btn-sm" id="btn-insp-toggle-pause" title="Pausar o reanudar descarga">⏸ Pausar</button>
             <button class="btn btn-sm" id="btn-insp-remove-list" title="Quitar de la lista de descargas (mantiene el archivo en el disco)">🗑 Quitar</button>
             <button class="btn btn-sm btn-danger" id="btn-insp-delete-files" title="Eliminar descarga y borrar definitivamente los datos del disco">💥 Borrar</button>
-            <button class="btn btn-sm" id="btn-close-inspector" title="Cerrar panel de detalles">✕</button>
+            <button class="btn btn-sm" id="btn-close-inspector" title="Cerrar panel de detalles (Esc)">✕</button>
           </div>
         </div>
         <div class="inspector-content">
@@ -771,7 +777,7 @@
                     <span class="insp-prop-val" id="insp-speed-eta">-</span>
                   </div>
                   <div class="insp-prop-row">
-                    <span class="insp-prop-key">Hash eD2k:</span>
+                    <span class="insp-prop-key" id="insp-hash-label">Hash eD2k:</span>
                     <span class="insp-prop-val">
                       <code id="insp-hash" style="color: var(--primary); font-family: var(--font-mono); font-size: 0.78rem;">-</code>
                       <button class="btn btn-sm" onclick="copyInspectorHash()" title="Copiar hash" style="padding: 1px 6px; font-size: 0.72rem;">Copiar</button>
@@ -793,6 +799,12 @@
                     <span class="insp-prop-key">Archivo temporal:</span>
                     <span class="insp-prop-val" id="insp-temp" title="" style="max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 0.75rem; color: #94a3b8;">-</span>
                   </div>
+                  <div class="insp-prop-row" id="insp-hybrid-row" style="align-items: flex-start; gap: 8px;">
+                    <span class="insp-prop-key">Puente Híbrido BT:</span>
+                    <span class="insp-prop-val" style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                      <span id="insp-hybrid-status" style="font-size: 0.8rem; color: var(--text-muted);">Descubrimiento automático activo en DHT, Kad y Rendezvous</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -801,7 +813,15 @@
           <!-- SUB-TAB PARES / FUENTES -->
           <div id="insp-peers" class="insp-view-panel" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-              <div style="font-size: 0.82rem; color: var(--text-muted);" id="insp-peers-summary">0 fuentes para este archivo</div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="font-size: 0.82rem; color: var(--text-muted);" id="insp-peers-summary">0 fuentes para este archivo</div>
+                <div class="insp-peers-filter-bar" id="insp-peers-filter-bar">
+                  <button type="button" class="insp-filter-pill active" data-pfilter="all">Todos</button>
+                  <button type="button" class="insp-filter-pill" data-pfilter="connected">Conectados</button>
+                  <button type="button" class="insp-filter-pill" data-pfilter="available">Disponibles</button>
+                  <button type="button" class="insp-filter-pill" data-pfilter="issues">Fallos/Cooldown</button>
+                </div>
+              </div>
               <button class="btn btn-sm btn-primary" id="btn-add-manual-peer">＋ Añadir IP:Puerto manual</button>
             </div>
             <div class="table-container" style="max-height: 220px; overflow-y: auto;">
@@ -832,9 +852,11 @@
               <!-- Bloques de partes renderizados dinámicamente -->
             </div>
             <div class="part-legend">
-              <div class="part-legend-item"><div class="part-block verified" style="width: 12px; height: 12px;"></div> <span>Completada y verificada (MD4 / AICH)</span></div>
-              <div class="part-legend-item"><div class="part-block downloading" style="width: 12px; height: 12px;"></div> <span>Descargando actualmente</span></div>
-              <div class="part-legend-item"><div class="part-block" style="width: 12px; height: 12px;"></div> <span>Falta / No descargada</span></div>
+              <div class="part-legend-item"><div class="part-block verified" style="width: 12px; height: 12px;"></div> <span>Verificada (MD4 / AICH)</span></div>
+              <div class="part-legend-item"><div class="part-block downloading" style="width: 12px; height: 12px;"></div> <span>Descargando</span></div>
+              <div class="part-legend-item"><div class="part-block avail-high" style="width: 12px; height: 12px;"></div> <span>Alta disponibilidad</span></div>
+              <div class="part-legend-item"><div class="part-block avail-rare" style="width: 12px; height: 12px;"></div> <span>Pocas fuentes</span></div>
+              <div class="part-legend-item"><div class="part-block avail-zero" style="width: 12px; height: 12px;"></div> <span>0 fuentes</span></div>
             </div>
           </div>
 
@@ -842,10 +864,10 @@
           <div id="insp-perf" class="insp-view-panel" style="display: none;">
             <div style="background: var(--card-sub); padding: 16px; border-radius: 8px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-                <div style="font-size: 0.88rem; font-weight: 600; color: #fff;">Histórico de Velocidad en Tiempo Real</div>
+                <div style="font-size: 0.88rem; font-weight: 600; color: #fff;">Histórico de Velocidad de esta Descarga</div>
                 <div style="display: flex; gap: 16px; font-size: 0.8rem;">
                   <span style="color: #38bdf8; display: flex; align-items: center; gap: 4px;">● Bajada: <strong id="insp-perf-down" style="font-family: var(--font-mono);">0.0 kB/s</strong></span>
-                  <span style="color: #34d399; display: flex; align-items: center; gap: 4px;">● Subida: <strong id="insp-perf-up" style="font-family: var(--font-mono);">0.0 kB/s</strong></span>
+                  <span style="color: #34d399; display: flex; align-items: center; gap: 4px;">● <span id="insp-perf-secondary-label">Media / BT</span>: <strong id="insp-perf-up" style="font-family: var(--font-mono);">0.0 kB/s</strong></span>
                 </div>
               </div>
               <div style="height: 160px; width: 100%; position: relative;">
@@ -900,6 +922,7 @@
         <div class="net-subview-tabs">
           <button type="button" class="net-subview-btn active" onclick="switchNetworkView('servers')">Servidores eD2k</button>
           <button type="button" class="net-subview-btn" onclick="switchNetworkView('kad')">Red Kademlia DHT</button>
+          <button type="button" class="net-subview-btn" onclick="switchNetworkView('hybrid')">⚡ Motor Híbrido DHT</button>
         </div>
         <span class="net-subview-hint">Topología P2P unificada</span>
       </div>
@@ -982,6 +1005,7 @@
         <div class="net-subview-tabs">
           <button type="button" class="net-subview-btn" onclick="switchNetworkView('servers')">Servidores eD2k</button>
           <button type="button" class="net-subview-btn active" onclick="switchNetworkView('kad')">Red Kademlia DHT</button>
+          <button type="button" class="net-subview-btn" onclick="switchNetworkView('hybrid')">⚡ Motor Híbrido DHT</button>
         </div>
         <span class="net-subview-hint">Topología P2P unificada</span>
       </div>
@@ -1029,6 +1053,120 @@
             <tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Cargando contactos de la red Kademlia...</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- VISTA: MOTOR HÍBRIDO DHT SIN INDEXADORES (eD2K ⇄ Kad ⇄ BitTorrent) -->
+    <section id="tab-hybrid" class="view-panel">
+      <div class="net-subview-bar">
+        <div class="net-subview-tabs">
+          <button type="button" class="net-subview-btn" onclick="switchNetworkView('servers')">Servidores eD2k</button>
+          <button type="button" class="net-subview-btn" onclick="switchNetworkView('kad')">Red Kademlia DHT</button>
+          <button type="button" class="net-subview-btn active" onclick="switchNetworkView('hybrid')">⚡ Motor Híbrido DHT</button>
+        </div>
+        <span class="net-subview-hint">Descubrimiento BitTorrent sin indexadores + fusión MD4 en vivo</span>
+      </div>
+
+      <div class="card-grid">
+        <div class="metric-card">
+          <div class="metric-title">Sabueso Mainline DHT (BEP 5/51/9)</div>
+          <div class="metric-val" id="hybrid-card-harvester" style="color: var(--text-muted);">Inactivo</div>
+          <div class="metric-desc" id="hybrid-card-harvester-meta">0 nodos · ⬇ 0 / ⬆ 0 pkts</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Catálogo DHT Local (0 Indexadores)</div>
+          <div class="metric-val" id="hybrid-card-catalog" style="color: var(--primary);">0</div>
+          <div class="metric-desc" id="hybrid-card-catalog-meta">0 muestreados BEP 51 · 0 pasivos</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Puentes eD2k ⇄ BT Verificados</div>
+          <div class="metric-val" id="hybrid-card-bridges" style="color: #34d399;">0</div>
+          <div class="metric-desc" id="hybrid-card-bridges-meta">0 candidatos · 0 rechazados · 0 notas Kad</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Fusión Real BT → eD2k</div>
+          <div class="metric-val" id="hybrid-card-fused" style="color: #38bdf8;">0 B</div>
+          <div class="metric-desc" id="hybrid-card-fused-meta">0 fusiones activas · 0 pares Rendezvous</div>
+        </div>
+      </div>
+
+      <!-- Buscador directo en el catálogo DHT local sin indexadores HTTP -->
+      <div class="action-bar" style="flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; gap: 8px; flex: 1; min-width: 260px; flex-wrap: wrap;">
+          <input type="text" id="hybrid-dht-search-input" class="form-control" placeholder="Buscar vídeo en catálogo DHT local (título, 1080p...) o tamaño exacto en bytes..." style="flex: 1; min-width: 220px;" onkeydown="if(event.key==='Enter') searchHybridDhtCatalog()">
+          <button type="button" class="btn btn-primary" onclick="searchHybridDhtCatalog()">🔍 Buscar en DHT local</button>
+          <button type="button" class="btn" onclick="refreshHybridView()">🔄 Actualizar estado</button>
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);" id="hybrid-dht-search-summary">
+          Búsqueda 100 % P2P sin indexadores externos
+        </div>
+      </div>
+
+      <div class="table-container" id="hybrid-dht-results-wrap" style="display: none; margin-bottom: 16px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Vídeo descubierto en DHT</th>
+              <th>Tamaño exacto</th>
+              <th>InfoHash</th>
+              <th>Pares</th>
+              <th>Origen</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="hybrid-dht-results-list"></tbody>
+        </table>
+      </div>
+
+      <!-- Fusiones activas BitTorrent → eD2k -->
+      <div id="hybrid-active-fusions-wrap" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h4 style="margin: 0; font-size: 0.92rem; color: #fff;">⚡ Fusiones activas BT → eD2k en curso</h4>
+          <span id="hybrid-active-fusions-count" style="font-size: 0.8rem; color: var(--text-muted);">0 activas</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Hash eD2k</th>
+                <th>InfoHash BT</th>
+                <th>Verificación MD4</th>
+                <th>Pares BT</th>
+                <th>Velocidad BT</th>
+                <th>Fusionado hacia eD2k</th>
+              </tr>
+            </thead>
+            <tbody id="hybrid-active-fusions-list">
+              <tr><td colspan="6" style="text-align: center; padding: 18px; color: var(--text-muted);">Sin fusiones activas en este momento. Al detectar un puente válido para una descarga eD2k aparecerá aquí en directo.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tabla persistida de puentes híbridos verificados y candidatos -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h4 style="margin: 0; font-size: 0.92rem; color: #fff;">🧬 Puentes criptográficos eD2k ⇄ BitTorrent</h4>
+          <span id="hybrid-bridges-summary" style="font-size: 0.8rem; color: var(--text-muted);">0 puentes registrados</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Hash eD2k</th>
+                <th>InfoHash BT</th>
+                <th>Tamaño exacto</th>
+                <th>Estado</th>
+                <th>Partes MD4</th>
+                <th>Origen</th>
+                <th>Kad Notes</th>
+              </tr>
+            </thead>
+            <tbody id="hybrid-bridges-list">
+              <tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">Todavía no hay puentes híbridos registrados.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -3758,6 +3896,7 @@
   <script src="/assets/js/07_media_core.js?v=7"></script>
   <script src="/assets/js/08_media_servarr_and_subtitles.js?v=3"></script>
   <script src="/assets/js/09_spotlight_and_mcp.js?v=3"></script>
+  <script src="/assets/js/10_hybrid_swarm.js?v=2"></script>
   <script src="/assets/atmosphere.js?v=4"></script>
 </body>
 </html>

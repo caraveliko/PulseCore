@@ -13,6 +13,66 @@ const TARGET_ACTIVE_SERIES_DOWNLOADS: usize = 15;
 const EPISODE_SEARCH_CONCURRENCY: usize = 4;
 /// Umbral mínimo de candidatos en el pool base de la serie antes de lanzar una segunda pasada de búsqueda.
 const MIN_BASE_SERIES_POOL_SIZE: usize = 80;
+/// Número máximo de packs de temporada candidatos intentados antes de pasar a episodios individuales.
+const MAX_SEASON_PACK_ATTEMPTS: usize = 3;
+/// Número mínimo de episodios HD distintos en el pool para preferirlos frente a un pack de temporada SD en perfiles HD.
+const MIN_HD_EPISODES_TO_PREFER_OVER_SD_PACK: usize = 2;
+
+fn is_hd_quality_tag(quality: &str) -> bool {
+    let q = quality.trim().to_ascii_lowercase();
+    q.contains("2160") || q.contains("4k") || q.contains("1080") || q.contains("720")
+}
+
+/// Comprueba si conviene omitir un pack de temporada SD en un perfil HD porque el pool ya contiene
+/// suficientes episodios individuales en calidad HD con puntuación superior.
+pub(super) fn should_skip_sd_pack_for_hd_pool(
+    quality_profile: &str,
+    pack: &ScoredRelease,
+    pool: &[ScoredRelease],
+    item: &MediaItem,
+    alt_refs: &[&str],
+    season_num: u32,
+) -> usize {
+    if !is_hd_quality_tag(quality_profile) || is_hd_quality_tag(&pack.quality) {
+        return 0;
+    }
+    let mut hd_episodes: HashSet<u32> = HashSet::new();
+    for r in pool {
+        if r.is_rejected || r.score <= pack.score || !is_hd_quality_tag(&r.quality) {
+            continue;
+        }
+        if !matches_release_with_options(
+            &r.title,
+            &item.title,
+            item.original_title.as_deref(),
+            alt_refs,
+            item.year,
+            false,
+            None,
+            None,
+        ) {
+            continue;
+        }
+        let nums = extract_tv_episode_numbers(&r.title, season_num);
+        if nums.len() == 1 || (1..=3).contains(&nums.len()) {
+            for ep_num in nums {
+                if matches_release_with_options(
+                    &r.title,
+                    &item.title,
+                    item.original_title.as_deref(),
+                    alt_refs,
+                    item.year,
+                    false,
+                    Some((season_num, ep_num)),
+                    None,
+                ) {
+                    hd_episodes.insert(ep_num);
+                }
+            }
+        }
+    }
+    hd_episodes.len()
+}
 
 impl AutoGrabber {
     /// Ejecuta la búsqueda y descarga automática para los episodios buscados de una serie de TV.
@@ -83,19 +143,26 @@ impl AutoGrabber {
             .cloned()
             .collect();
 
-        // Priorizar los episodios nunca buscados (`consecutive_empty_searches == 0`)
+        let season_in_progress: HashSet<u32> = episodes
+            .iter()
+            .filter(|e| e.status == "completed" || e.status == "downloading")
+            .map(|e| e.season_number)
+            .collect();
+
+        // Priorizar episodios nunca buscados y temporadas ya iniciadas (`completed`/`downloading`)
         wanted_eps.sort_by_key(|ep| {
             let attempts = ag_state
                 .diagnostics
                 .get(&ep.id)
                 .map(|d| d.consecutive_empty_searches)
                 .unwrap_or(0);
-            (attempts, ep.season_number, ep.episode_number)
+            let not_started = !season_in_progress.contains(&ep.season_number);
+            (attempts, not_started, ep.season_number, ep.episode_number)
         });
 
         let mut handled_ep_ids: HashSet<String> = HashSet::new();
         let search_title = strip_trailing_year_suffix(&item.title);
-        let ext_details = state.media_metadata.get_extended_details(item).await;
+        let ext_details = super::load_extended_details_bounded(state, item).await;
         let alt_refs: Vec<&str> = ext_details
             .alternative_titles
             .iter()
@@ -115,7 +182,7 @@ impl AutoGrabber {
                 .filter(|(_, eps)| eps.len() >= MIN_WANTED_EPS_FOR_SEASON_PACK)
                 .map(|(&s, _)| s)
                 .collect();
-            candidate_seasons.sort_unstable();
+            candidate_seasons.sort_by_key(|&s| (!season_in_progress.contains(&s), s));
 
             for season_num in candidate_seasons {
                 let season_eps = match eps_by_season.get(&season_num) {
@@ -127,16 +194,39 @@ impl AutoGrabber {
                 let mut pack_queries = vec![
                     format!("{search_title} Temporada {season_num}"),
                     format!("{search_title} S{season_num:02}"),
+                    format!("{search_title} T{season_num}"),
+                    format!("{search_title} castellano"),
                 ];
                 if let Some(ref orig) = item.original_title {
                     if !orig.is_empty() && !orig.eq_ignore_ascii_case(&item.title) {
-                        pack_queries.push(format!("{orig} S{season_num:02}"));
+                        let q = format!("{orig} S{season_num:02}");
+                        if !pack_queries.iter().any(|p| p.eq_ignore_ascii_case(&q)) {
+                            pack_queries.push(q);
+                        }
                     }
                 }
                 for es_t in &es_variants {
-                    pack_queries.push(format!("{es_t} Temporada {season_num}"));
-                    pack_queries.push(format!("{es_t} S{season_num:02}"));
+                    for q in [
+                        format!("{es_t} Temporada {season_num}"),
+                        format!("{es_t} S{season_num:02}"),
+                        format!("{es_t} T{season_num}"),
+                    ] {
+                        if !pack_queries.iter().any(|p| p.eq_ignore_ascii_case(&q)) {
+                            pack_queries.push(q);
+                        }
+                    }
                 }
+
+                super::emit_autograb_progress(
+                    state,
+                    "searching",
+                    &item.title,
+                    &format!(
+                        "Buscando packs de Temporada {season_num:02} en eD2k, Kad y BitTorrent..."
+                    ),
+                    10,
+                    Some(json!({ "season": season_num, "queries": pack_queries })),
+                );
 
                 let pack_futs = pack_queries
                     .iter()
@@ -154,7 +244,14 @@ impl AutoGrabber {
                         if r.is_rejected || r.score < MIN_SEASON_PACK_SCORE {
                             continue;
                         }
-                        if ag_state.is_release_blacklisted(&item.id, &r.hash, &r.title) {
+                        if is_single_video_file_ed2k(&r.title, &r.protocol) {
+                            continue;
+                        }
+                        if ag_state.is_release_blacklisted(&item.id, &r.hash, &r.title)
+                            || season_eps
+                                .iter()
+                                .any(|ep| ag_state.is_release_blacklisted(&ep.id, &r.hash, &r.title))
+                        {
                             continue;
                         }
                         if matches_season_pack_release(
@@ -169,13 +266,36 @@ impl AutoGrabber {
                     }
                 }
 
+                info!(
+                    "[AUTO_GRAB] '{}' T{:02}: {} candidatos de pack analizados ({} válidos)",
+                    item.title,
+                    season_num,
+                    seen_pack_links.len(),
+                    valid_packs.len()
+                );
+
                 valid_packs.sort_by(|a, b| {
                     b.score
                         .cmp(&a.score)
                         .then_with(|| b.sources.cmp(&a.sources))
                 });
 
-                if let Some(best_pack) = valid_packs.into_iter().next() {
+                for best_pack in valid_packs.into_iter().take(MAX_SEASON_PACK_ATTEMPTS) {
+                    let hd_ep_count = should_skip_sd_pack_for_hd_pool(
+                        &item.quality_profile,
+                        &best_pack,
+                        &season_pack_pool,
+                        item,
+                        &alt_refs,
+                        season_num,
+                    );
+                    if hd_ep_count >= MIN_HD_EPISODES_TO_PREFER_OVER_SD_PACK {
+                        info!(
+                            "[AUTO_GRAB] '{}' T{:02}: omitiendo pack SD '{}' ({} pts) porque hay {} episodios HD en el pool",
+                            item.title, season_num, best_pack.title, best_pack.score, hd_ep_count
+                        );
+                        continue;
+                    }
                     let target_dest = {
                         let dl_svc = state.downloads.lock().await;
                         dl_svc
@@ -188,27 +308,42 @@ impl AutoGrabber {
 
                     let pack_dl_id = if best_pack.protocol == "ed2k" {
                         let mut dl_svc = state.downloads.lock().await;
-                        dl_svc
-                            .add_ed2k_link(
-                                &best_pack.link,
-                                &target_dest,
-                                AllocationPolicy::SparseIfSupported,
-                                Some("tv".to_string()),
-                            )
-                            .ok()
-                            .map(|snap| snap.id.to_string())
+                        match dl_svc.add_ed2k_link(
+                            &best_pack.link,
+                            &target_dest,
+                            AllocationPolicy::SparseIfSupported,
+                            Some("tv".to_string()),
+                        ) {
+                            Ok(snap) => Some(snap.id.to_string()),
+                            Err(e) => {
+                                warn!(
+                                    "[AUTO_GRAB] Fallo al añadir pack '{}' T{:02} (ed2k): {e}",
+                                    best_pack.title, season_num
+                                );
+                                None
+                            }
+                        }
                     } else if let Ok(torrent_engine) = state.torrent_engine().await {
-                        torrent_engine
+                        match torrent_engine
                             .add_url(&best_pack.link, Some(target_dest), Some("tv".to_string()))
                             .await
-                            .ok()
-                            .map(|snap| snap.info_hash)
+                        {
+                            Ok(snap) => Some(snap.info_hash),
+                            Err(e) => {
+                                warn!(
+                                    "[AUTO_GRAB] Fallo al añadir pack '{}' T{:02} ({}): {e}",
+                                    best_pack.title, season_num, best_pack.protocol
+                                );
+                                None
+                            }
+                        }
                     } else {
                         None
                     };
 
                     if let Some(dl_id_str) = pack_dl_id {
                         let covered_nums = extract_tv_episode_numbers(&best_pack.title, season_num);
+                        let mut season_linked_count = 0usize;
                         {
                             let dl_svc = state.downloads.lock().await;
                             for sep in season_eps {
@@ -220,7 +355,9 @@ impl AutoGrabber {
                                         Some(&dl_id_str),
                                         now,
                                     );
-                                    handled_ep_ids.insert(sep.id.clone());
+                                    if handled_ep_ids.insert(sep.id.clone()) {
+                                        season_linked_count += 1;
+                                    }
                                 }
                             }
                             let _ = dl_svc.db().update_media_status(
@@ -235,7 +372,7 @@ impl AutoGrabber {
                             "[AUTO_GRAB] Grabbed Season Pack '{}' S{:02} ({} episodes linked) via {} (score: {})",
                             item.title,
                             season_num,
-                            handled_ep_ids.len(),
+                            season_linked_count,
                             best_pack.protocol,
                             best_pack.score
                         );
@@ -300,6 +437,7 @@ impl AutoGrabber {
                             "protocol": best_pack.protocol,
                             "downloadId": dl_id_str
                         }));
+                        break;
                     }
                 }
             }
@@ -352,6 +490,17 @@ impl AutoGrabber {
                     base_queries.push(clean_alt.to_string());
                 }
             }
+            super::emit_autograb_progress(
+                state,
+                "searching",
+                &item.title,
+                &format!(
+                    "Buscando serie en eD2k, Kad, BT Público, DHT Local y Torznab ({} consultas base)...",
+                    base_queries.len()
+                ),
+                20,
+                Some(json!({ "queries": base_queries })),
+            );
             let base_futs = base_queries
                 .iter()
                 .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
@@ -423,9 +572,14 @@ impl AutoGrabber {
                     }
                     let mut ep_queries = vec![
                         format!("{search_title} S{:02}E{:02}", ep.season_number, ep.episode_number),
-                        format!("{search_title} {:02}x{:03}", ep.season_number, ep.episode_number),
                         format!("{search_title} {}x{:02}", ep.season_number, ep.episode_number),
                     ];
+                    if ep.episode_number >= 100 {
+                        ep_queries.push(format!(
+                            "{search_title} {:02}x{:03}",
+                            ep.season_number, ep.episode_number
+                        ));
+                    }
                     if ep.season_number >= 1 && ep.episode_number < 100 {
                         let cap_code = ep.season_number * 100 + ep.episode_number;
                         ep_queries.push(format!("{search_title} Cap.{cap_code}"));
@@ -457,6 +611,9 @@ impl AutoGrabber {
             let chunk_batches = join_all(chunk_futs).await;
 
             for (ep, ep_batches) in ep_chunk.iter().zip(chunk_batches) {
+                if handled_ep_ids.contains(&ep.id) {
+                    continue;
+                }
                 let mut all_releases = Vec::new();
                 let mut seen_links = HashSet::new();
                 for r in &base_series_releases {
@@ -473,6 +630,7 @@ impl AutoGrabber {
                 }
 
             let total_candidates = all_releases.len();
+            let sources_summary = super::summarize_release_sources(&all_releases);
             let mut rejection_counts: HashMap<String, usize> = HashMap::new();
             let mut valid_releases = Vec::new();
 
@@ -538,6 +696,28 @@ impl AutoGrabber {
                 .take(3)
                 .map(|(r, c)| format!("{c}× {r}"))
                 .collect();
+
+            let ep_label = format!("{} S{:02}E{:02}", item.title, ep.season_number, ep.episode_number);
+            super::emit_autograb_progress(
+                state,
+                "evaluated",
+                &ep_label,
+                &format!(
+                    "{total_candidates} candidatas analizadas → {valid_count} válidas{}",
+                    if formatted_reasons.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", formatted_reasons.iter().take(2).cloned().collect::<Vec<_>>().join(" · "))
+                    }
+                ),
+                65,
+                Some(json!({
+                    "sources": sources_summary,
+                    "totalCandidates": total_candidates,
+                    "validCandidates": valid_count,
+                    "topRejections": formatted_reasons,
+                })),
+            );
 
             if let Some(best) = valid_releases.into_iter().next() {
                 let target_dest = {
@@ -629,6 +809,26 @@ impl AutoGrabber {
                     info!(
                         "[AUTO_GRAB] Grabbed episode '{}' S{:02}E{:02} via {} (hash: {}, score: {})",
                         item.title, ep.season_number, ep.episode_number, best.protocol, best.hash, best.score
+                    );
+                    super::emit_autograb_progress(
+                        state,
+                        "grabbed",
+                        &ep_label,
+                        &format!(
+                            "Capturado '{}' [{} · {} · {} pts · {} fuentes]",
+                            best.title, best.quality, best.language, best.score, best.sources
+                        ),
+                        90,
+                        Some(json!({
+                            "sources": sources_summary,
+                            "protocol": best.protocol,
+                            "release": best.title,
+                            "quality": best.quality,
+                            "language": best.language,
+                            "score": best.score,
+                            "peerSources": best.sources,
+                            "indexerName": best.indexer_name,
+                        })),
                     );
 
                     ag_state.active_grabs.insert(
@@ -727,9 +927,21 @@ impl AutoGrabber {
             show_diag.total_candidates = total_candidates;
             if show_diag.last_status != "grabbed" {
                 show_diag.last_status = ep_status;
-                show_diag.summary_message = ep_msg;
+                show_diag.summary_message = ep_msg.clone();
                 show_diag.top_rejection_reasons = formatted_reasons;
             }
+            super::emit_autograb_progress(
+                state,
+                "no_match",
+                &ep_label,
+                &ep_msg,
+                85,
+                Some(json!({
+                    "sources": sources_summary,
+                    "totalCandidates": total_candidates,
+                    "validCandidates": 0,
+                })),
+            );
             }
         }
 

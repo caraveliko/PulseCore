@@ -35,6 +35,7 @@ function renderSpotlightResults(query) {
       { type: 'action', action: 'openMediaSearchModal', title: 'Añadir Película o Serie', sub: 'Buscar metadatos en TMDB y capturar fuentes', icon: '➕', cat: 'Filmoteca' },
       { type: 'action', action: 'openAddModal', title: 'Añadir enlace eD2k o Magnet', sub: 'Pegar enlaces ed2k:// o magnet:? directos', icon: '⚡', cat: 'Descargas' },
       { type: 'nav', tab: 'tab-servers', title: 'Ver Servidores eD2k', sub: 'Lista de servidores y estado de conexión', icon: '🌐', cat: 'Vistas' },
+      { type: 'nav', tab: 'tab-servers', netSubView: 'hybrid', title: 'Ver Motor Híbrido DHT (Sin Indexadores)', sub: 'Sabueso BEP 51/BEP 9, catálogo DHT local y fusiones BT → eD2k', icon: '⚡', cat: 'Vistas' },
       { type: 'nav', tab: 'tab-logs', title: 'Ver Registro en Vivo', sub: 'Historial de eventos y registro del daemon', icon: '📜', cat: 'Vistas' }
     );
   } else {
@@ -125,8 +126,12 @@ function executeSpotlightItem(idx) {
   closeSpotlight();
 
   if (item.type === 'nav') {
-    const tabBtn = document.querySelector(`.nav-btn[data-tab="${item.tab}"]`);
-    if (tabBtn) tabBtn.click();
+    if (item.netSubView && typeof switchNetworkView === 'function') {
+      switchNetworkView(item.netSubView);
+    } else {
+      const tabBtn = document.querySelector(`.nav-btn[data-tab="${item.tab}"]`);
+      if (tabBtn) tabBtn.click();
+    }
     if (item.subview && typeof switchMediaSubView === 'function') {
       switchMediaSubView(item.subview);
     }

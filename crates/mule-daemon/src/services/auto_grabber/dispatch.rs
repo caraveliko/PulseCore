@@ -262,6 +262,12 @@ impl AutoGrabber {
             }
         }
 
+        let mut dl_id_counts: HashMap<String, usize> = HashMap::new();
+        for (_, _, _, _, dl_id, _) in &downloading_targets {
+            *dl_id_counts.entry(dl_id.clone()).or_insert(0) += 1;
+        }
+        let mut removed_dl_ids: HashSet<String> = HashSet::new();
+
         for (target_id, media_id, is_episode, label, dl_id, has_existing_file) in downloading_targets {
             // Buscar en eD2k o BitTorrent
             let ed2k_match = ed2k_details
@@ -429,20 +435,25 @@ impl AutoGrabber {
                     label, release_title, reason, hash
                 );
 
-                // 1. Eliminar la descarga muerta
-                if is_ed2k {
-                    if let Ok(uuid) = Uuid::parse_str(&dl_id) {
-                        let mut dl_svc = state.downloads.lock().await;
-                        let _ = dl_svc.remove_download(&uuid, true);
-                    }
-                } else if let Some(tid) = bt_id {
-                    if let Ok(te) = state.torrent_engine().await {
-                        let _ = te.delete(tid, true).await;
+                // 1. Eliminar la descarga muerta (una sola vez si varios episodios comparten el mismo pack)
+                if removed_dl_ids.insert(dl_id.clone()) {
+                    if is_ed2k {
+                        if let Ok(uuid) = Uuid::parse_str(&dl_id) {
+                            let mut dl_svc = state.downloads.lock().await;
+                            let _ = dl_svc.remove_download(&uuid, true);
+                        }
+                    } else if let Some(tid) = bt_id {
+                        if let Ok(te) = state.torrent_engine().await {
+                            let _ = te.delete(tid, true).await;
+                        }
                     }
                 }
 
-                // 2. Añadir a la lista negra el hash para este objetivo
+                // 2. Añadir a la lista negra el hash para este objetivo (y para la serie si es un pack compartido)
                 ag_state.blacklist_hash(&target_id, &hash, &release_title, reason, now);
+                if is_episode && dl_id_counts.get(&dl_id).copied().unwrap_or(0) > 1 {
+                    ag_state.blacklist_hash(&media_id, &hash, &release_title, reason, now);
+                }
                 ag_state.active_grabs.remove(&dl_id);
 
                 // 3. Volver a poner en 'wanted' (o 'completed' si era una mejora) y reiniciar el retroceso

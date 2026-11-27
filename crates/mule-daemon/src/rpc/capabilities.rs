@@ -33,6 +33,7 @@ pub fn daemon_capabilities() -> Vec<&'static str> {
         "peer-credits",
         "kad-contacts",
         "notifications",
+        "hybrid-swarm",
         #[cfg(feature = "lab-tools")]
         "lab-tools",
     ]

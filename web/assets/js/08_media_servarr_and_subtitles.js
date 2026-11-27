@@ -9,6 +9,9 @@ function startMediaOperation(title, desc, icon) {
   const iconEl = document.getElementById('media-op-icon');
   const badgeEl = document.getElementById('media-op-badge');
   const bar = document.getElementById('media-op-progressbar');
+  const detailsEl = document.getElementById('media-op-details');
+  const chipsEl = document.getElementById('media-op-sources-chips');
+  const logEl = document.getElementById('media-op-log');
 
   if (banner) {
     banner.style.display = 'block';
@@ -24,10 +27,14 @@ function startMediaOperation(title, desc, icon) {
     badgeEl.style.borderColor = 'rgba(59, 130, 246, 0.3)';
   }
   if (bar) {
-    bar.style.width = '25%';
+    bar.style.width = '20%';
     bar.style.background = 'linear-gradient(90deg, #3b82f6, #06b6d4)';
   }
+  if (detailsEl) detailsEl.style.display = 'none';
+  if (chipsEl) chipsEl.innerHTML = '';
+  if (logEl) logEl.innerHTML = '';
 
+  clearTimeout(window.__mediaOpTimer);
   showToast(title, 'info', icon);
 }
 
@@ -45,6 +52,7 @@ function finishMediaOperation(success, title, desc, icon) {
   const iconEl = document.getElementById('media-op-icon');
   const badgeEl = document.getElementById('media-op-badge');
   const bar = document.getElementById('media-op-progressbar');
+  const detailsEl = document.getElementById('media-op-details');
 
   if (titleEl) titleEl.textContent = title;
   if (descEl) descEl.textContent = desc;
@@ -66,10 +74,70 @@ function finishMediaOperation(success, title, desc, icon) {
 
   showToast(title, success ? 'success' : 'error', icon);
   clearTimeout(window.__mediaOpTimer);
+  const keepMs = detailsEl && detailsEl.style.display !== 'none' ? 12000 : 5500;
   window.__mediaOpTimer = setTimeout(() => {
     dismissMediaOpBanner();
-  }, 5500);
+  }, keepMs);
 }
+
+/**
+ * Procesa eventos `autograb.progress` emitidos en directo por el daemon y actualiza el panel visual.
+ */
+window.handleAutoGrabProgressEvent = (params) => {
+  if (!params) return;
+  const banner = document.getElementById('media-op-banner');
+  const detailsEl = document.getElementById('media-op-details');
+  const chipsEl = document.getElementById('media-op-sources-chips');
+  const logEl = document.getElementById('media-op-log');
+  if (!banner || !detailsEl || !logEl) return;
+
+  if (banner.style.display === 'none') {
+    startMediaOperation(params.title || 'Auto-Grab en curso', params.detail || '', '⚡');
+  }
+  detailsEl.style.display = 'block';
+  if (typeof params.percent === 'number') {
+    updateMediaOperation(params.percent, params.detail || '');
+  }
+
+  const metrics = params.metrics || {};
+  if (chipsEl && metrics.sources) {
+    const s = metrics.sources;
+    const chip = (label, val, accent) =>
+      `<span class="badge" style="background: rgba(15,23,42,0.8); border: 1px solid ${accent}; color: #e2e8f0; font-size: 0.72rem; padding: 2px 8px;">${label}: <strong>${Number(val || 0)}</strong></span>`;
+    chipsEl.innerHTML = [
+      chip('eD2k Servidor', s.ed2kServer, 'rgba(56,189,248,0.4)'),
+      chip('Kad', s.ed2kKad, 'rgba(56,189,248,0.4)'),
+      chip('BT Público', s.btPublic, 'rgba(52,211,153,0.45)'),
+      chip('DHT Local', s.btDhtLocal, 'rgba(52,211,153,0.45)'),
+      chip('Torznab', s.torznab, 'rgba(192,132,252,0.45)'),
+    ].join('');
+  }
+
+  const stage = (params.stage || '').toLowerCase();
+  const icon = stage === 'searching' ? '🔎'
+    : stage === 'evaluated' ? '📊'
+    : stage === 'grabbed' ? '✅'
+    : stage === 'no_match' ? '⚠️'
+    : stage === 'finished' ? '🏁'
+    : '⚡';
+
+  let protoBadge = '';
+  if (stage === 'grabbed' && metrics.protocol) {
+    const isBt = String(metrics.protocol).toLowerCase() === 'torrent';
+    protoBadge = isBt
+      ? ' <span class="badge badge-torrent" style="font-size: 0.68rem; padding: 1px 6px;">Torrent</span>'
+      : ' <span class="badge badge-ed2k" style="font-size: 0.68rem; padding: 1px 6px;">eD2k</span>';
+  }
+
+  const row = document.createElement('div');
+  row.style.cssText = 'padding: 2px 0; border-bottom: 1px dashed rgba(148,163,184,0.12);';
+  row.innerHTML = `${icon} <strong>${escapeHtml(params.title || 'Auto-Grab')}</strong>${protoBadge}: <span style="color: #94a3b8;">${escapeHtml(params.detail || '')}</span>`;
+  logEl.appendChild(row);
+  while (logEl.children.length > 12) {
+    logEl.removeChild(logEl.firstChild);
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+};
 
 function dismissMediaOpBanner() {
   const banner = document.getElementById('media-op-banner');
@@ -1197,7 +1265,11 @@ function renderAutoGrabDiagnosticBanner(mediaId, autoGrab) {
 }
 
 async function triggerSingleAutoGrab(mediaId, episodeId, label) {
-  showToastNotification(`⚡ Ejecutando AutoGrabber de precisión para "${label}"...`, 'info', '🤖');
+  startMediaOperation(
+    `Auto-Grab: ${label}`,
+    'Consultando redes eD2k, Kad, BT Público, DHT Local y Torznab...',
+    '⚡'
+  );
   try {
     const res = await client.call('media.autoGrab', {
       mediaId,
@@ -1209,21 +1281,21 @@ async function triggerSingleAutoGrab(mediaId, episodeId, label) {
 
     if (grabbedM.length > 0) {
       const g = grabbedM[0];
-      showToastNotification(`✅ Auto-Grab: "${g.release}" [${g.quality} · ${g.language} · ${g.score} pts]`, 'success', '🎬');
+      finishMediaOperation(true, `Capturada: ${g.title || label}`, `${g.release} [${g.quality} · ${g.language} · ${g.score} pts · ${g.protocol}]`, '🎬');
     } else if (grabbedE.length > 0) {
       const g = grabbedE[0];
-      showToastNotification(`✅ Auto-Grab S${String(g.season).padStart(2,'0')}E${String(g.episode).padStart(2,'0')}: "${g.release}"`, 'success', '📺');
+      finishMediaOperation(true, `Capturado S${String(g.season).padStart(2,'0')}E${String(g.episode).padStart(2,'0')}`, `${g.release} [${g.protocol || 'ed2k'}]`, '📺');
     } else if (healed.length > 0) {
-      showToastNotification(`🛡️ Auto-Curación: descartada descarga estancada (${healed[0].discardedRelease})`, 'warning', '🛡️');
+      finishMediaOperation(true, 'Auto-Curación ejecutada', `Descartada descarga estancada (${healed[0].discardedRelease})`, '🛡️');
     } else if (res && res.diagnostic && res.diagnostic.summaryMessage) {
-      showToastNotification(res.diagnostic.summaryMessage, 'info', '🔎');
+      finishMediaOperation(true, 'Búsqueda completada', res.diagnostic.summaryMessage, '🔎');
     } else {
-      showToastNotification('Búsqueda completada: ninguna release superó los filtros estrictos todavía.', 'info', '🔎');
+      finishMediaOperation(true, 'Búsqueda completada', 'Ninguna release superó los filtros estrictos todavía.', '🔎');
     }
     await openMediaDetail(mediaId);
     if (typeof loadMediaLibrary === 'function') loadMediaLibrary();
   } catch (e) {
-    showToastNotification('Error en AutoGrabber: ' + e.message, 'error', '❌');
+    finishMediaOperation(false, 'Error en AutoGrabber', e.message || String(e), '❌');
   }
 }
 window.triggerSingleAutoGrab = triggerSingleAutoGrab;
@@ -1379,19 +1451,23 @@ function initSeriesSeasonsAndEpisodes() {
 }
 
 async function triggerSeasonAutoGrab(mediaId, seasonNumber, title) {
-  showToastNotification(`⚡ Buscando y descargando Temporada ${seasonNumber} de "${title}"...`, 'info', '📺');
+  startMediaOperation(
+    `Temporada ${seasonNumber}: ${title}`,
+    'Buscando pack o episodios en eD2k, Kad, BT Público, DHT Local y Torznab...',
+    '📺'
+  );
   try {
     const res = await client.call('media.autoGrab', { mediaId, seasonNumber });
     const grabbedE = (res && res.grabbedEpisodes) || [];
     if (grabbedE.length > 0) {
-      showToastNotification(`✅ Temporada ${seasonNumber}: ${grabbedE.length} elemento(s) añadidos a la cola`, 'success', '📺');
+      finishMediaOperation(true, `Temporada ${seasonNumber} capturada`, `${grabbedE.length} elemento(s) añadidos a la cola`, '📺');
     } else {
-      showToastNotification(`Búsqueda de Temporada ${seasonNumber} completada`, 'info', '🔎');
+      finishMediaOperation(true, `Temporada ${seasonNumber} revisada`, 'Búsqueda completada sin nuevas capturas aún', '🔎');
     }
     await openMediaDetail(mediaId);
     if (typeof loadMediaLibrary === 'function') loadMediaLibrary();
   } catch (e) {
-    showToastNotification(`Error descargando Temporada ${seasonNumber}: ${e.message || e}`, 'error', '❌');
+    finishMediaOperation(false, `Error en Temporada ${seasonNumber}`, e.message || String(e), '❌');
   }
 }
 

@@ -28,13 +28,17 @@ mod tests;
 
 pub use dictionaries::spanish_title_search_variants;
 pub use matching::{
-    clean_title_tokens, extract_tv_episode_numbers, matches_release, matches_release_with_alts,
-    matches_release_with_options, matches_season_pack_release, normalize_accents_and_symbols,
-    strip_trailing_year_suffix,
+    clean_title_tokens, extract_tv_episode_numbers, is_single_video_file_ed2k, matches_release,
+    matches_release_with_alts, matches_release_with_options, matches_season_pack_release,
+    normalize_accents_and_symbols, strip_trailing_year_suffix,
 };
 
 use dictionaries::{FORBIDDEN_EXTENSIONS, TRUSTED_RELEASE_GROUPS};
 use matching::{has_season_pack_indicator, is_year_token};
+/// Prefijos de resultados sintéticos inyectados por servidores `emule-qt.org` sin fuentes eD2K reales.
+const SYNTHETIC_EMULE_QT_PREFIXES: &[&str] = &["[torrent emule-qt.org]", "[kad emule-qt.org]"];
+/// Prefijo de hash sintético puente emitido por `emule-qt.org` que no corresponde a un MD4 eD2K válido en la red.
+const SYNTHETIC_EMULE_QT_HASH_PREFIX: &str = "ed2b01";
 /// Umbrales de tamaño óptimo ("Sweet-Spot" en MB) para equilibrar calidad de imagen y almacenamiento.
 const MOVIE_1080P_SWEET_MIN_MB: u64 = 1800;
 const MOVIE_1080P_SWEET_MAX_MB: u64 = 9500;
@@ -85,7 +89,19 @@ pub fn evaluate_release(
     let mut is_rejected = false;
     let mut rejection_reason = None;
 
-    // 1. Comprobación antifalsificaciones y extensiones peligrosas
+    // 1. Comprobación antifalsificaciones, resultados sintéticos y extensiones peligrosas
+    if SYNTHETIC_EMULE_QT_PREFIXES.iter().any(|p| lower.contains(p))
+        || (protocol.eq_ignore_ascii_case("ed2k")
+            && hash
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with(SYNTHETIC_EMULE_QT_HASH_PREFIX))
+    {
+        is_rejected = true;
+        rejection_reason =
+            Some("Resultado sintético de emule-qt.org sin fuentes eD2K reales".to_string());
+    }
+
     for &ext in FORBIDDEN_EXTENSIONS {
         if lower.ends_with(ext) || lower.contains(&format!("{ext}.")) {
             is_rejected = true;
@@ -314,7 +330,16 @@ pub fn evaluate_release(
         || has_spanish_sub_only
         || lower.contains("subs")
         || lower.contains("[sub]");
-    let has_latino = lower.contains("latino") && !lower.contains("castellano");
+    let has_latino = (lower.contains("latino")
+        || lower.contains("dual-lat")
+        || lower.contains("dual.lat")
+        || lower.contains("dual lat")
+        || lower.contains("lat-eng")
+        || lower.contains("eng-lat")
+        || lower.contains("cinecalidad")
+        || has_word("lat"))
+        && !lower.contains("castellano")
+        && !has_castellano_audio;
     let has_foreign = lower.contains("french")
         || lower.contains("truefrench")
         || has_word("vff")

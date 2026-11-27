@@ -338,6 +338,13 @@ pub async fn handle_media_add(
         .db()
         .insert_media_item(&item)
         .map_err(|e| JsonRpcError::business(format!("Database insert error: {e}")))?;
+    crate::services::media_exclusions::remove_deleted_media_exclusion(
+        &mut dl_svc,
+        &media_type,
+        title,
+        tvdb_id,
+        tmdb_id,
+    );
 
     let season_scope = params["seasonScope"].as_str().unwrap_or("all");
     let explicit_seasons: Option<std::collections::HashSet<u32>> = params["monitoredSeasons"]
@@ -448,6 +455,7 @@ pub async fn handle_media_delete(
             item_info = Some((
                 item.media_type.clone(),
                 item.title.clone(),
+                item.year,
                 item.tvdb_id,
                 item.tmdb_id,
                 item.root_folder.clone(),
@@ -484,10 +492,12 @@ pub async fn handle_media_delete(
     }
 
     if delete_files {
-        if let Some((_, ref title, year, _, ref root_folder)) = item_info {
+        if let Some((_, ref title, year, tvdb, tmdb, ref root_folder)) = item_info {
             let root_p = std::path::PathBuf::from(root_folder);
             let title_norm = title.trim().to_lowercase();
             let title_year_norm = year.map(|y| format!("{title_norm} ({y})"));
+            let tvdb_marker = tvdb.map(|id| format!("[tvdbid-{id}]"));
+            let tmdb_marker = tmdb.map(|id| format!("[tmdbid-{id}]"));
             if root_p.is_dir() {
                 if let Ok(entries) = std::fs::read_dir(&root_p) {
                     for entry in entries.flatten() {
@@ -499,7 +509,9 @@ pub async fn handle_media_delete(
                                 || name.starts_with(&format!("{title_norm} ["))
                                 || title_year_norm
                                     .as_deref()
-                                    .is_some_and(|ty| name.starts_with(&format!("{ty} [")));
+                                    .is_some_and(|ty| name.starts_with(&format!("{ty} [")))
+                                || tvdb_marker.as_deref().is_some_and(|m| name.contains(m))
+                                || tmdb_marker.as_deref().is_some_and(|m| name.contains(m));
                             if exact_match {
                                 files_to_delete.push(path);
                             }
@@ -524,14 +536,28 @@ pub async fn handle_media_delete(
         .ok();
     }
 
-    let dl_svc = state.downloads.lock().await;
+    let mut dl_svc = state.downloads.lock().await;
     let deleted = dl_svc
         .db()
         .delete_media_item(id)
         .map_err(|e| JsonRpcError::business(format!("Database error: {e}")))?;
 
+    if deleted {
+        if let Some((ref mtype, ref title, _, tvdb, tmdb, _)) = item_info {
+            crate::services::media_exclusions::record_deleted_media(
+                &mut dl_svc,
+                mtype,
+                title,
+                tvdb,
+                tmdb,
+                crate::services::downloads::now_ms(),
+            );
+        }
+    }
+    drop(dl_svc);
+
     // Sincronizar eliminación con Sonarr / Radarr para evitar nuevas descargas
-    if let Some((mtype, title, tvdb, tmdb, _)) = item_info {
+    if let Some((mtype, title, _, tvdb, tmdb, _)) = item_info {
         sync_delete_with_servarr(state, &mtype, &title, tvdb, tmdb, delete_files).await;
     }
 

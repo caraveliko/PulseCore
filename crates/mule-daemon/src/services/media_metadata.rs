@@ -17,6 +17,8 @@ const MAX_CAST_CREDITS: usize = 16;
 const MAX_PHOTO_FALLBACK_LOOKUPS: usize = 6;
 /// Tiempo máximo de espera (en segundos) para una petición de foto de Wikipedia de respaldo.
 const PHOTO_FALLBACK_TIMEOUT_SECS: u64 = 4;
+/// Tiempo máximo total (en segundos) dedicado al enriquecimiento paralelo de fotos de reparto.
+const PHOTO_ENRICH_TOTAL_TIMEOUT: Duration = Duration::from_secs(3);
 /// Tiempo máximo de espera (en segundos) para la traducción automática de sinopsis al español.
 const TRANSLATION_FALLBACK_TIMEOUT_SECS: u64 = 4;
 /// Longitud máxima de cada fragmento enviado al traductor de respaldo.
@@ -1525,20 +1527,46 @@ impl MediaMetadataService {
     }
 
     async fn enrich_missing_photos(&self, details: &mut MediaExtendedDetails) {
-        let mut lookups = 0usize;
+        let mut names_to_lookup: Vec<String> = Vec::new();
+        for person in details
+            .directors
+            .iter()
+            .chain(details.cast.iter())
+        {
+            if person.photo_url.is_some() || names_to_lookup.contains(&person.name) {
+                continue;
+            }
+            names_to_lookup.push(person.name.clone());
+            if names_to_lookup.len() >= MAX_PHOTO_FALLBACK_LOOKUPS {
+                break;
+            }
+        }
+        if names_to_lookup.is_empty() {
+            return;
+        }
+        let futs = names_to_lookup
+            .iter()
+            .map(|name| self.scrape_person_photo_wikipedia(name));
+        let Ok(resolved) =
+            tokio::time::timeout(PHOTO_ENRICH_TOTAL_TIMEOUT, futures_util::future::join_all(futs))
+                .await
+        else {
+            return;
+        };
+        let mut map: HashMap<String, Option<String>> = HashMap::new();
+        for (name, url_opt) in names_to_lookup.into_iter().zip(resolved) {
+            map.insert(name, url_opt);
+        }
         for person in details
             .directors
             .iter_mut()
             .chain(details.cast.iter_mut())
         {
-            if person.photo_url.is_some() {
-                continue;
+            if person.photo_url.is_none() {
+                if let Some(Some(url)) = map.get(&person.name) {
+                    person.photo_url = Some(url.clone());
+                }
             }
-            if lookups >= MAX_PHOTO_FALLBACK_LOOKUPS {
-                break;
-            }
-            lookups += 1;
-            person.photo_url = self.scrape_person_photo_wikipedia(&person.name).await;
         }
     }
 

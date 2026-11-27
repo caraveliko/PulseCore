@@ -257,6 +257,7 @@ pub fn topic_for_method(method: &str) -> Option<&'static str> {
         "network.policyChanged" | "upnp.statusChanged" => Some("network"),
         "event.notificationCreated" => Some("notifications"),
         "server.searchResult" | "server.foundSources" => Some("search"),
+        "autograb.progress" => Some("downloads"),
         "event.snapshotRequired" => None,
         _ => Some("other"),
     }
@@ -284,6 +285,7 @@ mod tests {
             Some("notifications")
         );
         assert_eq!(topic_for_method("server.searchResult"), Some("search"));
+        assert_eq!(topic_for_method("autograb.progress"), Some("downloads"));
         assert_eq!(topic_for_method("event.snapshotRequired"), None);
         assert_eq!(topic_for_method("custom.unknown"), Some("other"));
     }

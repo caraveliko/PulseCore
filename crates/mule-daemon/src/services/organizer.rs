@@ -1248,7 +1248,17 @@ impl MediaOrganizer {
                             updated_at: now,
                         };
                         let dl_svc = state.downloads.lock().await;
-                        let _ = dl_svc.db().insert_media_item(&item);
+                        let exclusions =
+                            crate::services::media_exclusions::load_deleted_media_exclusions(&dl_svc);
+                        if !crate::services::media_exclusions::is_media_excluded(
+                            &exclusions,
+                            "movie",
+                            &item.title,
+                            item.tvdb_id,
+                            item.tmdb_id,
+                        ) {
+                            let _ = dl_svc.db().insert_media_item(&item);
+                        }
                         matched_movie = Some(item);
                     }
                 }
@@ -1330,7 +1340,17 @@ impl MediaOrganizer {
                     let _ = dl_svc.update_target_path(&dl_uuid, &dest_file);
                 }
                 if was_new_movie {
-                    let _ = dl_svc.db().insert_media_item(&final_movie);
+                    let exclusions =
+                        crate::services::media_exclusions::load_deleted_media_exclusions(&dl_svc);
+                    if !crate::services::media_exclusions::is_media_excluded(
+                        &exclusions,
+                        "movie",
+                        &final_movie.title,
+                        final_movie.tvdb_id,
+                        final_movie.tmdb_id,
+                    ) {
+                        let _ = dl_svc.db().insert_media_item(&final_movie);
+                    }
                 }
                 let _ = dl_svc.db().update_media_completed(&final_movie.id, &dest_str, now);
                 if let Some(ref rel) = orig_release {

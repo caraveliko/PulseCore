@@ -2,8 +2,94 @@
 // Extraído de web/index.html.
 
 // === GESTIÓN DEL PANEL INSPECTOR INFERIOR ===
+let inspectorRequestSeq = 0;
+let inspectorPeersFilter = 'all';
+let lastRenderedPeersList = [];
+let lastRenderedPeersKey = '';
+let lastRenderedPartsKey = '';
+let lastHybridRefreshAt = 0;
+let lastSourcesRefreshAt = 0;
+const INSPECTOR_HYBRID_POLL_MS = 4000;
+const INSPECTOR_SOURCES_POLL_MS = 5000;
+const INSPECTOR_MIN_HEIGHT_PX = 180;
+const INSPECTOR_MAX_HEIGHT_PX = 520;
+const INSPECTOR_PERF_MAX_SAMPLES = 60;
+
+window.perDownloadPerfHistory = window.perDownloadPerfHistory || new Map();
+
+window.recordDownloadPerfSample = (id, primaryBps, secondaryBps = 0) => {
+  if (!id) return;
+  let entry = window.perDownloadPerfHistory.get(id);
+  if (!entry) {
+    entry = { primary: [], secondary: [] };
+    window.perDownloadPerfHistory.set(id, entry);
+  }
+  entry.primary.push(Math.max(0, Number(primaryBps) || 0));
+  entry.secondary.push(Math.max(0, Number(secondaryBps) || 0));
+  if (entry.primary.length > INSPECTOR_PERF_MAX_SAMPLES) entry.primary.shift();
+  if (entry.secondary.length > INSPECTOR_PERF_MAX_SAMPLES) entry.secondary.shift();
+};
+
+window.renderInspectorDownloadPerf = (id) => {
+  const inspPerf = document.getElementById('insp-perf');
+  if (!inspPerf || inspPerf.style.display === 'none' || !id) return false;
+
+  const entry = window.perDownloadPerfHistory.get(id) || { primary: [0, 0], secondary: [0, 0] };
+  const primary = entry.primary.length >= 2 ? entry.primary : [0, entry.primary[0] || 0];
+  const hasHybridBt = entry.secondary.some(v => v > 0);
+  const secondary = hasHybridBt
+    ? (entry.secondary.length >= 2 ? entry.secondary : [0, entry.secondary[0] || 0])
+    : primary.map((_, idx, arr) => {
+        const start = Math.max(0, idx - 5);
+        const slice = arr.slice(start, idx + 1);
+        return slice.reduce((a, b) => a + b, 0) / slice.length;
+      });
+
+  const curDown = primary[primary.length - 1] || 0;
+  const curSec = secondary[secondary.length - 1] || 0;
+  const perfDownEl = document.getElementById('insp-perf-down');
+  const perfUpEl = document.getElementById('insp-perf-up');
+  const secLabelEl = document.getElementById('insp-perf-secondary-label');
+  if (perfDownEl) perfDownEl.textContent = formatSpeed(curDown);
+  if (perfUpEl) perfUpEl.textContent = formatSpeed(curSec);
+  if (secLabelEl) secLabelEl.textContent = hasHybridBt ? 'BT Híbrido' : 'Media móvil';
+
+  const perfSvg = document.getElementById('insp-perf-svg');
+  if (!perfSvg) return true;
+  const maxPerf = Math.max(...primary, ...secondary, 10240);
+  const w = 500;
+  const h = 140;
+
+  const makePathData = (arr) => {
+    const pts = arr.map((val, idx) => {
+      const x = Math.round((idx / Math.max(1, arr.length - 1)) * w);
+      const y = Math.round(h - (val / maxPerf) * (h - 14) - 6);
+      return `${x},${y}`;
+    });
+    return {
+      polylineStr: pts.join(' '),
+      fillD: `M 0,${h} L ${pts.join(' L ')} L ${w},${h} Z`,
+    };
+  };
+
+  const downData = makePathData(primary);
+  const secData = makePathData(secondary);
+  const pDownLine = document.getElementById('perf-down-line');
+  const pDownFill = document.getElementById('perf-down-fill');
+  if (pDownLine) pDownLine.setAttribute('points', downData.polylineStr);
+  if (pDownFill) pDownFill.setAttribute('d', downData.fillD);
+
+  const pUpLine = document.getElementById('perf-up-line');
+  const pUpFill = document.getElementById('perf-up-fill');
+  if (pUpLine) pUpLine.setAttribute('points', secData.polylineStr);
+  if (pUpFill) pUpFill.setAttribute('d', secData.fillD);
+  return true;
+};
+
 window.selectDownload = (id) => {
   selectedDownloadId = id;
+  lastRenderedPeersKey = '';
+  lastRenderedPartsKey = '';
   const inspector = document.getElementById('download-inspector');
   inspector.classList.add('active');
   document.querySelectorAll('#downloads-list tr').forEach(r => {
@@ -14,24 +100,35 @@ window.selectDownload = (id) => {
 
 window.closeInspector = () => {
   selectedDownloadId = null;
+  window.selectedDownloadSnap = null;
   document.getElementById('download-inspector').classList.remove('active');
   document.querySelectorAll('#downloads-list tr').forEach(r => r.classList.remove('selected-row'));
 };
 
 async function refreshInspector(resetView = false) {
   if (!selectedDownloadId) return;
+  const targetId = selectedDownloadId;
+  const reqSeq = ++inspectorRequestSeq;
   try {
-    const detail = await client.call('downloads.get', { id: selectedDownloadId });
-    if (!detail) return;
+    const detail = await client.call('downloads.get', { id: targetId });
+    if (!detail || reqSeq !== inspectorRequestSeq || selectedDownloadId !== targetId) return;
 
     const snap = detail.snapshot || detail;
-    const isTorrent = snap.fileName && snap.fileName.startsWith('⚡ [Torrent]');
-    const name = fixMojibake(snap.fileName || 'Archivo');
+    window.selectedDownloadSnap = snap;
+    const rawName = snap.fileName || snap.file_name || 'Archivo';
+    const currentHash = detail.ed2kHash || detail.ed2k_hash || snap.ed2kHash || '';
+    const isTorrent = snap.protocol === 'torrent'
+      || detail.protocol === 'torrent'
+      || rawName.startsWith('⚡ [Torrent]')
+      || (currentHash.length === 40 && !(detail.parts || snap.parts || []).length);
+    const name = fixMojibake(rawName);
 
     document.getElementById('insp-title').textContent = name;
     document.getElementById('insp-proto-badge').textContent = isTorrent ? 'Torrent' : 'eD2k';
     document.getElementById('insp-proto-badge').className = isTorrent ? 'badge badge-torrent' : 'badge badge-ed2k';
-    document.getElementById('insp-hash').textContent = detail.ed2kHash || detail.ed2k_hash || snap.ed2kHash || '-';
+    const hashLabelEl = document.getElementById('insp-hash-label');
+    if (hashLabelEl) hashLabelEl.textContent = isTorrent ? 'InfoHash BT:' : 'Hash eD2k:';
+    document.getElementById('insp-hash').textContent = currentHash || '-';
     document.getElementById('insp-dest').textContent = detail.targetPath || detail.target_path || 'Carpeta Incoming NAS';
     document.getElementById('insp-temp').textContent = detail.tempPath || detail.temp_path || '-';
 
@@ -57,6 +154,14 @@ async function refreshInspector(resetView = false) {
 
     // Fase y Ubicación de Almacenamiento
     const statusLower = (snap.status || '').toLowerCase();
+    const togglePauseBtn = document.getElementById('btn-insp-toggle-pause');
+    if (togglePauseBtn) {
+      const isPaused = statusLower === 'paused';
+      const isDone = statusLower === 'completed' || (total > 0 && transferred >= total);
+      togglePauseBtn.style.display = isDone ? 'none' : '';
+      togglePauseBtn.textContent = isPaused ? '▶ Reanudar' : '⏸ Pausar';
+      togglePauseBtn.dataset.paused = isPaused ? '1' : '0';
+    }
     const stageMeta = typeof getDownloadCompletionStageMeta === 'function' ? getDownloadCompletionStageMeta(snap) : { active: false };
     const stageBox = document.getElementById('insp-stage-box');
     const stageText = document.getElementById('insp-stage-text');
@@ -88,6 +193,11 @@ async function refreshInspector(resetView = false) {
         stageBox.style.background = 'rgba(168, 85, 247, 0.08)';
         if (stageDot) stageDot.style.background = '#c084fc';
         stageText.innerHTML = `<strong style="color:#c084fc;">Verificando hashes:</strong> Comprobando integridad del archivo...`;
+      } else if (statusLower === 'paused') {
+        stageBox.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+        stageBox.style.background = 'rgba(245, 158, 11, 0.07)';
+        if (stageDot) stageDot.style.background = '#fbbf24';
+        stageText.innerHTML = `<strong style="color:#fbbf24;">Descarga en pausa:</strong> Pulsa «▶ Reanudar» cuando quieras continuar.`;
       } else {
         stageBox.style.borderColor = 'rgba(56, 189, 248, 0.3)';
         stageBox.style.background = 'rgba(56, 189, 248, 0.06)';
@@ -101,18 +211,42 @@ async function refreshInspector(resetView = false) {
       prioSel.value = (snap.priority || 'auto').toLowerCase();
     }
 
-    // Partes
+    // Partes (con renderizado diferencial y mapa de disponibilidad)
     const parts = detail.parts || snap.parts || [];
     document.getElementById('insp-parts-count').textContent = parts.length;
     renderExpandedParts(parts);
 
-    // Actualizar fuentes para pestaña y badge
-    const currentHash = detail.ed2kHash || detail.ed2k_hash || snap.ed2kHash;
-    if (currentHash) {
+    // Actualizar gráfico por descarga si la pestaña Tráfico está visible
+    if (inspectorActiveTab === 'insp-perf') {
+      window.renderInspectorDownloadPerf(targetId);
+    }
+
+    // Polling inteligente del Puente Híbrido BT → eD2k
+    const nowMs = Date.now();
+    if (typeof refreshInspectorHybridStatus === 'function'
+      && (resetView || (inspectorActiveTab === 'insp-general' && nowMs - lastHybridRefreshAt >= INSPECTOR_HYBRID_POLL_MS))) {
+      lastHybridRefreshAt = nowMs;
+      refreshInspectorHybridStatus(snap, isTorrent);
+    }
+
+    // Polling inteligente de fuentes (solo eD2K)
+    if (isTorrent) {
+      const badge = document.getElementById('insp-peers-count');
+      if (badge) badge.textContent = '-';
+      if (inspectorActiveTab === 'insp-peers') {
+        const summary = document.getElementById('insp-peers-summary');
+        const tbody = document.getElementById('insp-peers-list');
+        if (summary) summary.textContent = 'Enjambre BitTorrent gestionado por DHT/PEX';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Los pares BitTorrent se gestionan automáticamente por DHT/PEX en el motor BT.</td></tr>';
+      }
+    } else if (currentHash && (resetView || inspectorActiveTab === 'insp-peers' || nowMs - lastSourcesRefreshAt >= INSPECTOR_SOURCES_POLL_MS)) {
+      lastSourcesRefreshAt = nowMs;
       client.call('sources.list', { fileHash: currentHash }).then(sources => {
+        if (selectedDownloadId !== targetId) return;
         const list = Array.isArray(sources) ? sources : (sources.sources || []);
         const badge = document.getElementById('insp-peers-count');
         if (badge) badge.textContent = list.length;
+        lastRenderedPeersList = list;
         if (inspectorActiveTab === 'insp-peers') {
           renderInspectorPeersTable(list);
         }
@@ -127,29 +261,77 @@ function renderExpandedParts(parts) {
   const grid = document.getElementById('insp-parts-grid');
   if (!grid) return;
   if (parts.length === 0) {
+    lastRenderedPartsKey = '';
     grid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px;">Información de partes aún no disponible para esta descarga.</div>';
+    document.getElementById('insp-parts-summary').textContent = '0 partes totales';
     return;
   }
 
+  const partsKey = parts
+    .map(p => `${p.partIndex}:${p.state || 'm'}:${p.receivedBytes || p.received_bytes || 0}:${p.availableSourceCount ?? p.available_source_count ?? -1}`)
+    .join('|');
+  if (lastRenderedPartsKey === partsKey && grid.children.length === parts.length) {
+    return;
+  }
+  lastRenderedPartsKey = partsKey;
+
   let verifiedCount = 0;
   let downloadingCount = 0;
+  let zeroSourcesCount = 0;
   let html = '';
   parts.forEach(p => {
     const state = (p.state || 'missing').toLowerCase();
-    if (state === 'verified' || state === 'completed') verifiedCount++;
-    else if (state === 'downloading') downloadingCount++;
+    const recvBytes = p.receivedBytes || p.received_bytes || 0;
+    const partSize = p.size || 0;
+    const avail = p.availableSourceCount ?? p.available_source_count;
+    const availNum = typeof avail === 'number' ? avail : -1;
 
-    html += `<div class="part-block ${state}" title="Parte #${p.partIndex}: ${state.toUpperCase()} (bytes ${formatBytes(p.verifiedBytes || 0)})"></div>`;
+    let cls = state;
+    if (state === 'verified' || state === 'completed') {
+      verifiedCount++;
+    } else if (state === 'downloading') {
+      downloadingCount++;
+    } else if (availNum === 0) {
+      cls += ' avail-zero';
+      zeroSourcesCount++;
+    } else if (availNum > 0 && availNum <= 2) {
+      cls += ' avail-rare';
+    } else if (availNum > 2 && availNum <= 6) {
+      cls += ' avail-mid';
+    } else if (availNum > 6) {
+      cls += ' avail-high';
+    }
+
+    const availText = availNum >= 0 ? ` · Fuentes: ${availNum}` : '';
+    const sizeText = partSize > 0 ? `${formatBytes(recvBytes)} / ${formatBytes(partSize)}` : formatBytes(recvBytes);
+    html += `<div class="part-block ${cls}" title="Parte #${p.partIndex}: ${state.toUpperCase()} · ${sizeText}${availText}"></div>`;
   });
   grid.innerHTML = html;
-  document.getElementById('insp-parts-summary').textContent = `${parts.length} partes totales | ${verifiedCount} verificadas | ${downloadingCount} descargando`;
+  const warnZero = zeroSourcesCount > 0 ? ` | ⚠ ${zeroSourcesCount} sin fuentes` : '';
+  document.getElementById('insp-parts-summary').textContent = `${parts.length} partes totales | ${verifiedCount} verificadas | ${downloadingCount} descargando${warnZero}`;
 }
 
-let lastRenderedPeersKey = '';
+function classifyPeerBucket(statusLower) {
+  if (statusLower === 'connected') return 'connected';
+  if (statusLower === 'allowed' || statusLower === 'candidate') return 'available';
+  return 'issues';
+}
 
 function renderInspectorPeersTable(list) {
+  lastRenderedPeersList = list;
   document.getElementById('insp-peers-count').textContent = list.length;
-  document.getElementById('insp-peers-summary').textContent = `${list.length} fuentes registradas en red`;
+
+  let cntConnected = 0;
+  let cntAvailable = 0;
+  let cntIssues = 0;
+  list.forEach(s => {
+    const b = classifyPeerBucket((s.status || 'allowed').toLowerCase());
+    if (b === 'connected') cntConnected++;
+    else if (b === 'available') cntAvailable++;
+    else cntIssues++;
+  });
+  document.getElementById('insp-peers-summary').textContent =
+    `${list.length} fuentes (${cntConnected} conectadas · ${cntAvailable} disponibles · ${cntIssues} fallos/cooldown)`;
 
   const tbody = document.getElementById('insp-peers-list');
   if (!tbody) return;
@@ -159,26 +341,58 @@ function renderInspectorPeersTable(list) {
     return;
   }
 
-  const peersKey = list.map(s => `${s.address || `${s.ip}:${s.port}`}-${s.status}-${s.failCount}-${s.cooldownUntilUnixMs}`).join('|');
-  if (lastRenderedPeersKey === peersKey && tbody.children.length === list.length) {
-    // Nada ha cambiado en la lista de pares, evitar repintado del DOM
+  const priorityRank = (st) => {
+    if (st === 'connected') return 0;
+    if (st === 'allowed' || st === 'candidate') return 1;
+    if (st === 'cooldown' || st === 'tried') return 2;
+    return 3;
+  };
+
+  const filtered = list
+    .filter(s => {
+      if (inspectorPeersFilter === 'all') return true;
+      return classifyPeerBucket((s.status || 'allowed').toLowerCase()) === inspectorPeersFilter;
+    })
+    .slice()
+    .sort((a, b) => {
+      const ra = priorityRank((a.status || 'allowed').toLowerCase());
+      const rb = priorityRank((b.status || 'allowed').toLowerCase());
+      if (ra !== rb) return ra - rb;
+      return (a.failCount || 0) - (b.failCount || 0);
+    });
+
+  if (filtered.length === 0) {
+    lastRenderedPeersKey = '';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No hay fuentes que coincidan con este filtro.</td></tr>';
+    return;
+  }
+
+  const peersKey = `${inspectorPeersFilter}:` + filtered
+    .map(s => `${s.address || `${s.ip}:${s.port}`}-${s.status}-${s.failCount}-${s.cooldownUntilUnixMs}`)
+    .join('|');
+  if (lastRenderedPeersKey === peersKey && tbody.children.length === filtered.length) {
+    // Nada ha cambiado en la lista filtrada de pares, evitar repintado del DOM
     return;
   }
   lastRenderedPeersKey = peersKey;
 
   let html = '';
-  list.forEach(s => {
-    const origin = s.origin || 'Kad / eD2k';
+  filtered.forEach(s => {
+    const origin = escapeHtml(s.origin || 'Kad / eD2k');
+    const addrText = escapeHtml(s.address || `${s.ip}:${s.port}`);
+    const swText = s.software
+      ? escapeHtml(s.software)
+      : '<span style="color: var(--text-muted);">eMule Compatible</span>';
     const status = (s.status || 'Allowed').toLowerCase();
     let statusBadge = '<span class="badge badge-wait">Disponible</span>';
     if (status === 'connected') statusBadge = '<span class="badge badge-dl">Conectado</span>';
     else if (status === 'cooldown') statusBadge = '<span class="badge badge-pause">Cooldown</span>';
-    else if (status === 'rejected') statusBadge = '<span class="badge badge-error">Rechazado</span>';
+    else if (status === 'rejected' || status === 'failed') statusBadge = '<span class="badge badge-error">Rechazado</span>';
 
     html += `
       <tr>
-        <td><code>${s.address || `${s.ip}:${s.port}`}</code></td>
-        <td>${s.software || '<span style="color: var(--text-muted);">eMule Compatible</span>'}</td>
+        <td><code>${addrText}</code></td>
+        <td>${swText}</td>
         <td><span style="font-size: 0.8rem; color: var(--text-muted);">${origin}</span></td>
         <td>${statusBadge}</td>
         <td>${s.failCount || 0}</td>
@@ -211,11 +425,102 @@ document.querySelectorAll('.insp-tab-btn').forEach(btn => {
     if (target) {
       target.style.display = 'block';
       if (inspectorActiveTab === 'insp-peers') {
-        refreshInspector(false);
+        refreshInspector(true);
+      } else if (inspectorActiveTab === 'insp-perf' && selectedDownloadId) {
+        window.renderInspectorDownloadPerf(selectedDownloadId);
       }
     }
   });
 });
+
+// Filtros rápidos de la pestaña Pares
+document.querySelectorAll('#insp-peers-filter-bar .insp-filter-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#insp-peers-filter-bar .insp-filter-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    inspectorPeersFilter = pill.dataset.pfilter || 'all';
+    renderInspectorPeersTable(lastRenderedPeersList);
+  });
+});
+
+// Botón rápido Pausar / Reanudar en la cabecera del inspector
+const togglePauseBtn = document.getElementById('btn-insp-toggle-pause');
+if (togglePauseBtn) {
+  togglePauseBtn.onclick = async () => {
+    if (!selectedDownloadId) return;
+    const wasPaused = togglePauseBtn.dataset.paused === '1';
+    togglePauseBtn.disabled = true;
+    try {
+      await client.call(wasPaused ? 'downloads.resume' : 'downloads.pause', { id: selectedDownloadId });
+      await refreshDownloads();
+      await refreshInspector(true);
+    } catch (e) {
+      appNotify('Error cambiando estado de la descarga: ' + (e.message || JSON.stringify(e)), 'error', '❌');
+    } finally {
+      togglePauseBtn.disabled = false;
+    }
+  };
+}
+
+// Cerrar inspector con la tecla Esc
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !selectedDownloadId) return;
+  const openModal = document.querySelector('.modal.active, .modal-overlay.active, dialog[open]');
+  if (openModal) return;
+  window.closeInspector();
+});
+
+// Redimensionado vertical arrastrable del inspector con persistencia en localStorage
+(function initInspectorResizer() {
+  const handle = document.getElementById('inspector-resize-handle');
+  const content = document.querySelector('#download-inspector .inspector-content');
+  if (!handle || !content) return;
+
+  try {
+    const saved = Number(localStorage.getItem('pulse_inspector_height'));
+    if (saved >= INSPECTOR_MIN_HEIGHT_PX && saved <= INSPECTOR_MAX_HEIGHT_PX) {
+      content.style.maxHeight = `${saved}px`;
+      content.style.height = `${saved}px`;
+    }
+  } catch (err) {
+    console.warn('[PulseCore] No se pudo leer altura guardada del inspector:', err);
+  }
+
+  let dragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true;
+    startY = e.clientY;
+    startH = content.getBoundingClientRect().height || 260;
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const nextH = Math.max(
+      INSPECTOR_MIN_HEIGHT_PX,
+      Math.min(INSPECTOR_MAX_HEIGHT_PX, Math.round(startH - (e.clientY - startY)))
+    );
+    content.style.maxHeight = `${nextH}px`;
+    content.style.height = `${nextH}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    try {
+      const finalH = Math.round(content.getBoundingClientRect().height);
+      if (finalH >= INSPECTOR_MIN_HEIGHT_PX) {
+        localStorage.setItem('pulse_inspector_height', String(finalH));
+      }
+    } catch (err) {
+      console.warn('[PulseCore] No se pudo guardar altura del inspector:', err);
+    }
+  });
+})();
 
 document.getElementById('btn-close-inspector').onclick = window.closeInspector;
 

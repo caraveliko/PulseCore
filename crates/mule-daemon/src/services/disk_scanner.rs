@@ -326,6 +326,8 @@ impl DiskScanner {
         // 2. Sincronización agrupada en la base SQLite (un único bloqueo para el escaneo completo)
         {
             let mut dl_svc = state.downloads.lock().await;
+            let deleted_exclusions =
+                crate::services::media_exclusions::load_deleted_media_exclusions(&dl_svc);
             let db = dl_svc.db_mut();
             let mut all_movies = db.list_media_items(Some("movie"), None).unwrap_or_default();
 
@@ -364,6 +366,24 @@ impl DiskScanner {
                     }
                     updated += 1;
                 } else {
+                    let candidate_title = if m_scan.clean_title.is_empty() {
+                        &m_scan.folder_name
+                    } else {
+                        &m_scan.clean_title
+                    };
+                    if crate::services::media_exclusions::is_media_excluded(
+                        &deleted_exclusions,
+                        "movie",
+                        candidate_title,
+                        None,
+                        m_scan.tmdb_id,
+                    ) {
+                        tracing::debug!(
+                            "[DISK_SCANNER] Omitiendo película '{}' excluida tras borrado manual",
+                            candidate_title
+                        );
+                        continue;
+                    }
                     let item = MediaItem {
                         id: Uuid::new_v4().to_string(),
                         tmdb_id: m_scan.tmdb_id,
@@ -439,6 +459,24 @@ impl DiskScanner {
                     }
                     id
                 } else {
+                    let candidate_title = if s_scan.clean_title.is_empty() {
+                        &s_scan.folder_name
+                    } else {
+                        &s_scan.clean_title
+                    };
+                    if crate::services::media_exclusions::is_media_excluded(
+                        &deleted_exclusions,
+                        "tv",
+                        candidate_title,
+                        s_scan.tvdb_id,
+                        s_scan.tmdb_id,
+                    ) {
+                        tracing::debug!(
+                            "[DISK_SCANNER] Omitiendo serie '{}' excluida tras borrado manual",
+                            candidate_title
+                        );
+                        continue;
+                    }
                     let id = Uuid::new_v4().to_string();
                     let item = MediaItem {
                         id: id.clone(),
@@ -730,7 +768,7 @@ impl DiskScanner {
                                 title: ep_title,
                                 air_date,
                                 status: "wanted".to_string(),
-                                monitored: true,
+                                monitored: item.monitored,
                                 file_path: None,
                                 original_release_name: None,
                                 download_id: None,

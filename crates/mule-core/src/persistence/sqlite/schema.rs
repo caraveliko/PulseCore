@@ -590,8 +590,84 @@ pub fn init_schema(conn: &Connection) -> Result<(), CoreError> {
         );
         CREATE INDEX IF NOT EXISTS idx_subtitle_blacklist_key
             ON subtitle_blacklist(media_key);
+
+        CREATE TABLE IF NOT EXISTS dht_torrent_catalog (
+            info_hash TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            search_text TEXT NOT NULL,
+            total_bytes INTEGER NOT NULL,
+            video_file_name TEXT NOT NULL,
+            video_file_size INTEGER NOT NULL,
+            video_file_index INTEGER NOT NULL DEFAULT 0,
+            video_file_offset INTEGER NOT NULL DEFAULT 0,
+            files_json TEXT NOT NULL DEFAULT '[]',
+            estimated_peers INTEGER NOT NULL DEFAULT 1,
+            source TEXT NOT NULL DEFAULT 'dht_bep51',
+            first_seen_ms INTEGER NOT NULL,
+            last_seen_ms INTEGER NOT NULL,
+            torrent_meta_zstd BLOB,
+            known_peers_json TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE INDEX IF NOT EXISTS idx_dht_catalog_video_size
+            ON dht_torrent_catalog(video_file_size);
+        CREATE INDEX IF NOT EXISTS idx_dht_catalog_last_seen
+            ON dht_torrent_catalog(last_seen_ms DESC);
+
+        CREATE TABLE IF NOT EXISTS dht_torrent_files (
+            info_hash TEXT NOT NULL,
+            file_index INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            search_text TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            file_offset INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (info_hash, file_index)
+        );
+        CREATE INDEX IF NOT EXISTS idx_dht_files_size
+            ON dht_torrent_files(file_size);
+
+        CREATE TABLE IF NOT EXISTS hybrid_bridges (
+            ed2k_hash TEXT NOT NULL,
+            bt_info_hash TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            bt_file_index INTEGER NOT NULL DEFAULT 0,
+            bt_file_offset INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'candidate',
+            origin TEXT NOT NULL DEFAULT 'dht_exact_size',
+            verified_chunks INTEGER NOT NULL DEFAULT 0,
+            published_kad_at_ms INTEGER,
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            PRIMARY KEY (ed2k_hash, bt_info_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_hybrid_bridges_ed2k
+            ON hybrid_bridges(ed2k_hash, status);
+        CREATE INDEX IF NOT EXISTS idx_hybrid_bridges_bt
+            ON hybrid_bridges(bt_info_hash);
         ",
     )?;
+
+    // Migración: columnas de metadatos `.torrent` comprimidos y pares conocidos en `dht_torrent_catalog`.
+    let mut stmt_dht = conn.prepare("PRAGMA table_info(dht_torrent_catalog)")?;
+    let mut rows_dht = stmt_dht.query([])?;
+    let (mut has_dht_meta, mut has_dht_peers) = (false, false);
+    while let Some(row) = rows_dht.next()? {
+        let col_name: String = row.get(1)?;
+        if col_name == "torrent_meta_zstd" {
+            has_dht_meta = true;
+        } else if col_name == "known_peers_json" {
+            has_dht_peers = true;
+        }
+    }
+    drop(rows_dht);
+    drop(stmt_dht);
+    if !has_dht_meta {
+        let _ = conn.execute_batch("ALTER TABLE dht_torrent_catalog ADD COLUMN torrent_meta_zstd BLOB;");
+    }
+    if !has_dht_peers {
+        let _ = conn.execute_batch(
+            "ALTER TABLE dht_torrent_catalog ADD COLUMN known_peers_json TEXT NOT NULL DEFAULT '[]';",
+        );
+    }
 
     // Restablece las fuentes de pares huérfanas en estado conectado al inicio (limpieza tras cierre abrupto o reinicio)
     let _ = conn.execute_batch(

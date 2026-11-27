@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use futures_util::future::join_all;
 use reqwest::Client;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, watch, Mutex};
 
 use crate::services::downloads::now_ms;
 use crate::services::scorer::{evaluate_release, ScoredRelease};
@@ -25,6 +25,8 @@ const SERVER_SEARCH_MIN_INTERVAL_MS: i64 = 1_200;
 const SERVER_SEARCH_WAIT_MAX_MS: u64 = 2_500;
 /// Ventana de silencio tras recibir un lote del servidor eD2K antes de cerrar la recogida (350 ms).
 const SERVER_SEARCH_IDLE_AFTER_HIT_MS: u64 = 350;
+/// Número máximo de resultados recuperados del catálogo DHT local sin indexadores por consulta.
+const DHT_LOCAL_SEARCH_LIMIT: usize = 50;
 
 #[derive(Clone)]
 struct CachedSearchEntry {
@@ -46,6 +48,52 @@ static SHARED_SERVER_SEARCH_CACHE: OnceLock<Mutex<HashMap<String, CachedRawEd2kE
     OnceLock::new();
 /// Puerta de serialización y cadencia para búsquedas en el servidor eD2K conectado (almacena marca temporal ms).
 static SHARED_SERVER_SEARCH_GATE: OnceLock<Mutex<i64>> = OnceLock::new();
+type KadInflightRx = watch::Receiver<Option<Vec<serde_json::Value>>>;
+type KadInflightMap = std::sync::Mutex<HashMap<String, KadInflightRx>>;
+
+/// Registro de búsquedas Kad DHT en curso por clave para deduplicar consultas concurrentes (*singleflight*).
+static SHARED_KAD_INFLIGHT: OnceLock<KadInflightMap> = OnceLock::new();
+
+fn shared_kad_inflight() -> &'static KadInflightMap {
+    SHARED_KAD_INFLIGHT.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+struct KadInflightGuard {
+    key: String,
+    tx: Option<watch::Sender<Option<Vec<serde_json::Value>>>>,
+}
+
+impl Drop for KadInflightGuard {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = shared_kad_inflight().lock() {
+            guard.remove(&self.key);
+        }
+        if let Some(tx) = self.tx.take() {
+            let _ = tx.send(Some(Vec::new()));
+        }
+    }
+}
+
+enum KadInflightSlot {
+    Leader(KadInflightGuard),
+    Follower(watch::Receiver<Option<Vec<serde_json::Value>>>),
+}
+
+fn acquire_kad_inflight_slot(kad_key: &str) -> KadInflightSlot {
+    let mut guard = match shared_kad_inflight().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(rx) = guard.get(kad_key).cloned() {
+        return KadInflightSlot::Follower(rx);
+    }
+    let (tx, rx) = watch::channel(None);
+    guard.insert(kad_key.to_string(), rx);
+    KadInflightSlot::Leader(KadInflightGuard {
+        key: kad_key.to_string(),
+        tx: Some(tx),
+    })
+}
 
 fn shared_http_client() -> &'static Client {
     SHARED_HTTP_CLIENT.get_or_init(|| {
@@ -248,19 +296,8 @@ impl IndexerAggregator {
         }
 
         // 1. Instantánea de los indexadores externos activados (bloqueo SQLite muy corto)
-        let enabled_indexers: Vec<_> = {
-            let dl_svc = state.downloads.lock().await;
-            dl_svc
-                .db()
-                .list_external_indexers()
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|idx| idx.enabled)
-                .collect()
-        };
+        let enabled_indexers = Self::load_enabled_indexers(state).await;
 
-        let encoded_q: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let cat = if is_movie { "2000" } else { "5000" };
         let profile_owned = quality_profile.to_string();
 
         // 2. Preparar la petición Kad DHT (con caché por palabra clave primaria Kad) y peticiones Torznab en paralelo
@@ -281,58 +318,56 @@ impl IndexerAggregator {
             if let Some(hit) = cached_kad {
                 return Ok(hit);
             }
-            let res = state.kad.search_keywords(query, None, None).await;
-            if let Ok(ref items) = res {
-                if !items.is_empty() {
-                    let mut guard = shared_kad_keyword_cache().lock().await;
-                    if guard.len() >= SEARCH_CACHE_MAX_ENTRIES {
-                        if let Some(oldest_key) = guard
-                            .iter()
-                            .min_by_key(|(_, e)| e.timestamp_ms)
-                            .map(|(k, _)| k.clone())
-                        {
-                            guard.remove(&oldest_key);
-                        }
-                    }
-                    guard.insert(
-                        kad_key,
-                        CachedRawEd2kEntry {
-                            timestamp_ms: now_ms(),
-                            results: items.clone(),
-                        },
-                    );
+            let mut inflight_guard = match acquire_kad_inflight_slot(&kad_key) {
+                KadInflightSlot::Follower(mut rx) => {
+                    let _ = rx.wait_for(|v| v.is_some()).await;
+                    return Ok(rx.borrow().clone().unwrap_or_default());
                 }
+                KadInflightSlot::Leader(guard) => guard,
+            };
+
+            let res = state.kad.search_keywords(query, None, None).await;
+            let items_to_notify = match &res {
+                Ok(items) => {
+                    if !items.is_empty() {
+                        let mut guard = shared_kad_keyword_cache().lock().await;
+                        if guard.len() >= SEARCH_CACHE_MAX_ENTRIES {
+                            if let Some(oldest_key) = guard
+                                .iter()
+                                .min_by_key(|(_, e)| e.timestamp_ms)
+                                .map(|(k, _)| k.clone())
+                            {
+                                guard.remove(&oldest_key);
+                            }
+                        }
+                        guard.insert(
+                            kad_key,
+                            CachedRawEd2kEntry {
+                                timestamp_ms: now_ms(),
+                                results: items.clone(),
+                            },
+                        );
+                    }
+                    items.clone()
+                }
+                Err(_) => Vec::new(),
+            };
+            if let Ok(mut guard) = shared_kad_inflight().lock() {
+                guard.remove(&inflight_guard.key);
+            }
+            if let Some(tx) = inflight_guard.tx.take() {
+                let _ = tx.send(Some(items_to_notify));
             }
             res
         };
 
         let server_fut = Self::search_ed2k_server(state, query);
+        let torznab_fut = self.query_torznab_indexers(&enabled_indexers, query, is_movie, &profile_owned);
+        let public_bt_fut =
+            crate::services::hybrid::public_search::search_public_bt_sources(state, query, is_movie);
 
-        let torznab_futs = enabled_indexers.into_iter().map(|idx| {
-            let client = self.http.clone();
-            let eq = encoded_q.clone();
-            let prof = profile_owned.clone();
-            async move {
-                let sep = if idx.base_url.contains('?') { "&" } else { "?" };
-                let url = format!(
-                    "{}{sep}t=search&q={eq}&cat={cat}",
-                    idx.base_url
-                );
-                let mut req = client.get(&url);
-                if !idx.api_key.is_empty() {
-                    req = req.header("X-Api-Key", &idx.api_key);
-                }
-                if let Ok(resp) = req.send().await {
-                    if let Ok(xml_text) = resp.text().await {
-                        return parse_torznab_feed(&xml_text, &idx.name, is_movie, &prof);
-                    }
-                }
-                Vec::new()
-            }
-        });
-
-        let (kad_outcome, server_outcome, torznab_batches) =
-            tokio::join!(kad_fut, server_fut, join_all(torznab_futs));
+        let (kad_outcome, server_outcome, torznab_batches, public_bt_hits) =
+            tokio::join!(kad_fut, server_fut, torznab_fut, public_bt_fut);
 
         let mut results = Vec::new();
         let mut seen_hashes = HashSet::new();
@@ -406,6 +441,67 @@ impl IndexerAggregator {
             }
         }
 
+        // Incorporar resultados del metabuscador público BitTorrent (apibay / yts) sin necesidad de Torznab.
+        for cand in public_bt_hits {
+            if seen_hashes.insert(cand.info_hash.clone()) {
+                let magnet = format!(
+                    "magnet:?xt=urn:btih:{}&dn={}",
+                    cand.info_hash,
+                    url::form_urlencoded::byte_serialize(cand.name.as_bytes()).collect::<String>()
+                );
+                let source_label = format!("BT/{}", cand.source);
+                let evaluated = evaluate_release(
+                    &cand.name,
+                    "torrent",
+                    &magnet,
+                    &cand.info_hash,
+                    cand.size_bytes,
+                    cand.seeders,
+                    &source_label,
+                    is_movie,
+                    quality_profile,
+                    "es",
+                );
+                results.push(evaluated);
+            }
+        }
+
+        // Incorporar resultados del catálogo Mainline DHT local (0 indexadores externos).
+        let local_dht_entries = {
+            let dl_svc = state.downloads.lock().await;
+            dl_svc
+                .db()
+                .search_dht_catalog_by_tokens(query, DHT_LOCAL_SEARCH_LIMIT)
+                .unwrap_or_default()
+        };
+        for entry in local_dht_entries {
+            if seen_hashes.insert(entry.info_hash.clone()) {
+                let magnet = format!(
+                    "magnet:?xt=urn:btih:{}&dn={}",
+                    entry.info_hash,
+                    url::form_urlencoded::byte_serialize(entry.name.as_bytes()).collect::<String>()
+                );
+                let title = if entry.video_file_name.is_empty() {
+                    &entry.name
+                } else {
+                    &entry.video_file_name
+                };
+                let evaluated = evaluate_release(
+                    title,
+                    "torrent",
+                    &magnet,
+                    &entry.info_hash,
+                    entry.video_file_size,
+                    u64::from(entry.estimated_peers.max(1)),
+                    "BT/DHT-Local",
+                    is_movie,
+                    quality_profile,
+                    "es",
+                );
+                results.push(evaluated);
+            }
+        }
+
         // Ordenar resultados: versiones válidas primero, ordenadas por puntuación descendente, luego fuentes descendentes
         results.sort_by(|a, b| {
             b.score
@@ -432,6 +528,90 @@ impl IndexerAggregator {
         }
 
         results
+    }
+
+    async fn load_enabled_indexers(state: &AppState) -> Vec<mule_core::model::ExternalIndexer> {
+        let dl_svc = state.downloads.lock().await;
+        dl_svc
+            .db()
+            .list_external_indexers()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|idx| idx.enabled)
+            .collect()
+    }
+
+    async fn query_torznab_indexers(
+        &self,
+        enabled_indexers: &[mule_core::model::ExternalIndexer],
+        query: &str,
+        is_movie: bool,
+        quality_profile: &str,
+    ) -> Vec<Vec<ScoredRelease>> {
+        if enabled_indexers.is_empty() || query.trim().is_empty() {
+            return Vec::new();
+        }
+        let encoded_q: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
+        let cat = if is_movie { "2000" } else { "5000" };
+        let futs = enabled_indexers.iter().map(|idx| {
+            let client = self.http.clone();
+            let eq = encoded_q.clone();
+            let prof = quality_profile.to_string();
+            let base_url = idx.base_url.clone();
+            let api_key = idx.api_key.clone();
+            let name = idx.name.clone();
+            async move {
+                let sep = if base_url.contains('?') { "&" } else { "?" };
+                let url = format!("{base_url}{sep}t=search&q={eq}&cat={cat}");
+                let mut req = client.get(&url);
+                if !api_key.is_empty() {
+                    req = req.header("X-Api-Key", &api_key);
+                }
+                if let Ok(resp) = req.send().await {
+                    if let Ok(xml_text) = resp.text().await {
+                        return parse_torznab_feed(&xml_text, &name, is_movie, &prof);
+                    }
+                }
+                Vec::new()
+            }
+        });
+        join_all(futs).await
+    }
+
+    /// Consulta únicamente los indexadores externos Torznab/Prowlarr habilitados y devuelve
+    /// `(resultados_torrent_deduplicados, num_indexadores_habilitados)`.
+    pub async fn search_torznab_only(
+        &self,
+        state: &AppState,
+        query: &str,
+        is_movie: bool,
+        quality_profile: &str,
+    ) -> (Vec<ScoredRelease>, usize) {
+        if matches!(
+            state.network_policy.state(),
+            mule_network_policy::NetworkState::Disabled
+                | mule_network_policy::NetworkState::ShuttingDown
+        ) {
+            return (Vec::new(), 0);
+        }
+        let enabled_indexers = Self::load_enabled_indexers(state).await;
+        let indexer_count = enabled_indexers.len();
+        if indexer_count == 0 {
+            return (Vec::new(), 0);
+        }
+        let batches = self
+            .query_torznab_indexers(&enabled_indexers, query, is_movie, quality_profile)
+            .await;
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        for batch in batches {
+            for r in batch {
+                if r.protocol == "torrent" && !r.hash.is_empty() && seen.insert(r.hash.clone()) {
+                    out.push(r);
+                }
+            }
+        }
+        (out, indexer_count)
     }
 }
 
@@ -471,13 +651,17 @@ fn parse_torznab_feed(
             .or_else(|| extract_torznab_attr(item_str, "peers"))
             .unwrap_or(1);
 
-        // Extraer hash de enlace magnet (xt=urn:btih:<hash>) o guid
-        let hash = if let Some(pos) = link.to_lowercase().find("urn:btih:") {
+        // Extraer hash de enlace magnet (xt=urn:btih:<hex|base32>), atributo Torznab `infohash` o guid
+        let raw_hash = if let Some(pos) = link.to_lowercase().find("urn:btih:") {
             let rest = &link[pos + 9..];
-            rest.split('&').next().unwrap_or("").to_lowercase()
+            rest.split('&').next().unwrap_or("").to_string()
+        } else if let Some(ih) = extract_torznab_str_attr(item_str, "infohash") {
+            ih
         } else {
             extract_xml_tag(item_str, "guid").unwrap_or_else(|| title.clone())
         };
+        let hash = crate::services::hybrid::kad_bridge::normalize_btih_token(raw_hash.trim())
+            .unwrap_or_else(|| raw_hash.trim().to_lowercase());
 
         let protocol = if link.starts_with("ed2k://") {
             "ed2k"
@@ -534,8 +718,77 @@ fn extract_xml_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
 }
 
 fn extract_torznab_attr(xml: &str, attr_name: &str) -> Option<u64> {
+    extract_torznab_str_attr(xml, attr_name).and_then(|s| s.parse().ok())
+}
+
+fn extract_torznab_str_attr(xml: &str, attr_name: &str) -> Option<String> {
     let needle = format!("name=\"{attr_name}\" value=\"");
     let start = xml.find(&needle)? + needle.len();
     let end = xml[start..].find('"')? + start;
-    xml[start..end].parse().ok()
+    Some(xml[start..end].trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn torznab_feed_extracts_infohash_attr_and_base32_magnet() {
+        let hex_hash = "0123456789abcdef0123456789abcdef01234567";
+        let raw_bytes = hex::decode(hex_hash).unwrap();
+        let b32_hash = data_encoding::BASE32_NOPAD.encode(&raw_bytes);
+
+        let xml = format!(
+            r#"<rss><channel>
+                <item>
+                    <title>Serie.S01E03.1080p.WEB-DL.mkv</title>
+                    <link>magnet:?xt=urn:btih:{b32_hash}&amp;dn=Serie</link>
+                    <size>1587832376</size>
+                    <torznab:attr name="seeders" value="14"/>
+                </item>
+                <item>
+                    <title>Pelicula.2024.1080p.BluRay.mkv</title>
+                    <link>http://127.0.0.1:9696/download/123</link>
+                    <size>4200000000</size>
+                    <torznab:attr name="infohash" value="{hex_hash}"/>
+                    <torznab:attr name="seeders" value="8"/>
+                </item>
+            </channel></rss>"#
+        );
+
+        let parsed = parse_torznab_feed(&xml, "ProwlarrTest", false, "1080p");
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].hash, hex_hash);
+        assert_eq!(parsed[0].sources, 14);
+        assert_eq!(parsed[1].hash, hex_hash);
+        assert_eq!(parsed[1].sources, 8);
+    }
+
+    #[test]
+    fn evaluates_public_bt_candidate_as_torrent_scored_release() {
+        let cand = crate::services::hybrid::public_search::PublicBtCandidate {
+            info_hash: "0123456789abcdef0123456789abcdef01234567".to_string(),
+            name: "Interstellar.2014.1080p.Castellano.BluRay.x264".to_string(),
+            size_bytes: 2_400_000_000,
+            seeders: 125,
+            source: "apibay",
+        };
+        let magnet = format!("magnet:?xt=urn:btih:{}", cand.info_hash);
+        let rel = evaluate_release(
+            &cand.name,
+            "torrent",
+            &magnet,
+            &cand.info_hash,
+            cand.size_bytes,
+            cand.seeders,
+            &format!("BT/{}", cand.source),
+            true,
+            "1080p",
+            "es",
+        );
+        assert_eq!(rel.protocol, "torrent");
+        assert_eq!(rel.indexer_name, "BT/apibay");
+        assert_eq!(rel.sources, 125);
+        assert!(!rel.is_rejected);
+    }
 }

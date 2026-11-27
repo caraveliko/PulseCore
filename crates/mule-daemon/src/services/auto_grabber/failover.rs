@@ -213,7 +213,7 @@ impl AutoGrabber {
         episode: Option<&EpisodeItem>,
     ) -> Vec<ScoredRelease> {
         let search_title = strip_trailing_year_suffix(&item.title);
-        let ext_details = state.media_metadata.get_extended_details(item).await;
+        let ext_details = super::load_extended_details_bounded(state, item).await;
         let alt_refs: Vec<&str> = ext_details
             .alternative_titles
             .iter()
@@ -350,7 +350,10 @@ impl AutoGrabber {
                 if !seen_links.insert(r.link.clone()) {
                     continue;
                 }
-                if r.is_rejected || ag_state.is_release_blacklisted(&item.id, &r.hash, &r.title) {
+                if r.is_rejected
+                    || is_single_video_file_ed2k(&r.title, &r.protocol)
+                    || ag_state.is_release_blacklisted(&item.id, &r.hash, &r.title)
+                {
                     continue;
                 }
                 if matches_season_pack_release(

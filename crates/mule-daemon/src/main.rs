@@ -493,6 +493,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let coordinator_handle = mule_daemon::services::SwarmCoordinator::start(state.clone());
     state.register_task(coordinator_handle.abort_handle()).await;
 
+    // Auto-iniciar el motor híbrido autónomo (Sabueso DHT BEP 5/51 + notas Kad + fusión real BT → eD2K)
+    let hybrid_handle = mule_daemon::services::HybridSwarmService::start(state.clone());
+    state.register_task(hybrid_handle.abort_handle()).await;
+
     // Auto-iniciar automatización multimedia autónoma (organizador + subtítulos + auto-descarga)
     let media_automation_handle = mule_daemon::services::MediaAutomation::start(state.clone());
     state.register_task(media_automation_handle.abort_handle()).await;

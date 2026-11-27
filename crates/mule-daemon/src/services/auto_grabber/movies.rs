@@ -187,7 +187,7 @@ impl AutoGrabber {
         }
 
         // Títulos alternativos y traducciones oficiales proporcionados por el servicio de metadatos
-        let ext_details = state.media_metadata.get_extended_details(item).await;
+        let ext_details = super::load_extended_details_bounded(state, item).await;
         for alt_title in &ext_details.alternative_titles {
             let clean_alt = alt_title.replace([':', '-', '\''], " ");
             if let Some(year) = item.year {
@@ -258,6 +258,18 @@ impl AutoGrabber {
             _ => item.quality_profile.clone(),
         };
 
+        super::emit_autograb_progress(
+            state,
+            "searching",
+            &item.title,
+            &format!(
+                "Consultando eD2k, Kad, BT Público, DHT Local y Torznab ({} consultas)...",
+                queries.len()
+            ),
+            20,
+            Some(json!({ "queries": queries })),
+        );
+
         let search_futs = queries
             .iter()
             .map(|q| aggregator.search_all(state, q, true, &effective_profile));
@@ -274,6 +286,7 @@ impl AutoGrabber {
         }
 
         let total_candidates = all_releases.len();
+        let sources_summary = super::summarize_release_sources(&all_releases);
         let mut rejection_counts: HashMap<String, usize> = HashMap::new();
         let mut valid_releases = Vec::new();
 
@@ -343,6 +356,27 @@ impl AutoGrabber {
             .map(|(r, c)| format!("{c}× {r}"))
             .collect();
 
+        super::emit_autograb_progress(
+            state,
+            "evaluated",
+            &item.title,
+            &format!(
+                "{total_candidates} candidatas analizadas → {valid_count} válidas{}",
+                if formatted_reasons.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", formatted_reasons.iter().take(2).cloned().collect::<Vec<_>>().join(" · "))
+                }
+            ),
+            65,
+            Some(json!({
+                "sources": sources_summary,
+                "totalCandidates": total_candidates,
+                "validCandidates": valid_count,
+                "topRejections": formatted_reasons,
+            })),
+        );
+
         if let Some(best) = valid_releases.into_iter().next() {
             // Guardar temporalmente el estado antes de `grab_release`, que lo recarga
             Self::save_state(state, ag_state).await;
@@ -358,6 +392,26 @@ impl AutoGrabber {
                     );
                 }
                 Self::save_state(state, ag_state).await;
+                super::emit_autograb_progress(
+                    state,
+                    "grabbed",
+                    &item.title,
+                    &format!(
+                        "Capturada '{}' [{} · {} · {} pts · {} fuentes]",
+                        best.title, best.quality, best.language, best.score, best.sources
+                    ),
+                    90,
+                    Some(json!({
+                        "sources": sources_summary,
+                        "protocol": best.protocol,
+                        "release": best.title,
+                        "quality": best.quality,
+                        "language": best.language,
+                        "score": best.score,
+                        "peerSources": best.sources,
+                        "indexerName": best.indexer_name,
+                    })),
+                );
                 return Some(json!({
                     "title": item.title,
                     "release": best.title,
@@ -399,6 +453,20 @@ impl AutoGrabber {
             );
         }
         Self::save_state(state, ag_state).await;
+        if let Some(diag) = ag_state.diagnostics.get(&item.id) {
+            super::emit_autograb_progress(
+                state,
+                "no_match",
+                &item.title,
+                &diag.summary_message,
+                85,
+                Some(json!({
+                    "sources": sources_summary,
+                    "totalCandidates": total_candidates,
+                    "validCandidates": 0,
+                })),
+            );
+        }
         None
     }
 }

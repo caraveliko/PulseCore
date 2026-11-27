@@ -5,6 +5,8 @@
 
 pub mod blocklist;
 pub mod config;
+pub mod dht_crawler;
+pub mod hybrid_io;
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -28,6 +30,15 @@ pub use config::{
     TorrentCapabilitiesSnapshot, TorrentError, TorrentPolicyConfig, DEFAULT_TORRENT_CLIENT_NAME,
     DEFAULT_TORRENT_PEER_LIMIT,
 };
+pub use dht_crawler::{
+    build_minimal_torrent_bytes, derive_ed2k_rendezvous_id, has_media_release_signal,
+    is_blocked_abusive_or_adult, is_clean_catalog_video, DhtHarvester, DhtHarvesterStats,
+    DhtVideoFile, DiscoveredVideoTorrent, MIN_DHT_MEDIA_VIDEO_BYTES,
+};
+pub use hybrid_io::{
+    compute_verified_file_ranges, CompletedTorrentVideo, HybridTorrentLaunchResult,
+    VerifiedTorrentFileState,
+};
 
 /// Alias compatible con versiones previas del límite por defecto de pares por torrent.
 pub const TORRENT_PEER_LIMIT: usize = DEFAULT_TORRENT_PEER_LIMIT;
@@ -43,6 +54,10 @@ const VIDEO_HEADER_WATCHDOG_MAX_CHECKS: usize = 1800;
 
 /// Prefijo máximo comprobado para distinguir un archivo disperso preasignado (todo ceros) de datos reales.
 const SPARSE_ZERO_PREFIX_BYTES: usize = 64;
+/// Tiempo máximo de espera al resolver metadatos `list_only` de un torrent híbrido auxiliar (20 s).
+const HYBRID_METADATA_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+/// Tiempo máximo de espera al resolver metadatos `list_only` antes de añadir un torrent (25 s).
+const TORRENT_METADATA_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
 
 /// Objetivo de vigilancia de cabecera para un archivo de vídeo dentro de un torrent.
 #[derive(Clone)]
@@ -631,7 +646,17 @@ impl TorrentEngine {
             peer_limit: Some(self.peer_limit),
             ..Default::default()
         };
-        let list_only = match self.session.add_torrent(add_torrent, Some(list_opts)).await? {
+        let list_only = match tokio::time::timeout(
+            TORRENT_METADATA_RESOLVE_TIMEOUT,
+            self.session.add_torrent(add_torrent, Some(list_opts)),
+        )
+        .await
+        .map_err(|_| {
+            Box::new(TorrentError::Session(format!(
+                "tiempo de espera agotado ({} s) resolviendo metadatos del torrent",
+                TORRENT_METADATA_RESOLVE_TIMEOUT.as_secs()
+            )))
+        })?? {
             AddTorrentResponse::ListOnly(resp) => resp,
             _ => {
                 return Err(Box::new(TorrentError::Session(
@@ -853,6 +878,315 @@ impl TorrentEngine {
                     .unwrap_or((0, 0));
                 (dl.saturating_add(d), ul.saturating_add(u))
             })
+        })
+    }
+
+    /// Extrae hasta `max_nodes` direcciones activas de la tabla de enrutamiento DHT de `librqbit`
+    /// para sembrar instantáneamente el Sabueso DHT sin tráfico de bootstrap adicional.
+    pub fn dht_routing_nodes(&self, max_nodes: usize) -> Vec<SocketAddr> {
+        let Some(dht) = self.session.get_dht() else {
+            return Vec::new();
+        };
+        let mut out = Vec::with_capacity(max_nodes);
+        dht.with_routing_tables(|v4, _v6| {
+            for node in v4.iter() {
+                if out.len() >= max_nodes {
+                    break;
+                }
+                let addr = node.addr();
+                if addr.port() > 0 {
+                    out.push(addr);
+                }
+            }
+        });
+        out
+    }
+
+    /// Añade un torrent auxiliar por `info_hash` (40 hex) seleccionando exclusivamente el archivo
+    /// de vídeo que coincida exactamente al byte con `expected_file_size`.
+    pub async fn add_hybrid_torrent_for_exact_size(
+        &self,
+        info_hash_hex: &str,
+        expected_file_size: u64,
+        output_folder: PathBuf,
+        initial_peers: Vec<SocketAddr>,
+    ) -> Result<HybridTorrentLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+        self.ensure_policy_active()?;
+        let normalized = info_hash_hex.trim().to_ascii_lowercase();
+        if normalized.len() != 40 || !normalized.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(Box::new(TorrentError::Session(format!(
+                "info_hash inválido para descarga híbrida: '{info_hash_hex}'"
+            ))));
+        }
+        if self.capabilities.loopback_only && initial_peers.is_empty() {
+            return Err(Box::new(TorrentError::PolicyDenied(
+                "no es posible resolver un magnet sin pares iniciales en perfil aislado loopback"
+                    .to_string(),
+            )));
+        }
+        let magnet = format!("magnet:?xt=urn:btih:{normalized}");
+        self.add_hybrid_torrent_internal(
+            AddTorrent::from_url(magnet),
+            expected_file_size,
+            output_folder,
+            initial_peers,
+        )
+        .await
+    }
+
+    /// Añade un torrent auxiliar desde los bytes de un `.torrent` seleccionando exclusivamente
+    /// el archivo de vídeo con tamaño exacto `expected_file_size` (arranque instantáneo sin re-descargar metadatos).
+    pub async fn add_hybrid_torrent_bytes_for_exact_size(
+        &self,
+        torrent_bytes: Vec<u8>,
+        expected_file_size: u64,
+        output_folder: PathBuf,
+        initial_peers: Vec<SocketAddr>,
+    ) -> Result<HybridTorrentLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+        self.ensure_policy_active()?;
+        self.add_hybrid_torrent_internal(
+            AddTorrent::from_bytes(torrent_bytes),
+            expected_file_size,
+            output_folder,
+            initial_peers,
+        )
+        .await
+    }
+
+    async fn add_hybrid_torrent_internal(
+        &self,
+        add_torrent: AddTorrent<'static>,
+        expected_file_size: u64,
+        output_folder: PathBuf,
+        initial_peers: Vec<SocketAddr>,
+    ) -> Result<HybridTorrentLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+        if output_folder
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err("Path traversal ('..') denied in hybrid torrent output folder".into());
+        }
+
+        let list_opts = AddTorrentOptions {
+            list_only: true,
+            output_folder: Some(output_folder.to_string_lossy().to_string()),
+            initial_peers: if initial_peers.is_empty() {
+                None
+            } else {
+                Some(initial_peers.clone())
+            },
+            peer_limit: Some(self.peer_limit),
+            ..Default::default()
+        };
+        let list_only = match tokio::time::timeout(
+            HYBRID_METADATA_RESOLVE_TIMEOUT,
+            self.session.add_torrent(add_torrent, Some(list_opts)),
+        )
+        .await
+        .map_err(|_| {
+            Box::new(TorrentError::Session(format!(
+                "tiempo de espera agotado ({} s) resolviendo metadatos del torrent híbrido",
+                HYBRID_METADATA_RESOLVE_TIMEOUT.as_secs()
+            )))
+        })?? {
+            AddTorrentResponse::ListOnly(resp) => resp,
+            _ => {
+                return Err(Box::new(TorrentError::Session(
+                    "se esperaba respuesta ListOnly al inspeccionar el torrent híbrido".to_string(),
+                )));
+            }
+        };
+
+        let mut offset = 0u64;
+        let mut matched: Option<(usize, u64, String, u64)> = None;
+        for (idx, fd) in list_only.info.iter_file_details().enumerate() {
+            let name = fd.filename.to_string();
+            let len = fd.len;
+            if len == expected_file_size
+                && mule_network_policy::content_policy::is_allowed_video_filename(&name)
+            {
+                matched = Some((idx, offset, name, len));
+                break;
+            }
+            offset = offset.saturating_add(len);
+        }
+
+        let (file_index, file_offset, file_name, file_size) = matched.ok_or_else(|| {
+            Box::new(TorrentError::ContentRejected(format!(
+                "ningún archivo de vídeo del torrent coincide con el tamaño exacto de {expected_file_size} bytes"
+            )))
+        })?;
+
+        let mut merged_peers = list_only.seen_peers;
+        for p in initial_peers {
+            if !merged_peers.contains(&p) {
+                merged_peers.push(p);
+            }
+        }
+
+        let resolved_add = AddTorrent::from_bytes(list_only.torrent_bytes);
+        let opts = AddTorrentOptions {
+            output_folder: Some(output_folder.to_string_lossy().to_string()),
+            overwrite: true,
+            only_files: Some(vec![file_index]),
+            initial_peers: if merged_peers.is_empty() {
+                None
+            } else {
+                Some(merged_peers)
+            },
+            peer_limit: Some(self.peer_limit),
+            ..Default::default()
+        };
+
+        let res = self.session.add_torrent(resolved_add, Some(opts)).await?;
+        let (id, handle) = match res {
+            AddTorrentResponse::Added(id, handle) => {
+                spawn_video_header_watchdog(
+                    Arc::clone(&self.session),
+                    id,
+                    handle.clone(),
+                    vec![file_index],
+                );
+                (id, handle)
+            }
+            AddTorrentResponse::AlreadyManaged(id, handle) => (id, handle),
+            AddTorrentResponse::ListOnly(_) => return Err("Hybrid torrent is list only".into()),
+        };
+
+        let info_hash = handle.info_hash().as_string();
+        if let Ok(mut guard) = self.categories.write() {
+            guard.insert(info_hash.clone(), "__hybrid__".to_string());
+        }
+
+        Ok(HybridTorrentLaunchResult {
+            torrent_id: id,
+            info_hash,
+            file_index,
+            file_offset,
+            file_name,
+            file_size,
+        })
+    }
+
+    /// Devuelve los rangos de bytes verificados por SHA-1 del archivo `file_index` de un torrent activo.
+    pub fn verified_file_state(
+        &self,
+        torrent_id: usize,
+        file_index: usize,
+    ) -> Option<VerifiedTorrentFileState> {
+        let handle = self.session.get(TorrentIdOrHash::Id(torrent_id))?;
+        let info_hash = handle.info_hash().as_string();
+        let out_dir = handle.output_folder().to_path_buf();
+        let stats = handle.stats();
+
+        let (file_path, file_size, file_offset, piece_range, piece_length) = handle
+            .with_metadata(|meta| {
+                let fi = meta.file_infos.get(file_index)?;
+                Some((
+                    out_dir.join(&fi.relative_filename),
+                    fi.len,
+                    fi.offset_in_torrent,
+                    fi.piece_range.clone(),
+                    u64::from(meta.lengths().default_piece_length()),
+                ))
+            })
+            .ok()??;
+
+        let verified_ranges = if stats.finished {
+            vec![(0, file_size)]
+        } else {
+            let api = librqbit::Api::new(Arc::clone(&self.session), None);
+            api.api_dump_haves(TorrentIdOrHash::Id(torrent_id))
+                .map(|(have, _total_pieces)| {
+                    compute_verified_file_ranges(
+                        file_offset,
+                        file_size,
+                        piece_length,
+                        piece_range,
+                        |piece_idx| have.get(piece_idx as usize).is_some_and(|b| *b),
+                    )
+                })
+                .unwrap_or_default()
+        };
+
+        Some(VerifiedTorrentFileState {
+            torrent_id,
+            info_hash,
+            file_index,
+            file_path,
+            file_size,
+            finished: stats.finished
+                || (file_size > 0
+                    && stats.file_progress.get(file_index).copied().unwrap_or(0) >= file_size),
+            peer_count: stats
+                .live
+                .as_ref()
+                .map(|l| l.snapshot.peer_stats.live as usize)
+                .unwrap_or(0),
+            download_rate_bps: stats
+                .live
+                .as_ref()
+                .map(|l| (l.download_speed.mbps * 125_000.0) as u64)
+                .unwrap_or(0),
+            verified_ranges,
+        })
+    }
+
+    /// Enumera los archivos de vídeo completamente descargados por BitTorrent (excluyendo torrents
+    /// auxiliares `__hybrid__`) para calcular su hash eD2K y sembrar el puente en Kad.
+    pub fn list_completed_video_files(&self) -> Vec<CompletedTorrentVideo> {
+        let cats = self.categories.read().ok();
+        self.session.with_torrents(|torrents| {
+            let mut out = Vec::new();
+            for (id, handle) in torrents {
+                let info_hash = handle.info_hash().as_string();
+                if cats
+                    .as_ref()
+                    .and_then(|c| c.get(&info_hash))
+                    .is_some_and(|cat| cat == "__hybrid__")
+                {
+                    continue;
+                }
+                let stats = handle.stats();
+                if !stats.finished {
+                    continue;
+                }
+                let torrent_name = handle.name().unwrap_or_else(|| "Torrent".to_string());
+                let out_dir = handle.output_folder().to_path_buf();
+                if let Ok(files) = handle.with_metadata(|meta| {
+                    meta.file_infos
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, fi)| {
+                            let rel = fi.relative_filename.to_string_lossy().into_owned();
+                            if fi.len > 0
+                                && mule_network_policy::content_policy::is_allowed_video_filename(
+                                    &rel,
+                                )
+                            {
+                                let path = out_dir.join(&fi.relative_filename);
+                                if path.is_file() {
+                                    return Some(CompletedTorrentVideo {
+                                        torrent_id: id,
+                                        info_hash: info_hash.clone(),
+                                        torrent_name: torrent_name.clone(),
+                                        file_index: idx,
+                                        file_offset: fi.offset_in_torrent,
+                                        file_name: rel,
+                                        file_path: path,
+                                        file_size: fi.len,
+                                        total_torrent_bytes: stats.total_bytes,
+                                    });
+                                }
+                            }
+                            None
+                        })
+                        .collect::<Vec<_>>()
+                }) {
+                    out.extend(files);
+                }
+            }
+            out
         })
     }
 }

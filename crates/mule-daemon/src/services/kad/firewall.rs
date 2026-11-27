@@ -33,6 +33,9 @@ use crate::services::kad_udp::{FirewallUdpResult, UdpFirewallStatus};
 /// Número de contactos consultados por ronda de comprobación (eMule
 /// `UDP_FIREWALLTEST_CLIENTSTOASK = 2`).
 const UDP_FW_CLIENTS_TO_ASK: usize = 2;
+/// Máximo de contactos candidatos examinados por ronda para conseguir hasta
+/// `UDP_FW_CLIENTS_TO_ASK` sondeos TCP válidos.
+const UDP_FW_CANDIDATE_POOL: usize = 10;
 /// Versión mínima de Kad que un candidato debe anunciar para atender una
 /// comprobación de cortafuegos UDP (eMule `KADEMLIA_VERSION6_49aBETA`).
 const MIN_FW_TEST_KAD_VERSION: u8 = 6;
@@ -49,6 +52,23 @@ const FW_UDP_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 /// Presupuesto global de comprobación (eMule: ~6 minutos antes de declarar
 /// agotado el tiempo y clasificar como tras cortafuegos).
 const FW_OVERALL_TIMEOUT: Duration = Duration::from_secs(360);
+
+/// Clasificación del fallo en una comprobación individual de cortafuegos UDP.
+enum CandidateTestError {
+    /// Fallo previo al envío de `OP_FWCHECKUDPREQ` (conexión TCP o handshake con el par remoto).
+    PreProbe(String),
+    /// `OP_FWCHECKUDPREQ` se envió al par, pero no llegó respuesta UDP dentro del tiempo límite.
+    ProbeNoResponse(String),
+}
+
+/// Resuelve el veredicto de una ronda cuando ningún candidato devolvió un datagrama UDP válido.
+fn resolve_fw_round_verdict(probes_completed: usize) -> UdpFirewallStatus {
+    if probes_completed > 0 {
+        UdpFirewallStatus::Firewalled
+    } else {
+        UdpFirewallStatus::Unverified
+    }
+}
 
 impl KadService {
     /// Establece el hash de usuario local empleado en los saludos de conexiones de prueba.
@@ -125,7 +145,7 @@ impl KadService {
                         && c.kad_id != self.local_id()
                         && seen.insert(c.ip)
                 })
-                .take(UDP_FW_CLIENTS_TO_ASK)
+                .take(UDP_FW_CANDIDATE_POOL)
                 .collect()
         };
 
@@ -136,7 +156,11 @@ impl KadService {
             return UdpFirewallStatus::Unverified;
         }
 
+        let mut probes_completed: usize = 0;
         for contact in &candidates {
+            if probes_completed >= UDP_FW_CLIENTS_TO_ASK {
+                break;
+            }
             match self
                 .fw_test_candidate(contact, tracker, intern_port, extern_port)
                 .await
@@ -168,6 +192,7 @@ impl KadService {
                         }
                         return UdpFirewallStatus::Open;
                     }
+                    probes_completed += 1;
                     tracing::warn!(
                         "Kad UDP firewall check from {} returned unusable result (error={}, port={}) — trying next candidate",
                         log_peer_ip(contact.ip),
@@ -175,9 +200,17 @@ impl KadService {
                         res.port_tested
                     );
                 }
-                Err(e) => {
+                Err(CandidateTestError::ProbeNoResponse(e)) => {
+                    probes_completed += 1;
                     tracing::debug!(
-                        "Kad UDP firewall check via {} failed: {} — trying next candidate",
+                        "Kad UDP firewall check via {} sent probe without UDP reply: {} — trying next candidate",
+                        log_peer_ip(contact.ip),
+                        e
+                    );
+                }
+                Err(CandidateTestError::PreProbe(e)) => {
+                    tracing::debug!(
+                        "Kad UDP firewall check pre-probe TCP/handshake via {} failed: {} — trying next candidate",
                         log_peer_ip(contact.ip),
                         e
                     );
@@ -185,7 +218,14 @@ impl KadService {
             }
         }
 
-        UdpFirewallStatus::Firewalled
+        let verdict = resolve_fw_round_verdict(probes_completed);
+        if verdict == UdpFirewallStatus::Unverified {
+            tracing::info!(
+                "Kad UDP firewall check inconclusive: 0/{} candidates reachable over TCP (keeping unverified)",
+                candidates.len()
+            );
+        }
+        verdict
     }
 
     /// Ejecuta una comprobación individual contra un contacto: conexión TCP → OP_HELLO →
@@ -196,9 +236,11 @@ impl KadService {
         tracker: &Arc<tokio::sync::Mutex<crate::services::kad_udp::FirewallTestTracker>>,
         intern_port: u16,
         extern_port: Option<u16>,
-    ) -> Result<FirewallUdpResult, String> {
+    ) -> Result<FirewallUdpResult, CandidateTestError> {
         let ip = IpAddr::V4(contact.ip);
-        let tcp_port = contact.tcp_port.ok_or("candidate has no TCP port")?;
+        let tcp_port = contact
+            .tcp_port
+            .ok_or_else(|| CandidateTestError::PreProbe("candidate has no TCP port".to_string()))?;
         let addr = SocketAddr::new(ip, tcp_port);
 
         // Clave de verificación UDP por candidato (GetUDPVerifyKey de eMule): los pares remotos
@@ -224,16 +266,16 @@ impl KadService {
         udp_verify_key: u32,
         intern_port: u16,
         extern_port: Option<u16>,
-    ) -> Result<FirewallUdpResult, String> {
+    ) -> Result<FirewallUdpResult, CandidateTestError> {
         let _permit = self
             .policy_mgr
             .request_tcp_connect(addr, ConnectionPurpose::Ed2kPeer)
-            .map_err(|e| format!("policy denied connect to {addr}: {e}"))?;
+            .map_err(|e| CandidateTestError::PreProbe(format!("policy denied connect to {addr}: {e}")))?;
 
         let mut stream = tokio::time::timeout(FW_TCP_CONNECT_TIMEOUT, TcpStream::connect(addr))
             .await
-            .map_err(|_| format!("TCP connect to {addr} timed out"))?
-            .map_err(|e| format!("TCP connect to {addr} refused: {e}"))?;
+            .map_err(|_| CandidateTestError::PreProbe(format!("TCP connect to {addr} timed out")))?
+            .map_err(|e| CandidateTestError::PreProbe(format!("TCP connect to {addr} refused: {e}")))?;
 
         // OP_HELLO — el par remoto comprueba nuestra versión Kad anunciada
         // (bits 0-3 de MiscOptions2) antes de aceptar OP_FWCHECKUDPREQ.
@@ -241,7 +283,7 @@ impl KadService {
         let encoder = Ed2kEncoder::default();
         let hello_pkt = encoder
             .encode_hello(&hello)
-            .map_err(|e| format!("failed to encode OP_HELLO: {e}"))?;
+            .map_err(|e| CandidateTestError::PreProbe(format!("failed to encode OP_HELLO: {e}")))?;
         let mut out = Vec::with_capacity(6 + hello_pkt.payload.len());
         out.push(hello_pkt.protocol);
         out.extend_from_slice(&(hello_pkt.frame_len() as u32).to_le_bytes());
@@ -250,7 +292,7 @@ impl KadService {
         stream
             .write_all(&out)
             .await
-            .map_err(|e| format!("failed to send OP_HELLO: {e}"))?;
+            .map_err(|e| CandidateTestError::PreProbe(format!("failed to send OP_HELLO: {e}")))?;
 
         // Esperar OP_HELLO_ANSWER (o un OP_HELLO simple — algunos clientes
         // inician su propio saludo primero).
@@ -262,10 +304,16 @@ impl KadService {
         while !hello_done {
             let read_res = tokio::time::timeout_at(deadline, stream.read(&mut raw_buf))
                 .await
-                .map_err(|_| "handshake timed out waiting for OP_HELLO_ANSWER")?
-                .map_err(|e| format!("read error during handshake: {e}"))?;
+                .map_err(|_| {
+                    CandidateTestError::PreProbe("handshake timed out waiting for OP_HELLO_ANSWER".to_string())
+                })?
+                .map_err(|e| {
+                    CandidateTestError::PreProbe(format!("read error during handshake: {e}"))
+                })?;
             if read_res == 0 {
-                return Err("peer closed connection during handshake".to_string());
+                return Err(CandidateTestError::PreProbe(
+                    "peer closed connection during handshake".to_string(),
+                ));
             }
             read_buf.extend_from_slice(&raw_buf[..read_res]);
             while let Ok(Some(pkt)) = codec.decode(&mut read_buf) {
@@ -294,10 +342,9 @@ impl KadService {
         req.extend_from_slice(&((payload.len() as u32) + 1).to_le_bytes());
         req.push(OP_FWCHECKUDPREQ);
         req.extend_from_slice(&payload);
-        stream
-            .write_all(&req)
-            .await
-            .map_err(|e| format!("failed to send OP_FWCHECKUDPREQ: {e}"))?;
+        stream.write_all(&req).await.map_err(|e| {
+            CandidateTestError::PreProbe(format!("failed to send OP_FWCHECKUDPREQ: {e}"))
+        })?;
 
         tracing::info!(
             "Kad UDP firewall check: OP_FWCHECKUDPREQ sent to {peer} (intern={intern_port}, extern={})",
@@ -308,8 +355,14 @@ impl KadService {
         // descarta la prueba si el cliente solicitante se desconecta).
         tokio::time::timeout(FW_UDP_WAIT_TIMEOUT, rx)
             .await
-            .map_err(|_| "no FIREWALLUDP datagram within timeout".to_string())?
-            .map_err(|_| "firewall test channel dropped".to_string())
+            .map_err(|_| {
+                CandidateTestError::ProbeNoResponse(
+                    "no FIREWALLUDP datagram within timeout".to_string(),
+                )
+            })?
+            .map_err(|_| {
+                CandidateTestError::ProbeNoResponse("firewall test channel dropped".to_string())
+            })
     }
 
     /// OP_HELLO mínimo para conexiones de prueba de cortafuegos — mismos flags de capacidad
@@ -362,5 +415,24 @@ impl KadService {
             server_ip: 0,
             server_port: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sin_sondeos_completados_mantiene_unverified() {
+        assert_eq!(resolve_fw_round_verdict(0), UdpFirewallStatus::Unverified);
+    }
+
+    #[test]
+    fn con_sondeos_completados_sin_datagrama_declara_firewalled() {
+        assert_eq!(resolve_fw_round_verdict(1), UdpFirewallStatus::Firewalled);
+        assert_eq!(
+            resolve_fw_round_verdict(UDP_FW_CLIENTS_TO_ASK),
+            UdpFirewallStatus::Firewalled
+        );
     }
 }

@@ -3,21 +3,24 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
+use std::time::Duration;
 use futures_util::future::join_all;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::services::downloads::now_ms;
+use crate::services::events::DaemonEvent;
 use crate::services::indexer_aggregator::IndexerAggregator;
 use crate::services::media_probe::probe_video_file;
 use crate::services::organizer::detect_quality_tag;
 use crate::services::scorer::{
     apply_strict_castilian_filter, castilian_confidence_level, evaluate_release,
-    extract_tv_episode_numbers, matches_release_with_alts, matches_release_with_options,
-    matches_season_pack_release,
-    spanish_title_search_variants, strip_trailing_year_suffix, ScoredRelease,
+    extract_tv_episode_numbers, is_single_video_file_ed2k, matches_release_with_alts,
+    matches_release_with_options, matches_season_pack_release, spanish_title_search_variants,
+    strip_trailing_year_suffix, ScoredRelease,
 };
 use crate::state::AppState;
 use mule_core::model::{EpisodeItem, MediaItem};
@@ -31,6 +34,24 @@ static AUTOGRAB_PASS_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
 fn autograb_pass_mutex() -> &'static tokio::sync::Mutex<()> {
     AUTOGRAB_PASS_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+/// Contador de peticiones manuales de AutoGrab esperando turno frente a la ronda en segundo plano.
+static MANUAL_AUTOGRAB_WAITERS: AtomicUsize = AtomicUsize::new(0);
+
+struct ManualWaiterGuard;
+
+impl ManualWaiterGuard {
+    fn new() -> Self {
+        MANUAL_AUTOGRAB_WAITERS.fetch_add(1, Ordering::Release);
+        Self
+    }
+}
+
+impl Drop for ManualWaiterGuard {
+    fn drop(&mut self) {
+        MANUAL_AUTOGRAB_WAITERS.fetch_sub(1, Ordering::Release);
+    }
 }
 
 /// Plazos de detección de bloqueo (detección de estancamiento / Stall Detection) por protocolo.
@@ -83,6 +104,90 @@ pub use state::{ActiveGrabTracker, AutoGrabberState, BlacklistedEntry, GrabDiagn
 
 /// Motor de captura automática y recuperación de descargas multimedia.
 pub struct AutoGrabber;
+
+/// Tiempo máximo de espera para cargar metadatos extendidos de una película/serie durante el Auto-Grab (6 s).
+pub(super) const AUTOGRAB_METADATA_TIMEOUT: Duration = Duration::from_secs(6);
+
+/// Carga `MediaExtendedDetails` acotado por `AUTOGRAB_METADATA_TIMEOUT` para evitar bloqueos por APIs externas.
+pub(super) async fn load_extended_details_bounded(
+    state: &AppState,
+    item: &MediaItem,
+) -> crate::services::media_metadata::MediaExtendedDetails {
+    match tokio::time::timeout(
+        AUTOGRAB_METADATA_TIMEOUT,
+        state.media_metadata.get_extended_details(item),
+    )
+    .await
+    {
+        Ok(details) => details,
+        Err(_) => {
+            tracing::debug!(
+                media_id = %item.id,
+                title = %item.title,
+                "Tiempo agotado cargando metadatos extendidos en AutoGrabber; usando metadatos locales"
+            );
+            crate::services::media_metadata::MediaExtendedDetails::default()
+        }
+    }
+}
+
+/// Emite un evento WebSocket `autograb.progress` en tiempo real para el banner visual de Cine y Series.
+pub(super) fn emit_autograb_progress(
+    state: &AppState,
+    stage: &str,
+    title: &str,
+    detail: &str,
+    percent: u8,
+    metrics: Option<Value>,
+) {
+    let title_owned = title.to_string();
+    let detail_owned = detail.to_string();
+    let stage_owned = stage.to_string();
+    DaemonEvent::Custom {
+        method: "autograb.progress".to_string(),
+        payload: json!({
+            "stage": stage_owned,
+            "title": title_owned,
+            "detail": detail_owned,
+            "percent": percent.min(100),
+            "metrics": metrics,
+            "timestampMs": now_ms(),
+        }),
+    }
+    .send(&state.event_tx);
+}
+
+/// Resume cuántos lanzamientos provienen de cada red (eD2K Servidor, Kad, BT Público, DHT Local, Torznab).
+pub(super) fn summarize_release_sources(releases: &[ScoredRelease]) -> Value {
+    let mut ed2k_server = 0usize;
+    let mut ed2k_kad = 0usize;
+    let mut bt_public = 0usize;
+    let mut bt_dht_local = 0usize;
+    let mut torznab = 0usize;
+
+    for r in releases {
+        let src = r.indexer_name.as_str();
+        if src.contains("Server") {
+            ed2k_server += 1;
+        } else if src.contains("Kad") {
+            ed2k_kad += 1;
+        } else if src.starts_with("BT/apibay") || src.starts_with("BT/yts") {
+            bt_public += 1;
+        } else if src == "BT/DHT-Local" {
+            bt_dht_local += 1;
+        } else if r.protocol == "torrent" {
+            torznab += 1;
+        }
+    }
+
+    json!({
+        "ed2kServer": ed2k_server,
+        "ed2kKad": ed2k_kad,
+        "btPublic": bt_public,
+        "btDhtLocal": bt_dht_local,
+        "torznab": torznab,
+    })
+}
 
 impl AutoGrabber {
     pub async fn load_state(state: &AppState) -> AutoGrabberState {
@@ -192,7 +297,27 @@ impl AutoGrabber {
         episode_id: Option<&str>,
         season_number: Option<u32>,
     ) -> Result<Value, String> {
-        let _pass_guard = autograb_pass_mutex().lock().await;
+        info!(
+            "[AUTO_GRAB] Solicitud manual recibida para media_id={} (temporada={:?}, episodio={:?})",
+            media_id, season_number, episode_id
+        );
+        let waiter = ManualWaiterGuard::new();
+        let _pass_guard = match autograb_pass_mutex().try_lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                emit_autograb_progress(
+                    state,
+                    "queued",
+                    "Auto-Grab manual",
+                    "Esperando turno del planificador...",
+                    5,
+                    None,
+                );
+                autograb_pass_mutex().lock().await
+            }
+        };
+        drop(waiter);
+
         aggregator.invalidate_cache().await;
         let mut ag_state = Self::load_state(state).await;
         let healed = Self::inspect_and_heal_stalled_downloads(state, &mut ag_state).await;
@@ -205,6 +330,11 @@ impl AutoGrabber {
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Media item '{media_id}' not found"))?
         };
+
+        info!(
+            "[AUTO_GRAB] Iniciando búsqueda manual para '{}' (tipo={}, perfil={})",
+            item.title, item.media_type, item.quality_profile
+        );
 
         let mut grabbed_movies = Vec::new();
         let mut grabbed_episodes = Vec::new();
@@ -227,6 +357,30 @@ impl AutoGrabber {
             .await;
         }
 
+        info!(
+            "[AUTO_GRAB] Búsqueda manual finalizada para '{}': {} película(s), {} episodio(s)/pack(s), {} reparada(s)",
+            item.title,
+            grabbed_movies.len(),
+            grabbed_episodes.len(),
+            healed.len()
+        );
+        emit_autograb_progress(
+            state,
+            "finished",
+            &item.title,
+            &format!(
+                "{} película(s) y {} episodio(s)/pack(s) capturados",
+                grabbed_movies.len(),
+                grabbed_episodes.len()
+            ),
+            100,
+            Some(json!({
+                "grabbedMovies": grabbed_movies.len(),
+                "grabbedEpisodes": grabbed_episodes.len(),
+                "healedDownloads": healed.len(),
+            })),
+        );
+
         let diag = ag_state.diagnostics.get(media_id).cloned();
         Ok(json!({
             "grabbedMovies": grabbed_movies,
@@ -242,33 +396,37 @@ impl AutoGrabber {
         aggregator: &IndexerAggregator,
         force: bool,
     ) -> Value {
-        let _pass_guard = autograb_pass_mutex().lock().await;
-        let mut ag_state = Self::load_state(state).await;
+        let (healed_downloads, media_items) = {
+            let _pass_guard = autograb_pass_mutex().lock().await;
+            let mut ag_state = Self::load_state(state).await;
 
-        // 1. Autorreparación de descargas bloqueadas (detección de estancamiento + lista negra + conmutación por error)
-        let healed_downloads = Self::inspect_and_heal_stalled_downloads(state, &mut ag_state).await;
-        if !healed_downloads.is_empty() {
-            Self::save_state(state, &ag_state).await;
-        }
+            // 1. Autorreparación de descargas bloqueadas (detección de estancamiento + lista negra + conmutación por error)
+            let healed = Self::inspect_and_heal_stalled_downloads(state, &mut ag_state).await;
+            if !healed.is_empty() {
+                Self::save_state(state, &ag_state).await;
+            }
 
-        let mut media_items = {
-            let dl_svc = state.downloads.lock().await;
-            dl_svc
-                .db()
-                .list_media_items(None, None)
-                .unwrap_or_default()
+            let mut items = {
+                let dl_svc = state.downloads.lock().await;
+                dl_svc
+                    .db()
+                    .list_media_items(None, None)
+                    .unwrap_or_default()
+            };
+
+            // 2. Cola de prioridad: procesar primero los elementos recién añadidos (0 fallos)
+            items.sort_by_key(|item| {
+                let empty_count = ag_state
+                    .diagnostics
+                    .get(&item.id)
+                    .map(|d| d.consecutive_empty_searches)
+                    .unwrap_or(0);
+                let is_wanted_priority = if item.status == "wanted" { 0 } else { 1 };
+                (is_wanted_priority, empty_count, std::cmp::Reverse(item.updated_at))
+            });
+
+            (healed, items)
         };
-
-        // 2. Cola de prioridad: procesar primero los elementos recién añadidos (0 fallos)
-        media_items.sort_by_key(|item| {
-            let empty_count = ag_state
-                .diagnostics
-                .get(&item.id)
-                .map(|d| d.consecutive_empty_searches)
-                .unwrap_or(0);
-            let is_wanted_priority = if item.status == "wanted" { 0 } else { 1 };
-            (is_wanted_priority, empty_count, std::cmp::Reverse(item.updated_at))
-        });
 
         let mut grabbed_movies = Vec::new();
         let mut grabbed_episodes = Vec::new();
@@ -277,6 +435,14 @@ impl AutoGrabber {
             if !item.monitored {
                 continue;
             }
+
+            // Ceder prioridad inmediata si hay una solicitud manual de Auto-Grab esperando turno.
+            if !force && MANUAL_AUTOGRAB_WAITERS.load(Ordering::Acquire) > 0 {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+
+            let _pass_guard = autograb_pass_mutex().lock().await;
+            let mut ag_state = Self::load_state(state).await;
 
             if item.media_type == "movie" {
                 if let Some(grabbed) =
@@ -298,6 +464,23 @@ impl AutoGrabber {
                 grabbed_episodes.append(&mut eps);
             }
         }
+
+        emit_autograb_progress(
+            state,
+            "finished",
+            "Auto-Grab finalizado",
+            &format!(
+                "{} película(s) y {} episodio(s) capturados",
+                grabbed_movies.len(),
+                grabbed_episodes.len()
+            ),
+            100,
+            Some(json!({
+                "grabbedMovies": grabbed_movies.len(),
+                "grabbedEpisodes": grabbed_episodes.len(),
+                "healedDownloads": healed_downloads.len(),
+            })),
+        );
 
         json!({
             "grabbedMovies": grabbed_movies,

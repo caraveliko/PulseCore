@@ -15,10 +15,54 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// Tamaño de cola *backlog* para el socket de escucha TCP dual-stack.
 const TCP_LISTEN_BACKLOG: i32 = 1024;
+
+/// Espera tras un error transitorio de `accept()` (p. ej. agotamiento de descriptores)
+/// para evitar bucles de CPU sin detener el listener.
+const ACCEPT_TRANSIENT_BACKOFF_MS: u64 = 100;
+
+/// Códigos POSIX/Linux de `accept(2)` que representan condiciones transitorias
+/// y pueden no mapearse a un `ErrorKind` específico en todas las plataformas.
+#[cfg(unix)]
+const ERRNO_ENOMEM: i32 = 12;
+#[cfg(unix)]
+const ERRNO_ENFILE: i32 = 23;
+#[cfg(unix)]
+const ERRNO_EMFILE: i32 = 24;
+#[cfg(unix)]
+const ERRNO_EPROTO: i32 = 71;
+#[cfg(unix)]
+const ERRNO_ENOBUFS: i32 = 105;
+
+/// Determina si un error de `accept()` es transitorio y permite reintentar
+/// sin cerrar el socket de escucha TCP.
+pub(crate) fn is_transient_accept_error(err: &std::io::Error) -> bool {
+    if matches!(
+        err.kind(),
+        std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::OutOfMemory
+    ) {
+        return true;
+    }
+
+    #[cfg(unix)]
+    if let Some(code) = err.raw_os_error() {
+        return matches!(
+            code,
+            ERRNO_ENOMEM | ERRNO_ENFILE | ERRNO_EMFILE | ERRNO_EPROTO | ERRNO_ENOBUFS
+        );
+    }
+
+    false
+}
 
 /// Enlaza un `TcpListener` de Tokio con soporte dual-stack IPv6+IPv4 (`IPV6_V6ONLY = false`)
 /// cuando se escucha en `[::]`.
@@ -361,8 +405,21 @@ impl InboundListenerService {
                                     }
                                 });
                             }
+                            Err(e) if is_transient_accept_error(&e) => {
+                                warn!(
+                                    "Error transitorio en accept() sobre {}: {}; reintentando en {} ms",
+                                    actual_addr, e, ACCEPT_TRANSIENT_BACKOFF_MS
+                                );
+                                tokio::select! {
+                                    _ = cancel_token.cancelled() => {
+                                        info!("Inbound listener cancelled by network policy / kill switch");
+                                        break;
+                                    }
+                                    _ = tokio::time::sleep(std::time::Duration::from_millis(ACCEPT_TRANSIENT_BACKOFF_MS)) => {}
+                                }
+                            }
                             Err(e) => {
-                                warn!("Error accepting inbound connection on {}: {}", actual_addr, e);
+                                error!("Error fatal en accept() sobre {}: {}", actual_addr, e);
                                 break;
                             }
                         }
@@ -410,6 +467,64 @@ impl InboundListenerService {
             active_uploads: active_snaps.len(),
             queued_uploads: queue.len(),
             upload_rate_bps: upload_rate,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clasifica_errores_transitorios_de_accept() {
+        let transitorios = [
+            std::io::ErrorKind::ConnectionAborted,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::ConnectionRefused,
+            std::io::ErrorKind::Interrupted,
+            std::io::ErrorKind::WouldBlock,
+            std::io::ErrorKind::TimedOut,
+            std::io::ErrorKind::OutOfMemory,
+        ];
+        for kind in transitorios {
+            let err = std::io::Error::new(kind, "error transitorio");
+            assert!(
+                is_transient_accept_error(&err),
+                "Se esperaba transitorio para {kind:?}"
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            for errno in [ERRNO_EMFILE, ERRNO_ENFILE, ERRNO_ENOMEM, ERRNO_ENOBUFS, ERRNO_EPROTO] {
+                let err = std::io::Error::from_raw_os_error(errno);
+                assert!(
+                    is_transient_accept_error(&err),
+                    "Se esperaba transitorio para errno {errno}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn clasifica_errores_fatales_de_accept() {
+        let fatales = [
+            std::io::ErrorKind::InvalidInput,
+            std::io::ErrorKind::BrokenPipe,
+        ];
+        for kind in fatales {
+            let err = std::io::Error::new(kind, "error fatal");
+            assert!(
+                !is_transient_accept_error(&err),
+                "Se esperaba fatal para {kind:?}"
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            // EBADF (9): descriptor de socket cerrado/inválido, irrecuperable.
+            let ebadf = std::io::Error::from_raw_os_error(9);
+            assert!(!is_transient_accept_error(&ebadf));
         }
     }
 }

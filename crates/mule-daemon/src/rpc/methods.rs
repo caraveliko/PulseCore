@@ -5,8 +5,9 @@ use serde_json::{json, Value};
 
 use crate::error::JsonRpcError;
 use crate::rpc::handlers::{
-    categories::*, downloads::*, friends::*, history::*, kad::*, lab::*, media::*, network::*,
-    notifications::*, servers::*, settings::*, shares::*, sources::*, upnp::*, updater::*,
+    categories::*, downloads::*, friends::*, history::*, hybrid::*, kad::*, lab::*, media::*,
+    network::*, notifications::*, servers::*, settings::*, shares::*, sources::*, upnp::*,
+    updater::*,
 };
 use crate::rpc::types::{JsonRpcRequest, JsonRpcResponse};
 use crate::state::AppState;
@@ -195,6 +196,11 @@ pub async fn handle_request(
         "kad.searchNotes" => handle_kad_search_notes(state, req.params).await,
         "kad.publishNote" => handle_kad_publish_note(state, req.params).await,
         "kad.bootstrapFromUrl" => handle_kad_bootstrap_from_url(state, req.params).await,
+        // Motor híbrido automático eD2K ⇄ Kad ⇄ BitTorrent sin indexadores
+        "hybrid.status" => handle_hybrid_status(state).await,
+        "hybrid.searchDht" => handle_hybrid_search_dht(state, req.params).await,
+        "hybrid.listBridges" => handle_hybrid_list_bridges(state, req.params).await,
+        "hybrid.discoverForDownload" => handle_hybrid_discover_for_download(state, req.params).await,
         // "events.subscribe" es interceptado en rpc::server::handle_socket —
         // modifica el filtro de temas por sesión, no el estado del daemon.
         #[cfg(any(feature = "debug-rpc", feature = "lab-tools"))]

@@ -10,6 +10,7 @@ pub mod downloads;
 pub mod events;
 pub(crate) mod hello_caps;
 pub mod hole_punch;
+pub mod hybrid;
 pub mod identity;
 pub mod inbound_listener;
 pub mod incoming_share;
@@ -18,6 +19,7 @@ pub mod kad;
 pub mod kad_udp;
 pub mod known_met_import;
 pub mod media_automation;
+pub mod media_exclusions;
 pub mod media_metadata;
 pub mod media_probe;
 pub(crate) mod media_search_query;
@@ -59,6 +61,7 @@ pub use downloads::{
     DownloadDetail, DownloadService, DownloadSnapshot, ImportPartMetResult, PartMetInspection,
     PartProgressSummary, SourceAvailabilitySummary,
 };
+pub use hybrid::HybridSwarmService;
 pub use inbound_listener::{InboundListenerService, InboundListenerSnapshot};
 pub use indexer_aggregator::IndexerAggregator;
 pub use media_automation::MediaAutomation;

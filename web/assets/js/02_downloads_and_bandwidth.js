@@ -672,11 +672,16 @@ function updateSparklines(downSpeed, upSpeed) {
     window.updateAtmosphereTelemetry(downSpeed, upSpeed);
   }
 
-  // Actualizar gráfica extendida del panel inspector (solo si la pestaña de rendimiento está visible)
+  // Actualizar gráfica extendida del panel inspector (por descarga si hay una seleccionada)
   const inspPerf = document.getElementById('insp-perf');
   const isPerfVisible = inspPerf && inspPerf.style.display !== 'none';
 
   if (isPerfVisible) {
+    if (selectedDownloadId && typeof window.renderInspectorDownloadPerf === 'function'
+      && window.renderInspectorDownloadPerf(selectedDownloadId)) {
+      renderBandwidthModal();
+      return;
+    }
     const perfDownEl = document.getElementById('insp-perf-down');
     if (perfDownEl) perfDownEl.textContent = formatSpeed(downSpeed);
     const perfUpEl = document.getElementById('insp-perf-up');
@@ -760,6 +765,10 @@ async function refreshDownloads() {
 
       const dlRate = dl.downloadRateBps || dl.download_rate_bps || 0;
       const ulRate = dl.uploadRateBps || dl.upload_rate_bps || 0;
+      if (typeof window.recordDownloadPerfSample === 'function') {
+        const hybridBtRate = (window.hybridActiveRatesByDownloadId && window.hybridActiveRatesByDownloadId[dl.id]) || 0;
+        window.recordDownloadPerfSample(dl.id, dlRate, hybridBtRate);
+      }
       totalDown += dlRate;
       totalUp += ulRate;
       if (isTorrent) {

@@ -382,20 +382,32 @@ if (searchInput) {
 let activeNetworkSubView = 'servers';
 
 /**
- * Cambia entre la subvista de Servidores eD2k y Red Kademlia DHT bajo la pestaña Red P2P.
+ * Cambia entre las subvistas de Servidores eD2k, Red Kademlia DHT y Motor Híbrido DHT bajo Red P2P.
  */
 function switchNetworkView(sub) {
-  activeNetworkSubView = sub === 'kad' ? 'kad' : 'servers';
-  const targetId = activeNetworkSubView === 'kad' ? 'tab-kad' : 'tab-servers';
+  if (sub === 'kad') activeNetworkSubView = 'kad';
+  else if (sub === 'hybrid') activeNetworkSubView = 'hybrid';
+  else activeNetworkSubView = 'servers';
+
+  const targetId =
+    activeNetworkSubView === 'kad'
+      ? 'tab-kad'
+      : activeNetworkSubView === 'hybrid'
+        ? 'tab-hybrid'
+        : 'tab-servers';
+
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
   const netNav = document.querySelector('.nav-btn[data-tab="tab-servers"]');
   if (netNav) netNav.classList.add('active');
   const target = document.getElementById(targetId);
   if (target) target.classList.add('active');
+
   if (activeNetworkSubView === 'kad') {
     refreshKad();
     refreshKadContacts();
+  } else if (activeNetworkSubView === 'hybrid') {
+    if (typeof refreshHybridView === 'function') refreshHybridView();
   } else {
     refreshServers();
   }
