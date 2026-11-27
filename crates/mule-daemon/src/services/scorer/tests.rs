@@ -718,3 +718,121 @@ fn test_sequel_three_never_matches_first_installment() {
         None,
     ));
 }
+
+#[test]
+fn test_anime_absolute_episode_numbering() {
+    // Formato NarutoSpain eD2K: "Naruto 1x36 ..." corresponde a S02E01 (abs 36) cuando es anime
+    assert!(matches_release_with_options(
+        "Naruto 1x36 Clones contra clones (DVD+SAT by Redencion)(Spanish-Japones)(NarutoSpain.com).avi",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((2, 1)),
+        Some(36),
+    ));
+    // Formato anime con número absoluto de 3 dígitos
+    assert!(matches_release_with_options(
+        "Naruto - 036 [1080p][Castellano].mkv",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((2, 1)),
+        Some(36),
+    ));
+    // Formato anime con número absoluto de 3 dígitos y título de episodio tras guion
+    assert!(matches_release_with_options(
+        "Naruto - 036 - Clones contra clones [1080p][Castellano].mkv",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((2, 1)),
+        Some(36),
+    ));
+    // Formato tusSeries con temporada alternativa y número absoluto entre paréntesis
+    assert!(matches_release_with_options(
+        "Naruto.7x20.(176).DVBRip.Spanish.tusSeries.com.avi",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((4, 20)),
+        Some(176),
+    ));
+    // Spin-off (Shippuden) debe seguir rechazándose aunque coincida el número absoluto
+    assert!(!matches_release_with_options(
+        "Naruto Shippuden - 036 - El regreso [1080p][Castellano].mkv",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((2, 1)),
+        Some(36),
+    ));
+    // Si NO es anime (absolute_episode = None), "1x36" NO debe coincidir con S02E01
+    assert!(!matches_release_with_options(
+        "Naruto 1x36 Clones contra clones.avi",
+        "Naruto",
+        None,
+        &[],
+        Some(2002),
+        false,
+        Some((2, 1)),
+        None,
+    ));
+}
+
+#[test]
+fn test_ed2k_healthy_sources_outscore_single_source_ghost() {
+    let ghost_1080p = evaluate_release(
+        "Naruto.01x005.1080p.WEB-DL.Castellano.x265.mkv",
+        "ed2k",
+        "ed2k://|file|a|400000000|0123456789abcdef0123456789abcdef|/",
+        "0123456789abcdef0123456789abcdef",
+        400_000_000,
+        1,
+        "eD2k/Kad",
+        false,
+        "1080p-es",
+        "es",
+    );
+    let healthy_720p = evaluate_release(
+        "Naruto.01x005.720p.Castellano.mkv",
+        "ed2k",
+        "ed2k://|file|b|400000000|abcdef0123456789abcdef0123456789|/",
+        "abcdef0123456789abcdef0123456789",
+        400_000_000,
+        8,
+        "eD2k/Server+Kad",
+        false,
+        "1080p-es",
+        "es",
+    );
+    let healthy_1080p = evaluate_release(
+        "Naruto.01x005.1080p.WEB-DL.Castellano.x265.mkv",
+        "ed2k",
+        "ed2k://|file|c|400000000|fedcba9876543210fedcba9876543210|/",
+        "fedcba9876543210fedcba9876543210",
+        400_000_000,
+        6,
+        "eD2k/Server+Kad",
+        false,
+        "1080p-es",
+        "es",
+    );
+    assert!(!ghost_1080p.is_rejected);
+    assert!(
+        healthy_720p.score > ghost_1080p.score,
+        "720p con 8 fuentes ({}) debería superar a 1080p fantasma de 1 fuente ({})",
+        healthy_720p.score,
+        ghost_1080p.score
+    );
+    assert!(healthy_1080p.score > healthy_720p.score);
+}

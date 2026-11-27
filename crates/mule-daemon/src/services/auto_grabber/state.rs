@@ -131,5 +131,32 @@ impl AutoGrabberState {
         let synthetic_hash = format!("{TITLE_BLACKLIST_PREFIX}{title_key}");
         self.blacklist_hash(target_id, &synthetic_hash, title, reason, now);
     }
+
+    /// Indica si un motivo de lista negra debe ser permanente (idioma erróneo o archivo inválido)
+    /// frente a motivos transitorios de disponibilidad o estancamiento en red P2P.
+    pub fn is_permanent_blacklist_reason(reason: &str) -> bool {
+        let lower = reason.to_lowercase();
+        lower == super::WRONG_LANGUAGE_REASON
+            || lower.contains("idioma")
+            || lower.contains("wrong_language")
+            || lower.contains("corrupt")
+            || lower.contains("fake")
+    }
+
+    /// Purga las entradas temporales de lista negra (estancamiento / sin fuentes) cuyo plazo `ttl_ms`
+    /// haya caducado, manteniendo intactas las exclusiones permanentes por idioma erróneo o archivo inválido.
+    pub fn prune_expired_blacklists(&mut self, now: i64, ttl_ms: i64) -> usize {
+        let mut pruned = 0usize;
+        self.blacklisted_hashes.retain(|_, entries| {
+            let before = entries.len();
+            entries.retain(|entry| {
+                Self::is_permanent_blacklist_reason(&entry.reason)
+                    || now.saturating_sub(entry.timestamp_ms) < ttl_ms
+            });
+            pruned += before.saturating_sub(entries.len());
+            !entries.is_empty()
+        });
+        pruned
+    }
 }
 

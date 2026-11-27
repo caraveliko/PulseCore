@@ -222,6 +222,7 @@ impl AutoGrabber {
         } else {
             Vec::new()
         };
+        let swarm_snapshot = state.peer_session.swarm_snapshot(None).await;
 
         // Construir una lista de objetivos en curso de descarga: (target_id, media_id, is_episode, title_label, download_id, has_existing_file)
         let mut downloading_targets: Vec<(String, String, bool, String, String, bool)> = Vec::new();
@@ -370,17 +371,51 @@ impl AutoGrabber {
                 None
             };
 
+            let has_active_ed2k_peer = is_ed2k
+                && swarm_snapshot.peers.iter().any(|p| {
+                    p.file_hash
+                        .as_deref()
+                        .is_some_and(|fh| fh.eq_ignore_ascii_case(&hash))
+                        && (p.queue_rank.is_some()
+                            || matches!(
+                                p.status,
+                                crate::services::peer_session::types::PeerConnectionStatus::Queued
+                                    | crate::services::peer_session::types::PeerConnectionStatus::Transferring
+                            ))
+                });
+            let (zero_sources_ms, zero_bytes_max_ms, zero_sources_label, zero_bytes_label) =
+                if is_ed2k {
+                    (
+                        STALL_ED2K_ZERO_SOURCES_MS,
+                        STALL_ED2K_ZERO_BYTES_MAX_MS,
+                        "Estancada (0% y 0 fuentes en eD2K durante >45 min)",
+                        "Estancada (0 bytes sin cola activa en eD2K durante >4 h)",
+                    )
+                } else {
+                    (
+                        STALL_BT_ZERO_SOURCES_MS,
+                        STALL_BT_ZERO_BYTES_MAX_MS,
+                        "Estancada (0% y 0 pares en BitTorrent durante >15 min)",
+                        "Estancada (0 bytes en BitTorrent durante >45 min)",
+                    )
+                };
+
             let stall_reason = if let Some(lang_r) = invalid_lang_reason {
                 Some(lang_r)
             } else if received_bytes == 0
                 && sources == 0
-                && elapsed_since_start >= STALL_ZERO_SOURCES_MS
+                && !has_active_ed2k_peer
+                && elapsed_since_start >= zero_sources_ms
             {
-                Some("Estancada (0% y 0 fuentes durante >45 min)")
-            } else if received_bytes == 0 && elapsed_since_start >= STALL_ZERO_BYTES_MAX_MS {
-                Some("Estancada (0 bytes recibidos durante >3 horas)")
+                Some(zero_sources_label)
+            } else if received_bytes == 0
+                && !has_active_ed2k_peer
+                && elapsed_since_start >= zero_bytes_max_ms
+            {
+                Some(zero_bytes_label)
             } else if received_bytes > 0
                 && sources == 0
+                && !has_active_ed2k_peer
                 && elapsed_since_progress >= STALL_PARTIAL_NO_PROGRESS_MS
             {
                 Some("Abandonada (sin avance ni fuentes durante >12 horas)")

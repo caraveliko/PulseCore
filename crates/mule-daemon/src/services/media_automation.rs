@@ -14,6 +14,8 @@ use crate::state::AppState;
 
 /// Número máximo de títulos incluidos de forma explícita en el resumen de biblioteca lista.
 const MAX_MEDIA_SUMMARY_TITLES: usize = 3;
+/// Cadencia de comprobación periódica de AutoGrabber (autocuración + rellenado de cola): 20 minutos.
+const AUTO_GRAB_TICK_SECS: u64 = 1200;
 
 fn extract_organized_titles(org_res: &serde_json::Value) -> Vec<String> {
     org_res["organized"]
@@ -145,10 +147,28 @@ impl MediaAutomation {
             tokio::time::sleep(Duration::from_secs(45)).await;
 
             let mut ticker = tokio::time::interval(Duration::from_secs(3600));
+            let mut autograb_ticker = tokio::time::interval(Duration::from_secs(AUTO_GRAB_TICK_SECS));
+            autograb_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut cycle_counter: u32 = 0;
 
             loop {
                 tokio::select! {
+                    _ = autograb_ticker.tick() => {
+                        let aggregator = IndexerAggregator::new();
+                        let grab_res = AutoGrabber::run_auto_grab_round(&state, &aggregator, false).await;
+                        let healed = grab_res["healedDownloads"].as_array().map(|a| a.len()).unwrap_or(0);
+                        let movies = grab_res["grabbedMovies"].as_array().map(|a| a.len()).unwrap_or(0);
+                        let eps = grab_res["grabbedEpisodes"].as_array().map(|a| a.len()).unwrap_or(0);
+                        if healed > 0 || movies > 0 || eps > 0 {
+                            info!(
+                                "[MEDIA_AUTOMATION] AutoGrab tick: healed={}, grabbedMovies={}, grabbedEpisodes={}",
+                                healed, movies, eps
+                            );
+                            if movies > 0 || eps > 0 {
+                                emit_media_grabbed_notification(&state, &grab_res).await;
+                            }
+                        }
+                    }
                     _ = ticker.tick() => {
                         let is_deep_scan_cycle = cycle_counter.is_multiple_of(6);
                         cycle_counter = cycle_counter.wrapping_add(1);
@@ -228,6 +248,30 @@ impl MediaAutomation {
                                 serde_json::json!({ "downloaded": [], "skipped": "disabled" })
                             };
                             emit_media_ready_notification(&state, &org_res, &sub_res).await;
+
+                            // Disparar inmediatamente una pasada de AutoGrabber en segundo plano para rellenar la cola
+                            // con los siguientes episodios pendientes de la serie (flujo continuo sin esperar al temporizador).
+                            let state_grab = state.clone();
+                            tokio::spawn(async move {
+                                let aggregator = IndexerAggregator::new();
+                                let grab_res =
+                                    AutoGrabber::run_auto_grab_round(&state_grab, &aggregator, false).await;
+                                let movies = grab_res["grabbedMovies"]
+                                    .as_array()
+                                    .map(|a| a.len())
+                                    .unwrap_or(0);
+                                let eps = grab_res["grabbedEpisodes"]
+                                    .as_array()
+                                    .map(|a| a.len())
+                                    .unwrap_or(0);
+                                if movies > 0 || eps > 0 {
+                                    info!(
+                                        "[MEDIA_AUTOMATION] Reactive auto-grabbed {} movies and {} episodes after completion",
+                                        movies, eps
+                                    );
+                                    emit_media_grabbed_notification(&state_grab, &grab_res).await;
+                                }
+                            });
                         }
                     }
                 }

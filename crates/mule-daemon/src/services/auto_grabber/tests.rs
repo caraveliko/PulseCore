@@ -43,3 +43,38 @@ use super::*;
             "Mi Serie S01E01 720p English mkv"
         ));
     }
+
+    #[test]
+    fn test_prune_expired_blacklists_keeps_language_and_expires_stalls() {
+        let mut ag_state = AutoGrabberState::default();
+        let t0 = 1_700_000_000_000i64;
+
+        ag_state.blacklist_hash(
+            "ep-1",
+            "hash_stall_old",
+            "Naruto.01x005.Castellano.mkv",
+            "Estancada (0% y 0 fuentes en eD2K durante >45 min)",
+            t0,
+        );
+        ag_state.blacklist_hash(
+            "ep-1",
+            "hash_wrong_lang_old",
+            "Naruto.01x005.Latino.mkv",
+            WRONG_LANGUAGE_REASON,
+            t0,
+        );
+        ag_state.blacklist_hash(
+            "ep-2",
+            "hash_stall_recent",
+            "Naruto.01x006.Castellano.mkv",
+            "Estancada (0 bytes sin cola activa en eD2K durante >4 h)",
+            t0 + STALL_BLACKLIST_TTL_MS - 60_000,
+        );
+
+        let now = t0 + STALL_BLACKLIST_TTL_MS + 1_000;
+        let pruned = ag_state.prune_expired_blacklists(now, STALL_BLACKLIST_TTL_MS);
+        assert_eq!(pruned, 1);
+        assert!(!ag_state.is_hash_blacklisted("ep-1", "hash_stall_old"));
+        assert!(ag_state.is_hash_blacklisted("ep-1", "hash_wrong_lang_old"));
+        assert!(ag_state.is_hash_blacklisted("ep-2", "hash_stall_recent"));
+    }

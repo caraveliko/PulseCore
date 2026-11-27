@@ -3,6 +3,17 @@
 
 use super::*;
 
+/// Número máximo de episodios buscados en una pasada forzada para evitar bloqueos largos en series extensas.
+const MAX_FORCED_EPISODES_PER_PASS: usize = 24;
+/// Número máximo de episodios buscados en una pasada automática en segundo plano.
+const MAX_AUTO_EPISODES_PER_PASS: usize = 20;
+/// Objetivo de episodios descargando simultáneamente por serie para mantener flujo continuo sin saturar la cola.
+const TARGET_ACTIVE_SERIES_DOWNLOADS: usize = 15;
+/// Concurrencia de búsquedas individuales por episodio dentro de una misma serie.
+const EPISODE_SEARCH_CONCURRENCY: usize = 4;
+/// Umbral mínimo de candidatos en el pool base de la serie antes de lanzar una segunda pasada de búsqueda.
+const MIN_BASE_SERIES_POOL_SIZE: usize = 80;
+
 impl AutoGrabber {
     /// Ejecuta la búsqueda y descarga automática para los episodios buscados de una serie de TV.
     pub(super) async fn process_series_item(
@@ -26,6 +37,17 @@ impl AutoGrabber {
             }
             dl_svc.db().get_episodes_for_media(&item.id).unwrap_or_default()
         };
+
+        let active_downloading = episodes
+            .iter()
+            .filter(|e| e.status == "downloading")
+            .count();
+        if only_episode_id.is_none()
+            && !force
+            && active_downloading >= TARGET_ACTIVE_SERIES_DOWNLOADS
+        {
+            return grabbed_episodes;
+        }
 
         let today = time::OffsetDateTime::now_utc().date();
         let today_str = format!("{today}");
@@ -81,6 +103,7 @@ impl AutoGrabber {
             .collect();
 
         // 0. Búsqueda inteligente de paquetes de temporada completa si se buscan >= 3 episodios de una misma temporada
+        let mut season_pack_pool: Vec<ScoredRelease> = Vec::new();
         if only_episode_id.is_none() {
             let mut eps_by_season: HashMap<u32, Vec<EpisodeItem>> = HashMap::new();
             for ep in &wanted_eps {
@@ -127,6 +150,7 @@ impl AutoGrabber {
                         if !seen_pack_links.insert(r.link.clone()) {
                             continue;
                         }
+                        season_pack_pool.push(r.clone());
                         if r.is_rejected || r.score < MIN_SEASON_PACK_SCORE {
                             continue;
                         }
@@ -281,7 +305,11 @@ impl AutoGrabber {
             }
         }
 
-        let batch_limit = if only_episode_id.is_some() || force { 24 } else { 8 };
+        let batch_limit = if only_episode_id.is_some() || force {
+            MAX_FORCED_EPISODES_PER_PASS
+        } else {
+            MAX_AUTO_EPISODES_PER_PASS
+        };
         let es_variants =
             spanish_title_search_variants(search_title, item.original_title.as_deref());
         let remaining_eps: Vec<EpisodeItem> = wanted_eps
@@ -291,10 +319,20 @@ impl AutoGrabber {
             .collect();
 
         // Precargar los resultados de Kad/Torznab a nivel de serie (y sus variantes en español)
-        // una sola vez para evitar N búsquedas redundantes sobre la misma palabra clave Kad de título.
+        // junto con el pool obtenido en las búsquedas de paquetes de temporada.
         let mut base_series_releases = Vec::new();
+        let mut seen_base_links = HashSet::new();
+        for r in season_pack_pool {
+            if seen_base_links.insert(r.link.clone()) {
+                base_series_releases.push(r);
+            }
+        }
         if !remaining_eps.is_empty() {
-            let mut base_queries = vec![search_title.to_string()];
+            let mut base_queries = vec![
+                search_title.to_string(),
+                format!("{search_title} castellano"),
+                format!("{search_title} spanish"),
+            ];
             if let Some(ref orig) = item.original_title {
                 let clean_orig = strip_trailing_year_suffix(orig);
                 if !clean_orig.is_empty() && !clean_orig.eq_ignore_ascii_case(search_title) {
@@ -318,7 +356,6 @@ impl AutoGrabber {
                 .iter()
                 .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
             let base_batches = join_all(base_futs).await;
-            let mut seen_base_links = HashSet::new();
             for rels in base_batches {
                 for r in rels {
                     if seen_base_links.insert(r.link.clone()) {
@@ -327,65 +364,113 @@ impl AutoGrabber {
                 }
             }
 
-            // Si solo un subconjunto de pares de indexación Kad respondió en el primer intento,
-            // realizar una segunda pasada de fusión para maximizar la cobertura de episodios.
-            if base_series_releases.len() < 150 {
+            // Si el pool inicial es escaso (ej. pocos nodos Kad respondieron), realizar una segunda
+            // pasada de fusión sobre la consulta principal para mejorar la cobertura.
+            if base_series_releases.len() < MIN_BASE_SERIES_POOL_SIZE {
                 aggregator.invalidate_cache().await;
-                let retry_futs = base_queries
-                    .iter()
-                    .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
-                for rels in join_all(retry_futs).await {
-                    for r in rels {
-                        if seen_base_links.insert(r.link.clone()) {
-                            base_series_releases.push(r);
-                        }
+                let retry_rels = aggregator
+                    .search_all(state, search_title, false, &item.quality_profile)
+                    .await;
+                for r in retry_rels {
+                    if seen_base_links.insert(r.link.clone()) {
+                        base_series_releases.push(r);
                     }
                 }
             }
         }
 
-        for ep in remaining_eps {
-            if handled_ep_ids.contains(&ep.id) {
-                continue;
-            }
-            let mut ep_queries = vec![
-                format!("{search_title} S{:02}E{:02}", ep.season_number, ep.episode_number),
-                format!("{search_title} {}x{:02}", ep.season_number, ep.episode_number),
-            ];
-            if ep.season_number >= 1 && ep.episode_number < 100 {
-                let cap_code = ep.season_number * 100 + ep.episode_number;
-                ep_queries.push(format!("{search_title} Cap.{cap_code}"));
-            }
-            for es_t in &es_variants {
-                ep_queries.push(format!(
-                    "{es_t} {}x{:02}",
-                    ep.season_number, ep.episode_number
-                ));
-                ep_queries.push(format!(
-                    "{es_t} S{:02}E{:02}",
-                    ep.season_number, ep.episode_number
-                ));
-            }
+        // Ejecutar búsquedas individuales por lotes concurrentes (solo para episodios sin coincidencia previa en el pool)
+        let pending_eps: Vec<EpisodeItem> = remaining_eps
+            .into_iter()
+            .filter(|ep| !handled_ep_ids.contains(&ep.id))
+            .collect();
 
-            let ep_futs = ep_queries
-                .iter()
-                .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
-            let ep_batches = join_all(ep_futs).await;
+        for ep_chunk in pending_eps.chunks(EPISODE_SEARCH_CONCURRENCY) {
+            if only_episode_id.is_none()
+                && (active_downloading + grabbed_episodes.len()) >= TARGET_ACTIVE_SERIES_DOWNLOADS
+            {
+                break;
+            }
+            let chunk_futs = ep_chunk.iter().map(|ep| {
+                let ep_meta_key = format!("S{:02}E{:02}", ep.season_number, ep.episode_number);
+                let abs_num = if ext_details.is_anime {
+                    ext_details
+                        .episode_meta
+                        .get(&ep_meta_key)
+                        .and_then(|m| m.absolute_episode_number)
+                } else {
+                    None
+                };
+                let has_pool_hit = base_series_releases.iter().any(|r| {
+                    !r.is_rejected
+                        && r.score >= 15
+                        && !ag_state.is_release_blacklisted(&ep.id, &r.hash, &r.title)
+                        && matches_release_with_options(
+                            &r.title,
+                            &item.title,
+                            item.original_title.as_deref(),
+                            &alt_refs,
+                            item.year,
+                            false,
+                            Some((ep.season_number, ep.episode_number)),
+                            abs_num,
+                        )
+                });
+                let es_vars = &es_variants;
+                async move {
+                    if has_pool_hit {
+                        return Vec::new();
+                    }
+                    let mut ep_queries = vec![
+                        format!("{search_title} S{:02}E{:02}", ep.season_number, ep.episode_number),
+                        format!("{search_title} {:02}x{:03}", ep.season_number, ep.episode_number),
+                        format!("{search_title} {}x{:02}", ep.season_number, ep.episode_number),
+                    ];
+                    if ep.season_number >= 1 && ep.episode_number < 100 {
+                        let cap_code = ep.season_number * 100 + ep.episode_number;
+                        ep_queries.push(format!("{search_title} Cap.{cap_code}"));
+                    }
+                    if let Some(abs) = abs_num {
+                        ep_queries.push(format!("{search_title} {abs:03}"));
+                        if abs != ep.episode_number || ep.season_number > 1 {
+                            ep_queries.push(format!("{search_title} 01x{abs:03}"));
+                            ep_queries.push(format!("{search_title} 1x{abs:02}"));
+                        }
+                    }
+                    for es_t in es_vars {
+                        ep_queries.push(format!(
+                            "{es_t} {}x{:02}",
+                            ep.season_number, ep.episode_number
+                        ));
+                        ep_queries.push(format!(
+                            "{es_t} S{:02}E{:02}",
+                            ep.season_number, ep.episode_number
+                        ));
+                    }
 
-            let mut all_releases = Vec::new();
-            let mut seen_links = HashSet::new();
-            for r in &base_series_releases {
-                if seen_links.insert(r.link.clone()) {
-                    all_releases.push(r.clone());
+                    let ep_futs = ep_queries
+                        .iter()
+                        .map(|q| aggregator.search_all(state, q, false, &item.quality_profile));
+                    join_all(ep_futs).await
                 }
-            }
-            for rels in ep_batches {
-                for r in rels {
+            });
+            let chunk_batches = join_all(chunk_futs).await;
+
+            for (ep, ep_batches) in ep_chunk.iter().zip(chunk_batches) {
+                let mut all_releases = Vec::new();
+                let mut seen_links = HashSet::new();
+                for r in &base_series_releases {
                     if seen_links.insert(r.link.clone()) {
-                        all_releases.push(r);
+                        all_releases.push(r.clone());
                     }
                 }
-            }
+                for rels in ep_batches {
+                    for r in rels {
+                        if seen_links.insert(r.link.clone()) {
+                            all_releases.push(r);
+                        }
+                    }
+                }
 
             let total_candidates = all_releases.len();
             let mut rejection_counts: HashMap<String, usize> = HashMap::new();
@@ -406,7 +491,16 @@ impl AutoGrabber {
                     *rejection_counts.entry(reason).or_insert(0) += 1;
                     continue;
                 }
-                if !matches_release_with_alts(
+                let ep_meta_key = format!("S{:02}E{:02}", ep.season_number, ep.episode_number);
+                let abs_num = if ext_details.is_anime {
+                    ext_details
+                        .episode_meta
+                        .get(&ep_meta_key)
+                        .and_then(|m| m.absolute_episode_number)
+                } else {
+                    None
+                };
+                if !matches_release_with_options(
                     &r.title,
                     &item.title,
                     item.original_title.as_deref(),
@@ -414,6 +508,7 @@ impl AutoGrabber {
                     item.year,
                     false,
                     Some((ep.season_number, ep.episode_number)),
+                    abs_num,
                 ) {
                     *rejection_counts
                         .entry("No coincide serie o número de episodio".to_string())
@@ -634,6 +729,7 @@ impl AutoGrabber {
                 show_diag.last_status = ep_status;
                 show_diag.summary_message = ep_msg;
                 show_diag.top_rejection_reasons = formatted_reasons;
+            }
             }
         }
 

@@ -73,7 +73,9 @@ pub const LOW_SPECIFICITY_WORDS: &[&str] = &[
     "season", "chapter", "capitulo", "pelicula", "movie", "film", "part", "parte",
     "secret", "secrets", "secreto", "secretos", "dark", "night", "blood", "world",
     "dead", "love", "game", "city", "house", "time", "death", "fire", "water",
-    "true", "lost", "black", "white"
+    "true", "lost", "black", "white",
+    "castellano", "spanish", "espanol", "español", "english", "dual", "vose",
+    "1080p", "720p", "2160p", "bluray", "webrip", "dvdrip", "hdtv", "x264", "x265", "hevc"
 ];
 
 /// Selecciona la palabra clave más discriminante para una búsqueda en Kad DHT.

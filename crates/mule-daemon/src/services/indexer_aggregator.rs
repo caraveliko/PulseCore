@@ -3,12 +3,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use futures_util::future::join_all;
 use reqwest::Client;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 use crate::services::downloads::now_ms;
 use crate::services::scorer::{evaluate_release, ScoredRelease};
+use crate::services::server_session::ServerConnectionStatus;
 use crate::state::AppState;
 
 /// Tiempo de espera HTTP por indexador Torznab (en segundos).
@@ -17,6 +19,12 @@ const INDEXER_HTTP_TIMEOUT_SECS: u64 = 10;
 const SEARCH_CACHE_TTL_MS: i64 = 10 * 60 * 1000;
 /// Número máximo de peticiones conservadas en la caché de indexadores.
 const SEARCH_CACHE_MAX_ENTRIES: usize = 256;
+/// Espaciado mínimo entre búsquedas `OP_SEARCHREQUEST` hacia el servidor eD2K para evitar límites de tasa (1,2 s).
+const SERVER_SEARCH_MIN_INTERVAL_MS: i64 = 1_200;
+/// Espera máxima total para recibir resultados `server.searchResult` del servidor eD2K (2,5 s).
+const SERVER_SEARCH_WAIT_MAX_MS: u64 = 2_500;
+/// Ventana de silencio tras recibir un lote del servidor eD2K antes de cerrar la recogida (350 ms).
+const SERVER_SEARCH_IDLE_AFTER_HIT_MS: u64 = 350;
 
 #[derive(Clone)]
 struct CachedSearchEntry {
@@ -24,13 +32,25 @@ struct CachedSearchEntry {
     results: Vec<ScoredRelease>,
 }
 
+#[derive(Clone)]
+struct CachedRawEd2kEntry {
+    timestamp_ms: i64,
+    results: Vec<serde_json::Value>,
+}
+
 static SHARED_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 static SHARED_SEARCH_CACHE: OnceLock<Mutex<HashMap<String, CachedSearchEntry>>> = OnceLock::new();
+static SHARED_KAD_KEYWORD_CACHE: OnceLock<Mutex<HashMap<String, CachedRawEd2kEntry>>> =
+    OnceLock::new();
+static SHARED_SERVER_SEARCH_CACHE: OnceLock<Mutex<HashMap<String, CachedRawEd2kEntry>>> =
+    OnceLock::new();
+/// Puerta de serialización y cadencia para búsquedas en el servidor eD2K conectado (almacena marca temporal ms).
+static SHARED_SERVER_SEARCH_GATE: OnceLock<Mutex<i64>> = OnceLock::new();
 
 fn shared_http_client() -> &'static Client {
     SHARED_HTTP_CLIENT.get_or_init(|| {
         Client::builder()
-            .timeout(std::time::Duration::from_secs(INDEXER_HTTP_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(INDEXER_HTTP_TIMEOUT_SECS))
             .user_agent(concat!("eMule-Rust/", env!("CARGO_PKG_VERSION"), " MediaManager"))
             .build()
             .unwrap_or_default()
@@ -39,6 +59,18 @@ fn shared_http_client() -> &'static Client {
 
 fn shared_search_cache() -> &'static Mutex<HashMap<String, CachedSearchEntry>> {
     SHARED_SEARCH_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn shared_kad_keyword_cache() -> &'static Mutex<HashMap<String, CachedRawEd2kEntry>> {
+    SHARED_KAD_KEYWORD_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn shared_server_search_cache() -> &'static Mutex<HashMap<String, CachedRawEd2kEntry>> {
+    SHARED_SERVER_SEARCH_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn shared_server_search_gate() -> &'static Mutex<i64> {
+    SHARED_SERVER_SEARCH_GATE.get_or_init(|| Mutex::new(0))
 }
 
 pub struct IndexerAggregator {
@@ -69,11 +101,130 @@ impl IndexerAggregator {
 
     /// Vacía explícitamente la caché en memoria del agregador (útil en caso de forzado manual).
     pub async fn invalidate_cache(&self) {
-        let mut guard = shared_search_cache().lock().await;
-        guard.clear();
+        {
+            let mut guard = shared_search_cache().lock().await;
+            guard.clear();
+        }
+        {
+            let mut kad_guard = shared_kad_keyword_cache().lock().await;
+            kad_guard.clear();
+        }
+        {
+            let mut srv_guard = shared_server_search_cache().lock().await;
+            srv_guard.clear();
+        }
     }
 
-    /// Busca en Kad DHT + todos los indexadores externos Torznab configurados en paralelo
+    /// Consulta el servidor eD2K conectado (`OP_SEARCHREQUEST` con filtro de vídeo) con caché
+    /// y serialización respetando el espaciado mínimo para no activar límites de tasa del servidor.
+    async fn search_ed2k_server(state: &AppState, query: &str) -> Vec<serde_json::Value> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Vec::new();
+        }
+        if state.server_session.snapshot().await.status != ServerConnectionStatus::Connected {
+            return Vec::new();
+        }
+
+        let cache_key = trimmed.to_lowercase();
+        let now = now_ms();
+        {
+            let guard = shared_server_search_cache().lock().await;
+            if let Some(entry) = guard.get(&cache_key) {
+                if now.saturating_sub(entry.timestamp_ms) < SEARCH_CACHE_TTL_MS {
+                    return entry.results.clone();
+                }
+            }
+        }
+
+        let mut last_ts = shared_server_search_gate().lock().await;
+
+        // Doble comprobación de caché tras adquirir la puerta por si otra tarea acaba de consultarlo.
+        let after_lock_now = now_ms();
+        {
+            let guard = shared_server_search_cache().lock().await;
+            if let Some(entry) = guard.get(&cache_key) {
+                if after_lock_now.saturating_sub(entry.timestamp_ms) < SEARCH_CACHE_TTL_MS {
+                    return entry.results.clone();
+                }
+            }
+        }
+
+        if state.server_session.snapshot().await.status != ServerConnectionStatus::Connected {
+            return Vec::new();
+        }
+
+        let elapsed = after_lock_now.saturating_sub(*last_ts);
+        if *last_ts > 0 && elapsed < SERVER_SEARCH_MIN_INTERVAL_MS {
+            tokio::time::sleep(Duration::from_millis(
+                (SERVER_SEARCH_MIN_INTERVAL_MS - elapsed) as u64,
+            ))
+            .await;
+        }
+
+        let mut rx = state.event_tx.subscribe();
+        let mut sq = mule_protocol::ed2k::SearchQuery::new(trimmed);
+        sq.file_type = Some("Video".to_string());
+
+        *last_ts = now_ms();
+        if state.server_session.search(sq).await.is_err() {
+            return Vec::new();
+        }
+
+        let mut collected = Vec::new();
+        let deadline = Instant::now() + Duration::from_millis(SERVER_SEARCH_WAIT_MAX_MS);
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            let wait_for = if collected.is_empty() {
+                remaining
+            } else {
+                remaining.min(Duration::from_millis(SERVER_SEARCH_IDLE_AFTER_HIT_MS))
+            };
+            match tokio::time::timeout(wait_for, rx.recv()).await {
+                Ok(Ok(raw_msg)) => {
+                    if !raw_msg.contains("\"server.searchResult\"") {
+                        continue;
+                    }
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw_msg) {
+                        if parsed["method"].as_str() == Some("server.searchResult") {
+                            if let Some(files) = parsed["params"]["files"].as_array() {
+                                collected.extend(files.iter().cloned());
+                            }
+                        }
+                    }
+                }
+                Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
+                Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => break,
+            }
+        }
+
+        {
+            let mut guard = shared_server_search_cache().lock().await;
+            if guard.len() >= SEARCH_CACHE_MAX_ENTRIES {
+                if let Some(oldest_key) = guard
+                    .iter()
+                    .min_by_key(|(_, e)| e.timestamp_ms)
+                    .map(|(k, _)| k.clone())
+                {
+                    guard.remove(&oldest_key);
+                }
+            }
+            guard.insert(
+                cache_key,
+                CachedRawEd2kEntry {
+                    timestamp_ms: now_ms(),
+                    results: collected.clone(),
+                },
+            );
+        }
+
+        collected
+    }
+
+    /// Busca en Kad DHT + servidor eD2K conectado + indexadores externos Torznab en paralelo.
     pub async fn search_all(
         &self,
         state: &AppState,
@@ -112,8 +263,50 @@ impl IndexerAggregator {
         let cat = if is_movie { "2000" } else { "5000" };
         let profile_owned = quality_profile.to_string();
 
-        // 2. Preparar la petición Kad DHT y todas las peticiones HTTP Torznab en paralelo
-        let kad_fut = state.kad.search_keywords(query, None, None);
+        // 2. Preparar la petición Kad DHT (con caché por palabra clave primaria Kad) y peticiones Torznab en paralelo
+        let (_, kad_id) = crate::services::kad::search_keywords::select_best_kad_keyword(query);
+        let kad_key = kad_id.to_hex();
+        let cached_kad = {
+            let guard = shared_kad_keyword_cache().lock().await;
+            guard.get(&kad_key).and_then(|entry| {
+                if now.saturating_sub(entry.timestamp_ms) < SEARCH_CACHE_TTL_MS {
+                    Some(entry.results.clone())
+                } else {
+                    None
+                }
+            })
+        };
+
+        let kad_fut = async {
+            if let Some(hit) = cached_kad {
+                return Ok(hit);
+            }
+            let res = state.kad.search_keywords(query, None, None).await;
+            if let Ok(ref items) = res {
+                if !items.is_empty() {
+                    let mut guard = shared_kad_keyword_cache().lock().await;
+                    if guard.len() >= SEARCH_CACHE_MAX_ENTRIES {
+                        if let Some(oldest_key) = guard
+                            .iter()
+                            .min_by_key(|(_, e)| e.timestamp_ms)
+                            .map(|(k, _)| k.clone())
+                        {
+                            guard.remove(&oldest_key);
+                        }
+                    }
+                    guard.insert(
+                        kad_key,
+                        CachedRawEd2kEntry {
+                            timestamp_ms: now_ms(),
+                            results: items.clone(),
+                        },
+                    );
+                }
+            }
+            res
+        };
+
+        let server_fut = Self::search_ed2k_server(state, query);
 
         let torznab_futs = enabled_indexers.into_iter().map(|idx| {
             let client = self.http.clone();
@@ -138,34 +331,70 @@ impl IndexerAggregator {
             }
         });
 
-        let (kad_outcome, torznab_batches) = tokio::join!(kad_fut, join_all(torznab_futs));
+        let (kad_outcome, server_outcome, torznab_batches) =
+            tokio::join!(kad_fut, server_fut, join_all(torznab_futs));
 
         let mut results = Vec::new();
         let mut seen_hashes = HashSet::new();
 
-        if let Ok(kad_res) = kad_outcome {
-            for r in kad_res {
+        // Fusionar resultados eD2K de Kad DHT y del servidor eD2K por hash conservando el máximo de fuentes reales.
+        let mut ed2k_merged: HashMap<String, (String, u64, u64, bool, bool)> = HashMap::new();
+        let mut insert_ed2k_raw = |items: Vec<serde_json::Value>, is_server: bool| {
+            for r in items {
                 let hash = r["fileHash"].as_str().unwrap_or("").to_lowercase();
                 let name = r["fileName"].as_str().unwrap_or("");
                 let size = r["fileSize"].as_u64().unwrap_or(0);
                 let sources = r["sourceCount"].as_u64().unwrap_or(1);
-
-                if !hash.is_empty() && !name.is_empty() && seen_hashes.insert(hash.clone()) {
-                    let ed2k_link = format!("ed2k://|file|{name}|{size}|{hash}|/");
-                    let evaluated = evaluate_release(
-                        name,
-                        "ed2k",
-                        &ed2k_link,
-                        &hash,
-                        size,
-                        sources,
-                        "eD2k/Kad",
-                        is_movie,
-                        quality_profile,
-                        "es",
-                    );
-                    results.push(evaluated);
+                if hash.is_empty() || name.is_empty() {
+                    continue;
                 }
+                ed2k_merged
+                    .entry(hash)
+                    .and_modify(|e| {
+                        if e.1 == 0 && size > 0 {
+                            e.1 = size;
+                        }
+                        if sources > e.2 {
+                            e.2 = sources;
+                        }
+                        if is_server {
+                            e.4 = true;
+                        } else {
+                            e.3 = true;
+                        }
+                    })
+                    .or_insert_with(|| (name.to_string(), size, sources, !is_server, is_server));
+            }
+        };
+
+        if let Ok(kad_res) = kad_outcome {
+            insert_ed2k_raw(kad_res, false);
+        }
+        if !server_outcome.is_empty() {
+            insert_ed2k_raw(server_outcome, true);
+        }
+
+        for (hash, (name, size, sources, from_kad, from_server)) in ed2k_merged {
+            if seen_hashes.insert(hash.clone()) {
+                let source_label = match (from_server, from_kad) {
+                    (true, true) => "eD2k/Server+Kad",
+                    (true, false) => "eD2k/Server",
+                    _ => "eD2k/Kad",
+                };
+                let ed2k_link = format!("ed2k://|file|{name}|{size}|{hash}|/");
+                let evaluated = evaluate_release(
+                    &name,
+                    "ed2k",
+                    &ed2k_link,
+                    &hash,
+                    size,
+                    sources,
+                    source_label,
+                    is_movie,
+                    quality_profile,
+                    "es",
+                );
+                results.push(evaluated);
             }
         }
 

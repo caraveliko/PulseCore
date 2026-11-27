@@ -58,6 +58,8 @@ pub struct EpisodeRichMeta {
     pub image_url: Option<String>,
     pub runtime_mins: Option<u32>,
     pub air_date: Option<String>,
+    #[serde(default)]
+    pub absolute_episode_number: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -91,6 +93,8 @@ pub struct MediaExtendedDetails {
     pub digital_release_date: Option<String>,
     #[serde(default)]
     pub release_status: Option<String>,
+    #[serde(default)]
+    pub is_anime: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1350,9 +1354,19 @@ impl MediaMetadataService {
             .await;
 
         if let Some(genres) = val["genres"].as_array() {
-            details.genres = genres
+            let raw_genres: Vec<&str> = genres.iter().filter_map(|g| g.as_str()).collect();
+            let has_anime_genre = raw_genres.iter().any(|g| g.eq_ignore_ascii_case("anime"));
+            let has_animation_genre = raw_genres
                 .iter()
-                .filter_map(|g| g.as_str().map(translate_genre_to_spanish))
+                .any(|g| g.eq_ignore_ascii_case("animation") || g.eq_ignore_ascii_case("animación"));
+            let is_japanese = details
+                .original_language
+                .as_deref()
+                .is_some_and(|l| matches!(l.to_ascii_lowercase().as_str(), "jpn" | "ja" | "japanese"));
+            details.is_anime = has_anime_genre || (has_animation_genre && is_japanese);
+            details.genres = raw_genres
+                .into_iter()
+                .map(translate_genre_to_spanish)
                 .collect();
         }
 
@@ -1421,6 +1435,10 @@ impl MediaMetadataService {
                             .as_str()
                             .filter(|s| !s.is_empty())
                             .map(String::from),
+                        absolute_episode_number: ep["absoluteEpisodeNumber"]
+                            .as_u64()
+                            .filter(|&n| n > 0)
+                            .map(|n| n as u32),
                     },
                 );
             }

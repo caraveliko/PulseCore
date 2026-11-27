@@ -468,6 +468,61 @@ fn matches_tv_episode_marker(candidate_title: &str, season: u32, episode: u32) -
     extract_tv_episode_numbers(candidate_title, season).contains(&episode)
 }
 
+/// Comprueba si el título candidato coincide con un episodio de anime por temporada+episodio
+/// o por su número absoluto (`1x36`, `036`, `- 36`, `[036]`, `Cap.36`, `E036`, `EP36`).
+fn matches_anime_episode_marker(
+    candidate_title: &str,
+    season: u32,
+    episode: u32,
+    absolute_episode: Option<u32>,
+) -> bool {
+    if matches_tv_episode_marker(candidate_title, season, episode) {
+        return true;
+    }
+    let Some(abs_ep) = absolute_episode else {
+        return false;
+    };
+    if abs_ep == 0 {
+        return false;
+    }
+    // 1. Formato español/anime frecuente en eD2K: "1x36", "1x105", "S01E36", "Cap.136"
+    if matches_tv_episode_marker(candidate_title, 1, abs_ep) {
+        return true;
+    }
+
+    // 2. Numeración absoluta suelta ("Naruto - 036", "Naruto 036 [1080p]", "Naruto Cap.36", "Naruto E036")
+    let norm = normalize_accents_and_symbols(candidate_title);
+    let words: Vec<&str> = norm.split_whitespace().collect();
+    for (idx, &w) in words.iter().enumerate() {
+        // Ignorar si va precedido de palabra de temporada (p. ej. "Temporada 2")
+        if idx > 0 && matches!(words[idx - 1], "temporada" | "season" | "temp") {
+            continue;
+        }
+        // Formatos con prefijo explícito: e036, ep036
+        if let Some(rest) = w.strip_prefix("ep").or_else(|| w.strip_prefix('e')) {
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                if let Ok(n) = rest.parse::<u32>() {
+                    if n == abs_ep {
+                        return true;
+                    }
+                }
+            }
+        }
+        // Token numérico puro (excluyendo años 1900..=2099, resoluciones y códecs)
+        if w.chars().all(|c| c.is_ascii_digit()) {
+            if let Ok(n) = w.parse::<u32>() {
+                if n == abs_ep
+                    && !matches!(n, 264 | 265 | 480 | 576 | 720 | 1080 | 2160)
+                    && !(1900..=2099).contains(&n)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Comprueba si una versión corresponde a un paquete de temporada completa para la serie y temporada dadas.
 pub fn matches_season_pack_release(
     candidate_title: &str,
@@ -483,6 +538,7 @@ pub fn matches_season_pack_release(
         &[],
         expected_year,
         false,
+        None,
     ) {
         return false;
     }
@@ -514,6 +570,7 @@ pub fn matches_season_pack_release(
     covered_eps.len() >= 4 && covered_eps.contains(&1)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn matches_series_or_movie_title_tokens(
     candidate_title: &str,
     expected_title: &str,
@@ -521,6 +578,7 @@ fn matches_series_or_movie_title_tokens(
     alternative_titles: &[&str],
     expected_year: Option<u32>,
     is_movie: bool,
+    absolute_episode: Option<u32>,
 ) -> bool {
     let (cand_main_tokens, cand_alt_tokens, cand_years) =
         parse_candidate_release_structure(candidate_title);
@@ -728,17 +786,48 @@ fn matches_series_or_movie_title_tokens(
             return false;
         }
 
-        if target_tokens.len() <= 2 {
-            let has_foreign_word = segment_tokens
+        let is_abs_ep_token = |cw: &str| -> bool {
+            let Some(abs_ep) = absolute_episode else {
+                return false;
+            };
+            let num_str = cw
+                .strip_prefix("ep")
+                .or_else(|| cw.strip_prefix('e'))
+                .unwrap_or(cw);
+            !num_str.is_empty()
+                && num_str.chars().all(|c| c.is_ascii_digit())
+                && num_str.parse::<u32>().ok() == Some(abs_ep)
+        };
+
+        // En anime con numeración absoluta (p. ej. "Naruto - 036 - Clones contra clones"), los tokens
+        // posteriores al número absoluto pertenecen al título del episodio y no al título de la serie.
+        let effective_segment: &[String] = if absolute_episode.is_some() {
+            if let Some(abs_pos) = segment_tokens
                 .iter()
-                .any(|cw| !allowed_union.contains(&cw.as_str()));
+                .enumerate()
+                .skip(1)
+                .find(|(_, cw)| is_abs_ep_token(cw))
+                .map(|(idx, _)| idx)
+            {
+                &segment_tokens[..abs_pos]
+            } else {
+                segment_tokens
+            }
+        } else {
+            segment_tokens
+        };
+
+        if target_tokens.len() <= 2 {
+            let has_foreign_word = effective_segment
+                .iter()
+                .any(|cw| !allowed_union.contains(&cw.as_str()) && !is_abs_ep_token(cw));
             if has_foreign_word {
                 return false;
             }
         } else {
-            let foreign_count = segment_tokens
+            let foreign_count = effective_segment
                 .iter()
-                .filter(|cw| !allowed_union.contains(&cw.as_str()))
+                .filter(|cw| !allowed_union.contains(&cw.as_str()) && !is_abs_ep_token(cw))
                 .count();
             if foreign_count > 1 {
                 return false;
@@ -813,9 +902,32 @@ pub fn matches_release_with_alts(
     is_movie: bool,
     season_episode: Option<(u32, u32)>,
 ) -> bool {
+    matches_release_with_options(
+        candidate_title,
+        expected_title,
+        expected_original_title,
+        alternative_titles,
+        expected_year,
+        is_movie,
+        season_episode,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn matches_release_with_options(
+    candidate_title: &str,
+    expected_title: &str,
+    expected_original_title: Option<&str>,
+    alternative_titles: &[&str],
+    expected_year: Option<u32>,
+    is_movie: bool,
+    season_episode: Option<(u32, u32)>,
+    absolute_episode: Option<u32>,
+) -> bool {
     if !is_movie {
         if let Some((season, episode)) = season_episode {
-            if !matches_tv_episode_marker(candidate_title, season, episode) {
+            if !matches_anime_episode_marker(candidate_title, season, episode, absolute_episode) {
                 return false;
             }
         }
@@ -828,6 +940,7 @@ pub fn matches_release_with_alts(
         alternative_titles,
         expected_year,
         is_movie,
+        absolute_episode,
     )
 }
 

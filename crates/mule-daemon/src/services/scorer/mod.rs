@@ -29,7 +29,8 @@ mod tests;
 pub use dictionaries::spanish_title_search_variants;
 pub use matching::{
     clean_title_tokens, extract_tv_episode_numbers, matches_release, matches_release_with_alts,
-    matches_season_pack_release, normalize_accents_and_symbols, strip_trailing_year_suffix,
+    matches_release_with_options, matches_season_pack_release, normalize_accents_and_symbols,
+    strip_trailing_year_suffix,
 };
 
 use dictionaries::{FORBIDDEN_EXTENSIONS, TRUSTED_RELEASE_GROUPS};
@@ -50,6 +51,12 @@ const STRICT_CASTILIAN_VERIFIED_BONUS: i32 = 30;
 const STRICT_CASTILIAN_DUAL_BONUS: i32 = 10;
 /// Puntuación asignada a los lanzamientos descartados por el filtro estricto de Castellano de España.
 const STRICT_CASTILIAN_REJECTED_SCORE: i32 = -999;
+/// Penalización en eD2K cuando solo se detecta 1 fuente (alto riesgo de par desconectado o LowID).
+const ED2K_SINGLE_SOURCE_PENALTY: i32 = 30;
+/// Bonificación en eD2K para lanzamientos con disponibilidad saludable (3 a 5 fuentes).
+const ED2K_HEALTHY_SOURCES_BONUS: i32 = 20;
+/// Bonificación en eD2K para lanzamientos con alta disponibilidad (6 o más fuentes).
+const ED2K_STRONG_SOURCES_BONUS: i32 = 35;
 
 /// Comprueba si el título o el indexador pertenecen a una fuente española de confianza conocida.
 fn is_trusted_spanish_source(lower_title: &str, indexer_name: &str) -> bool {
@@ -174,10 +181,12 @@ pub fn evaluate_release(
         ));
     }
 
-    // 3. Palabras clave conocidas de falsificaciones
+    // 3. Palabras clave conocidas de falsificaciones y contenido prohibido/spam
     for bad in &[
         "codec", "password", "contraseña", "crack", "keygen", "virus",
-        "setup.exe", "install.exe", "wmv-codec", "drm-protected", "password.txt"
+        "setup.exe", "install.exe", "wmv-codec", "drm-protected", "password.txt",
+        "pthc", "pedofilia", "pedophilia", "hebephilia", "hussyfan", "r@ygold",
+        "babyshivid", "teen anal",
     ] {
         if lower.contains(bad) && !is_rejected {
             is_rejected = true;
@@ -384,8 +393,18 @@ pub fn evaluate_release(
         score += 30;
     }
 
-    // 7. Bonificación por fuentes / seeders (hasta 40 pts)
+    // 7. Bonificación por fuentes / seeders (hasta 40 pts) y ajuste eD2K por disponibilidad real
     score += (sources.min(20) * 2) as i32;
+    if protocol == "ed2k" {
+        if sources <= 1 {
+            // Una única fuente reportada en Kad/servidor suele corresponder a pares desconectados o LowID
+            score -= ED2K_SINGLE_SOURCE_PENALTY;
+        } else if sources >= 6 {
+            score += ED2K_STRONG_SOURCES_BONUS;
+        } else if sources >= 3 {
+            score += ED2K_HEALTHY_SOURCES_BONUS;
+        }
+    }
 
     // 8. Bonificación de velocidad de protocolo BitTorrent (+10 pts si hay muchos seeders)
     if protocol == "torrent" && sources >= 5 {

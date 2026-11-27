@@ -15,7 +15,8 @@ use crate::services::media_probe::probe_video_file;
 use crate::services::organizer::detect_quality_tag;
 use crate::services::scorer::{
     apply_strict_castilian_filter, castilian_confidence_level, evaluate_release,
-    extract_tv_episode_numbers, matches_release_with_alts, matches_season_pack_release,
+    extract_tv_episode_numbers, matches_release_with_alts, matches_release_with_options,
+    matches_season_pack_release,
     spanish_title_search_variants, strip_trailing_year_suffix, ScoredRelease,
 };
 use crate::state::AppState;
@@ -32,10 +33,19 @@ fn autograb_pass_mutex() -> &'static tokio::sync::Mutex<()> {
     AUTOGRAB_PASS_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
-/// Plazos de detección de bloqueo (detección de estancamiento / Stall Detection).
-pub(super) const STALL_ZERO_SOURCES_MS: i64 = 45 * 60 * 1000; // 45 min a 0 bytes y 0 fuentes
-pub(super) const STALL_ZERO_BYTES_MAX_MS: i64 = 3 * 3600 * 1000; // 3 h a 0 bytes incluso con fuentes fantasma
-pub(super) const STALL_PARTIAL_NO_PROGRESS_MS: i64 = 12 * 3600 * 1000; // 12 h sin avance y 0 fuentes
+/// Plazos de detección de bloqueo (detección de estancamiento / Stall Detection) por protocolo.
+/// Ventana sin fuentes ni bytes en eD2K antes de considerar la descarga estancada (45 min).
+pub(super) const STALL_ED2K_ZERO_SOURCES_MS: i64 = 45 * 60 * 1000;
+/// Ventana máxima a 0 bytes en eD2K sin cola remota (`QR`) activa antes de cambiar de versión (4 h).
+pub(super) const STALL_ED2K_ZERO_BYTES_MAX_MS: i64 = 4 * 3600 * 1000;
+/// Ventana sin pares ni bytes en BitTorrent antes de considerar la descarga estancada (15 min).
+pub(super) const STALL_BT_ZERO_SOURCES_MS: i64 = 15 * 60 * 1000;
+/// Ventana máxima a 0 bytes en BitTorrent antes de cambiar de versión (45 min).
+pub(super) const STALL_BT_ZERO_BYTES_MAX_MS: i64 = 45 * 60 * 1000;
+/// Ventana sin avance ni fuentes para una descarga parcial antes de descartarla (12 h).
+pub(super) const STALL_PARTIAL_NO_PROGRESS_MS: i64 = 12 * 3600 * 1000;
+/// Tiempo de vida de las entradas temporales en lista negra por estancamiento/falta de fuentes (24 h).
+pub(super) const STALL_BLACKLIST_TTL_MS: i64 = 24 * 3600 * 1000;
 
 /// Intervalo entre dos comprobaciones de mejora de calidad/idioma (12 h).
 pub(super) const UPGRADE_CHECK_INTERVAL_MS: i64 = 12 * 3600 * 1000;
@@ -54,10 +64,10 @@ pub(super) const MIN_STRICT_REPLACEMENT_SCORE: i32 = 15;
 
 /// Intervalos de retroceso exponencial (en ms) cuando no se encuentra ninguna versión válida.
 pub(super) const BACKOFF_STEPS_MS: &[i64] = &[
-    30 * 60 * 1000,      // 1er échec : 30 min
-    2 * 3600 * 1000,     // 2e échec : 2h
-    6 * 3600 * 1000,     // 3e échec : 6h
-    12 * 3600 * 1000,    // 4e+ échec : 12h
+    20 * 60 * 1000,      // 1.er fallo: 20 min
+    60 * 60 * 1000,      // 2.º fallo: 1 h
+    2 * 3600 * 1000,     // 3.er fallo: 2 h
+    4 * 3600 * 1000,     // 4.º+ fallo: 4 h
 ];
 
 
@@ -76,13 +86,17 @@ pub struct AutoGrabber;
 
 impl AutoGrabber {
     pub async fn load_state(state: &AppState) -> AutoGrabberState {
-        let dl_svc = state.downloads.lock().await;
-        dl_svc
-            .get_setting(AUTOGRABBER_STATE_KEY)
-            .ok()
-            .flatten()
-            .and_then(|raw| serde_json::from_str::<AutoGrabberState>(&raw).ok())
-            .unwrap_or_default()
+        let mut ag_state = {
+            let dl_svc = state.downloads.lock().await;
+            dl_svc
+                .get_setting(AUTOGRABBER_STATE_KEY)
+                .ok()
+                .flatten()
+                .and_then(|raw| serde_json::from_str::<AutoGrabberState>(&raw).ok())
+                .unwrap_or_default()
+        };
+        ag_state.prune_expired_blacklists(now_ms(), STALL_BLACKLIST_TTL_MS);
+        ag_state
     }
 
     pub async fn save_state(state: &AppState, ag_state: &AutoGrabberState) {
@@ -125,22 +139,48 @@ impl AutoGrabber {
         })
     }
 
-    /// Borra la lista negra y reinicia el retroceso para un medio o episodio.
+    /// Borra la lista negra y reinicia el retroceso para un medio (incluidos todos sus episodios si es serie) o un episodio concreto.
     pub async fn clear_blacklist(state: &AppState, target_id: &str) -> Value {
         let mut ag_state = Self::load_state(state).await;
-        let removed = ag_state
+        let episode_ids: Vec<String> = {
+            let dl_svc = state.downloads.lock().await;
+            dl_svc
+                .db()
+                .get_episodes_for_media(target_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|ep| ep.id)
+                .collect()
+        };
+
+        let mut removed = ag_state
             .blacklisted_hashes
             .remove(target_id)
             .map(|v| v.len())
             .unwrap_or(0);
+        let mut reset_diagnostics = 0usize;
         if let Some(diag) = ag_state.diagnostics.get_mut(target_id) {
             diag.consecutive_empty_searches = 0;
             diag.next_eligible_search_ms = 0;
+            reset_diagnostics += 1;
+        }
+        for ep_id in episode_ids {
+            removed += ag_state
+                .blacklisted_hashes
+                .remove(&ep_id)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            if let Some(diag) = ag_state.diagnostics.get_mut(&ep_id) {
+                diag.consecutive_empty_searches = 0;
+                diag.next_eligible_search_ms = 0;
+                reset_diagnostics += 1;
+            }
         }
         Self::save_state(state, &ag_state).await;
         json!({
             "success": true,
-            "clearedCount": removed
+            "clearedCount": removed,
+            "resetDiagnosticsCount": reset_diagnostics
         })
     }
 
